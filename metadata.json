@@ -1,0 +1,6 @@
+{
+  "name": "Task Force 1944: Vector Fleet Command",
+  "description": "WWII top-down naval combat game with clean vector line art. Command a carrier battle group across procedurally generated island archipelagos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
