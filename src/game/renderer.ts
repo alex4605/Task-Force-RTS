@@ -3329,6 +3329,369 @@ export class VectorRenderer {
     this.drawShipTurrets(ship, hullColor);
   }
 
+  // Soviet Project 61 Kashin Class Guided Missile Destroyer Line Art (DDG)
+  private drawKashinDDG(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#140D12';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 1.8;
+
+    // Distinctive flush-deck long hull with raked bow and transom
+    ctx.beginPath();
+    ctx.moveTo(l * 0.5, 0);
+    ctx.lineTo(l * 0.36, -w * 0.44);
+    ctx.lineTo(-l * 0.44, -w * 0.44);
+    ctx.lineTo(-l * 0.49, -w * 0.3);
+    ctx.lineTo(-l * 0.49, w * 0.3);
+    ctx.lineTo(-l * 0.44, w * 0.44);
+    ctx.lineTo(l * 0.36, w * 0.44);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Bow AK-726 twin 76mm automatic turret
+    const bowGunX = l * 0.32;
+    ctx.fillStyle = '#263238';
+    ctx.strokeStyle = '#FF8A80';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(bowGunX, 0, 4.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(bowGunX, -1.2);
+    ctx.lineTo(bowGunX + 11, -1.2);
+    ctx.moveTo(bowGunX, 1.2);
+    ctx.lineTo(bowGunX + 11, 1.2);
+    ctx.stroke();
+
+    // RBU-6000 12-barrel ASW rocket mortars (pair forward of bridge)
+    ctx.strokeStyle = '#FFD54F';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(l * 0.22, -w * 0.24, 2.8, 0, Math.PI * 2);
+    ctx.arc(l * 0.22, w * 0.24, 2.8, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Forward SA-N-1 Goa twin-arm SAM launcher
+    const fwdGoaX = l * 0.15;
+    ctx.strokeStyle = '#FF1744';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(fwdGoaX, 0, 3.8, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(fwdGoaX, 0);
+    ctx.lineTo(fwdGoaX + 8, -2);
+    ctx.moveTo(fwdGoaX, 0);
+    ctx.lineTo(fwdGoaX + 8, 2);
+    ctx.stroke();
+
+    // Bridge and First Gas Turbine Funnel Pair
+    ctx.fillStyle = '#211822';
+    ctx.strokeStyle = detailColor;
+    ctx.strokeRect(l * 0.02, -w * 0.32, l * 0.1, w * 0.64);
+    ctx.fillRect(l * 0.02, -w * 0.32, l * 0.1, w * 0.64);
+
+    // Twin angled gas-turbine funnels forward & aft ("Singing Frigate")
+    ctx.fillStyle = '#37474F';
+    ctx.fillRect(-l * 0.04, -w * 0.35, 6, 4);
+    ctx.fillRect(-l * 0.04, w * 0.35 - 4, 6, 4);
+    ctx.fillRect(-l * 0.22, -w * 0.35, 6, 4);
+    ctx.fillRect(-l * 0.22, w * 0.35 - 4, 6, 4);
+
+    // Midships 533mm quintuple torpedo launcher
+    ctx.strokeStyle = '#80DEEA';
+    ctx.lineWidth = 1.3;
+    ctx.strokeRect(-l * 0.14, -4, 8, 8);
+
+    // Aft SA-N-1 Goa twin-arm SAM launcher
+    const aftGoaX = -l * 0.3;
+    ctx.strokeStyle = '#FF1744';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(aftGoaX, 0, 3.8, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(aftGoaX, 0);
+    ctx.lineTo(aftGoaX - 8, -2);
+    ctx.moveTo(aftGoaX, 0);
+    ctx.lineTo(aftGoaX - 8, 2);
+    ctx.stroke();
+
+    // Stern AK-726 twin 76mm automatic turret
+    const sternGunX = -l * 0.4;
+    ctx.fillStyle = '#263238';
+    ctx.strokeStyle = '#FF8A80';
+    ctx.beginPath();
+    ctx.arc(sternGunX, 0, 4.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(sternGunX, -1.2);
+    ctx.lineTo(sternGunX - 11, -1.2);
+    ctx.moveTo(sternGunX, 1.2);
+    ctx.lineTo(sternGunX - 11, 1.2);
+    ctx.stroke();
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // Soviet Project 50 Riga Class Frigate Line Art (FFG / North Vietnamese Flagship)
+  private drawRigaFFG(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#140D12';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 1.8;
+
+    // Raised forecastle stepping down to low quarterdeck
+    ctx.beginPath();
+    ctx.moveTo(l * 0.5, 0);
+    ctx.lineTo(l * 0.34, -w * 0.44);
+    ctx.lineTo(-l * 0.42, -w * 0.44);
+    ctx.lineTo(-l * 0.48, -w * 0.3);
+    ctx.lineTo(-l * 0.48, w * 0.3);
+    ctx.lineTo(-l * 0.42, w * 0.44);
+    ctx.lineTo(l * 0.34, w * 0.44);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Bow 100mm B-34 Gun Turret ('A' Mount)
+    const gun1X = l * 0.32;
+    ctx.fillStyle = '#263238';
+    ctx.strokeStyle = '#FF8A80';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(gun1X, 0, 4.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(gun1X, 0);
+    ctx.lineTo(gun1X + 11, 0);
+    ctx.stroke();
+
+    // RBU-2500 ASW rocket launcher forward of bridge
+    ctx.strokeStyle = '#FFD54F';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(l * 0.22, 0, 3, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Midships Bridge & Single Raked Funnel
+    ctx.fillStyle = '#211822';
+    ctx.strokeStyle = detailColor;
+    ctx.strokeRect(l * 0.06, -w * 0.3, l * 0.12, w * 0.6);
+    ctx.fillRect(l * 0.06, -w * 0.3, l * 0.12, w * 0.6);
+
+    ctx.fillStyle = '#37474F';
+    ctx.fillRect(-l * 0.06, -3, 8, 6);
+
+    // Midships 100mm B-34 Gun Turret ('B' Mount between funnel and torpedo tubes)
+    const gun2X = -l * 0.14;
+    ctx.fillStyle = '#263238';
+    ctx.strokeStyle = '#FF8A80';
+    ctx.beginPath();
+    ctx.arc(gun2X, 0, 4.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(gun2X, 0);
+    ctx.lineTo(gun2X + 10, 0);
+    ctx.stroke();
+
+    // Twin 37mm V-11M anti-aircraft autocannon tubs
+    ctx.strokeStyle = '#FFE082';
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.arc(-l * 0.24, -w * 0.3, 2.5, 0, Math.PI * 2);
+    ctx.arc(-l * 0.24, w * 0.3, 2.5, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Stern 100mm B-34 Gun Turret ('X' Mount)
+    const gun3X = -l * 0.36;
+    ctx.fillStyle = '#263238';
+    ctx.strokeStyle = '#FF8A80';
+    ctx.beginPath();
+    ctx.arc(gun3X, 0, 4.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(gun3X, 0);
+    ctx.lineTo(gun3X - 11, 0);
+    ctx.stroke();
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // Soviet Project 205 Osa Class Missile Boat Line Art (PTG)
+  private drawOsaPTG(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#1A0E12';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 1.8;
+
+    // Wide hard-chine planing hull
+    ctx.beginPath();
+    ctx.moveTo(l * 0.5, 0);
+    ctx.lineTo(l * 0.32, -w * 0.46);
+    ctx.lineTo(-l * 0.48, -w * 0.46);
+    ctx.lineTo(-l * 0.48, w * 0.46);
+    ctx.lineTo(l * 0.32, w * 0.46);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Forward AK-230 30mm twin enclosed dome turret
+    const fwdAkX = l * 0.3;
+    ctx.fillStyle = '#263238';
+    ctx.strokeStyle = '#FF5252';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(fwdAkX, 0, 3.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(fwdAkX, -1);
+    ctx.lineTo(fwdAkX + 7, -1);
+    ctx.moveTo(fwdAkX, 1);
+    ctx.lineTo(fwdAkX + 7, 1);
+    ctx.stroke();
+
+    // Wheelhouse and Drum Tilt Fire Control Radar Dome
+    ctx.fillStyle = '#2E1C22';
+    ctx.strokeStyle = detailColor;
+    ctx.strokeRect(-l * 0.05, -w * 0.24, l * 0.16, w * 0.48);
+    ctx.fillRect(-l * 0.05, -w * 0.24, l * 0.16, w * 0.48);
+    ctx.strokeStyle = '#FFD54F';
+    ctx.beginPath();
+    ctx.arc(l * 0.03, 0, 3, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // 4 Box Missile Containers for P-15 Styx (2 Port, 2 Starboard)
+    ctx.fillStyle = '#37474F';
+    ctx.strokeStyle = '#FF1744';
+    ctx.lineWidth = 1.4;
+    // Fwd port & starboard missile boxes
+    ctx.strokeRect(l * 0.05, -w * 0.45, l * 0.22, w * 0.2);
+    ctx.fillRect(l * 0.05, -w * 0.45, l * 0.22, w * 0.2);
+    ctx.strokeRect(l * 0.05, w * 0.25, l * 0.22, w * 0.2);
+    ctx.fillRect(l * 0.05, w * 0.25, l * 0.22, w * 0.2);
+    // Aft port & starboard missile boxes
+    ctx.strokeRect(-l * 0.32, -w * 0.45, l * 0.22, w * 0.2);
+    ctx.fillRect(-l * 0.32, -w * 0.45, l * 0.22, w * 0.2);
+    ctx.strokeRect(-l * 0.32, w * 0.25, l * 0.22, w * 0.2);
+    ctx.fillRect(-l * 0.32, w * 0.25, l * 0.22, w * 0.2);
+
+    // Aft AK-230 30mm twin enclosed dome turret
+    const aftAkX = -l * 0.38;
+    ctx.fillStyle = '#263238';
+    ctx.strokeStyle = '#FF5252';
+    ctx.beginPath();
+    ctx.arc(aftAkX, 0, 3.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(aftAkX, -1);
+    ctx.lineTo(aftAkX - 7, -1);
+    ctx.moveTo(aftAkX, 1);
+    ctx.lineTo(aftAkX - 7, 1);
+    ctx.stroke();
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // Soviet Project 641 Foxtrot Class Ocean Patrol Submarine Line Art (SS)
+  private drawFoxtrotSS(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    if (ship.isSubmerged) {
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = 'rgba(255, 82, 82, 0.45)';
+    } else {
+      ctx.strokeStyle = hullColor;
+    }
+
+    ctx.fillStyle = '#120B10';
+    ctx.lineWidth = 1.8;
+
+    // Streamlined hull with sharp bow and bulbous sonar chin
+    ctx.beginPath();
+    ctx.moveTo(l * 0.5, 0);
+    ctx.lineTo(l * 0.36, -w * 0.38);
+    ctx.lineTo(-l * 0.42, -w * 0.38);
+    ctx.lineTo(-l * 0.49, 0);
+    ctx.lineTo(-l * 0.42, w * 0.38);
+    ctx.lineTo(l * 0.36, w * 0.38);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Distinctive bulbous bow chin sonar dome (MG-10 / Herkules)
+    ctx.strokeStyle = '#FF5252';
+    ctx.fillStyle = '#263238';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(l * 0.44, 0, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // 6 Forward Bow Torpedo Tube Shutters
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(l * 0.4, -w * 0.22);
+    ctx.lineTo(l * 0.46, -w * 0.14);
+    ctx.moveTo(l * 0.4, w * 0.22);
+    ctx.lineTo(l * 0.46, w * 0.14);
+    ctx.stroke();
+
+    // Casing Free-Flooding Limber Slits
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    for (let s = -3; s <= 3; s++) {
+      const sx = s * (l * 0.07);
+      ctx.beginPath();
+      ctx.moveTo(sx, -w * 0.2);
+      ctx.lineTo(sx + 3.5, -w * 0.2);
+      ctx.moveTo(sx, w * 0.2);
+      ctx.lineTo(sx + 3.5, w * 0.2);
+      ctx.stroke();
+    }
+
+    // Tall stepped sail / conning tower midships with periscopes & snorkel mast
+    ctx.fillStyle = '#21131A';
+    ctx.strokeStyle = '#FF8A80';
+    ctx.lineWidth = 1.4;
+    ctx.strokeRect(-l * 0.1, -w * 0.2, l * 0.2, w * 0.4);
+    ctx.fillRect(-l * 0.1, -w * 0.2, l * 0.2, w * 0.4);
+
+    // Periscope and Snorkel Masts
+    ctx.beginPath();
+    ctx.moveTo(-l * 0.02, 0);
+    ctx.lineTo(l * 0.05, 0);
+    ctx.stroke();
+
+    // Stern 4 Torpedo Tubes and Rudder Fin
+    ctx.strokeStyle = detailColor;
+    ctx.beginPath();
+    ctx.moveTo(-l * 0.42, 0);
+    ctx.lineTo(-l * 0.48, 0);
+    ctx.stroke();
+
+    ctx.setLineDash([]);
+  }
+
   // 依照艦種呼叫對應之向量線條艦體繪製
   private renderShipHullByType(ship: Ship, hullColor: string, detailColor: string) {
     if (ship.type === 'carrier') {
@@ -3349,6 +3712,14 @@ export class VectorRenderer {
       this.drawLCM8(ship, hullColor, detailColor);
     } else if (ship.type === 'komar_ptg') {
       this.drawKomarPTG(ship, hullColor, detailColor);
+    } else if (ship.type === 'kashin') {
+      this.drawKashinDDG(ship, hullColor, detailColor);
+    } else if (ship.type === 'riga') {
+      this.drawRigaFFG(ship, hullColor, detailColor);
+    } else if (ship.type === 'osa') {
+      this.drawOsaPTG(ship, hullColor, detailColor);
+    } else if (ship.type === 'foxtrot') {
+      this.drawFoxtrotSS(ship, hullColor, detailColor);
     } else if (ship.type === 'battleship') {
       this.drawBattleship(ship, hullColor, detailColor);
     } else if (ship.type === 'cruiser') {
@@ -7879,6 +8250,59 @@ export class VectorRenderer {
         ctx.beginPath();
         ctx.ellipse(p.x, p.y, p.radius, p.radius * 0.65, 0, 0, Math.PI * 2);
         ctx.fill();
+      } else if (p.type === 'flare') {
+        // High-intensity magnesium flare with incandescent core
+        const prog = 1 - (p.life / p.maxLife);
+        const flareR = Math.max(2.5, p.radius * (1 - prog * 0.3));
+        const fGrad = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, flareR * 2.2);
+        fGrad.addColorStop(0, '#FFFFFF');
+        fGrad.addColorStop(0.25, '#FFF59D');
+        fGrad.addColorStop(0.65, '#FF7043');
+        fGrad.addColorStop(1, 'rgba(255, 61, 0, 0)');
+        ctx.fillStyle = fGrad;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, flareR * 2.2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Incandescent core spark
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, Math.max(1, flareR * 0.5), 0, Math.PI * 2);
+        ctx.fill();
+      } else if (p.type === 'chaff') {
+        // High-reflective aluminum/mylar chaff dipoles fluttering in wind
+        ctx.strokeStyle = '#E0F7FA';
+        ctx.lineWidth = 1.3;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate((p.life * 7.5) % (Math.PI * 2));
+        ctx.beginPath();
+        ctx.moveTo(-p.radius, 0);
+        ctx.lineTo(p.radius, 0);
+        ctx.stroke();
+        ctx.restore();
+      } else if (p.type === 'chaff_cloud') {
+        // Expanding radar reflection decoy cloud over water/air
+        const prog = 1 - (p.life / p.maxLife);
+        const cloudR = Math.max(4, p.radius * (0.8 + prog * 0.4));
+        const cGrad = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, cloudR);
+        cGrad.addColorStop(0, 'rgba(224, 247, 250, 0.45)');
+        cGrad.addColorStop(0.5, 'rgba(178, 235, 242, 0.25)');
+        cGrad.addColorStop(1, 'rgba(128, 222, 234, 0)');
+        ctx.fillStyle = cGrad;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, cloudR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Shimmering radar sparkles
+        ctx.fillStyle = '#FFFFFF';
+        for (let s = 0; s < 3; s++) {
+          const sx = p.x + (Math.sin(p.life * 10 + s * 2.1) * cloudR * 0.6);
+          const sy = p.y + (Math.cos(p.life * 8 + s * 3.2) * cloudR * 0.6);
+          ctx.beginPath();
+          ctx.arc(sx, sy, 1, 0, Math.PI * 2);
+          ctx.fill();
+        }
       } else if (p.shape === 'ring' || p.type === 'shockwave') {
         ctx.strokeStyle = p.color;
         ctx.lineWidth = 2;

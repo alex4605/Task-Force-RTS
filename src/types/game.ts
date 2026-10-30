@@ -23,7 +23,11 @@ export type ShipType =
   | 'ffg'     // 時代四 諾克斯級 (FFG-1052 Knox) 反潛巡防艦
   | 'lph'     // 時代四 硫磺島級 (LPH-2 Iwo Jima) 兩棲直升機突擊艦
   | 'lcm8'    // 時代四 LCM-8 麥克登陸艇
-  | 'komar_ptg'; // 時代四 蚊子級/黃蜂級 (Project 183R Komar) 飛彈快艇
+  | 'komar_ptg' // 時代四 蚊子級 (Project 183R Komar) 飛彈快艇
+  | 'kashin'  // 時代四 卡辛級 (Project 61 Kashin) 導向飛彈驅逐艦 (全燃氣渦輪)
+  | 'riga'    // 時代四 里加級 (Project 50 Riga) 護衛艦 (北越海軍主力旗艦)
+  | 'osa'     // 時代四 黃蜂級 (Project 205 Osa) 重型飛彈快艇 (4x 冥河飛彈)
+  | 'foxtrot'; // 時代四 狐步級 (Project 641 Foxtrot) 遠洋長程攻擊潛艇 (10x 533mm魚雷)
 
 export type GroundUnitType =
   | 'usmc_rifle_42'      // 時代一 1942 USMC 陸戰隊步槍排 (春田M1903 / 早期M1加蘭德)
@@ -221,6 +225,8 @@ export interface Ship {
   readyASROC?: number;
   hasSVTT?: boolean;
   svttCooldown?: number;
+  hasChaffLauncher?: boolean; // 艦載 RBOC 金屬箔條干擾迫擊砲發射器
+  chaffCooldown?: number;
 }
 
 export type AircraftPayloadType =
@@ -1105,6 +1111,15 @@ export interface Aircraft {
     rotSpeed: number;
     type: 'wing' | 'tail' | 'prop';
   }[];
+  // 時代四機載自我防禦系統 (Era 4 Chaff / Flare & Evasive Break Maneuvers)
+  chaffCount?: number;
+  maxChaff?: number;
+  flareCount?: number;
+  maxFlare?: number;
+  cmCooldown?: number; // 誘餌發射間隔
+  isEvading?: boolean;
+  evasionTimer?: number;
+  evasionTurnSign?: number;
 }
 
 export type InstallationType =
@@ -1264,6 +1279,8 @@ export interface Projectile {
   asrocTimer?: number;
   acousticPingTimer?: number;
   sarhIlluminatorId?: string; // 機頭/艦載射控雷達照射源 ID
+  isDecoyed?: boolean; // 被箔條雲/熱焰彈誘騙偏航
+  decoyTargetPos?: Vector2D;
 }
 
 export interface Particle {
@@ -1288,7 +1305,10 @@ export interface Particle {
     | 'geyser'
     | 'tracer'
     | 'oil_slick'
-    | 'fire';
+    | 'fire'
+    | 'flare'
+    | 'chaff'
+    | 'chaff_cloud';
   shape?: 'circle' | 'line' | 'ring';
   length?: number;
   scale?: number;

@@ -1595,6 +1595,8 @@ export function createCV63(id: string, name: string, pos: Vector2D): Ship {
     samCooldown: 0,
     maxSAMs: 32,
     readySAMs: 32,
+    hasChaffLauncher: true,
+    chaffCooldown: 0,
     turrets: [
       createTurret(32, -14, 'RIM-7 Sea Sparrow (右舷前防空飛彈發射器)', 2400, 3.5, 1, heading, 90),
       createTurret(-32, -14, 'RIM-7 Sea Sparrow (右舷後防空飛彈發射器)', 2400, 3.5, 1, heading, 90),
@@ -1648,6 +1650,8 @@ export function createBelknapCG(id: string, name: string, pos: Vector2D): Ship {
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
+    hasChaffLauncher: true,
+    chaffCooldown: 0,
     turrets: [
       createTurret(28, 0, 'Mk 10 Mod 7 (雙臂長程防空飛彈發射架 RIM-67/Terrier)', 3400, 3.0, 2, heading, 260),
       createTurret(-28, 0, '5-inch/54 Mk 42 Rapid Gun (艦艉5吋自動速射砲)', 1450, 1.5, 1, heading, 220),
@@ -1696,6 +1700,8 @@ export function createAdamsDDG(id: string, name: string, pos: Vector2D): Ship {
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
+    hasChaffLauncher: true,
+    chaffCooldown: 0,
     hasTorpedoes: true,
     torpedoCooldown: 0,
     torpedoReloadTime: 12,
@@ -1746,6 +1752,8 @@ export function createForrestShermanDD(id: string, name: string, pos: Vector2D):
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
+    hasChaffLauncher: true,
+    chaffCooldown: 0,
     hasDepthCharges: true,
     depthChargeCooldown: 0,
     turrets: [
@@ -1795,6 +1803,8 @@ export function createKnoxFFG(id: string, name: string, pos: Vector2D): Ship {
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
+    hasChaffLauncher: true,
+    chaffCooldown: 0,
     turrets: [
       createTurret(24, 0, '5-inch/54 Mk 42 Auto (艦艏5吋自動速射主砲)', 1450, 1.5, 1, heading, 110),
       createTurret(12, 0, 'ASROC 8-cell Launcher (艦艏八聯裝反潛火箭箱)', 1900, 3.5, 1, heading, 80),
@@ -1832,6 +1842,8 @@ export function createLPHIwoJima(id: string, name: string, pos: Vector2D): Ship 
     detectionRange: 3800,
     isLPH: true,
     isAmphibious: true,
+    hasChaffLauncher: true,
+    chaffCooldown: 0,
     cargoCapacity: 6,
     embarkedUnitIds: [],
     turrets: [
@@ -1921,6 +1933,159 @@ export function createKomarMissileBoat(id: string, name: string, pos: Vector2D):
     ],
     flakCooldown: 0,
     flakRange: 600,
+  });
+}
+
+export function createKashinDDG(id: string, name: string, pos: Vector2D): Ship {
+  const heading = (Math.PI * 3) / 4;
+  return createShip({
+    id,
+    name,
+    codeName: 'Project 61 Kashin (卡辛級全燃氣渦輪大型飛彈反潛艦)',
+    type: 'kashin',
+    side: 'enemy',
+    era: 'era4',
+    pos: { ...pos },
+    heading,
+    speed: 18,
+    maxSpeed: 36,
+    length: 106,
+    width: 16,
+    health: 3400,
+    maxHealth: 3400,
+    armor: 0.28,
+    detectionRange: 4200,
+    hasSAM: true,
+    samRange: 2600,
+    samCooldown: 0,
+    maxSAMs: 24,
+    readySAMs: 24,
+    hasTorpedoes: true,
+    torpedoCooldown: 0,
+    torpedoReloadTime: 14,
+    turrets: [
+      createTurret(28, 0, 'AK-726 76.2mm Twin Auto (艦艏雙聯裝76mm自動速射砲)', 1400, 1.2, 2, heading, 85),
+      createTurret(-28, 0, 'AK-726 76.2mm Twin Auto (艦艉雙聯裝76mm自動速射砲)', 1400, 1.2, 2, heading, 85),
+      createTurret(14, 0, 'SA-N-1 Volna Twin Arm SAM (前甲板波浪防空飛彈)', 2600, 3.2, 1, heading, 180),
+      createTurret(-14, 0, 'SA-N-1 Volna Twin Arm SAM (後甲板波浪防空飛彈)', 2600, 3.2, 1, heading, 180),
+      createTurret(36, 0, 'RBU-6000 12-tube ASW Rocket (艦艏反潛火箭深彈)', 1200, 4.0, 2, heading, 120),
+    ],
+    detailedArmaments: [
+      { name: 'AK-726 雙聯裝76.2mm 全自動速射艦砲 (2座4門)', count: '4門 (每分90發)', type: 'main', desc: '雷達火控對海對空全自動速射砲' },
+      { name: 'SA-N-1 波浪 (Volna/Goa) 雙臂中程艦空飛彈 (2座)', count: '24枚儲備', type: 'aa', desc: '半主動雷達導引攔截高空戰機' },
+      { name: 'RBU-6000 12管反潛火箭發射器 (2座)', count: '24枚火箭深彈', type: 'asw', desc: '反制西太平洋美軍核/常規潛艇' },
+      { name: '533mm 五聯裝重型魚雷發射管', count: '5管', type: 'torpedo', desc: '53-65 尾流導引重型魚雷' },
+    ],
+    flakCooldown: 0,
+    flakRange: 900,
+  });
+}
+
+export function createRigaFFG(id: string, name: string, pos: Vector2D): Ship {
+  const heading = (Math.PI * 3) / 4;
+  return createShip({
+    id,
+    name,
+    codeName: 'Project 50 Riga (里加級主力護衛艦 / 北越海軍旗艦)',
+    type: 'riga',
+    side: 'enemy',
+    era: 'era4',
+    pos: { ...pos },
+    heading,
+    speed: 16,
+    maxSpeed: 29,
+    length: 88,
+    width: 13,
+    health: 2200,
+    maxHealth: 2200,
+    armor: 0.22,
+    detectionRange: 3400,
+    hasTorpedoes: true,
+    torpedoCooldown: 0,
+    torpedoReloadTime: 14,
+    turrets: [
+      createTurret(24, 0, '100mm/56 B-34 Single (艦艏100mm高平兩用砲)', 1300, 2.0, 1, heading, 110),
+      createTurret(0, 0, '100mm/56 B-34 Single (舯部100mm高平兩用砲)', 1300, 2.0, 1, heading, 110),
+      createTurret(-24, 0, '100mm/56 B-34 Single (艦艉100mm高平兩用砲)', 1300, 2.0, 1, heading, 110),
+      createTurret(12, 0, '37mm V-11M Twin AA (雙聯裝防空砲)', 950, 0.8, 2, heading, 75),
+    ],
+    detailedArmaments: [
+      { name: '100mm 56倍徑 B-34 單管高平兩用主砲 (3門)', count: '3門 (16發/分)', type: 'main', desc: '岸轟壓制與水面砲戰主力' },
+      { name: '37mm V-11M 雙聯裝自動防空砲 (2座)', count: '4門', type: 'aa', desc: '中低空自衛防空火網' },
+      { name: 'RBU-2500 反潛火箭與 BMB-2 深彈發射架', count: '16枚反潛深彈', type: 'asw', desc: '近程反潛反蛙人防禦' },
+      { name: '533mm 雙聯裝魚雷發射管', count: '2管', type: 'torpedo', desc: '反艦重型魚雷' },
+    ],
+    flakCooldown: 0,
+    flakRange: 750,
+  });
+}
+
+export function createOsaPTG(id: string, name: string, pos: Vector2D): Ship {
+  const heading = (Math.PI * 3) / 4;
+  return createShip({
+    id,
+    name,
+    codeName: 'Project 205 Osa (黃蜂級重型飛彈快艇)',
+    type: 'osa',
+    side: 'enemy',
+    era: 'era4',
+    pos: { ...pos },
+    heading,
+    speed: 22,
+    maxSpeed: 40,
+    length: 48,
+    width: 11,
+    health: 1100,
+    maxHealth: 1100,
+    armor: 0.18,
+    detectionRange: 3400,
+    hasTorpedoes: true,
+    torpedoCooldown: 0,
+    torpedoReloadTime: 12,
+    turrets: [
+      createTurret(16, 0, 'AK-230 30mm Twin Enclosed (艦艏30mm高射速機砲)', 950, 0.4, 2, heading, 75),
+      createTurret(-16, 0, 'AK-230 30mm Twin Enclosed (艦艉30mm高射速機砲)', 950, 0.4, 2, heading, 75),
+    ],
+    detailedArmaments: [
+      { name: 'P-15 冥河 (Styx) 重型反艦飛彈箱 (4座)', count: '4枚 P-15 主動雷達導引飛彈', type: 'torpedo', desc: '極具毀滅性的4聯裝齊射，可重創任何大型戰艦！' },
+      { name: 'AK-230 雙聯裝30mm 全自動水冷防空砲 (2座)', count: '4門 (2000發/分)', type: 'aa', desc: '近迫火控雷達導引高速彈幕' },
+      { name: 'M-503 42缸柴油機 (40節極速掠海奔襲)', count: '高突防快艇', type: 'main', desc: '狼群高速側翼穿插' },
+    ],
+    flakCooldown: 0,
+    flakRange: 700,
+  });
+}
+
+export function createFoxtrotSS(id: string, name: string, pos: Vector2D): Ship {
+  const heading = -Math.PI / 3;
+  return createShip({
+    id,
+    name,
+    codeName: 'Project 641 Foxtrot (狐步級長程遠洋常規攻擊潛艦)',
+    type: 'foxtrot',
+    side: 'enemy',
+    era: 'era4',
+    pos: { ...pos },
+    heading,
+    speed: 9,
+    maxSpeed: 16,
+    length: 84,
+    width: 11,
+    health: 1600,
+    maxHealth: 1600,
+    armor: 0.20,
+    detectionRange: 2400,
+    isSubmerged: true,
+    hasTorpedoes: true,
+    torpedoCooldown: 0,
+    torpedoReloadTime: 14,
+    turrets: [],
+    detailedArmaments: [
+      { name: '533mm 重型魚雷發射管 (10具: 艦艏6具 + 艦艉4具)', count: '10具發射管 (備彈22枚)', type: 'torpedo', desc: '53-56 / 53-65 聲自導與尾流自導重型反艦魚雷' },
+      { name: 'MG-10 聲納與極長大洋伏擊自持力', count: '遠洋作戰潛艦', type: 'asw', desc: '深度下潛伏擊，可對航母戰鬥群發動致命扇面齊射' },
+    ],
+    flakCooldown: 0,
+    flakRange: 0,
   });
 }
 
@@ -5635,78 +5800,21 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
         flakRange: 0,
       })
     );
-  } else {
     // ═══════════════════════════════════════════════════════════════════════
-    // ERA 4: OPFOR GULF OF TONKIN COASTAL & MISSILE STRIKE FORCE (越共/北越海岸海空特混突擊群)
-    // 飛彈快艇: 3x Project 183R Komar-class (Komar PTG-1, PTG-2, PTG-3, P-15 冥河反艦飛彈, 44kt)
-    // 巡防艦: Project 50 Riga-class / Project 56 Kotlin 艦隊驅逐艦 (100mm/130mm 艦砲, 魚雷)
-    // 伏擊常規潛艦: Whiskey-class 常規柴電潛艇 (S-210)
+    // ERA 4: OPFOR SOVIET NAVAL ADVISORY GROUP & VPAF/VPN TASK FORCE (蘇聯海軍顧問特混群與北越艦艇隊)
+    // 導向飛彈驅逐艦: Project 61 Kashin-class (DDG Krasny Kavkaz, 76mm速射砲, SA-N-1 Goa防空飛彈, RBU-6000)
+    // 主力護衛艦: Project 50 Riga-class (FFG HQ-01, 3x 100mm 艦砲, 37mm雙管防空砲)
+    // 重型飛彈快艇: 2x Project 205 Osa-class (PTG-351, PTG-352, 4聯裝 P-15 冥河飛彈, 30mm AK-230雙管機砲)
+    // 輕型飛彈快艇: 1x Project 183R Komar-class (PTG-181, 2聯裝 P-15 冥河飛彈, 44kt)
+    // 遠洋常規攻擊潛艦: Project 641 Foxtrot-class (B-427, 10具 533mm魚雷發射管)
     // ═══════════════════════════════════════════════════════════════════════
     enemyShips.push(
-      createKomarMissileBoat('enemy-ptg-1', 'Project 183R Komar (PTG-181)', enemyCenter),
-      createKomarMissileBoat('enemy-ptg-2', 'Project 183R Komar (PTG-182)', { x: enemyCenter.x - 320, y: enemyCenter.y + 220 }),
-      createKomarMissileBoat('enemy-ptg-3', 'Project 183R Komar (PTG-183)', { x: enemyCenter.x + 320, y: enemyCenter.y - 220 }),
-      createShip({
-        id: 'enemy-dd-1',
-        name: 'Project 50 Riga (Frigate 112)',
-        codeName: 'Coastal Guard Frigate',
-        type: 'destroyer',
-        side: 'enemy',
-        era: 'era4',
-        pos: { x: enemyCenter.x - 500, y: enemyCenter.y + 400 },
-        heading: enemyHeading,
-        speed: 16,
-        maxSpeed: 30,
-        length: 90,
-        width: 14,
-        health: 2200,
-        maxHealth: 2200,
-        armor: 0.24,
-        detectionRange: 3200,
-        hasTorpedoes: true,
-        torpedoCooldown: 1,
-        torpedoReloadTime: 12,
-        turrets: [
-          createTurret(22, 0, '100mm B-34 Single (艦艏100mm砲)', 1250, 1.8, 1, enemyHeading, 80),
-          createTurret(-20, 0, '100mm B-34 Single (艦艉100mm砲)', 1250, 1.8, 1, enemyHeading, 80),
-          createTurret(0, 0, '37mm V-11 Twin AA (舯部防空砲)', 950, 0.8, 2, enemyHeading, 90),
-        ],
-        detailedArmaments: [
-          { name: '100mm 56倍徑 B-34 主砲', count: '3門 (3座單裝)', type: 'main', desc: '巡邏砲戰' },
-          { name: '533mm 雙聯裝魚雷發射管', count: '2管', type: 'torpedo', desc: '重型魚雷' },
-          { name: '37mm 雙聯裝高射機砲群', count: '4門', type: 'aa', desc: '防空火力' },
-        ],
-        flakCooldown: 0,
-        flakRange: 750,
-      }),
-      createShip({
-        id: 'enemy-sub-1',
-        name: 'Whiskey-class (S-210)',
-        codeName: 'Iron Shadow Submarine',
-        type: 'submarine',
-        side: 'enemy',
-        era: 'era4',
-        pos: { x: 3200, y: 3800 },
-        heading: -Math.PI / 3,
-        speed: 8,
-        maxSpeed: 17,
-        length: 76,
-        width: 10,
-        health: 1250,
-        maxHealth: 1250,
-        armor: 0.16,
-        detectionRange: 2200,
-        isSubmerged: true,
-        hasTorpedoes: true,
-        torpedoCooldown: 6,
-        torpedoReloadTime: 16,
-        turrets: [],
-        detailedArmaments: [
-          { name: '533mm 聲自導反艦反潛魚雷', count: '6門魚雷發射管', type: 'torpedo', desc: '伏擊水面特混艦隊' },
-        ],
-        flakCooldown: 0,
-        flakRange: 0,
-      })
+      createKashinDDG('enemy-kashin-1', 'Project 61 Kashin (DDG Krasny Kavkaz)', enemyCenter),
+      createRigaFFG('enemy-riga-1', 'Project 50 Riga (HQ-01)', { x: enemyCenter.x - 420, y: enemyCenter.y + 240 }),
+      createOsaPTG('enemy-osa-1', 'Project 205 Osa (PTG-351)', { x: enemyCenter.x + 360, y: enemyCenter.y - 180 }),
+      createOsaPTG('enemy-osa-2', 'Project 205 Osa (PTG-352)', { x: enemyCenter.x + 500, y: enemyCenter.y + 140 }),
+      createKomarMissileBoat('enemy-komar-1', 'Project 183R Komar (PTG-181)', { x: enemyCenter.x - 220, y: enemyCenter.y - 280 }),
+      createFoxtrotSS('enemy-foxtrot-1', 'Project 641 Foxtrot (B-427)', { x: 3200, y: 3800 })
     );
   }
 

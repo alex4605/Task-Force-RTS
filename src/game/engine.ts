@@ -2310,11 +2310,138 @@ export class GameEngine {
         }
       }
 
+      // ══════════════════════════════════════════════════════════
+      // 時代四戰機干擾絲 (Chaff) / 熱焰彈 (Flare) 與機動高G破轉防禦
+      // ══════════════════════════════════════════════════════════
+      if (this.era === 'era4') {
+        if (plane.chaffCount === undefined) {
+          plane.chaffCount = 30;
+          plane.maxChaff = 30;
+          plane.flareCount = 30;
+          plane.maxFlare = 30;
+          plane.cmCooldown = 0;
+        }
+
+        if (plane.cmCooldown !== undefined && plane.cmCooldown > 0) {
+          plane.cmCooldown = Math.max(0, plane.cmCooldown - dt);
+        }
+
+        if (plane.evasionTimer !== undefined && plane.evasionTimer > 0) {
+          plane.evasionTimer = Math.max(0, plane.evasionTimer - dt);
+          if (plane.evasionTimer <= 0) {
+            plane.isEvading = false;
+          }
+        }
+
+        if (plane.side === 'player' && plane.health > 0 && plane.state !== 'landing') {
+          const incomingMissile = this.projectiles.find(
+            (pr) =>
+              !pr.isDead &&
+              pr.side !== plane.side &&
+              (pr.type === 'missile_sam' || pr.type === 'missile_aam') &&
+              (pr.targetEntityId === plane.id || dist(pr.pos, plane.pos) < 780)
+          );
+
+          if (incomingMissile && (plane.cmCooldown || 0) <= 0) {
+            const isIr = incomingMissile.guidanceType === 'infrared' || incomingMissile.guidanceType === 'ir';
+            const isRadar = !isIr;
+
+            if (isIr && (plane.flareCount ?? 0) > 0) {
+              plane.flareCount = Math.max(0, (plane.flareCount ?? 30) - 2);
+              plane.cmCooldown = 1.6;
+              plane.isEvading = true;
+              plane.evasionTimer = 2.4;
+              plane.evasionTurnSign = Math.random() > 0.5 ? 1 : -1;
+
+              // 投放高溫鎂燃燒熱焰彈 (Burning magnesium flares)
+              for (let f = 0; f < 3; f++) {
+                const flareAng = plane.heading + Math.PI + (Math.random() - 0.5) * 0.8;
+                this.particles.push({
+                  id: `flare-${Date.now()}-${f}-${Math.random()}`,
+                  x: plane.pos.x - Math.cos(plane.heading) * 12,
+                  y: plane.pos.y - Math.sin(plane.heading) * 12,
+                  vx: Math.cos(flareAng) * (45 + Math.random() * 25),
+                  vy: Math.sin(flareAng) * (45 + Math.random() * 25),
+                  life: 1.5,
+                  maxLife: 1.5,
+                  radius: 5,
+                  color: '#FF6D00',
+                  type: 'flare',
+                });
+              }
+
+              if (Math.random() < 0.75) {
+                incomingMissile.isDecoyed = true;
+                incomingMissile.targetEntityId = undefined;
+                incomingMissile.targetPos = {
+                  x: plane.pos.x + (Math.random() - 0.5) * 450,
+                  y: plane.pos.y + (Math.random() - 0.5) * 450,
+                };
+              }
+
+              this.addCombatLog({
+                category: 'aa',
+                sourceSide: 'player',
+                sourceName: plane.name,
+                targetName: '來襲紅外飛彈',
+                actionType: 'recon_spotted',
+                text: `🚨【熱焰彈投放 + 高G機動破轉】「${plane.name}」釋放燃燒熱焰彈並大角度急轉，成功破壞紅外尋標鎖定！`,
+              });
+            } else if (isRadar && (plane.chaffCount ?? 0) > 0) {
+              plane.chaffCount = Math.max(0, (plane.chaffCount ?? 30) - 4);
+              plane.cmCooldown = 1.6;
+              plane.isEvading = true;
+              plane.evasionTimer = 2.4;
+              plane.evasionTurnSign = Math.random() > 0.5 ? 1 : -1;
+
+              // 投放鍍鋁干擾絲箔條雲 (Reflective aluminum chaff strips)
+              for (let c = 0; c < 8; c++) {
+                this.particles.push({
+                  id: `chaff-${Date.now()}-${c}-${Math.random()}`,
+                  x: plane.pos.x - Math.cos(plane.heading) * 16 + (Math.random() - 0.5) * 12,
+                  y: plane.pos.y - Math.sin(plane.heading) * 16 + (Math.random() - 0.5) * 12,
+                  vx: (Math.random() - 0.5) * 14,
+                  vy: (Math.random() - 0.5) * 14,
+                  life: 2.5,
+                  maxLife: 2.5,
+                  radius: 6,
+                  color: '#E0F7FA',
+                  type: 'chaff',
+                });
+              }
+
+              if (Math.random() < 0.70) {
+                incomingMissile.isDecoyed = true;
+                incomingMissile.targetEntityId = undefined;
+                incomingMissile.targetPos = {
+                  x: plane.pos.x + (Math.random() - 0.5) * 550,
+                  y: plane.pos.y + (Math.random() - 0.5) * 550,
+                };
+              }
+
+              this.addCombatLog({
+                category: 'aa',
+                sourceSide: 'player',
+                sourceName: plane.name,
+                targetName: '來襲雷達導引飛彈',
+                actionType: 'recon_spotted',
+                text: `📡【箔條干擾絲雲投放】「${plane.name}」釋放高密度金屬箔條，SA-2 / 敵雷達尋標頭迷失於雜波反射雲中！`,
+              });
+            }
+          }
+        }
+      }
+
+      // Evasive Maneuver
+      if (plane.isEvading && (plane.evasionTimer || 0) > 0) {
+        plane.targetHeading = plane.heading + (plane.evasionTurnSign || 1) * Math.PI * 0.7;
+      }
+
       // Smooth Heading
       let aDiff = plane.targetHeading - plane.heading;
       while (aDiff > Math.PI) aDiff -= Math.PI * 2;
       while (aDiff < -Math.PI) aDiff += Math.PI * 2;
-      const turnSpeed = 2.4 * dt;
+      const turnSpeed = (plane.isEvading ? 4.5 : 2.4) * dt;
       if (Math.abs(aDiff) < turnSpeed) {
         plane.heading = plane.targetHeading;
       } else {
@@ -6218,6 +6345,16 @@ export class GameEngine {
       } else if (item.typeTag === 'attacker_pool') {
         const attModel = this.era === 'era1' ? 'a20' : this.era === 'era2' ? 'p47' : this.era === 'era3' ? 'a26' : 'a7';
         this.airbasePlanes[attModel] = (this.airbasePlanes[attModel] || 0) + 4;
+      } else if (item.typeTag === 'air_sh2') {
+        this.airbasePlanes['sh2'] = (this.airbasePlanes['sh2'] || 0) + 4;
+        if (flagship && flagship.carrierPlanes) {
+          flagship.carrierPlanes.ready.sh2 = (flagship.carrierPlanes.ready.sh2 || 0) + 2;
+        }
+      } else if (item.typeTag === 'air_p3') {
+        this.airbasePlanes['p3'] = (this.airbasePlanes['p3'] || 0) + 2;
+        if (flagship && flagship.carrierPlanes) {
+          flagship.carrierPlanes.ready.p3 = (flagship.carrierPlanes.ready.p3 || 0) + 1;
+        }
       }
 
       this.addBannerAlert(`✈️【機隊補充】「${item.nameZh}」已進駐起始前進基地航空庫存！`, 'player', 'capture', 5.0);
@@ -6278,6 +6415,12 @@ export class GameEngine {
           this.era,
           spawnPos
         );
+      } else if (item.typeTag === 'army_rifle_65') {
+        gUnit = createGroundUnit(gId, 'us_army_rifle_platoon_65', '美軍 1965 年型前線常規步槍排', 'player', this.era, spawnPos);
+      } else if (item.typeTag === 'm113_mech') {
+        gUnit = createGroundUnit(gId, 'us_army_m113_mech', 'M113 裝甲運兵機械化步兵排', 'player', this.era, spawnPos);
+      } else if (item.typeTag === 'chaparral_sam') {
+        gUnit = createGroundUnit(gId, 'us_army_chaparral_sam', 'MIM-72 榭樹野戰履帶防空飛彈排', 'player', this.era, spawnPos);
       } else if (item.typeTag === 'air_assault') {
         gUnit = createGroundUnit(gId, 'usmc_air_assault_65', 'USMC 空中突擊/直升機機降突擊排 (1965)', 'player', this.era, spawnPos);
       } else if (item.typeTag === 'armor_m48') {
@@ -6794,22 +6937,7 @@ export class GameEngine {
       if ((ship.samCooldown || 0) <= 0) {
         const samRange = ship.samRange || 1800;
 
-        // A. 優先攔截極具威脅的來襲反艦飛彈 (Anti-Missile Interception)
-        const incomingAshm = this.projectiles.find(
-          (p) =>
-            !p.isDead &&
-            p.side === 'enemy' &&
-            p.type === 'missile_ashm' &&
-            dist(ship.pos, p.pos) <= samRange
-        );
-
-        if (incomingAshm) {
-          this.fireSAM(ship, incomingAshm, 'projectile');
-          ship.samCooldown = ship.type === 'cg' ? 3.5 : 4.5;
-          continue;
-        }
-
-        // B. 攔截射程內敵機 (MiG-17, MiG-21, IL-28)
+        // A. 艦載長程防空飛彈史實限制：早期連續波照明與海面雜波反射，難以追蹤掠海反艦飛彈，專職攔截中高空敵機
         const hostileAircraft = this.aircraft.find(
           (a) =>
             a.side === 'enemy' &&
@@ -6820,6 +6948,104 @@ export class GameEngine {
         if (hostileAircraft) {
           this.fireSAM(ship, hostileAircraft, 'aircraft');
           ship.samCooldown = ship.type === 'cg' ? 4.0 : 5.0;
+        }
+      }
+
+      // 3a. 艦載 RBOC 金屬箔條干擾火箭 (Shipboard RBOC Chaff Rocket Mortars vs AShM)
+      if (ship.hasChaffLauncher) {
+        if (ship.chaffCooldown !== undefined && ship.chaffCooldown > 0) {
+          ship.chaffCooldown = Math.max(0, ship.chaffCooldown - dt);
+        }
+        if ((ship.chaffCooldown || 0) <= 0) {
+          const incomingAshm = this.projectiles.find(
+            (p) => !p.isDead && p.side === 'enemy' && p.type === 'missile_ashm' && dist(ship.pos, p.pos) <= 950
+          );
+          if (incomingAshm) {
+            ship.chaffCooldown = 18.0;
+            soundEngine.playPlaneSortie();
+
+            // 在船艦與飛彈間海面上射出金屬箔條雲假目標
+            const cloudPos = {
+              x: ship.pos.x + Math.cos(incomingAshm.heading + Math.PI * 0.45) * 260,
+              y: ship.pos.y + Math.sin(incomingAshm.heading + Math.PI * 0.45) * 260,
+            };
+            for (let c = 0; c < 14; c++) {
+              this.particles.push({
+                id: `ship-chaff-${Date.now()}-${c}`,
+                x: cloudPos.x + (Math.random() - 0.5) * 70,
+                y: cloudPos.y + (Math.random() - 0.5) * 70,
+                vx: (Math.random() - 0.5) * 10,
+                vy: (Math.random() - 0.5) * 10,
+                life: 4.5,
+                maxLife: 4.5,
+                radius: 12 + Math.random() * 8,
+                color: '#ECEFF1',
+                type: 'chaff_cloud',
+              });
+            }
+
+            if (!incomingAshm.isDecoyed) {
+              if (Math.random() < 0.72) {
+                incomingAshm.isDecoyed = true;
+                incomingAshm.decoyTargetPos = { ...cloudPos };
+                incomingAshm.targetPos = { ...cloudPos };
+                this.addBannerAlert('📡【RBOC 艦載箔條干擾生效】海面金屬箔條雲成功誘騙來襲冥河反艦飛彈！', 'player', 'alert', 4.5);
+                this.addCombatLog({
+                  category: 'aa',
+                  sourceSide: 'player',
+                  sourceName: `${ship.name} (RBOC 箔條迫擊砲)`,
+                  targetName: 'P-15 冥河反艦飛彈',
+                  actionType: 'recon_spotted',
+                  text: `📡【艦載箔條誘騙成功】「${ship.name}」向海面射出金屬箔條干擾火箭！形成高雷達截面假目標雲，來襲冥河飛彈尋標頭被引離真艦！`,
+                });
+              }
+            }
+          }
+        }
+      }
+
+      // 3b. 5吋/54 Mk 42 自動砲與近迫火砲彈幕攔截 (Rapid Gun Barrage Point Defense vs AShM)
+      const closeAshm = this.projectiles.find(
+        (p) => !p.isDead && p.side === 'enemy' && p.type === 'missile_ashm' && dist(ship.pos, p.pos) <= 450
+      );
+      if (closeAshm) {
+        this.particles.push({
+          id: `pd-tracer-${Date.now()}`,
+          x: ship.pos.x,
+          y: ship.pos.y,
+          vx: ((closeAshm.pos.x - ship.pos.x) / 450) * 450,
+          vy: ((closeAshm.pos.y - ship.pos.y) / 450) * 450,
+          life: 0.15,
+          maxLife: 0.15,
+          radius: 2.2,
+          color: '#FFE082',
+          type: 'tracer',
+        });
+        if (Math.random() < 0.10) {
+          soundEngine.playExplosion(false);
+          closeAshm.isDead = true;
+          this.particles.push({
+            id: `pd-blast-${Date.now()}`,
+            x: closeAshm.pos.x,
+            y: closeAshm.pos.y,
+            vx: 0,
+            vy: 0,
+            life: 0.6,
+            maxLife: 0.6,
+            radius: 36,
+            color: '#FF6D00',
+            type: 'shockwave',
+            shape: 'ring',
+          });
+          this.addBannerAlert('💥【近迫火砲擊落】5吋/54全自動速射砲與防空機砲打出密集彈幕，凌空擊碎冥河飛彈！', 'player', 'alert', 4.0);
+          this.addCombatLog({
+            category: 'aa',
+            sourceSide: 'player',
+            sourceName: `${ship.name} (近迫火砲彈幕)`,
+            targetName: 'P-15 冥河反艦飛彈',
+            actionType: 'aa_down',
+            text: `💥【近迫火砲防禦擊落】「${ship.name}」Mk 42 5吋全自動速射砲與高射機砲密集火網覆蓋，在艦舷外 ${Math.round(dist(ship.pos, closeAshm.pos))}m 凌空打碎來襲冥河反艦飛彈！`,
+          });
         }
       }
 
@@ -6859,9 +7085,9 @@ export class GameEngine {
       }
     }
 
-    // 4. 敵蚊子級飛彈快艇 (Komar PTG) 發射 P-15 冥河 (Styx) 反艦飛彈
+    // 4. 敵蚊子級/黃蜂級飛彈快艇 (Komar / Osa PTG) 發射 P-15 冥河 (Styx) 反艦飛彈
     for (const eShip of this.enemyShips) {
-      if (eShip.isSunk || eShip.type !== 'komar_ptg') continue;
+      if (eShip.isSunk || (eShip.type !== 'komar_ptg' && eShip.type !== 'osa')) continue;
 
       if (eShip.torpedoCooldown !== undefined && eShip.torpedoCooldown > 0) {
         eShip.torpedoCooldown = Math.max(0, eShip.torpedoCooldown - dt);
@@ -6877,7 +7103,7 @@ export class GameEngine {
 
         if (targetShip && dist(eShip.pos, targetShip.pos) <= 2600) {
           this.fireKomarStyx(eShip, targetShip);
-          eShip.torpedoCooldown = 22.0;
+          eShip.torpedoCooldown = eShip.type === 'osa' ? 18.0 : 24.0;
         }
       }
     }
@@ -8848,12 +9074,38 @@ export class GameEngine {
           });
         }
 
+        // 誘餌引離判定：若飛彈被誘騙且抵達誘餌空域/海面，凌空自毀引爆
+        if (proj.isDecoyed && targetPos && dist(proj.pos, targetPos) < 65) {
+          proj.isDead = true;
+          soundEngine.playExplosion(false);
+          this.particles.push({
+            id: `decoyed-blast-${Date.now()}`,
+            x: proj.pos.x,
+            y: proj.pos.y,
+            vx: 0,
+            vy: 0,
+            life: 0.6,
+            maxLife: 0.6,
+            radius: 40,
+            color: '#80DEEA',
+            type: 'shockwave',
+            shape: 'ring',
+          });
+          continue;
+        }
+
         // A. 反飛彈攔截 (Anti-Missile Interception)
         if (proj.isInterceptionMissile || proj.targetEntityType === 'projectile') {
           const targetProj = this.projectiles.find(
             (p) => !p.isDead && p.id === proj.targetEntityId && dist(proj.pos, p.pos) < 32
           );
           if (targetProj) {
+            // 時代四防空飛彈對低空掠海反艦飛彈受海浪雜波影響，攔截率極低 (<4%)
+            if (targetProj.type === 'missile_ashm' && Math.random() > 0.04) {
+              proj.isDead = true;
+              continue;
+            }
+
             soundEngine.playExplosion(false);
             targetProj.isDead = true;
             proj.isDead = true;
@@ -8870,7 +9122,7 @@ export class GameEngine {
               type: 'shockwave',
               shape: 'ring',
             });
-            this.addBannerAlert('🎯【飛彈防禦攔截成功！】防空飛彈成功凌空打爆來襲反艦飛彈！', 'player', 'alert', 5.5);
+            this.addBannerAlert('🎯【防禦攔截成功！】防空飛彈成功凌空打爆來襲反艦飛彈！', 'player', 'alert', 5.5);
             this.addCombatLog({
               category: 'aa',
               sourceSide: proj.side,
@@ -8884,41 +9136,71 @@ export class GameEngine {
 
         // B. 空空 / 防空飛彈近炸敵機 (AAM & SAM vs Aircraft)
         if (!proj.isDead && (proj.type === 'missile_aam' || proj.type === 'missile_sam')) {
-          const targetPlanes = this.aircraft.filter((a) => a.side !== proj.side && a.state !== 'shot_down');
-          for (const plane of targetPlanes) {
-            if (dist(proj.pos, plane.pos) < 34) {
-              soundEngine.playExplosion(false);
-              plane.health -= proj.damage;
-              proj.isDead = true;
+          if (!proj.isDecoyed) {
+            const targetPlanes = this.aircraft.filter((a) => a.side !== proj.side && a.state !== 'shot_down');
+            for (const plane of targetPlanes) {
+              if (dist(proj.pos, plane.pos) < 34) {
+                // 機動規避動作判定：若戰機正處於大G機動破轉，早期飛彈超載受限高機率脫靶
+                if (plane.isEvading && Math.random() < 0.55) {
+                  soundEngine.playExplosion(false);
+                  proj.isDead = true;
+                  this.particles.push({
+                    id: `near-miss-${Date.now()}`,
+                    x: proj.pos.x,
+                    y: proj.pos.y,
+                    vx: 0,
+                    vy: 0,
+                    life: 0.5,
+                    maxLife: 0.5,
+                    radius: 32,
+                    color: '#FFAB00',
+                    type: 'shockwave',
+                    shape: 'ring',
+                  });
+                  this.addCombatLog({
+                    category: 'aa',
+                    sourceSide: 'player',
+                    sourceName: plane.name,
+                    targetName: proj.attackerName || '導向飛彈',
+                    actionType: 'recon_spotted',
+                    text: `💨【高G機動破轉避開！】「${plane.name}」大過載劇烈破轉，敵飛彈超載脫靶於舷側近距擦過爆炸！`,
+                  });
+                  break;
+                }
 
-              this.particles.push({
-                id: `sam-air-blast-${Date.now()}`,
-                x: proj.pos.x,
-                y: proj.pos.y,
-                vx: 0,
-                vy: 0,
-                life: 0.55,
-                maxLife: 0.55,
-                radius: 38,
-                color: '#FF6D00',
-                type: 'shockwave',
-                shape: 'ring',
-              });
+                soundEngine.playExplosion(false);
+                plane.health -= proj.damage;
+                proj.isDead = true;
 
-              this.addCombatLog({
-                category: 'aa',
-                sourceSide: proj.side,
-                sourceName: proj.attackerName || '導向飛彈',
-                targetName: plane.name,
-                actionType: 'aa_down',
-                damage: proj.damage,
-                text: `💥【飛彈近炸破甲】${proj.attackerName || '導向飛彈'} 於「${plane.name}」近距凌空引爆！高能預製破片造成 ${proj.damage} 點重創！`,
-              });
+                this.particles.push({
+                  id: `sam-air-blast-${Date.now()}`,
+                  x: proj.pos.x,
+                  y: proj.pos.y,
+                  vx: 0,
+                  vy: 0,
+                  life: 0.55,
+                  maxLife: 0.55,
+                  radius: 38,
+                  color: '#FF6D00',
+                  type: 'shockwave',
+                  shape: 'ring',
+                });
 
-              if (plane.health <= 0) {
-                this.killPlane(plane);
+                this.addCombatLog({
+                  category: 'aa',
+                  sourceSide: proj.side,
+                  sourceName: proj.attackerName || '導向飛彈',
+                  targetName: plane.name,
+                  actionType: 'aa_down',
+                  damage: proj.damage,
+                  text: `💥【飛彈近炸破甲】${proj.attackerName || '導向飛彈'} 於「${plane.name}」近距凌空引爆！高能預製破片造成 ${proj.damage} 點重創！`,
+                });
+
+                if (plane.health <= 0) {
+                  this.killPlane(plane);
+                }
+                break;
               }
-              break;
             }
           }
         }
