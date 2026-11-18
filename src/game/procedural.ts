@@ -4790,8 +4790,8 @@ export function createConvoyEscortShip(
         turrets: [
           createTurret(22, 0, '5-inch/38 Mk 12 (No.51 艦艏單裝)', 1080, 2.2, 1, heading, 75),
           createTurret(14, 0, '5-inch/38 Mk 12 (No.52 背負單裝)', 1080, 2.2, 1, heading, 75),
-          createTurret(-9, 0, '5-inch/38 Mk 12 (No.53 後甲板室單裝)', 1080, 2.2, 1, heading, 75),
-          createTurret(-16, 0, '5-inch/38 Mk 12 (No.54 背負單裝)', 1080, 2.2, 1, heading, 75),
+          createTurret(-11, 0, '5-inch/38 Mk 12 (No.53 後甲板室單裝)', 1080, 2.2, 1, heading, 75),
+          createTurret(-17, 0, '5-inch/38 Mk 12 (No.54 背負單裝)', 1080, 2.2, 1, heading, 75),
           createTurret(-24, 0, '5-inch/38 Mk 12 (No.55 艦艉單裝)', 1080, 2.2, 1, heading, 75),
         ],
         detailedArmaments: [
@@ -4830,8 +4830,8 @@ export function createConvoyEscortShip(
         turrets: [
           createTurret(22, 0, '5-inch/38 Mk 12 (No.51 艦艏單裝)', 1050, 2.4, 1, heading, 70),
           createTurret(14, 0, '5-inch/38 Mk 12 (No.52 背負單裝)', 1050, 2.4, 1, heading, 70),
-          createTurret(-9, 0, '5-inch/38 Mk 12 (No.53 後甲板室單裝)', 1050, 2.4, 1, heading, 70),
-          createTurret(-16, 0, '5-inch/38 Mk 12 (No.54 背負單裝)', 1050, 2.4, 1, heading, 70),
+          createTurret(-11, 0, '5-inch/38 Mk 12 (No.53 後甲板室單裝)', 1050, 2.4, 1, heading, 70),
+          createTurret(-17, 0, '5-inch/38 Mk 12 (No.54 背負單裝)', 1050, 2.4, 1, heading, 70),
           createTurret(-24, 0, '5-inch/38 Mk 12 (No.55 艦艉單裝)', 1050, 2.4, 1, heading, 70),
         ],
         detailedArmaments: [
@@ -4934,14 +4934,14 @@ export function createConvoyEscortShip(
         torpedoCooldown: 0,
         torpedoReloadTime: 16,
         turrets: [
-          createTurret(28, 0, '5-inch/38 Mk 29 Twin DP (No.1 艦艏雙聯)', 1100, 2.2, 2, heading, 80),
-          createTurret(18, 0, '5-inch/38 Mk 29 Twin DP (No.2 背負雙聯)', 1100, 2.2, 2, heading, 80),
-          createTurret(8, 0, '5-inch/38 Mk 29 Twin DP (No.3 三層背負)', 1100, 2.2, 2, heading, 80),
-          createTurret(-8, 0, '5-inch/38 Mk 29 Twin DP (No.4 三層背負後)', 1100, 2.2, 2, heading, 80),
-          createTurret(-18, 0, '5-inch/38 Mk 29 Twin DP (No.5 背負雙聯後)', 1100, 2.2, 2, heading, 80),
-          createTurret(-28, 0, '5-inch/38 Mk 29 Twin DP (No.6 艦艉雙聯)', 1100, 2.2, 2, heading, 80),
-          createTurret(0, -7, '5-inch/38 Twin (右舷翼砲)', 1050, 2.2, 2, heading, 80),
-          createTurret(0, 7, '5-inch/38 Twin (左舷翼砲)', 1050, 2.2, 2, heading, 80),
+          createTurret(31, 0, '5-inch/38 Mk 29 Twin DP (No.1 艦艏雙聯)', 1100, 2.2, 2, heading, 80),
+          createTurret(23, 0, '5-inch/38 Mk 29 Twin DP (No.2 背負雙聯)', 1100, 2.2, 2, heading, 80),
+          createTurret(15, 0, '5-inch/38 Mk 29 Twin DP (No.3 三層背負)', 1100, 2.2, 2, heading, 80),
+          createTurret(-15, 0, '5-inch/38 Mk 29 Twin DP (No.4 三層背負後)', 1100, 2.2, 2, heading, 80),
+          createTurret(-23, 0, '5-inch/38 Mk 29 Twin DP (No.5 背負雙聯後)', 1100, 2.2, 2, heading, 80),
+          createTurret(-31, 0, '5-inch/38 Mk 29 Twin DP (No.6 艦艉雙聯)', 1100, 2.2, 2, heading, 80),
+          createTurret(-7, -7, '5-inch/38 Twin (右舷翼砲)', 1050, 2.2, 2, heading, 80),
+          createTurret(-7, 7, '5-inch/38 Twin (左舷翼砲)', 1050, 2.2, 2, heading, 80),
         ],
         detailedArmaments: [
           { name: '5吋38倍徑雙聯裝高平砲 (16門)', count: '16門 (8座雙聯裝)', type: 'main', desc: '全艦高仰角速射防空砲幕' },
@@ -9161,14 +9161,14 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
         torpedoCooldown: 0,
         torpedoReloadTime: 16,
         turrets: [
-          createTurret(28, 0, '5-inch/38 Mk 29 Twin DP (No.1 艦艏雙聯)', 1100, 2.2, 2, initialHeading, 80),
-          createTurret(18, 0, '5-inch/38 Mk 29 Twin DP (No.2 背負雙聯)', 1100, 2.2, 2, initialHeading, 80),
-          createTurret(8, 0, '5-inch/38 Mk 29 Twin DP (No.3 三層背負)', 1100, 2.2, 2, initialHeading, 80),
-          createTurret(-8, 0, '5-inch/38 Mk 29 Twin DP (No.4 三層背負後)', 1100, 2.2, 2, initialHeading, 80),
-          createTurret(-18, 0, '5-inch/38 Mk 29 Twin DP (No.5 背負雙聯後)', 1100, 2.2, 2, initialHeading, 80),
-          createTurret(-28, 0, '5-inch/38 Mk 29 Twin DP (No.6 艦艉雙聯)', 1100, 2.2, 2, initialHeading, 80),
-          createTurret(0, -7, '5-inch/38 Twin (右舷翼砲)', 1050, 2.2, 2, initialHeading, 80),
-          createTurret(0, 7, '5-inch/38 Twin (左舷翼砲)', 1050, 2.2, 2, initialHeading, 80),
+          createTurret(31, 0, '5-inch/38 Mk 29 Twin DP (No.1 艦艏雙聯)', 1100, 2.2, 2, initialHeading, 80),
+          createTurret(23, 0, '5-inch/38 Mk 29 Twin DP (No.2 背負雙聯)', 1100, 2.2, 2, initialHeading, 80),
+          createTurret(15, 0, '5-inch/38 Mk 29 Twin DP (No.3 三層背負)', 1100, 2.2, 2, initialHeading, 80),
+          createTurret(-15, 0, '5-inch/38 Mk 29 Twin DP (No.4 三層背負後)', 1100, 2.2, 2, initialHeading, 80),
+          createTurret(-23, 0, '5-inch/38 Mk 29 Twin DP (No.5 背負雙聯後)', 1100, 2.2, 2, initialHeading, 80),
+          createTurret(-31, 0, '5-inch/38 Mk 29 Twin DP (No.6 艦艉雙聯)', 1100, 2.2, 2, initialHeading, 80),
+          createTurret(-7, -7, '5-inch/38 Twin (右舷翼砲)', 1050, 2.2, 2, initialHeading, 80),
+          createTurret(-7, 7, '5-inch/38 Twin (左舷翼砲)', 1050, 2.2, 2, initialHeading, 80),
         ],
         detailedArmaments: [
           { name: '5吋38倍徑雙聯裝高平砲 (16門)', count: '16門 (8座雙聯裝砲塔)', type: 'main', desc: '傳奇防空巡洋艦，全艦高仰角超高射速彈幕' },
@@ -9206,8 +9206,8 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
         turrets: [
           createTurret(22, 0, '5-inch/38 Mk 12 (No.51 艦艏單裝)', 1050, 2.4, 1, initialHeading, 70),
           createTurret(14, 0, '5-inch/38 Mk 12 (No.52 背負單裝)', 1050, 2.4, 1, initialHeading, 70),
-          createTurret(-9, 0, '5-inch/38 Mk 12 (No.53 後甲板室單裝)', 1050, 2.4, 1, initialHeading, 70),
-          createTurret(-16, 0, '5-inch/38 Mk 12 (No.54 背負單裝)', 1050, 2.4, 1, initialHeading, 70),
+          createTurret(-11, 0, '5-inch/38 Mk 12 (No.53 後甲板室單裝)', 1050, 2.4, 1, initialHeading, 70),
+          createTurret(-17, 0, '5-inch/38 Mk 12 (No.54 背負單裝)', 1050, 2.4, 1, initialHeading, 70),
           createTurret(-24, 0, '5-inch/38 Mk 12 (No.55 艦艉單裝)', 1050, 2.4, 1, initialHeading, 70),
         ],
         detailedArmaments: [
@@ -9247,8 +9247,8 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
         turrets: [
           createTurret(22, 0, '5-inch/38 Mk 12 (No.51 艦艏單裝)', 1050, 2.4, 1, initialHeading, 70),
           createTurret(14, 0, '5-inch/38 Mk 12 (No.52 背負單裝)', 1050, 2.4, 1, initialHeading, 70),
-          createTurret(-9, 0, '5-inch/38 Mk 12 (No.53 後甲板室單裝)', 1050, 2.4, 1, initialHeading, 70),
-          createTurret(-16, 0, '5-inch/38 Mk 12 (No.54 背負單裝)', 1050, 2.4, 1, initialHeading, 70),
+          createTurret(-11, 0, '5-inch/38 Mk 12 (No.53 後甲板室單裝)', 1050, 2.4, 1, initialHeading, 70),
+          createTurret(-17, 0, '5-inch/38 Mk 12 (No.54 背負單裝)', 1050, 2.4, 1, initialHeading, 70),
           createTurret(-24, 0, '5-inch/38 Mk 12 (No.55 艦艉單裝)', 1050, 2.4, 1, initialHeading, 70),
         ],
         detailedArmaments: [
@@ -9287,8 +9287,8 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
         turrets: [
           createTurret(22, 0, '5-inch/38 Mk 12 (No.51 艦艏單裝)', 1050, 2.4, 1, initialHeading, 70),
           createTurret(14, 0, '5-inch/38 Mk 12 (No.52 背負單裝)', 1050, 2.4, 1, initialHeading, 70),
-          createTurret(-9, 0, '5-inch/38 Mk 12 (No.53 後甲板室單裝)', 1050, 2.4, 1, initialHeading, 70),
-          createTurret(-16, 0, '5-inch/38 Mk 12 (No.54 背負單裝)', 1050, 2.4, 1, initialHeading, 70),
+          createTurret(-11, 0, '5-inch/38 Mk 12 (No.53 後甲板室單裝)', 1050, 2.4, 1, initialHeading, 70),
+          createTurret(-17, 0, '5-inch/38 Mk 12 (No.54 背負單裝)', 1050, 2.4, 1, initialHeading, 70),
           createTurret(-24, 0, '5-inch/38 Mk 12 (No.55 艦艉單裝)', 1050, 2.4, 1, initialHeading, 70),
         ],
         detailedArmaments: [
@@ -9499,8 +9499,8 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
         turrets: [
           createTurret(22, 0, '5-inch/38 Mk 12 (No.51 艦艏單裝)', 1080, 2.2, 1, initialHeading, 75),
           createTurret(14, 0, '5-inch/38 Mk 12 (No.52 背負單裝)', 1080, 2.2, 1, initialHeading, 75),
-          createTurret(-9, 0, '5-inch/38 Mk 12 (No.53 後甲板室單裝)', 1080, 2.2, 1, initialHeading, 75),
-          createTurret(-16, 0, '5-inch/38 Mk 12 (No.54 背負單裝)', 1080, 2.2, 1, initialHeading, 75),
+          createTurret(-11, 0, '5-inch/38 Mk 12 (No.53 後甲板室單裝)', 1080, 2.2, 1, initialHeading, 75),
+          createTurret(-17, 0, '5-inch/38 Mk 12 (No.54 背負單裝)', 1080, 2.2, 1, initialHeading, 75),
           createTurret(-24, 0, '5-inch/38 Mk 12 (No.55 艦艉單裝)', 1080, 2.2, 1, initialHeading, 75),
         ],
         detailedArmaments: [
@@ -9543,8 +9543,8 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
         turrets: [
           createTurret(22, 0, '5-inch/38 Mk 12 (No.51 艦艏單裝)', 1080, 2.2, 1, initialHeading, 75),
           createTurret(14, 0, '5-inch/38 Mk 12 (No.52 背負單裝)', 1080, 2.2, 1, initialHeading, 75),
-          createTurret(-9, 0, '5-inch/38 Mk 12 (No.53 後甲板室單裝)', 1080, 2.2, 1, initialHeading, 75),
-          createTurret(-16, 0, '5-inch/38 Mk 12 (No.54 背負單裝)', 1080, 2.2, 1, initialHeading, 75),
+          createTurret(-11, 0, '5-inch/38 Mk 12 (No.53 後甲板室單裝)', 1080, 2.2, 1, initialHeading, 75),
+          createTurret(-17, 0, '5-inch/38 Mk 12 (No.54 背負單裝)', 1080, 2.2, 1, initialHeading, 75),
           createTurret(-24, 0, '5-inch/38 Mk 12 (No.55 艦艉單裝)', 1080, 2.2, 1, initialHeading, 75),
         ],
         detailedArmaments: [

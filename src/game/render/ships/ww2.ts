@@ -1,6 +1,6 @@
 import { Ship } from '../../../types/game';
 import { RenderContext } from '../context';
-import { drawShipTurrets } from './mounts';
+import { drawShipTurrets, parseBoreMm } from './mounts';
 
 // Carrier Line Art (Yorktown CV-6 / Essex CV-9)
 export function drawCarrier(rc: RenderContext, ship: Ship, hullColor: string, detailColor: string) {
@@ -76,26 +76,62 @@ export function drawCarrier(rc: RenderContext, ship: Ship, hullColor: string, de
   }
   ctx.stroke();
 
-  // Starboard Island Superstructure
+  // Island superstructure on the STARBOARD side (+y; port is -y, see the red port light)
+  const isIJN = /IJN|Shokaku|Zuikaku|Taiho/.test(ship.name);
   ctx.fillStyle = '#050E18';
   ctx.strokeStyle = hullColor;
   ctx.lineWidth = 2;
-  ctx.strokeRect(l * 0.04, -w * 0.62, l * 0.22, w * 0.22);
-  ctx.fillRect(l * 0.04, -w * 0.62, l * 0.22, w * 0.22);
-
-  // Island Bridge Tier Levels & Tripod Radar Mast
-  ctx.strokeStyle = detailColor;
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(l * 0.08, -w * 0.58, l * 0.14, w * 0.14);
-  ctx.beginPath();
-  ctx.moveTo(l * 0.15, -w * 0.62);
-  ctx.lineTo(l * 0.15, -w * 0.82); // Mast
-  ctx.stroke();
-
-  // Radar dish on mast
-  ctx.beginPath();
-  ctx.arc(l * 0.15, -w * 0.82, 3, 0, Math.PI * 2);
-  ctx.stroke();
+  if (isIJN) {
+    // IJN: small forward island; Taiho's island carries a large outboard-canted funnel,
+    // Shokaku vents through two downward-curving funnels projecting from the starboard side
+    const isTaiho = /Taiho/.test(ship.name);
+    const ix = isTaiho ? -l * 0.02 : l * 0.16;
+    ctx.fillRect(ix, w * 0.42, l * 0.1, w * 0.16);
+    ctx.strokeRect(ix, w * 0.42, l * 0.1, w * 0.16);
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(ix + l * 0.05, w * 0.42);
+    ctx.lineTo(ix + l * 0.05, w * 0.3); // mast
+    ctx.stroke();
+    ctx.fillStyle = '#263238';
+    if (isTaiho) {
+      ctx.beginPath();
+      ctx.ellipse(ix - l * 0.03, w * 0.62, l * 0.035, w * 0.08, -0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      for (const fx of [l * 0.0, -l * 0.07]) {
+        ctx.beginPath();
+        ctx.moveTo(fx - l * 0.02, w * 0.48);
+        ctx.quadraticCurveTo(fx, w * 0.72, fx + l * 0.025, w * 0.66);
+        ctx.lineTo(fx + l * 0.025, w * 0.48);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+  } else {
+    // USN: large island with integral funnel and tripod radar mast
+    ctx.fillRect(l * 0.04, w * 0.4, l * 0.22, w * 0.22);
+    ctx.strokeRect(l * 0.04, w * 0.4, l * 0.22, w * 0.22);
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(l * 0.08, w * 0.44, l * 0.14, w * 0.14);
+    // Funnel at the aft end of the island
+    ctx.fillStyle = '#263238';
+    ctx.beginPath();
+    ctx.ellipse(l * 0.065, w * 0.51, l * 0.025, w * 0.07, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(l * 0.15, w * 0.62);
+    ctx.lineTo(l * 0.15, w * 0.82); // Mast
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(l * 0.15, w * 0.82, 3, 0, Math.PI * 2);
+    ctx.stroke();
+  }
 
   // Port and Starboard Anti-Aircraft Gun Sponson Tubs
   ctx.strokeStyle = detailColor;
@@ -133,11 +169,35 @@ export function drawCarrier(rc: RenderContext, ship: Ship, hullColor: string, de
     ctx.fill();
   }
 
-  // Pennant number on bow deck
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-  ctx.font = 'bold 9px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(ship.era === 'era2' ? '9' : '6', l * 0.42, 3);
+  // Deck markings: USN hull number from the ship's designation; IJN Hinomaru on the bow deck and
+  // katakana identification character aft (Shokaku シ, Zuikaku ス, Taiho タ)
+  if (isIJN) {
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(l * 0.38, 0, w * 0.17, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#C62828';
+    ctx.beginPath();
+    ctx.arc(l * 0.38, 0, w * 0.13, 0, Math.PI * 2);
+    ctx.fill();
+    const kana = /Taiho/.test(ship.name) ? 'タ' : /Zuikaku/.test(ship.name) ? 'ス' : 'シ';
+    ctx.save();
+    ctx.translate(-l * 0.36, 0);
+    ctx.rotate(Math.PI / 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(kana, 0, 3);
+    ctx.restore();
+  } else {
+    const hull = ship.name.match(/CVA?-(\d+)/)?.[1];
+    if (hull) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.font = 'bold 9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(hull, l * 0.42, 3);
+    }
+  }
 
   drawShipTurrets(rc, ship, hullColor);
 }
@@ -252,113 +312,331 @@ export function drawBattleship(rc: RenderContext, ship: Ship, hullColor: string,
   drawShipTurrets(rc, ship, hullColor);
 }
 
-// Cruiser Line Art (CA San Francisco / CL Cleveland)
+interface CruiserLayout {
+  navy: 'usn' | 'ijn';
+  /** Funnels as fractions of the superstructure zone (0 = forward end, 1 = aft end). */
+  funnels: { at: number; raked?: boolean; trunked?: boolean }[];
+  /** Aircraft catapults: 'stern' (Baltimore / Cleveland) or 'midships' (treaty cruisers, IJN). */
+  catapult: 'stern' | 'midships' | 'none';
+  /** IJN quadruple torpedo mounts on the beam, Atlanta's centreline quads. */
+  torpedoes: 'ijn_beam' | 'ijn_centre' | 'usn_centre' | 'none';
+  /** Takao-class towering bridge structure. */
+  massiveBridge?: boolean;
+}
+
+function cruiserLayout(name: string): CruiserLayout {
+  if (/Takao|Atago|Maya/.test(name)) {
+    return { navy: 'ijn', massiveBridge: true, funnels: [{ at: 0.38, raked: true, trunked: true }, { at: 0.58, raked: true }], catapult: 'midships', torpedoes: 'ijn_beam' };
+  }
+  if (/Yahagi|Agano|Noshiro|Sakawa/.test(name)) {
+    return { navy: 'ijn', funnels: [{ at: 0.4, raked: true, trunked: true }], catapult: 'midships', torpedoes: 'ijn_centre' };
+  }
+  if (/Atlanta|Juneau|San Diego|Oakland/.test(name)) {
+    return { navy: 'usn', funnels: [{ at: 0.35 }, { at: 0.62 }], catapult: 'none', torpedoes: 'usn_centre' };
+  }
+  if (/Baltimore|Cleveland|Des Moines|Oregon/.test(name)) {
+    return { navy: 'usn', funnels: [{ at: 0.38 }, { at: 0.64 }], catapult: 'stern', torpedoes: 'none' };
+  }
+  // Treaty heavy cruisers (Portland / New Orleans): amidships catapults between funnels and aft turret
+  return { navy: 'usn', funnels: [{ at: 0.32 }, { at: 0.55 }], catapult: 'midships', torpedoes: 'none' };
+}
+
+// WWII cruiser: superstructure, funnels and catapults placed between the forward and aft main
+// batteries taken from the ship's own turret data, with class-specific features.
 export function drawCruiser(rc: RenderContext, ship: Ship, hullColor: string, detailColor: string) {
   const ctx = rc.ctx;
   const l = ship.length;
   const w = ship.width;
+  const lay = cruiserLayout(ship.name);
 
   ctx.fillStyle = '#071624';
   ctx.strokeStyle = hullColor;
   ctx.lineWidth = 2;
 
-  // Slender Cruiser Hull
+  // Hull: flared clipper bow, long parallel midbody, rounded transom stern
   ctx.beginPath();
   ctx.moveTo(l * 0.52, 0);
-  ctx.lineTo(l * 0.35, -w * 0.45);
-  ctx.lineTo(-l * 0.42, -w * 0.45);
-  ctx.lineTo(-l * 0.5, 0);
-  ctx.lineTo(-l * 0.42, w * 0.45);
-  ctx.lineTo(l * 0.35, w * 0.45);
+  ctx.quadraticCurveTo(l * 0.38, -w * 0.42, l * 0.24, -w * 0.47);
+  ctx.lineTo(-l * 0.36, -w * 0.47);
+  ctx.quadraticCurveTo(-l * 0.5, -w * 0.4, -l * 0.5, 0);
+  ctx.quadraticCurveTo(-l * 0.5, w * 0.4, -l * 0.36, w * 0.47);
+  ctx.lineTo(l * 0.24, w * 0.47);
+  ctx.quadraticCurveTo(l * 0.38, w * 0.42, l * 0.52, 0);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
 
-  // Superstructure & Bridge Deckhouse
+  // Superstructure zone: between the aftmost forward main turret and the foremost aft one
+  // Main battery = the largest-bore centreline mounts (ignores centreline 5" secondaries on Cleveland etc.)
+  const centre = ship.turrets.filter((t) => t.relY === 0);
+  const maxBore = Math.max(0, ...centre.map((t) => parseBoreMm(t.caliber) ?? 0));
+  const main = centre.filter((t) => (parseBoreMm(t.caliber) ?? 0) >= maxBore * 0.8);
+  const fwd = main.filter((t) => t.relX > 0).map((t) => t.relX);
+  const aft = main.filter((t) => t.relX < 0).map((t) => t.relX);
+  const zoneFwd = (fwd.length ? Math.min(...fwd) : l * 0.2) - 6;
+  const zoneAft = (aft.length ? Math.max(...aft) : -l * 0.25) + 6;
+  const zx = (f: number) => zoneFwd + (zoneAft - zoneFwd) * f;
+
+  // Bridge / conning tower block at the forward end of the zone
+  const bridgeLen = (zoneFwd - zoneAft) * (lay.massiveBridge ? 0.3 : 0.2);
+  ctx.fillStyle = '#16293A';
   ctx.strokeStyle = detailColor;
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(-l * 0.15, -w * 0.26, l * 0.3, w * 0.52);
+  ctx.lineWidth = 1.3;
+  const bw = w * (lay.massiveBridge ? 0.62 : 0.46);
+  ctx.beginPath();
+  ctx.moveTo(zoneFwd - bridgeLen, -bw / 2);
+  ctx.lineTo(zoneFwd - 2, -bw / 2);
+  ctx.quadraticCurveTo(zoneFwd + 1, 0, zoneFwd - 2, bw / 2);
+  ctx.lineTo(zoneFwd - bridgeLen, bw / 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  if (lay.massiveBridge) {
+    // Takao's stepped bridge levels
+    ctx.strokeRect(zoneFwd - bridgeLen * 0.8, -bw * 0.32, bridgeLen * 0.55, bw * 0.64);
+  }
+  // Main battery director
+  ctx.beginPath();
+  ctx.arc(zoneFwd - bridgeLen * 0.45, 0, Math.min(3, w * 0.13), 0, Math.PI * 2);
+  ctx.stroke();
 
   // Funnels
-  ctx.strokeRect(-l * 0.08, -w * 0.12, l * 0.06, w * 0.24);
-  ctx.strokeRect(l * 0.02, -w * 0.12, l * 0.06, w * 0.24);
+  for (const f of lay.funnels) {
+    const fx = zx(f.at);
+    const rx = l * (f.trunked ? 0.04 : 0.028);
+    const ry = w * (f.trunked ? 0.18 : 0.13);
+    ctx.fillStyle = '#263238';
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(fx, 0, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#0A0F14';
+    ctx.beginPath();
+    ctx.ellipse(fx - (f.raked ? rx * 0.35 : 0), 0, rx * 0.55, ry * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
-  // Midship Catapult
-  ctx.beginPath();
-  ctx.moveTo(-l * 0.18, 0);
-  ctx.lineTo(-l * 0.28, 0);
-  ctx.stroke();
+  // Aircraft catapults (paired, trained outboard) and a floatplane
+  ctx.strokeStyle = '#90A4AE';
+  ctx.lineWidth = 1;
+  if (lay.catapult !== 'none') {
+    const cx = lay.catapult === 'stern' ? -l * 0.44 : zx(0.86);
+    const len = l * 0.1;
+    ctx.beginPath();
+    for (const side of [-1, 1]) {
+      ctx.moveTo(cx, side * w * 0.12);
+      ctx.lineTo(cx + len * 0.55, side * w * 0.42);
+    }
+    ctx.stroke();
+    // Floatplane on the starboard catapult
+    ctx.strokeStyle = detailColor;
+    ctx.beginPath();
+    ctx.moveTo(cx + len * 0.15, w * 0.2);
+    ctx.lineTo(cx + len * 0.45, w * 0.36);
+    ctx.moveTo(cx + len * 0.22, w * 0.38);
+    ctx.lineTo(cx + len * 0.38, w * 0.18);
+    ctx.stroke();
+  }
+
+  // Torpedo armament
+  ctx.strokeStyle = '#B0BEC5';
+  ctx.lineWidth = 0.9;
+  if (lay.torpedoes === 'ijn_beam') {
+    // Takao: quadruple Type 92 mounts on both beams below the catapult deck
+    for (const side of [-1, 1]) {
+      for (const ox of [zx(0.7), zx(0.8)]) {
+        ctx.beginPath();
+        for (let i = 0; i < 4; i++) {
+          const y = side * (w * 0.32 + i * 0.9);
+          ctx.moveTo(ox - l * 0.03, y);
+          ctx.lineTo(ox + l * 0.03, y);
+        }
+        ctx.stroke();
+      }
+    }
+  } else if (lay.torpedoes === 'ijn_centre' || lay.torpedoes === 'usn_centre') {
+    const tx = zx(lay.torpedoes === 'ijn_centre' ? 0.66 : 0.5);
+    ctx.beginPath();
+    for (let i = 0; i < 4; i++) {
+      const y = (i - 1.5) * 1.1;
+      ctx.moveTo(tx - l * 0.035, y);
+      ctx.lineTo(tx + l * 0.035, y);
+    }
+    ctx.stroke();
+  }
 
   drawShipTurrets(rc, ship, hullColor);
 }
 
-// Destroyer Line Art (Fletcher / Gearing)
+interface DestroyerLayout {
+  navy: 'usn' | 'ijn' | 'sov';
+  /** Funnel centres as fractions of length (bow = +0.5); raked funnels lean aft (IJN). */
+  funnels: { x: number; raked?: boolean; trunked?: boolean }[];
+  /** Centreline torpedo mounts: position and number of tubes. */
+  tubes: { x: number; count: number }[];
+  bridge: [number, number];
+  /** IJN raised forecastle break. */
+  deckBreak?: number;
+}
+
+// Plan-view layouts per destroyer class, positions as fractions of hull length from midships.
+function destroyerLayout(name: string): DestroyerLayout {
+  if (/Shimakaze/.test(name)) {
+    return { navy: 'ijn', bridge: [0.14, 0.23], deckBreak: 0.13, funnels: [{ x: 0.07, raked: true, trunked: true }, { x: -0.04, raked: true }], tubes: [{ x: 0.0, count: 5 }, { x: -0.1, count: 5 }, { x: -0.155, count: 5 }] };
+  }
+  if (/IJN|Kagero|Yukikaze/.test(name)) {
+    return { navy: 'ijn', bridge: [0.14, 0.23], deckBreak: 0.13, funnels: [{ x: 0.07, raked: true, trunked: true }, { x: -0.04, raked: true }], tubes: [{ x: 0.01, count: 4 }, { x: -0.12, count: 4 }] };
+  }
+  if (/Skory/.test(name)) {
+    return { navy: 'sov', bridge: [0.12, 0.2], funnels: [{ x: 0.07 }, { x: -0.06 }], tubes: [{ x: 0.0, count: 5 }, { x: -0.13, count: 5 }] };
+  }
+  if (/DE-|Samuel B/.test(name)) {
+    return { navy: 'usn', bridge: [0.1, 0.2], funnels: [{ x: 0.03 }], tubes: [{ x: -0.07, count: 3 }] };
+  }
+  if (/Gearing|Frank Knox|DD-7[0-9]{2}/.test(name)) {
+    return { navy: 'usn', bridge: [0.06, 0.12], funnels: [{ x: 0.02 }, { x: -0.1 }], tubes: [{ x: -0.04, count: 5 }] };
+  }
+  // Fletcher class (default for WWII USN destroyers)
+  return { navy: 'usn', bridge: [0.12, 0.21], funnels: [{ x: 0.06 }, { x: -0.045 }], tubes: [{ x: 0.005, count: 5 }, { x: -0.1, count: 5 }] };
+}
+
+// WWII destroyer: class-specific funnels, torpedo mounts and deck layout (Fletcher / Butler DE /
+// Gearing / Kagero / Shimakaze / Skory), turrets placed from the ship's own turret data.
 export function drawDestroyer(rc: RenderContext, ship: Ship, hullColor: string, detailColor: string) {
   const ctx = rc.ctx;
   const l = ship.length;
   const w = ship.width;
+  const lay = destroyerLayout(ship.name);
 
   ctx.fillStyle = '#071420';
   ctx.strokeStyle = hullColor;
   ctx.lineWidth = 2;
 
-  // Sharp Fast Destroyer Hull Profile
+  // Hull: fine flared bow, parallel midbody, rounded cruiser-style stern
   ctx.beginPath();
-  ctx.moveTo(l * 0.52, 0); // Knife bow
-  ctx.lineTo(l * 0.28, -w * 0.44);
-  ctx.lineTo(-l * 0.44, -w * 0.44);
-  ctx.lineTo(-l * 0.5, 0);
-  ctx.lineTo(-l * 0.44, w * 0.44);
-  ctx.lineTo(l * 0.28, w * 0.44);
+  ctx.moveTo(l * 0.52, 0);
+  ctx.quadraticCurveTo(l * 0.36, -w * 0.4, l * 0.22, -w * 0.46);
+  ctx.lineTo(-l * 0.38, -w * 0.46);
+  ctx.quadraticCurveTo(-l * 0.5, -w * 0.38, -l * 0.5, 0);
+  ctx.quadraticCurveTo(-l * 0.5, w * 0.38, -l * 0.38, w * 0.46);
+  ctx.lineTo(l * 0.22, w * 0.46);
+  ctx.quadraticCurveTo(l * 0.36, w * 0.4, l * 0.52, 0);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
 
-  // Raised Forecastle Line
-  ctx.strokeStyle = detailColor;
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.moveTo(l * 0.12, -w * 0.44);
-  ctx.lineTo(l * 0.12, w * 0.44);
-  ctx.stroke();
-
-  // Bridge & Mast
-  ctx.strokeRect(0, -w * 0.25, l * 0.14, w * 0.5);
-
-  // Quintuple Torpedo Tube Launcher Assembly midships
-  ctx.strokeStyle = '#80DEEA';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(-l * 0.12, -w * 0.2, l * 0.09, w * 0.4);
-  // 5 Torpedo tips
-  for (let t = -2; t <= 2; t++) {
+  // IJN raised forecastle break (step down to the main deck)
+  if (lay.deckBreak !== undefined) {
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.arc(-l * 0.03, t * (w * 0.08), 1.5, 0, Math.PI * 2);
+    ctx.moveTo(l * lay.deckBreak, -w * 0.46);
+    ctx.lineTo(l * lay.deckBreak, w * 0.46);
     ctx.stroke();
   }
 
-  // 20mm Oerlikon Rapid-Fire Gun Tubs (Bridge wings & amidships)
-  ctx.strokeStyle = '#FFE082';
-  ctx.lineWidth = 1;
+  // Bridge with rounded front face
+  const [bA, bF] = lay.bridge;
+  ctx.fillStyle = '#16293A';
+  ctx.strokeStyle = detailColor;
+  ctx.lineWidth = 1.2;
   ctx.beginPath();
-  ctx.arc(l * 0.05, -w * 0.38, 2.5, 0, Math.PI * 2);
-  ctx.arc(l * 0.05, w * 0.38, 2.5, 0, Math.PI * 2);
-  ctx.arc(-l * 0.06, -w * 0.38, 2.5, 0, Math.PI * 2);
-  ctx.arc(-l * 0.06, w * 0.38, 2.5, 0, Math.PI * 2);
+  ctx.moveTo(l * bA, -w * 0.26);
+  ctx.lineTo(l * (bF - 0.03), -w * 0.26);
+  ctx.quadraticCurveTo(l * bF, -w * 0.26, l * bF, 0);
+  ctx.quadraticCurveTo(l * bF, w * 0.26, l * (bF - 0.03), w * 0.26);
+  ctx.lineTo(l * bA, w * 0.26);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // Main director atop the bridge
+  ctx.beginPath();
+  ctx.arc(l * (bA + bF) * 0.5, 0, Math.min(2.4, w * 0.16), 0, Math.PI * 2);
   ctx.stroke();
 
-  // 40mm Bofors Twin AA Mount Platforms
+  // Funnels: USN / Soviet upright ovals; IJN raked aft (forward one trunked and wider)
+  for (const f of lay.funnels) {
+    const rx = l * (f.trunked ? 0.05 : f.raked ? 0.042 : 0.034);
+    const ry = w * (f.trunked ? 0.2 : 0.16);
+    ctx.fillStyle = '#263238';
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(l * f.x, 0, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Smoke opening: offset aft on raked funnels
+    ctx.fillStyle = '#0A0F14';
+    ctx.beginPath();
+    ctx.ellipse(l * f.x - (f.raked ? rx * 0.35 : 0), 0, rx * 0.55, ry * 0.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Torpedo mounts, stowed fore-and-aft on the centreline
+  for (const t of lay.tubes) {
+    const cx = l * t.x;
+    const tubeLen = l * (lay.navy === 'ijn' ? 0.085 : 0.075);
+    const spread = Math.min(w * 0.36, t.count * 1.1);
+    ctx.save();
+    ctx.translate(cx, 0);
+    // Training base
+    ctx.fillStyle = '#16293A';
+    ctx.strokeStyle = '#80DEEA';
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.arc(0, 0, spread * 0.62, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Tubes
+    ctx.strokeStyle = '#B0BEC5';
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    for (let i = 0; i < t.count; i++) {
+      const y = -spread / 2 + (spread * i) / Math.max(1, t.count - 1);
+      ctx.moveTo(-tubeLen * 0.45, y);
+      ctx.lineTo(tubeLen * 0.55, y);
+    }
+    ctx.stroke();
+    // IJN Type 92 launchers carry an enclosed splinter shield over the breech end
+    if (lay.navy === 'ijn') {
+      ctx.fillStyle = '#263238';
+      ctx.strokeStyle = detailColor;
+      ctx.lineWidth = 0.8;
+      ctx.fillRect(-tubeLen * 0.5, -spread * 0.6, tubeLen * 0.42, spread * 1.2);
+      ctx.strokeRect(-tubeLen * 0.5, -spread * 0.6, tubeLen * 0.42, spread * 1.2);
+    }
+    ctx.restore();
+  }
+
+  // IJN reload lockers beside the forward funnel (Long Lance second salvo)
+  if (lay.navy === 'ijn') {
+    ctx.strokeStyle = 'rgba(176, 190, 197, 0.6)';
+    ctx.lineWidth = 0.8;
+    const fx = l * lay.funnels[0].x;
+    ctx.strokeRect(fx - l * 0.05, -w * 0.42, l * 0.1, w * 0.12);
+    ctx.strokeRect(fx - l * 0.05, w * 0.3, l * 0.1, w * 0.12);
+  }
+
+  // Light AA: USN 20mm Oerlikon tubs on the bridge wings, IJN / Soviet 25mm tubs abreast the funnels
+  ctx.strokeStyle = 'rgba(255, 224, 130, 0.7)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  const aaX = lay.navy === 'usn' ? l * (bA + 0.01) : l * (lay.funnels[lay.funnels.length - 1].x - 0.06);
+  ctx.arc(aaX, -w * 0.38, 1.3, 0, Math.PI * 2);
+  ctx.moveTo(aaX + 1.3, w * 0.38);
+  ctx.arc(aaX, w * 0.38, 1.3, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Stern depth charge roller racks
   ctx.strokeStyle = '#80DEEA';
   ctx.lineWidth = 1.2;
-  ctx.strokeRect(-l * 0.08, -w * 0.22, l * 0.04, w * 0.44);
-
-  // Stern Depth Charge Twin Roller Racks with Canisters
-  ctx.strokeStyle = '#80DEEA';
-  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(-l * 0.42, -w * 0.32);
-  ctx.lineTo(-l * 0.5, -w * 0.32);
-  ctx.moveTo(-l * 0.42, w * 0.32);
-  ctx.lineTo(-l * 0.5, w * 0.32);
+  ctx.moveTo(-l * 0.42, -w * 0.24);
+  ctx.lineTo(-l * 0.49, -w * 0.24);
+  ctx.moveTo(-l * 0.42, w * 0.24);
+  ctx.lineTo(-l * 0.49, w * 0.24);
   ctx.stroke();
 
   drawShipTurrets(rc, ship, hullColor);
