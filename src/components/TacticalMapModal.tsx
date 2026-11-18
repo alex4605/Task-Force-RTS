@@ -3,7 +3,7 @@ import { Island, Ship, Aircraft, GroundUnit, Era, Sonobuoy, Vector2D } from '../
 import { CameraViewportState } from './GameCanvas';
 import { X, Radio } from 'lucide-react';
 
-import { Language, getTranslation } from '../game/i18n';
+import { Language } from '../game/i18n';
 
 interface TacticalMapModalProps {
   isOpen: boolean;
@@ -40,7 +40,6 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
   lang = 'zh',
   era = 'era1',
 }) => {
-  const t = getTranslation(lang);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {

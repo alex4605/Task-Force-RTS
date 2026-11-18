@@ -239,8 +239,6 @@ export const HUD: React.FC<HUDProps> = ({
   onLaunchModel,
   onOrderSelected,
   onStopUnits,
-  onSetSpeed,
-  onSteer,
   onTriggerFlak,
   intel: _intel,
   score,
@@ -321,22 +319,6 @@ export const HUD: React.FC<HUDProps> = ({
   const [isBottomDeckExpanded, setIsBottomDeckExpanded] = useState<boolean>(true);
   const [requisitionTab, setRequisitionTab] = useState<RequisitionCategory>('ground');
   const [selectedBuildIslandId, setSelectedBuildIslandId] = useState<string>('');
-
-  // 1. 工兵部隊選中判定
-  const _isEngineerSelected = selectedUnits.some(
-    (u) => ('type' in u) && u.type === 'usmc_engineer'
-  ) || (selectedAirfacility !== null && (typeof selectedAirfacility === 'object' ? selectedAirfacility.type === 'engineer_construction' : selectedAirfacility === 'engineer_construction'));
-
-  // 2. 營指揮所選中判定 (專屬呼叫支援選單)
-  const _isBattalionCpSelected = selectedAirfacility !== null && (typeof selectedAirfacility === 'object' ? selectedAirfacility.type === 'battalion_cp' : selectedAirfacility === 'battalion_cp');
-
-  // 3. 機場選中判定 (只能打開陸基飛機選單)
-  const _isAirbaseSelected = !_isEngineerSelected && !_isBattalionCpSelected && (selectedAirfacility !== null && (typeof selectedAirfacility === 'object' ? selectedAirfacility.type === 'airbase' : selectedAirfacility === 'airbase'));
-
-  // 4. 航母選中判定 (只能顯示從該艦起飛的飛機) - 支援 CV-6 / CV-9 / CV-34 / CV-63 / CVN-68 與 LPH-2
-  const _isCarrierSelected = !_isEngineerSelected && !_isBattalionCpSelected && !_isAirbaseSelected && (selectedUnits.some(
-    (u) => ('type' in u) && (u.type === 'carrier' || u.type === 'cve' || u.type === 'cv63' || u.type === 'cvn' || u.type === 'lph')
-  ) || (selectedAirfacility !== null && (typeof selectedAirfacility === 'object' ? (selectedAirfacility.type === 'carrier' || selectedAirfacility.type === 'cve' || selectedAirfacility.type === 'cv63' || selectedAirfacility.type === 'lph') : selectedAirfacility === 'carrier')));
 
   // 取得當前活耀的營指揮所 (若有)
   const activeBattalionCp = React.useMemo(() => {

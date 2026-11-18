@@ -7,7 +7,6 @@ import {
   PAYLOAD_CATALOG,
   AirWingLoadout,
   Island,
-  IslandStronghold,
   Installation,
   InstallationType,
   Projectile,
@@ -47,8 +46,6 @@ import {
   createGroundUnit,
   createLCVP,
   createLST,
-  createLSMR,
-  createCVE,
   createTokyoExpressDD,
   createConvoyEscortShip,
   createPlayerBattleship,
@@ -80,7 +77,6 @@ import {
   createAustinLPD,
   createLCAC,
   createNewportLST,
-  createKievCVHG,
   createKirovCGN,
   createSovremennyDD,
   createUdaloyDD,
@@ -1542,7 +1538,7 @@ export class GameEngine {
       return;
     }
 
-    targetFighters.forEach((plane, idx) => {
+    targetFighters.forEach((plane) => {
       plane.order = {
         type: 'patrol',
         patrolOrigin: { ...origin },
@@ -2612,7 +2608,7 @@ export class GameEngine {
     return wps[Math.min(idx, wps.length - 1)] || dest;
   }
 
-  private updateEnemyShipAI(ship: Ship, dt: number) {
+  private updateEnemyShipAI(ship: Ship, _dt: number) {
     const flagship = this.getFlagship();
     const hostiles = [...this.playerShips, ...this.alliedShips].filter(
       (s) => !s.isSunk && (!this.isSubmarine(s) || Boolean(s.isSpottedByEnemy))
@@ -2678,7 +2674,7 @@ export class GameEngine {
   private calculateNavalSteeringAvoidance(
     ship: Ship,
     desiredHeading: number,
-    targetDist: number
+    _targetDist: number
   ): { targetHeading: number; speedScale: number } {
     if (this.islands.length === 0) {
       return { targetHeading: desiredHeading, speedScale: 1.0 };
@@ -4662,59 +4658,6 @@ export class GameEngine {
     }
   }
 
-  private fireTailGunner(bomber: Aircraft, targetFighter: Aircraft) {
-    soundEngine.playPlaneGun();
-    const tailAngle = bomber.heading + Math.PI;
-    const originX = bomber.pos.x + Math.cos(tailAngle) * 16;
-    const originY = bomber.pos.y + Math.sin(tailAngle) * 16;
-    const dx = targetFighter.pos.x - originX;
-    const dy = targetFighter.pos.y - originY;
-    const d = Math.hypot(dx, dy);
-    const fireAngle = Math.atan2(dy, dx);
-    const bulletSpeed = 560;
-
-    // Backward tracer stream from tail/dorsal turret
-    for (let b = 0; b < 2; b++) {
-      const spread = (Math.random() - 0.5) * 0.1;
-      const bAngle = fireAngle + spread;
-      this.projectiles.push({
-        id: `tailgun-${Date.now()}-${b}-${Math.random()}`,
-        type: 'bullet',
-        side: bomber.side,
-        pos: { x: originX, y: originY },
-        vel: { x: Math.cos(bAngle) * bulletSpeed, y: Math.sin(bAngle) * bulletSpeed },
-        originPos: { x: originX, y: originY },
-        targetPos: { x: originX + Math.cos(bAngle) * d, y: originY + Math.sin(bAngle) * d },
-        flightProgress: 0,
-        maxDistance: d + 40,
-        distanceTraveled: 0,
-        damage: bomber.role === 'level_bomber' ? 28 : 18,
-        blastRadius: 8,
-        speed: bulletSpeed,
-        heading: bAngle,
-        isDead: false,
-        trail: [],
-        attackerName: `${bomber.name} (自衛尾部機槍)`,
-      });
-    }
-
-    if (Math.random() < 0.6) {
-      const dmg = bomber.role === 'level_bomber' ? 36 : 22;
-      targetFighter.health = Math.max(0, targetFighter.health - dmg);
-      if (targetFighter.health <= 0) {
-        this.killPlane(targetFighter);
-        this.addCombatLog({
-          category: 'air',
-          sourceSide: bomber.side,
-          sourceName: `${bomber.name} 尾部機槍射手`,
-          targetName: targetFighter.name,
-          actionType: 'recon_spotted',
-          text: `🎯【自衛火力擊落！】${bomber.name} 尾部機槍手冷靜鎖定咬尾敵機「${targetFighter.name}」，自衛火網將其當空打爆！`,
-        });
-      }
-    }
-  }
-
   private initiateBombingRun(plane: Aircraft, targetPos: Vector2D) {
     plane.state = 'bombing_run';
     const headingToTarget = Math.atan2(targetPos.y - plane.pos.y, targetPos.x - plane.pos.x);
@@ -5110,11 +5053,7 @@ export class GameEngine {
     });
   }
 
-  private dropCarpetBomb(plane: Aircraft, targetPos: Vector2D) {
-    this.initiateBombingRun(plane, targetPos);
-  }
-
-  private dropDepthBombs(plane: Aircraft, targetPos: Vector2D) {
+  private dropDepthBombs(plane: Aircraft, _targetPos: Vector2D) {
     soundEngine.playWaterSplash();
     const count = plane.payloadType === 'scout_depth_charge' ? 2 : 4;
     for (let i = 0; i < count; i++) {
@@ -7452,7 +7391,6 @@ export class GameEngine {
       if (unit.side === 'player' || unit.side === 'allied') {
         let targetPos: Vector2D | null = null;
         let targetUnit: GroundUnit | null = null;
-        let targetName = '敵軍防禦工事';
 
         const enemyGround = this.groundUnits.find(
           (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && dist(unit.pos, u.pos) <= unit.range
@@ -7460,14 +7398,12 @@ export class GameEngine {
         if (enemyGround) {
           targetPos = enemyGround.pos;
           targetUnit = enemyGround;
-          targetName = enemyGround.name;
         } else {
           // Find enemy installation on current island (友軍地面部隊絕不攻擊我方或盟軍建造之陣地設施)
           for (const isl of this.islands) {
             for (const inst of isl.installations) {
               if (!inst.isDestroyed && this.isHostile(unit.side, inst.side) && dist(unit.pos, inst.pos) <= unit.range) {
                 targetPos = inst.pos;
-                targetName = inst.name;
                 break;
               }
             }
@@ -8523,7 +8459,7 @@ export class GameEngine {
     });
   }
 
-  private fireHARMMissile(plane: Aircraft, targetPos: Vector2D, targetEntity?: CombatTargetEntity) {
+  private fireHARMMissile(plane: Aircraft, targetPos: Vector2D, _targetEntity?: CombatTargetEntity) {
     soundEngine.playRocketIgnition();
     const attackerName = `${plane.name} (戰機 #${plane.id.slice(-4)})`;
     const heading = plane.heading;
@@ -8575,7 +8511,7 @@ export class GameEngine {
     });
   }
 
-  private fireMaverickMissile(plane: Aircraft, targetPos: Vector2D, targetEntity?: CombatTargetEntity) {
+  private fireMaverickMissile(plane: Aircraft, targetPos: Vector2D, _targetEntity?: CombatTargetEntity) {
     soundEngine.playRocketIgnition();
     const attackerName = `${plane.name} (戰機 #${plane.id.slice(-4)})`;
     const heading = plane.heading;
@@ -8723,7 +8659,7 @@ export class GameEngine {
     });
   }
 
-  private fireHellfireMissile(plane: Aircraft, targetPos: Vector2D, targetEntity?: CombatTargetEntity) {
+  private fireHellfireMissile(plane: Aircraft, targetPos: Vector2D, _targetEntity?: CombatTargetEntity) {
     soundEngine.playRocketIgnition();
     const attackerName = `${plane.name} (武裝直升機 #${plane.id.slice(-4)})`;
     const heading = plane.heading;
@@ -10245,7 +10181,7 @@ export class GameEngine {
     }
   }
 
-  private updateEra3Mechanics(dt: number) {
+  private updateEra3Mechanics(_dt: number) {
     // 1. AD-3W 全域空中預警系統 (AEW Early Warning 6500m & GCI)
     const activeAEW = this.aircraft.find(
       (a) => a.side === 'player' && (a.model === 'ad3w' || a.role === 'aew') && a.state !== 'shot_down' && a.state !== 'landing'
@@ -15844,229 +15780,6 @@ export class GameEngine {
   // ══════════════════════════════════════════════════════════
   // 定期增援循環 (Replenishment & Scheduled Convoys)
   // ══════════════════════════════════════════════════════════
-
-  private replenishAirbasePlanes() {
-    if (this.era === 'era1') {
-      this.airbasePlanes.b17 = (this.airbasePlanes.b17 || 0) + 1;
-      this.airbasePlanes.b25 = (this.airbasePlanes.b25 || 0) + 1;
-      this.airbasePlanes.p40 = (this.airbasePlanes.p40 || 0) + 2;
-      this.airbasePlanes.p36a = (this.airbasePlanes.p36a || 0) + 2;
-      this.airbasePlanes.p39d = (this.airbasePlanes.p39d || 0) + 1;
-      this.airbasePlanes.a20 = (this.airbasePlanes.a20 || 0) + 2;
-      this.airbasePlanes.f4f = (this.airbasePlanes.f4f || 0) + 2;
-      this.airbasePlanes.sbd = (this.airbasePlanes.sbd || 0) + 1;
-      this.airbasePlanes.tbd = (this.airbasePlanes.tbd || 0) + 1;
-      this.airbasePlanes.c47 = (this.airbasePlanes.c47 || 0) + 1;
-    } else if (this.era === 'era2') {
-      this.airbasePlanes.b24 = (this.airbasePlanes.b24 || 0) + 1;
-      this.airbasePlanes.b17_late = (this.airbasePlanes.b17_late || 0) + 1;
-      this.airbasePlanes.p51 = (this.airbasePlanes.p51 || 0) + 2;
-      this.airbasePlanes.p47 = (this.airbasePlanes.p47 || 0) + 2;
-      this.airbasePlanes.p38 = (this.airbasePlanes.p38 || 0) + 1;
-      this.airbasePlanes.f6f = (this.airbasePlanes.f6f || 0) + 2;
-      this.airbasePlanes.f4u = (this.airbasePlanes.f4u || 0) + 2;
-      this.airbasePlanes.sb2c = (this.airbasePlanes.sb2c || 0) + 1;
-      this.airbasePlanes.tbf = (this.airbasePlanes.tbf || 0) + 1;
-      this.airbasePlanes.c47 = (this.airbasePlanes.c47 || 0) + 1;
-    } else if (this.era === 'era3') {
-      this.airbasePlanes.b29 = (this.airbasePlanes.b29 || 0) + 1;
-      this.airbasePlanes.f86 = (this.airbasePlanes.f86 || 0) + 2;
-      this.airbasePlanes.f82 = (this.airbasePlanes.f82 || 0) + 1;
-      this.airbasePlanes.a26 = (this.airbasePlanes.a26 || 0) + 2;
-      this.airbasePlanes.f9f = (this.airbasePlanes.f9f || 0) + 2;
-      this.airbasePlanes.f2h = (this.airbasePlanes.f2h || 0) + 2;
-      this.airbasePlanes.ad1 = (this.airbasePlanes.ad1 || 0) + 2;
-      this.airbasePlanes.f4u4 = (this.airbasePlanes.f4u4 || 0) + 1;
-      this.airbasePlanes.af_guardian = (this.airbasePlanes.af_guardian || 0) + 1;
-      this.airbasePlanes.c47 = (this.airbasePlanes.c47 || 0) + 1;
-    } else if (this.era === 'era4') {
-      this.airbasePlanes.f4e = (this.airbasePlanes.f4e || 0) + 2;
-      this.airbasePlanes.a7 = (this.airbasePlanes.a7 || 0) + 2;
-      this.airbasePlanes.a6 = (this.airbasePlanes.a6 || 0) + 1;
-      this.airbasePlanes.f105 = (this.airbasePlanes.f105 || 0) + 1;
-      this.airbasePlanes.a1h = (this.airbasePlanes.a1h || 0) + 1;
-      this.airbasePlanes.a37b = (this.airbasePlanes.a37b || 0) + 1;
-      this.airbasePlanes.f5a = (this.airbasePlanes.f5a || 0) + 1;
-      this.airbasePlanes.f104g = (this.airbasePlanes.f104g || 0) + 1;
-      this.airbasePlanes.a4 = (this.airbasePlanes.a4 || 0) + 2;
-      this.airbasePlanes.f8 = (this.airbasePlanes.f8 || 0) + 1;
-      this.airbasePlanes.b52 = (this.airbasePlanes.b52 || 0) + 1;
-      this.airbasePlanes.uh1 = (this.airbasePlanes.uh1 || 0) + 2;
-      this.airbasePlanes.ah1 = (this.airbasePlanes.ah1 || 0) + 1;
-    } else {
-      // Era 5 Cold War modern jet air wing
-      this.airbasePlanes.b52 = (this.airbasePlanes.b52 || 0) + 1;
-      this.airbasePlanes.f111 = (this.airbasePlanes.f111 || 0) + 1;
-      this.airbasePlanes.a10a = (this.airbasePlanes.a10a || 0) + 2;
-      this.airbasePlanes.ah64a = (this.airbasePlanes.ah64a || 0) + 2;
-      this.airbasePlanes.ah1w = (this.airbasePlanes.ah1w || 0) + 2;
-      this.airbasePlanes.f15a = (this.airbasePlanes.f15a || 0) + 2;
-      this.airbasePlanes.f16a = (this.airbasePlanes.f16a || 0) + 2;
-      this.airbasePlanes.e3a = (this.airbasePlanes.e3a || 0) + 1;
-      this.airbasePlanes.c130 = (this.airbasePlanes.c130 || 0) + 1;
-      this.airbasePlanes.f14a = (this.airbasePlanes.f14a || 0) + 2;
-      this.airbasePlanes.fa18a = (this.airbasePlanes.fa18a || 0) + 2;
-      this.airbasePlanes.a6e = (this.airbasePlanes.a6e || 0) + 1;
-      this.airbasePlanes.ea6b = (this.airbasePlanes.ea6b || 0) + 1;
-      this.airbasePlanes.s3a = (this.airbasePlanes.s3a || 0) + 1;
-      this.airbasePlanes.av8b = (this.airbasePlanes.av8b || 0) + 1;
-      this.airbasePlanes.e2c = (this.airbasePlanes.e2c || 0) + 1;
-      this.airbasePlanes.sh3f = (this.airbasePlanes.sh3f || 0) + 1;
-      this.airbasePlanes.ch53 = (this.airbasePlanes.ch53 || 0) + 1;
-      this.airbasePlanes.c2a = (this.airbasePlanes.c2a || 0) + 1;
-    }
-    this.addCombatLog({
-      category: 'air',
-      sourceSide: 'player',
-      sourceName: '後勤航空輸送隊',
-      targetName: '前進航空基地',
-      actionType: 'recon_spotted',
-      text: `📦【基地航空補充】後方輸送機隊降落 Henderson Field，戰鬥機與攻擊機庫存獲得全面補充！`,
-    });
-  }
-
-  private spawnConvoyReinforcement() {
-    const basePos = this.friendlyBase?.center || { x: 2000, y: 12400 };
-    const landingPos: Vector2D = { x: basePos.x + 360, y: basePos.y - 200 };
-
-    const isEra5 = this.era === 'era5';
-    const isEra4 = this.era === 'era4';
-
-    // 1. Add Ground unit to base
-    let unitType: GroundUnitType;
-    let uName: string;
-
-    if (isEra5) {
-      const r = Math.random();
-      if (r < 0.25) {
-        unitType = 'us_m1ip_abrams';
-        uName = '美陸軍 M1IP 艾布蘭主力戰車排';
-      } else if (r < 0.45) {
-        unitType = 'us_m60a1_rise';
-        uName = '美陸戰隊 M60A1 RISE 爆反戰車排';
-      } else if (r < 0.65) {
-        unitType = 'usmc_lav25';
-        uName = 'USMC LAV-25 輪式裝甲偵察排';
-      } else if (r < 0.85) {
-        unitType = 'usmc_aav7a1';
-        uName = 'USMC AAV-7A1 兩棲突擊車排';
-      } else {
-        unitType = 'usmc_rifle_83';
-        uName = 'USMC 83年式 陸戰步兵加強班';
-      }
-    } else if (isEra4) {
-      const r = Math.random();
-      if (r < 0.3) {
-        unitType = 'usmc_armor_m48';
-        uName = '美陸軍 M48A3 巴頓主力戰車排';
-      } else if (r < 0.55) {
-        unitType = 'usmc_lvtp5a1';
-        uName = 'USMC LVTP-5A1 兩棲裝甲突擊車排';
-      } else if (r < 0.8) {
-        unitType = 'us_army_m113_mech';
-        uName = '美陸軍 M113 ACAV 裝甲騎兵排';
-      } else {
-        unitType = 'usmc_air_assault_65';
-        uName = 'USMC 陸戰隊空中突擊步兵排';
-      }
-    } else {
-      unitType =
-        this.era === 'era1'
-          ? Math.random() < 0.4
-            ? 'usmc_rifle_42'
-            : Math.random() < 0.7
-            ? 'usmc_lvt_42'
-            : 'usmc_armor_m3'
-          : Math.random() < 0.4
-          ? 'usmc_rifle_45'
-          : Math.random() < 0.7
-          ? 'usmc_lvt_45'
-          : 'usmc_armor_m4';
-
-      uName =
-        unitType === 'usmc_rifle_42'
-          ? 'USMC 陸戰步兵排 (1942)'
-          : unitType === 'usmc_rifle_45'
-          ? 'USMC 陸戰突擊步兵排 (1945)'
-          : unitType === 'usmc_lvt_42'
-          ? 'USMC LVT-1 水牛兩棲機步排'
-          : unitType === 'usmc_lvt_45'
-          ? 'USMC LVT-4 水牛兩棲突擊排'
-          : unitType === 'usmc_armor_m3'
-          ? 'USMC M3 斯圖亞特戰車排'
-          : 'USMC M4A2 薛曼中戰車排';
-    }
-
-    const newUnit = createGroundUnit(`usmc-reinf-${Date.now()}`, unitType, uName, 'player', this.era, {
-      x: basePos.x + (Math.random() - 0.5) * 80,
-      y: basePos.y + (Math.random() - 0.5) * 80,
-    });
-    this.groundUnits.push(newUnit);
-
-    // 2. Add Landing Craft
-    let craft: Ship;
-    if (isEra5) {
-      craft = Math.random() < 0.7
-        ? createLCAC(`player-lcac-reinf-${Date.now()}`, `LCAC-${Math.floor(Math.random() * 80) + 10} 氣墊登陸艇`, landingPos)
-        : createNewportLST(`player-lst-reinf-${Date.now()}`, `LST-1179 紐波特戰車登陸艦 (現代化型)`, landingPos, this.era);
-    } else if (isEra4) {
-      craft = Math.random() < 0.65
-        ? createLCM8(`player-lcm-reinf-${Date.now()}`, `LCM-8 機械化登陸艇 (Mike-${Math.floor(Math.random() * 80) + 10})`, landingPos)
-        : createNewportLST(`player-lst-reinf-${Date.now()}`, `LST-1179 紐波特級戰車登陸艦`, landingPos, this.era);
-    } else {
-      const craftType = Math.random() < 0.65 ? 'lcvp' : 'lst';
-      craft =
-        craftType === 'lcvp'
-          ? createLCVP(`player-lcvp-reinf-${Date.now()}`, `LCVP 突擊登陸艇 (PA-${Math.floor(Math.random() * 80) + 10})`, landingPos, this.era)
-          : createLST(`player-lst-reinf-${Date.now()}`, `LST-${Math.floor(Math.random() * 400) + 400} 戰車登陸艦`, landingPos, this.era);
-    }
-    this.playerShips.push(craft);
-
-    // 3. Add Naval Escort
-    const escortPos: Vector2D = { x: basePos.x + 480, y: basePos.y - 280 };
-    let escortShip: Ship;
-
-    if (isEra5) {
-      const r = Math.random();
-      if (r < 0.35) {
-        escortShip = createPerryFFG(`player-escort-${Date.now()}`, 'USS Oliver Hazard Perry (FFG-7)', escortPos);
-      } else if (r < 0.65) {
-        escortShip = createSpruanceDD(`player-escort-${Date.now()}`, 'USS Spruance (DD-963)', escortPos);
-      } else if (r < 0.85) {
-        escortShip = createKiddDDG(`player-escort-${Date.now()}`, 'USS Kidd (DDG-993)', escortPos);
-      } else {
-        escortShip = createTiconderogaCG(`player-escort-${Date.now()}`, 'USS Ticonderoga (CG-47 神盾巡洋艦)', escortPos);
-      }
-    } else if (isEra4) {
-      const r = Math.random();
-      if (r < 0.4) {
-        escortShip = createKnoxFFG(`player-escort-${Date.now()}`, 'USS Knox (FF-1052 諾克斯級巡防艦)', escortPos);
-      } else if (r < 0.75) {
-        escortShip = createAdamsDDG(`player-escort-${Date.now()}`, 'USS Charles F. Adams (DDG-2 飛彈驅逐艦)', escortPos);
-      } else {
-        escortShip = createBelknapCG(`player-escort-${Date.now()}`, 'USS Belknap (CG-26 貝爾納普級飛彈巡洋艦)', escortPos);
-      }
-    } else if (this.era === 'era2' && Math.random() < 0.2) {
-      escortShip = createCVE(`player-cve-${Date.now()}`, 'USS Casablanca (CVE-55 護航航母)', escortPos, this.era);
-    } else {
-      const escortType = this.nextConvoyEscort;
-      escortShip = createConvoyEscortShip(`player-escort-${Date.now()}`, escortType, escortPos, this.era);
-      const escorts: ('ss' | 'dd' | 'cl' | 'ca')[] = ['ss', 'dd', 'cl', 'ca'];
-      this.nextConvoyEscort = escorts[Math.floor(Math.random() * escorts.length)];
-    }
-    this.playerShips.push(escortShip);
-    this.applyUpgradesToShip(escortShip);
-
-    soundEngine.playPlaneSortie();
-    this.addCombatLog({
-      category: 'naval',
-      sourceSide: 'player',
-      sourceName: isEra5 ? '大西洋/太平洋第6/7艦隊後勤支援群' : isEra4 ? '西太平洋後勤支援艦隊 (CTF-73)' : '太平洋後勤輸送總隊',
-      targetName: '前進海空基地',
-      actionType: 'recon_spotted',
-      text: `🚢⚓【海運船團抵達基地！】「${craft.name}」與「${uName}」靠泊！伴隨護航艦「${escortShip.name}」加入作戰序列！`,
-    });
-  }
 
   private spawnTokyoExpressDD() {
     const spawnPos: Vector2D = { x: 8600, y: 1400 };

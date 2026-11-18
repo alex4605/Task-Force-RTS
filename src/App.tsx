@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { GameEngine } from './game/engine';
 import { GameCanvas, CameraViewportState } from './components/GameCanvas';
 import { HUD } from './components/HUD';
@@ -27,7 +27,7 @@ import {
   Island,
   Sonobuoy,
 } from './types/game';
-import { REQUISITION_CATALOG, getRequisitionCatalog } from './game/requisition';
+import { getRequisitionCatalog } from './game/requisition';
 import { soundEngine } from './game/audio';
 import { Language } from './game/i18n';
 

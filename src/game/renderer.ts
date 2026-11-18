@@ -2,7 +2,6 @@ import {
   Ship,
   Aircraft,
   Island,
-  IslandStronghold,
   Projectile,
   Particle,
   Vector2D,
@@ -3526,7 +3525,7 @@ export class VectorRenderer {
   }
 
   // LSM(R) Medium Rocket Landing Ship Line Art
-  private drawLSMR(ship: Ship, hullColor: string, detailColor: string) {
+  private drawLSMR(ship: Ship, hullColor: string, _detailColor: string) {
     const ctx = this.ctx;
     const l = ship.length;
     const w = ship.width;
@@ -4745,7 +4744,7 @@ export class VectorRenderer {
   }
 
   // Ticonderoga CG (Aegis Cruiser with SPY-1 phased array deckhouses)
-  private drawTiconderogaCG(ship: Ship, hullColor: string, detailColor: string) {
+  private drawTiconderogaCG(ship: Ship, hullColor: string, _detailColor: string) {
     const ctx = this.ctx;
     const l = ship.length;
     const w = ship.width;
@@ -4883,7 +4882,7 @@ export class VectorRenderer {
   }
 
   // LCAC Air Cushion Landing Craft
-  private drawLCAC(ship: Ship, hullColor: string, detailColor: string) {
+  private drawLCAC(ship: Ship, _hullColor: string, _detailColor: string) {
     const ctx = this.ctx;
     const l = ship.length;
     const w = ship.width;
@@ -4917,7 +4916,7 @@ export class VectorRenderer {
   }
 
   // Soviet Kiev Class Aircraft Carrier / Heavy Aviation Cruiser (CVHG)
-  private drawKievCVHG(ship: Ship, hullColor: string, detailColor: string) {
+  private drawKievCVHG(ship: Ship, hullColor: string, _detailColor: string) {
     const ctx = this.ctx;
     const l = ship.length;
     const w = ship.width;
@@ -5038,7 +5037,7 @@ export class VectorRenderer {
   }
 
   // Soviet Sovremenny Class Destroyer (Project 956 Sarych with 8x Moskit Sunburn)
-  private drawSovremennyDD(ship: Ship, hullColor: string, detailColor: string) {
+  private drawSovremennyDD(ship: Ship, hullColor: string, _detailColor: string) {
     const ctx = this.ctx;
     const l = ship.length;
     const w = ship.width;
@@ -6182,7 +6181,7 @@ export class VectorRenderer {
   }
 
   // 專屬盟軍艦艇外觀分流分發器
-  private drawAlliedSAGShip(ship: Ship, hullColor: string, detailColor: string) {
+  private drawAlliedSAGShip(ship: Ship, hullColor: string, _detailColor: string) {
     const name = ship.name || '';
     const l = ship.length;
     const w = ship.width;
@@ -6191,10 +6190,8 @@ export class VectorRenderer {
     // 1. 日本海上自衛隊 (JMSDF SAG)
     if (name.includes('JDS ') || ship.alliedSAGName?.includes('海上自衛隊')) {
       const isDDH = name.includes('Haruna') || name.includes('Shirane') || name.includes('DDH');
-      const isAsagiriOrHatsuyuki = name.includes('Asagiri') || name.includes('Hatsuyuki') || name.includes('Takatsuki');
 
       // JMSDF 海自暗灰塗裝
-      const jmsdfHull = '#2E3D48';
       const jmsdfDeck = '#455A64';
       const jmsdfDetail = '#80CBC4';
 
@@ -6299,7 +6296,6 @@ export class VectorRenderer {
 
     } else if (name.includes('Bremen') || name.includes('FGS ')) {
       // 2. 德國布萊梅級巡防艦 (FGS Bremen F207)
-      const deHull = '#2A3742';
       const deDetail = '#FFD54F';
 
       ctx.fillStyle = '#1A252E';
@@ -6376,7 +6372,6 @@ export class VectorRenderer {
       const isRNBB = name.includes('George') || name.includes('York') || ship.type === 'battleship';
       const isRNDDG = name.includes('Type 42') || name.includes('42型') || name.includes('Gloucester') || (name.includes('Sheffield') && name.includes('D80'));
       const isRNCruiser = name.includes('Belfast') || (name.includes('Sheffield') && !isRNDDG);
-      const isRNDD = !isRNBB && !isRNDDG && !isRNCruiser;
 
       // 英國海軍部海軍灰 (Admiralty Dark Sea Grey)
       ctx.fillStyle = isRNBB ? '#1E2B37' : '#192633';
@@ -8176,7 +8171,6 @@ export class VectorRenderer {
       ctx.strokeRect(-1, -1.8, 5, 3.6);
 
       // 4-blade prop
-      const scProp = this.time * 26;
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -8788,7 +8782,6 @@ export class VectorRenderer {
       ctx.strokeRect(3, 8.5, 8, 4.5);
 
       // Spinning dual props
-      const pAng = this.time * 24;
       ctx.strokeStyle = 'rgba(255, 213, 79, 0.7)';
       ctx.beginPath();
       ctx.arc(11, -11, 4, 0, Math.PI * 2);
@@ -12089,7 +12082,6 @@ export class VectorRenderer {
       ctx.stroke();
 
       // 3-blade prop
-      const propA = this.time * 28;
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -12726,7 +12718,6 @@ export class VectorRenderer {
       ctx.fill();
 
       // 5-blade Rotol propeller
-      const propA = this.time * 32;
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
       ctx.beginPath();
       ctx.arc(17, 0, 7.5, 0, Math.PI * 2);
@@ -14510,8 +14501,6 @@ export class VectorRenderer {
         if (proj.isASROC) {
           // ════ RUR-5 ASROC 反潛火箭 (Rocket Thrown Anti-Submarine Torpedo) ════
           const alt = proj.arcAltitude || 0;
-          const cosH = Math.cos(proj.heading);
-          const sinH = Math.sin(proj.heading);
 
           // 1. Water shadow directly underneath ASROC trajectory
           ctx.fillStyle = 'rgba(2, 8, 16, 0.35)';

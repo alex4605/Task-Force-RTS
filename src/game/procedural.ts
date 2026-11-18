@@ -2,7 +2,6 @@ import {
   Island,
   IslandStronghold,
   Installation,
-  InstallationType,
   Ship,
   Vector2D,
   Turret,
