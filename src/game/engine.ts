@@ -3827,7 +3827,7 @@ export class GameEngine {
                     this.triggerSovietHitAndRun(plane, targetPos);
                   }
                 }
-              } else if ((plane.side === 'player' || plane.side === 'allied') && (['f14a', 'f15a', 'f16a', 'fa18a', 'f4e', 'f4b', 'f4j', 'f8', 'tornado_adv', 'f4f', 'mirage2000', 'mirage3', 'hunter_fga9'].includes(plane.model))) {
+              } else if ((plane.side === 'player' || plane.side === 'allied') && (['f14a', 'f15a', 'f16a', 'fa18a', 'f4e', 'f4b', 'f4j', 'f8', 'tornado_adv', 'f4f_phantom', 'mirage2000', 'mirage3', 'hunter_fga9'].includes(plane.model))) {
                 if (plane.model === 'f14a' && d >= 1600 && d <= 4800 && plane.shootCooldown <= 0) {
                   this.firePhoenixMissile(plane, targetPlane.pos, targetPlane);
                   plane.shootCooldown = 7.0;
@@ -8766,7 +8766,7 @@ export class GameEngine {
     const role: AircraftRole =
       model === 'b17' || model === 'b17_late' || model === 'b25' || model === 'b24' || model === 'b29' || model === 'b52' || model === 'f111' || model === 'lancaster'
         ? 'level_bomber'
-        : model === 'p40' || model === 'p36a' || model === 'p38' || model === 'p51' || model === 'f82' || model === 'f86' || model === 'f4f' || model === 'f6f' || model === 'f4u' || model === 'f8f' || model === 'f9f' || model === 'f2h' || model === 'f8' || model === 'f4b' || model === 'f4j' || model === 'f4e' || model === 'f14a' || model === 'f15a' || model === 'f16a' || model === 'fa18a' || model === 'f5a' || model === 'f104g' || model === 'hurricane' || model === 'spitfire_v' || model === 'spitfire_xiv' || model === 'tempest' || model === 'meteor' || model === 'rokaf_p51' || model === 'mirage3' || model === 'tornado_adv' || model === 'mirage2000'
+        : model === 'p40' || model === 'p36a' || model === 'p38' || model === 'p51' || model === 'f82' || model === 'f86' || model === 'f4f' || model === 'f4f_phantom' || model === 'f6f' || model === 'f4u' || model === 'f8f' || model === 'f9f' || model === 'f2h' || model === 'f8' || model === 'f4b' || model === 'f4j' || model === 'f4e' || model === 'f14a' || model === 'f15a' || model === 'f16a' || model === 'fa18a' || model === 'f5a' || model === 'f104g' || model === 'hurricane' || model === 'spitfire_v' || model === 'spitfire_xiv' || model === 'tempest' || model === 'meteor' || model === 'rokaf_p51' || model === 'mirage3' || model === 'tornado_adv' || model === 'mirage2000'
         ? 'fighter'
         : model === 'a20' || model === 'p39d' || model === 'p47' || model === 'a26' || model === 'ad1' || model === 'f4u4' || model === 'a4' || model === 'a6a' || model === 'a6b_weasel' || model === 'f105' || model === 'a7' || model === 'a1h' || model === 'a37b' || model === 'ah1' || model === 'a10a' || model === 'a6e' || model === 'av8b' || model === 'ea6b' || model === 'ah64a' || model === 'ah1w' || model === 'beaufighter' || model === 'mosquito' || model === 'sea_fury' || model === 'firefly_as5' || model === 'hunter_fga9' || model === 'tornado_gr1' || model === 'tornado_ids' || model === 'jaguar_gr1' || model === 'viggen_ja37'
         ? 'attacker'
@@ -8844,7 +8844,8 @@ export class GameEngine {
       model === 'hurricane' ? 102 :
       model === 'c1' || model === 's2' || model === 'e1' ? 100 :
       model === 'p36a' ? 100 :
-      model === 'f4f' ? (this.era === 'era5' ? 165 : 98) :
+      model === 'f4f_phantom' ? 165 :
+      model === 'f4f' ? 98 :
       model === 'p39d' ? 98 :
       model === 'c47' ? 98 :
       model === 'b24' ? 96 :
@@ -8939,7 +8940,8 @@ export class GameEngine {
       model === 'p40' ? 420 :
       model === 'sbd' ? 420 :
       model === 'p36a' ? 400 :
-      model === 'f4f' ? (this.era === 'era5' ? 680 : 360) :
+      model === 'f4f_phantom' ? 680 :
+      model === 'f4f' ? 360 :
       model === 'swordfish' ? 340 : 500;
 
     const pType: AircraftPayloadType =
@@ -8976,7 +8978,7 @@ export class GameEngine {
         ? 'c1_paratroopers'
         : model === 'b52'
         ? (this.era === 'era5' ? 'rgm84_harpoon' : 'b52_megaton_carpet')
-        : model === 'f4e' || model === 'f4j' || model === 'f4f'
+        : model === 'f4e' || model === 'f4j' || model === 'f4f_phantom'
         ? 'aim7_sparrow'
         : model === 'tornado_adv'
         ? 'aim7_sparrow'
@@ -9149,7 +9151,7 @@ export class GameEngine {
     else if (model === 'ah1w') gunRounds = 750;
     else if (model === 'av8b') gunRounds = 300;
     else if (model === 'f14a' || model === 'fa18a' || model === 'f15a' || model === 'f16a' || model === 'f111') gunRounds = 940;
-    else if (model === 'f4e' || model === 'f105' || model === 'a7') gunRounds = 1000;
+    else if (model === 'f4e' || model === 'f4f_phantom' || model === 'f105' || model === 'a7') gunRounds = 1000;
     else if (model === 'ov10' || model === 'ah1') gunRounds = 1500;
     else if (model === 'uh1') gunRounds = 1200;
     else if (model === 'c47' || model === 'c1' || model === 'c2a' || model === 'c130' || model === 'ch53' || model === 'e2c' || model === 'e3a') gunRounds = 0;
@@ -14970,7 +14972,7 @@ export class GameEngine {
       // Era 5 Cold War NATO Coalition (Ceiling is SARH, AMRAAM not yet deployed)
       pool = [
         { model: 'tornado_adv', role: 'fighter', modelName: '龍捲風 ADV F.3 全天候截擊機', speed: 195, baseHealth: 750, payloadType: 'aim7_sparrow', payloadName: '4x 天閃 (Skyflash) SARH + 響尾蛇', ammo: 600, affiliation: '英國皇家空軍 (RAF)' },
-        { model: 'f4f', role: 'fighter', modelName: 'F-4F 幽靈II式戰鬥機', speed: 165, baseHealth: 680, payloadType: 'aim7_sparrow', payloadName: '4x AIM-7 麻雀 (SARH) + 響尾蛇', ammo: 640, affiliation: '西德聯邦空軍 (Luftwaffe)' },
+        { model: 'f4f_phantom', role: 'fighter', modelName: 'F-4F 幽靈II式戰鬥機', speed: 165, baseHealth: 680, payloadType: 'aim7_sparrow', payloadName: '4x AIM-7 麻雀 (SARH) + 響尾蛇', ammo: 640, affiliation: '西德聯邦空軍 (Luftwaffe)' },
         { model: 'mirage2000', role: 'fighter', modelName: '幻象 2000C 電傳飛控戰鬥機', speed: 205, baseHealth: 720, payloadType: 'aim7_sparrow', payloadName: '超級530D (SARH) + 魔術二型', ammo: 600, affiliation: '法國空軍 (Armée de l\'Air)' },
         { model: 'tornado_gr1', role: 'attacker', modelName: '龍捲風 GR.1 遠程打擊機', speed: 175, baseHealth: 760, payloadType: 'rgm84_harpoon', payloadName: '海鷹/鸕鶿反艦飛彈 + 雙門27mm砲', ammo: 800, affiliation: '西德聯邦海航 (MFG 1)' },
         { model: 'tornado_ids', role: 'attacker', modelName: '龍捲風 IDS 跑道壓制戰轟機', speed: 175, baseHealth: 760, payloadType: 'bombs_snakeye_retarded', payloadName: 'JP233 跑道集束子母彈藥撒佈器', ammo: 800, affiliation: '英國皇家空軍 (RAF)' },

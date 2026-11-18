@@ -1240,6 +1240,7 @@ function drawAircraftPreview(
     m === 'f4b' ||
     m === 'f4j' ||
     m === 'f4e' ||
+    m === 'f4f_phantom' ||
     m === 'f8' ||
     m === 'a7' ||
     m === 'f105' ||

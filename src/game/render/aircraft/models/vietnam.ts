@@ -1502,6 +1502,7 @@ export const VIETNAM_DRAWERS: AircraftDrawerTable = {
   f4b: drawF4b,
   f4j: drawF4b,
   f4e: drawF4b,
+  f4f_phantom: drawF4b,
   f8: drawF8,
   a4: drawA4,
   a6a: drawA6a,

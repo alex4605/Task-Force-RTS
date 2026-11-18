@@ -4,6 +4,11 @@ import { drawUnitSelectionRing } from '../ships';
 import { drawJapaneseIFFLeadingEdge } from './insignia';
 import { AIRCRAFT_MODEL_DRAWERS } from './models';
 
+// Airframes that cast a swept / delta wing shadow instead of a straight wing.
+const SWEPT_WING_SHADOW: ReadonlySet<AircraftModel> = new Set<AircraftModel>([
+  'f14a', 'fa18a', 'f15a', 'f16a', 'f111', 'f4b', 'f4j', 'f4e', 'f4f_phantom', 'b52', 'tu22m3', 'tu95', 'mig29a', 'su27', 'mirage3', 'mirage2000',
+]);
+
 // Draw Specific Aircraft Models with Authentic Vector Silhouettes
 export function drawAircraft(rc: RenderContext, aircraftList: Aircraft[], camera: Camera, selectedUnitIds: string[]) {
   const ctx = rc.ctx;
@@ -60,34 +65,8 @@ function drawAltitudeShadow(rc: RenderContext, plane: Aircraft): void {
     const altOffset = plane.altitude * 32;
     const shadowScale = 0.85 + plane.altitude * 0.25;
     const shadowAlpha = 0.34 * Math.min(1, plane.altitude * 1.6);
-    const isHeloShadow =
-      plane.model === 'ho3s1' ||
-      plane.model === 'uh2' ||
-      plane.model === 'uh1' ||
-      plane.model === 'ah1' ||
-      plane.model === 'sh2' ||
-      plane.model === 'sh3f' ||
-      plane.model === 'ch53' ||
-      plane.model === 'ah64a' ||
-      plane.model === 'ah1w' ||
-      plane.model === 'ka27' ||
-      plane.model === 'mi24';
-    const isSweptWing =
-      plane.model === 'f14a' ||
-      plane.model === 'fa18a' ||
-      plane.model === 'f15a' ||
-      plane.model === 'f16a' ||
-      plane.model === 'f111' ||
-      plane.model === 'f4b' ||
-      plane.model === 'f4j' ||
-      plane.model === 'f4e' ||
-      plane.model === 'b52' ||
-      plane.model === 'tu22m3' ||
-      plane.model === 'tu95' ||
-      plane.model === 'mig29a' ||
-      plane.model === 'su27' ||
-      plane.model === 'mirage3' ||
-      plane.model === 'mirage2000';
+    const isHeloShadow = AIRCRAFT_PROPULSION[plane.model] === 'helicopter';
+    const isSweptWing = SWEPT_WING_SHADOW.has(plane.model);
     const isHeavySpan = plane.role === 'level_bomber' || plane.model === 'tu95' || plane.model === 'e3a' || plane.model === 'c130';
 
     ctx.save();
@@ -961,25 +940,117 @@ function drawSarhBeam(rc: RenderContext, aircraftList: Aircraft[], plane: Aircra
   }
 }
 
-// Propulsion classes used to pick jet exhaust vs. propeller disc (built once, not per frame).
-const JET_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>([
-  'f8', 'f4b', 'f4j', 'f4e', 'a4', 'a6a', 'a6b_weasel', 'f105', 'b52', 'a7',
-  'f9f', 'f2h', 'f86', 'mig15', 'mig17', 'mig19', 'mig21', 'su7', 'il28', 'tu16',
-  'tu14', 'ohka', 'meteor',
-  // Era 5 Cold War Jets (冷戰噴射戰機群，絕無螺旋槳)
-  'f14a', 'fa18a', 's3a', 'a6e', 'ea6b', 'av8b', 'a10a', 'f15a', 'f16a', 'e3a', 'f111',
-  'tu22m3', 'yak38', 'mig29a', 'su27', 'a50', 'su25'
-]);
-const HELO_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>([
-  'uh2', 'uh1', 'ah1', 'ho3s1',
-  // Era 5 Helicopters:
-  'sh3f', 'ch53', 'ah64a', 'ah1w', 'ka27', 'mi24'
-]);
-const MULTI_PROP_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>([
-  'b17', 'b24', 'b25', 'b29', 'g4m', 'p38', 'c47', 'c1', 's2', 'e1', 'ov10', 'a20', 'a26',
-  // Era 4/5 Turboprops / Patrol / Transports (多發渦輪螺旋槳/反潛巡邏機):
-  'e2c', 'c2a', 'c130', 'tu95', 'be12', 'il38'
-]);
+/**
+ * How each airframe is propelled; selects the generic propulsion effect drawn over the silhouette.
+ * Exhaustive by type, so adding an AircraftModel without classifying it is a compile error.
+ * - single_prop: spinning nose propeller disc
+ * - jet: single tail exhaust plume
+ * - multi_prop / podded_jet / helicopter: engines are part of the silhouette, no generic effect
+ */
+type Propulsion = 'single_prop' | 'multi_prop' | 'jet' | 'podded_jet' | 'helicopter';
+
+const AIRCRAFT_PROPULSION: Record<AircraftModel, Propulsion> = {
+  // single_prop
+  f4f: 'single_prop', sbd: 'single_prop', tbd: 'single_prop', os2u: 'single_prop', p40: 'single_prop',
+  f6f: 'single_prop', f4u: 'single_prop', f8f: 'single_prop', sb2c: 'single_prop', tbf: 'single_prop',
+  sc1: 'single_prop', p51: 'single_prop', p47: 'single_prop', ad1: 'single_prop', f4u4: 'single_prop',
+  af_guardian: 'single_prop', ad3w: 'single_prop', zero: 'single_prop', zero_a6m2: 'single_prop',
+  zero_a6m5: 'single_prop', ki61: 'single_prop', george: 'single_prop', val: 'single_prop',
+  judy: 'single_prop', kate: 'single_prop', jill: 'single_prop', kamikaze_zero: 'single_prop',
+  kamikaze_judy: 'single_prop', yak9: 'single_prop', il10: 'single_prop', p36a: 'single_prop',
+  p39d: 'single_prop', hurricane: 'single_prop', spitfire_v: 'single_prop', swordfish: 'single_prop',
+  spitfire_xiv: 'single_prop', tempest: 'single_prop', sea_fury: 'single_prop', rokaf_p51: 'single_prop',
+  firefly_as5: 'single_prop', a1h: 'single_prop',
+  // multi_prop
+  b17: 'multi_prop', a20: 'multi_prop', b24: 'multi_prop', p38: 'multi_prop', a26: 'multi_prop',
+  b29: 'multi_prop', e1: 'multi_prop', s2: 'multi_prop', c1: 'multi_prop', c47: 'multi_prop',
+  p3: 'multi_prop', ov10: 'multi_prop', g4m: 'multi_prop', e2c: 'multi_prop', c2a: 'multi_prop',
+  c130: 'multi_prop', b25: 'multi_prop', beaufighter: 'multi_prop', b17_late: 'multi_prop',
+  mosquito: 'multi_prop', lancaster: 'multi_prop', f82: 'multi_prop', tu95: 'multi_prop', be12: 'multi_prop',
+  il38: 'multi_prop',
+  // jet
+  f86: 'jet', f9f: 'jet', f2h: 'jet', f8: 'jet', f4b: 'jet', f4f_phantom: 'jet', f4j: 'jet', a4: 'jet', a6a: 'jet',
+  a6b_weasel: 'jet', f4e: 'jet', f105: 'jet', a7: 'jet', ohka: 'jet', mig15: 'jet', mig17: 'jet',
+  mig19: 'jet', mig21: 'jet', su7: 'jet', tu16: 'jet', f14a: 'jet', fa18a: 'jet', a6e: 'jet', ea6b: 'jet',
+  av8b: 'jet', a10a: 'jet', f15a: 'jet', f16a: 'jet', f111: 'jet', meteor: 'jet', a37b: 'jet', f5a: 'jet',
+  f104g: 'jet', mirage3: 'jet', hunter_fga9: 'jet', tornado_gr1: 'jet', tornado_ids: 'jet',
+  tornado_adv: 'jet', mirage2000: 'jet', jaguar_gr1: 'jet', viggen_ja37: 'jet', tu22m3: 'jet', yak38: 'jet',
+  mig29a: 'jet', su27: 'jet', su25: 'jet',
+  // podded_jet
+  b52: 'podded_jet', tu14: 'podded_jet', il28: 'podded_jet', s3a: 'podded_jet', e3a: 'podded_jet',
+  a50: 'podded_jet',
+  // helicopter
+  ho3s1: 'helicopter', uh2: 'helicopter', sh2: 'helicopter', uh1: 'helicopter', ah1: 'helicopter',
+  sh3f: 'helicopter', ch53: 'helicopter', ah64a: 'helicopter', ah1w: 'helicopter', ka27: 'helicopter',
+  mi24: 'helicopter',
+};
+
+interface RotorSpec {
+  /** Main rotor radius in airframe units. */
+  radius: number;
+  blades: number;
+  /** Hub position along the fuselage (+x = nose). */
+  hubX: number;
+  /** Ka-27 style coaxial counter-rotating rotors. */
+  coaxial?: boolean;
+}
+
+// Main rotor geometry per helicopter (blade counts match the real aircraft).
+const ROTOR_SPECS: Partial<Record<AircraftModel, RotorSpec>> = {
+  ho3s1: { radius: 14, blades: 3, hubX: 2 },
+  uh2: { radius: 13, blades: 4, hubX: 1 },
+  uh1: { radius: 14, blades: 2, hubX: 1 },
+  ah1: { radius: 14, blades: 2, hubX: 0 },
+  ah1w: { radius: 14, blades: 4, hubX: 0 },
+  sh2: { radius: 14, blades: 4, hubX: 1 },
+  sh3f: { radius: 18, blades: 5, hubX: 2 },
+  ch53: { radius: 22, blades: 6, hubX: 2 },
+  ah64a: { radius: 15, blades: 4, hubX: 1 },
+  ka27: { radius: 14, blades: 3, hubX: 0, coaxial: true },
+  mi24: { radius: 18, blades: 5, hubX: 1 },
+};
+const DEFAULT_ROTOR: RotorSpec = { radius: 14, blades: 3, hubX: 1 };
+
+/** Translucent rotor disc with spinning blades, drawn over the fuselage. */
+function drawRotor(rc: RenderContext, spec: RotorSpec): void {
+  const ctx = rc.ctx;
+  ctx.save();
+  ctx.translate(spec.hubX, 0);
+
+  ctx.fillStyle = 'rgba(178, 235, 242, 0.07)';
+  ctx.strokeStyle = 'rgba(178, 235, 242, 0.22)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.arc(0, 0, spec.radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  const rotors = spec.coaxial ? [1, -1] : [1];
+  ctx.lineCap = 'round';
+  for (const dir of rotors) {
+    const base = rc.time * 17 * dir + (dir < 0 ? Math.PI / spec.blades : 0);
+    ctx.strokeStyle = dir > 0 ? 'rgba(236, 239, 241, 0.6)' : 'rgba(236, 239, 241, 0.4)';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    for (let b = 0; b < spec.blades; b++) {
+      const a = base + (b * Math.PI * 2) / spec.blades;
+      ctx.moveTo(Math.cos(a) * 1.5, Math.sin(a) * 1.5);
+      ctx.lineTo(Math.cos(a) * spec.radius, Math.sin(a) * spec.radius);
+    }
+    ctx.stroke();
+  }
+  ctx.lineCap = 'butt';
+
+  // Rotor hub
+  ctx.fillStyle = '#37474F';
+  ctx.strokeStyle = 'rgba(236, 239, 241, 0.7)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.arc(0, 0, 1.8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
 
 // Draw Specific WWII Vector Aircraft Model with Authentic Profiles
 export function drawSpecificAircraftModel(rc: RenderContext, plane: Aircraft, color: string) {
@@ -1000,8 +1071,10 @@ export function drawSpecificAircraftModel(rc: RenderContext, plane: Aircraft, co
 
   drawMountedOrdnance(rc, plane);
 
-  // Wingtip aerodynamic condensation trails during turns/dives
-  if (plane.altitude > 0.3) {
+  const propulsion = AIRCRAFT_PROPULSION[m];
+
+  // Wingtip aerodynamic condensation trails during turns/dives (fixed-wing only)
+  if (plane.altitude > 0.3 && propulsion !== 'helicopter') {
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -1013,11 +1086,8 @@ export function drawSpecificAircraftModel(rc: RenderContext, plane: Aircraft, co
   }
 
   // ════ Propulsion Visuals: Jet Supersonic Exhaust vs. Propeller Disc ════
-  const isJet = JET_MODELS.has(m);
-  const isHelo = HELO_MODELS.has(m);
-  const isMultiProp = MULTI_PROP_MODELS.has(m);
 
-  if (isJet) {
+  if (propulsion === 'jet') {
     // ════ Jet Exhaust Heat Shimmer & Supersonic Plume (噴射機無螺旋槳，繪製尾噴熾熱焰錐) ════
     const jetFlameLen = (plane.speed > (plane.maxSpeed * 0.75) ? 9 : 5) + Math.sin(rc.time * 30) * 2;
     const jGrad = ctx.createLinearGradient(-13, 0, -13 - jetFlameLen, 0);
@@ -1030,7 +1100,7 @@ export function drawSpecificAircraftModel(rc: RenderContext, plane: Aircraft, co
     ctx.moveTo(-13, 0);
     ctx.lineTo(-13 - jetFlameLen, 0);
     ctx.stroke();
-  } else if (!isHelo && !isMultiProp) {
+  } else if (propulsion === 'single_prop') {
     // Spinning propeller blur with yellow tip blades (僅限單發螺旋槳機)
     const propAngle = rc.time * 26;
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
@@ -1047,6 +1117,8 @@ export function drawSpecificAircraftModel(rc: RenderContext, plane: Aircraft, co
     ctx.moveTo(13 - Math.cos(propAngle) * 4, -Math.sin(propAngle) * 4);
     ctx.lineTo(13 - Math.cos(propAngle) * 5.5, -Math.sin(propAngle) * 5.5);
     ctx.stroke();
+  } else if (propulsion === 'helicopter') {
+    drawRotor(rc, ROTOR_SPECS[m] ?? DEFAULT_ROTOR);
   }
 }
 
