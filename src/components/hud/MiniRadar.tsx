@@ -1,11 +1,9 @@
 import React, { useEffect, useRef } from 'react';
 import { Aircraft, Island, Ship, Sonobuoy, Vector2D } from '../../types/game';
 import { CameraViewportState } from '../GameCanvas';
-import { Language } from '../../game/i18n';
 
 interface MiniRadarProps {
   title: string;
-  lang: Language;
   islands: Island[];
   playerShips: Ship[];
   enemyShips: Ship[];
@@ -18,7 +16,6 @@ interface MiniRadarProps {
 
 export const MiniRadar: React.FC<MiniRadarProps> = ({
   title,
-  lang,
   islands,
   playerShips,
   enemyShips,
@@ -185,7 +182,7 @@ export const MiniRadar: React.FC<MiniRadarProps> = ({
     <div className="pointer-events-auto bg-[#071322]/90 backdrop-blur-md border border-[#1E3A5F] rounded-lg p-1.5 shadow-2xl flex flex-col items-center">
       <div className="w-full flex justify-between text-[10px] font-mono text-[#80DEEA] pb-0.5 border-b border-[#1E3A5F]">
         <span>{title}</span>
-        <span className="text-slate-400 text-[9px]">{lang === 'zh' ? '點擊 / 拖曳跳轉' : 'Click / Drag Pan'}</span>
+        <span className="text-slate-400 text-[9px]">點擊 / 拖曳跳轉</span>
       </div>
       <div className="relative mt-0.5">
         <span className="absolute top-0.5 left-1/2 -translate-x-1/2 text-[8px] text-cyan-300 font-bold pointer-events-none drop-shadow">N</span>

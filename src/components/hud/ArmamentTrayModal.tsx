@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { Check, Wrench } from 'lucide-react';
 import { AircraftPayloadType, AircraftRole, PAYLOAD_CATALOG } from '../../types/game';
-import { Language } from '../../game/i18n';
 
 export interface ActiveArmamentTrayState {
   planeId: string;
@@ -14,7 +13,6 @@ export interface ActiveArmamentTrayState {
 
 interface ArmamentTrayModalProps {
   tray: ActiveArmamentTrayState | null;
-  lang: Language;
   resourcePoints: number;
   onClose: () => void;
   onSelectPayload: (pid: AircraftPayloadType) => void;
@@ -28,7 +26,6 @@ const NUKE_PAYLOADS = new Set<AircraftPayloadType>([
 
 export const ArmamentTrayModal: React.FC<ArmamentTrayModalProps> = ({
   tray,
-  lang,
   resourcePoints,
   onClose,
   onSelectPayload,
@@ -57,30 +54,22 @@ export const ArmamentTrayModal: React.FC<ArmamentTrayModalProps> = ({
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm font-bold text-[#E0F7FA]">
-                  {lang === 'zh'
-                    ? `【${tray.planeLabel}】戰地軍械庫掛載武裝配置盤`
-                    : `${tray.planeLabel} Tactical Armory Matrix`}
+                  {`【${tray.planeLabel}】戰地軍械庫掛載武裝配置盤`}
                 </span>
                 <span className="text-[11px] text-[#80CBC4] bg-[#004D40] px-2 py-0.5 rounded border border-[#80CBC4]/40 font-bold">
                   {tray.isAirbase
-                    ? lang === 'zh'
-                      ? '前進陸基基地'
-                      : 'Forward AFB'
-                    : lang === 'zh'
-                    ? '母艦飛行甲板'
-                    : 'Carrier Flight Deck'}
+                    ? '前進陸基基地'
+                    : '母艦飛行甲板'}
                 </span>
               </div>
               <div className="text-[11px] text-slate-400 mt-0.5">
-                {lang === 'zh'
-                  ? '作戰用途標註 · 殺傷破壞半徑 (m) · 戰略CP授權 · 機體外觀掛載標籤'
-                  : 'Tactical Purpose · Blast Radius (m) · Strategic CP Auth · Airframe Hardpoint Tag'}
+                作戰用途標註 · 殺傷破壞半徑 (m) · 戰略CP授權 · 機體外觀掛載標籤
               </div>
             </div>
           </div>
           <div className="flex items-center gap-3 shrink-0">
             <div className="text-right text-xs">
-              <span className="text-slate-400">{lang === 'zh' ? '目前可用 CP: ' : 'Available CP: '}</span>
+              <span className="text-slate-400">{'目前可用 CP: '}</span>
               <span className="text-amber-400 font-bold tabular-nums">{Math.floor(resourcePoints)} CP</span>
             </div>
             <button
@@ -88,7 +77,7 @@ export const ArmamentTrayModal: React.FC<ArmamentTrayModalProps> = ({
               onClick={onClose}
               className="px-3 py-1.5 bg-[#1E3A5F]/80 hover:bg-[#1E3A5F] text-slate-200 hover:text-white rounded text-xs font-bold transition-colors whitespace-nowrap"
             >
-              {lang === 'zh' ? '關閉選擇盤 ✕' : 'Close (ESC) ✕'}
+              關閉選擇盤 ✕
             </button>
           </div>
         </div>
@@ -126,7 +115,7 @@ export const ArmamentTrayModal: React.FC<ArmamentTrayModalProps> = ({
                           : 'bg-[#004D40] text-emerald-300 border border-[#00BFA5]/30'
                       }`}
                     >
-                      {item.purposeBadge || (lang === 'zh' ? '【戰術打擊】' : '【Tactical】')}
+                      {item.purposeBadge || ('【戰術打擊】')}
                     </span>
                     <span className="text-[10px] text-slate-400 font-mono">
                       {item.visualTag || '[Standard]'}
@@ -139,30 +128,28 @@ export const ArmamentTrayModal: React.FC<ArmamentTrayModalProps> = ({
                       {item.badge}
                     </span>
                     <span className="text-[10px] text-slate-400 text-right">
-                      {lang === 'zh' ? item.nameZh : item.name}
+                      {item.name}
                     </span>
                   </div>
 
                   {/* Metrics: Blast Radius, Damage, CP */}
                   <div className="grid grid-cols-2 gap-1.5 mt-2 bg-[#030D18] p-2 rounded border border-[#1E3A5F]/60 text-[10px]">
                     <div>
-                      <span className="text-slate-400">💥 {lang === 'zh' ? '破壞半徑: ' : 'Blast: '}</span>
+                      <span className="text-slate-400">💥 {'破壞半徑: '}</span>
                       <span className="font-bold text-amber-300 tabular-nums">
-                        {item.blastRadius ? `${item.blastRadius}m` : lang === 'zh' ? '精密點直擊' : 'Direct'}
+                        {item.blastRadius ? `${item.blastRadius}m` : '精密點直擊'}
                       </span>
                     </div>
                     <div>
-                      <span className="text-slate-400">🎯 {lang === 'zh' ? '殺傷威力: ' : 'DMG: '}</span>
+                      <span className="text-slate-400">🎯 {'殺傷威力: '}</span>
                       <span className="font-bold text-emerald-300 tabular-nums">
                         {item.damage > 0
                           ? `${item.damage.toLocaleString()} DMG`
-                          : lang === 'zh'
-                          ? '空戰/機砲'
-                          : 'Air Combat'}
+                          : '空戰/機砲'}
                       </span>
                     </div>
                     <div className="col-span-2 flex items-center justify-between pt-1 border-t border-[#1E3A5F]/40">
-                      <span className="text-slate-400">{lang === 'zh' ? '戰略CP授權: ' : 'Auth Cost: '}</span>
+                      <span className="text-slate-400">{'戰略CP授權: '}</span>
                       <span
                         className={`font-bold tabular-nums ${
                           cpCost > 0 ? (canAfford ? 'text-amber-400' : 'text-red-400') : 'text-emerald-400'
@@ -170,16 +157,14 @@ export const ArmamentTrayModal: React.FC<ArmamentTrayModalProps> = ({
                       >
                         {cpCost > 0
                           ? `☢️ ${cpCost.toLocaleString()} CP`
-                          : lang === 'zh'
-                          ? '✅ 常規庫存 (0 CP)'
-                          : '✅ Standard Issue (0 CP)'}
+                          : '✅ 常規庫存 (0 CP)'}
                       </span>
                     </div>
                   </div>
 
                   {/* Tactical Pros */}
                   <p className="text-[10px] text-slate-300 mt-2 line-clamp-3 leading-relaxed">
-                    {lang === 'zh' ? item.pros : item.desc}
+                    {item.pros}
                   </p>
                 </div>
 
@@ -200,20 +185,18 @@ export const ArmamentTrayModal: React.FC<ArmamentTrayModalProps> = ({
                   {isSelected ? (
                     <>
                       <Check className="w-3.5 h-3.5" />
-                      <span>{lang === 'zh' ? '✓ 目前已掛裝 (EQUIPPED)' : '✓ EQUIPPED'}</span>
+                      <span>✓ 目前已掛裝 (EQUIPPED)</span>
                     </>
                   ) : isNuke ? (
                     canAfford ? (
-                      <span>{lang === 'zh' ? '☢️ 立即掛載核彈 (CP 授權足額)' : '☢️ Equip Nuclear Strike'}</span>
+                      <span>☢️ 立即掛載核彈 (CP 授權足額)</span>
                     ) : (
                       <span>
-                        {lang === 'zh'
-                          ? `⚠️ 掛載核彈 (出擊需 ${(cpCost || 4500).toLocaleString()} CP)`
-                          : `⚠️ Equip Nuclear (Needs ${(cpCost || 4500).toLocaleString()} CP)`}
+                        {`⚠️ 掛載核彈 (出擊需 ${(cpCost || 4500).toLocaleString()} CP)`}
                       </span>
                     )
                   ) : (
-                    <span>{lang === 'zh' ? '立即更換此武裝 (EQUIP)' : 'Equip Ordnance'}</span>
+                    <span>立即更換此武裝 (EQUIP)</span>
                   )}
                 </button>
               </div>

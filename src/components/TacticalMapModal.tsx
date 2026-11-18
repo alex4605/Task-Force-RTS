@@ -3,7 +3,6 @@ import { Island, Ship, Aircraft, GroundUnit, Era, Sonobuoy, Vector2D } from '../
 import { CameraViewportState } from './GameCanvas';
 import { X, Radio } from 'lucide-react';
 
-import { Language } from '../game/i18n';
 
 interface TacticalMapModalProps {
   isOpen: boolean;
@@ -19,7 +18,6 @@ interface TacticalMapModalProps {
   cameraViewport?: CameraViewportState | null;
   onFocusWorldPos?: (pos: Vector2D) => void;
   sectorName: string;
-  lang?: Language;
   era?: Era;
 }
 
@@ -37,7 +35,6 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
   cameraViewport = null,
   onFocusWorldPos,
   sectorName,
-  lang = 'zh',
   era = 'era1',
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -537,7 +534,7 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
           <div className="flex items-center gap-3">
             {onFocusWorldPos && (
               <span className="text-[10px] text-cyan-300/80 hidden sm:inline">
-                {lang === 'zh' ? '點擊海圖立即跳轉視角' : 'Click chart to jump camera'}
+                點擊海圖立即跳轉視角
               </span>
             )}
             <button onClick={onClose} className="p-1 text-[#90CAF9] hover:text-white transition-colors" aria-label="Close">
@@ -561,42 +558,34 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#00E676]" />
-                <span>{lang === 'zh' ? '旗艦 Flagship' : 'Flagship'}</span>
+                <span>旗艦 Flagship</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#4FC3F7]" />
-                <span>{lang === 'zh' ? '友軍特遣艦隊 (TF)' : 'Allied Task Force (TF)'}</span>
+                <span>友軍特遣艦隊 (TF)</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#EF5350]" />
                 <span>
-                  {lang === 'zh'
-                    ? era === 'era5'
+                  {era === 'era5'
                       ? '蘇聯紅海軍水面打擊群 (OPFOR SAG)'
                       : era === 'era4'
                       ? '北越/蘇聯海空作戰群 (OPFOR SAG)'
                       : era === 'era3'
                       ? '蘇聯遠東紅海軍 (OPFOR Fleet)'
-                      : '敵水面艦隊 (IJN)'
-                    : era === 'era5'
-                    ? 'Soviet Surface Action Group (OPFOR)'
-                    : era === 'era4'
-                    ? 'OPFOR Surface & Air Group'
-                    : era === 'era3'
-                    ? 'OPFOR Far East Fleet'
-                    : 'Enemy Surface Fleet (IJN)'}
+                      : '敵水面艦隊 (IJN)'}
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="px-1 py-0.5 rounded bg-emerald-600 text-white font-bold text-[9px]">CP</span>
                 <span className="text-emerald-400 font-bold">
-                  {lang === 'zh' ? '指揮所據點 (佔領區)' : 'Command Post (Capture)'}
+                  指揮所據點 (佔領區)
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="px-1 py-0.5 rounded bg-blue-600 text-white font-bold text-[9px]">USMC</span>
                 <span className="text-blue-400 font-bold">
-                  {lang === 'zh' ? '陸戰隊地面部隊' : 'USMC Ground Forces'}
+                  陸戰隊地面部隊
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
@@ -604,17 +593,11 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
                   {era === 'era5' || era === 'era4' ? 'AShM' : era === 'era3' ? 'KS-1' : 'OHKA'}
                 </span>
                 <span className="text-red-400 font-bold">
-                  {lang === 'zh'
-                    ? era === 'era5' || era === 'era4'
+                  {era === 'era5' || era === 'era4'
                       ? '導引反艦巡弋飛彈'
                       : era === 'era3'
                       ? '長程反艦飛彈'
-                      : '反艦火箭飛彈'
-                    : era === 'era5' || era === 'era4'
-                    ? 'Guided Anti-Ship Missile'
-                    : era === 'era3'
-                    ? 'Long-Range AShM'
-                    : 'Rocket Bomb'}
+                      : '反艦火箭飛彈'}
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
@@ -622,66 +605,54 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
                   {era === 'era5' || era === 'era4' || era === 'era3' ? 'JET' : 'KAMI'}
                 </span>
                 <span className="text-orange-400 font-bold">
-                  {lang === 'zh'
-                    ? era === 'era5' || era === 'era4' || era === 'era3'
+                  {era === 'era5' || era === 'era4' || era === 'era3'
                       ? '噴射攔截機'
-                      : '特攻機'
-                    : era === 'era5' || era === 'era4' || era === 'era3'
-                    ? 'Jet Interceptor'
-                    : 'Kamikaze'}
+                      : '特攻機'}
                 </span>
               </div>
             </div>
             <span className="text-slate-400">
-              {lang === 'zh' ? '海圖比例尺: 1:14,000 NM (深遠作戰海域)' : 'Chart Scale: 1:14,000 NM (Deep Theater)'}
+              海圖比例尺: 1:14,000 NM (深遠作戰海域)
             </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-300 bg-[#040C16] p-1.5 rounded border border-[#1E3A5F]/60">
             <span className="font-bold text-[#80DEEA]">
-              {lang === 'zh' ? 'NATO APP-6 地面戰術標誌:' : 'NATO APP-6 Ground Symbology:'}
+              NATO APP-6 地面戰術標誌:
             </span>
             <span className="flex items-center gap-1">
               <span className="text-blue-400 font-mono font-bold">[X]</span>
-              {lang === 'zh' ? 'USMC 步兵排' : 'USMC Infantry'}
+              USMC 步兵排
             </span>
             <span className="flex items-center gap-1">
               <span className="text-blue-400 font-mono font-bold">[⬭]</span>
-              {lang === 'zh' ? 'USMC 戰車/LVT' : 'USMC Armor/LVT'}
+              USMC 戰車/LVT
             </span>
             <span className="flex items-center gap-1">
               <span className="text-red-400 font-mono font-bold">[X]</span>
-              {lang === 'zh'
-                ? era === 'era5'
+              {era === 'era5'
                   ? '蘇軍守備/特種伏擊連'
                   : era === 'era4'
                   ? 'OPFOR 守備/滲透排'
                   : era === 'era3'
                   ? '志願軍/人民軍守備排'
-                  : '日軍守備/伏擊排'
-                : era === 'era5'
-                ? 'Soviet Spetsnaz/Garrison'
-                : era === 'era4'
-                ? 'OPFOR Garrison'
-                : era === 'era3'
-                ? 'Coalition Infantry'
-                : 'IJN Garrison'}
+                  : '日軍守備/伏擊排'}
             </span>
             <span className="flex items-center gap-1">
               <span className="text-amber-300 font-mono font-bold">[⬭]</span>
-              {lang === 'zh' ? '敵戰車' : 'Hostile Armor'}
+              敵戰車
             </span>
             <span className="flex items-center gap-1">
               <span className="text-orange-400 font-mono font-bold">[●]</span>
-              {lang === 'zh' ? '野戰砲兵' : 'Field Artillery'}
+              野戰砲兵
             </span>
             <span className="flex items-center gap-1">
               <span className="text-red-300 font-mono font-bold">[⌢]</span>
-              {lang === 'zh' ? '防空砲' : 'AA / SAM Battery'}
+              防空砲
             </span>
             <span className="flex items-center gap-1">
               <span className="text-yellow-400 font-mono font-bold">[✈]</span>
-              {lang === 'zh' ? '航空基地' : 'Airfield'}
+              航空基地
             </span>
           </div>
         </div>

@@ -29,24 +29,8 @@ import {
 } from './types/game';
 import { getRequisitionCatalog } from './game/requisition';
 import { soundEngine } from './game/audio';
-import { Language } from './game/i18n';
 
 export default function App() {
-  const [lang, setLang] = useState<Language>(() => {
-    try {
-      return (localStorage.getItem('taskforce_lang') as Language) || 'zh';
-    } catch {
-      return 'zh';
-    }
-  });
-
-  const handleSetLang = (newLang: Language) => {
-    setLang(newLang);
-    try {
-      localStorage.setItem('taskforce_lang', newLang);
-    } catch {}
-  };
-
   const [era, setEra] = useState<Era>('era1');
   const engineRef = useRef<GameEngine | null>(null);
   if (!engineRef.current) {
@@ -562,8 +546,6 @@ export default function App() {
           setGroundUnits([...engine.groundUnits]);
           setIslands([...engine.islands]);
         }}
-        lang={lang}
-        onSetLang={handleSetLang}
       />
 
       {/* Tactical Operational Dispatch / Briefing */}
@@ -582,7 +564,6 @@ export default function App() {
           engine.isPaused = false;
           setIsPaused(false);
         }}
-        lang={lang}
       />
 
       {/* Pre-Battle Air Wing Loadout Preparation Modal */}
@@ -592,7 +573,6 @@ export default function App() {
         era={era}
         intel={intel}
         onConfirmLoadout={handleConfirmAirWingLoadout}
-        lang={lang}
       />
 
       {/* Mid-Battle Aircraft Armament / Payload Reconfiguration Modal */}
@@ -602,7 +582,6 @@ export default function App() {
         era={era}
         activePayloads={activePayloads}
         onSelectPayload={handleSelectPayload}
-        lang={lang}
       />
 
       {/* Tactical Battle Log Modal */}
@@ -616,7 +595,6 @@ export default function App() {
           engine.combatLogs = [];
           setCombatLogs([]);
         }}
-        lang={lang}
         era={engine.era}
       />
 
@@ -638,7 +616,6 @@ export default function App() {
           setIsMapOpen(false);
         }}
         sectorName={intel?.sectorName || 'Coral Atoll'}
-        lang={lang}
         era={engine.era}
       />
 
@@ -656,7 +633,6 @@ export default function App() {
         onSetEra={handleSetEra}
         canAdvance={engine.isVictory}
         onNextSector={handleNextSector}
-        lang={lang}
       />
 
       {/* After-Action Debriefing / Victory / Defeat */}
@@ -667,7 +643,6 @@ export default function App() {
           intel={intel}
           onNextSector={handleNextSector}
           onRestart={handleRestart}
-          lang={lang}
         />
       )}
     </div>

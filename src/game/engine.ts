@@ -1995,7 +1995,7 @@ export class GameEngine {
       sourceName: flagship.codeName || flagship.name,
       targetName: flightName,
       actionType: 'recon_spotted',
-      text: `🛫【機隊起飛出擊】「${flightName}」從飛行甲板彈射出擊！掛載: ${catalogItem?.nameZh || payloadName} (儲存彈藥: ${initialAmmo})`,
+      text: `🛫【機隊起飛出擊】「${flightName}」從飛行甲板彈射出擊！掛載: ${catalogItem?.name || payloadName} (儲存彈藥: ${initialAmmo})`,
     });
 
     // 不取消航母選取：保持航母/旗艦選中狀態，讓下方飛行甲板出擊選單保持開啟，方便連續派遣多批次機隊
@@ -5198,7 +5198,7 @@ export class GameEngine {
     }
 
     if (plane.side === 'player') {
-      const bombName = PAYLOAD_CATALOG[pType]?.nameZh || '航空炸彈';
+      const bombName = PAYLOAD_CATALOG[pType]?.name || '航空炸彈';
       this.addCombatLog({
         category: 'air',
         sourceSide: 'player',
@@ -9220,7 +9220,7 @@ export class GameEngine {
       sourceName: '前進航空基地 (AFB)',
       targetName: '戰區空域',
       actionType: 'recon_spotted',
-      text: `✈️【基地機隊緊急出擊！】前進航空基地出動 ${count} 架 ${model.toUpperCase()} (${roleZh}) 直飛戰區！掛載: ${PAYLOAD_CATALOG[pType]?.nameZh || pType}`,
+      text: `✈️【基地機隊緊急出擊！】前進航空基地出動 ${count} 架 ${model.toUpperCase()} (${roleZh}) 直飛戰區！掛載: ${PAYLOAD_CATALOG[pType]?.name || pType}`,
     });
   }
 
@@ -9348,7 +9348,7 @@ export class GameEngine {
           category: 'naval',
           sourceSide: 'player',
           sourceName: '後勤司令部 (LOGCOM)',
-          targetName: item.nameZh,
+          targetName: item.name,
           actionType: 'recon_spotted',
           text: `⚠️ 資源點數不足！需要 ${item.cost} CP，目前僅有 ${Math.floor(this.resourcePoints)} CP。請等待時間累積、佔領據點或擊沉敵艦！`,
         });
@@ -9597,14 +9597,14 @@ export class GameEngine {
         this.airbasePlanes.c130 = (this.airbasePlanes.c130 || 0) + 2;
       }
 
-      this.addBannerAlert(`✈️【機隊補充】「${item.nameZh}」已進駐起始前進基地航空庫存！`, 'player', 'capture', 5.0);
+      this.addBannerAlert(`✈️【機隊補充】「${item.name}」已進駐起始前進基地航空庫存！`, 'player', 'capture', 5.0);
       this.addCombatLog({
         category: 'air',
         sourceSide: 'player',
         sourceName: '海軍航空兵部 (BuAer)',
-        targetName: item.nameZh,
+        targetName: item.name,
         actionType: 'recon_spotted',
-        text: `✈️【航空戰力充實】${freeSandbox ? '【免CP沙盒配置】' : `耗費 ${item.cost} CP`}！${item.nameZh} 戰機群已進駐起始前進基地機庫，可隨時自基地起飛或轉場！`,
+        text: `✈️【航空戰力充實】${freeSandbox ? '【免CP沙盒配置】' : `耗費 ${item.cost} CP`}！${item.name} 戰機群已進駐起始前進基地機庫，可隨時自基地起飛或轉場！`,
       });
       return true;
     } else if (item.category === 'ground') {
@@ -10124,14 +10124,14 @@ export class GameEngine {
       }
 
       const locationLabel = customPos ? '指定海圖座標' : targetIsland.name;
-      this.addBannerAlert(`🏗️【碼頭/設施落成】已在 ${locationLabel} 構築「${item.nameZh}」！`, 'player', 'capture', 4.5);
+      this.addBannerAlert(`🏗️【碼頭/設施落成】已在 ${locationLabel} 構築「${item.name}」！`, 'player', 'capture', 4.5);
       this.addCombatLog({
         category: 'naval',
         sourceSide: 'player',
         sourceName: '海軍工兵團 (Seabees)',
-        targetName: item.nameZh,
+        targetName: item.name,
         actionType: 'recon_spotted',
-        text: `🏗️【設施工事落成】${freeSandbox ? '【免CP沙盒建造】' : `耗費 ${item.cost} CP`}！「${item.nameZh}」已在 ${targetIsland.name} (${locationLabel}) 構築完成並即刻投入戰備！`,
+        text: `🏗️【設施工事落成】${freeSandbox ? '【免CP沙盒建造】' : `耗費 ${item.cost} CP`}！「${item.name}」已在 ${targetIsland.name} (${locationLabel}) 構築完成並即刻投入戰備！`,
       });
       return true;
     }

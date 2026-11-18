@@ -16072,7 +16072,7 @@ export class VectorRenderer {
     ctx.textAlign = 'left';
     ctx.font = 'bold 11px monospace';
     ctx.fillStyle = '#00E5FF';
-    ctx.fillText(`⚓【戰地設施自由戳記】${item.nameZh}`, cardX + 8, cardY + 15);
+    ctx.fillText(`⚓【戰地設施自由戳記】${item.name}`, cardX + 8, cardY + 15);
 
     ctx.textAlign = 'right';
     ctx.fillStyle = '#FFD54F';

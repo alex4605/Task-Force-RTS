@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import { SectorIntel } from '../types/game';
-import { Language, getTranslation } from '../game/i18n';
 import { FileText, Target, Crosshair, CheckCircle2, X, ShieldAlert, Compass } from 'lucide-react';
 
 interface BriefingModalProps {
@@ -9,7 +8,6 @@ interface BriefingModalProps {
   intel: SectorIntel | null;
   onStart: () => void;
   onQuickStart?: () => void;
-  lang?: Language;
 }
 
 export const BriefingModal: React.FC<BriefingModalProps> = ({
@@ -18,7 +16,6 @@ export const BriefingModal: React.FC<BriefingModalProps> = ({
   intel,
   onStart,
   onQuickStart,
-  lang = 'zh',
 }) => {
   useEffect(() => {
     if (!isOpen) return;
@@ -33,7 +30,6 @@ export const BriefingModal: React.FC<BriefingModalProps> = ({
   }, [isOpen, onClose]);
 
   if (!isOpen || !intel) return null;
-  const t = getTranslation(lang);
 
   return (
     <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
@@ -47,10 +43,10 @@ export const BriefingModal: React.FC<BriefingModalProps> = ({
             <div>
               <div className="text-[10px] text-[#90CAF9] tracking-widest uppercase font-bold flex items-center gap-1.5">
                 <span className="text-[#00E5FF]">[CINCPAC]</span>
-                <span>{t.briefingSubtitle}</span>
+                <span>{'CINCPAC OPERATIONAL BRIEFING & DISPATCH'}</span>
               </div>
               <h2 className="text-base font-bold text-[#E0F7FA] tracking-wide mt-0.5">
-                {lang === 'zh' ? `第 ${intel.sectorNumber} 作戰海域` : `SECTOR ${intel.sectorNumber}`}: {intel.sectorName.toUpperCase()}
+                {`第 ${intel.sectorNumber} 作戰海域`}: {intel.sectorName.toUpperCase()}
               </h2>
             </div>
           </div>
@@ -70,7 +66,7 @@ export const BriefingModal: React.FC<BriefingModalProps> = ({
             <span>TOP SECRET // CINCPAC DEPT OF THE NAVY</span>
           </span>
           <span className="text-slate-400">
-            {lang === 'zh' ? '戰區戰役指令 · 即刻生效' : 'IMMEDIATE OPERATIONAL DIRECTIVE'}
+            戰區戰役指令 · 即刻生效
           </span>
         </div>
 
@@ -78,7 +74,7 @@ export const BriefingModal: React.FC<BriefingModalProps> = ({
         <div className="bg-[#040C16] border border-[#1E3A5F] rounded-lg p-4 space-y-3 font-mono text-[#E0F7FA]/90 leading-relaxed text-xs">
           <div className="text-[#80DEEA] font-semibold text-[11px] flex items-center gap-1.5">
             <Compass className="w-3.5 h-3.5 text-cyan-400" />
-            <span>{t.situationReport}</span>
+            <span>當前戰場敵情簡報 (SITREP)</span>
           </div>
           <p className="text-slate-300 leading-relaxed">{intel.briefing}</p>
 
@@ -86,7 +82,7 @@ export const BriefingModal: React.FC<BriefingModalProps> = ({
             <div className="flex items-start gap-2 text-[#FFD54F]">
               <Target className="w-4 h-4 mt-0.5 shrink-0 text-amber-400" />
               <div>
-                <span className="font-bold">{t.primaryObjective}: </span>
+                <span className="font-bold">主要作戰目標: </span>
                 <span className="text-slate-200">{intel.primaryObjective}</span>
               </div>
             </div>
@@ -94,7 +90,7 @@ export const BriefingModal: React.FC<BriefingModalProps> = ({
             <div className="flex items-start gap-2 text-[#90CAF9]">
               <Crosshair className="w-4 h-4 mt-0.5 shrink-0 text-sky-400" />
               <div>
-                <span className="font-bold">{t.secondaryObjective}: </span>
+                <span className="font-bold">次要戰術目標: </span>
                 <span className="text-slate-200">{intel.secondaryObjective}</span>
               </div>
             </div>
@@ -103,9 +99,9 @@ export const BriefingModal: React.FC<BriefingModalProps> = ({
 
         {/* Battle Tactics Advice */}
         <div className="space-y-1.5 font-mono text-[#90CAF9] text-[11px] bg-[#07192C]/50 border border-[#1E3A5F]/60 rounded-lg p-3">
-          <div className="text-[#80DEEA] font-bold">{t.tacticalAdvice}:</div>
+          <div className="text-[#80DEEA] font-bold">司令部戰術參謀指引:</div>
           <ul className="list-disc pl-4 space-y-1 text-slate-300 text-[10.5px]">
-            {lang === 'zh' ? (
+            {(
               <>
                 {intel.era === 'era5' ? (
                   <>
@@ -144,38 +140,6 @@ export const BriefingModal: React.FC<BriefingModalProps> = ({
                   </>
                 )}
               </>
-            ) : (
-              <>
-                {intel.era === 'era5' ? (
-                  <>
-                    <li>【Aegis & Historical AShM Doctrine】Down high-altitude P-700 Granit swarm leaders first to break datalink guidance across Soviet 8–16 missile hull salvos. USN Mk 141 ships fire 8-missile pop-up Harpoon waves, OHP rapid-cycles single Mk 13 shots, and Allied Exocets skim wave-tops under radar clutter.</li>
-                    <li>【Air-Dropped Passive Sonobuoys】Use S-3A / P-3C / SH-3F with <span className="text-cyan-300 font-bold">G</span> (Shift+Click to chain) to lay AN/SSQ-53 DIFAR hydrophone barriers exposing stealthy SSGN/SSN wolfpacks.</li>
-                    <li>【SEAD Anti-Radiation】Lead strikes with EA-6B Prowlers armed with AGM-88 HARM to blind S-300 & SA-11 SAM radars before Harpoon/Tomahawk raids.</li>
-                    <li>【MAD Strategic Warning】Launching Trident II SLBMs or tactical nuclear strikes immediately triggers full Soviet Typhoon SSBN & Tu-22M3 nuclear retaliation.</li>
-                  </>
-                ) : intel.era === 'era4' ? (
-                  <>
-                    <li>【AIM-7 Sparrow SARH】Requires continuous nose radar illumination (±50° gimbal, 1100m min arming range); low targets (&lt;300m) lose lock in ground clutter.</li>
-                    <li>【AIM-9 Sidewinder IR】Rear-aspect only (±40° exhaust cone) and locked out during high-G turns (&gt;2.5G); maneuver into a stable tail-chase before firing.</li>
-                    <li>【Countermeasures & Flare Dispenser】Aircraft automatically dispense chaff and flares upon detecting incoming missiles while executing high-G evasion.</li>
-                    <li>【Anti-Ship Missile Threat】Early SAMs struggle against sea-skimming Styx missiles; eliminate Osa/Komar missile boats at range or rely on rapid-fire gun barrages.</li>
-                  </>
-                ) : intel.era === 'era3' ? (
-                  <>
-                    <li>【F-86 APG-30 Computing Sight】Radar-ranging gyro gunsight provides tight bullet dispersion and superior deflection lead against high-speed bogeys.</li>
-                    <li>【MiG-15 Heavy Cannons】Hostile fighters wield deadly 37mm and 23mm cannons; avoid head-on passes and leverage sustained high-speed turning.</li>
-                    <li>【Acoustic Homing Torpedoes】Beginning in Era 3, naval ships and patrol aircraft deploy active homing torpedoes to track submarines.</li>
-                    <li>【Frontline Combined Arms】Industrial plants and urban covers shield infantry; seize key roads and bridgeheads to choke enemy reinforcements.</li>
-                  </>
-                ) : (
-                  <>
-                    <li>【Combat Air Patrol】Maintain CAP orbits over the task force to intercept kamikaze waves and Ohka rocket bombs before weapon release.</li>
-                    <li>【Amphibious Assault】Embark marine rifle platoons and armor aboard LCVP / LST and land them on beachheads to storm strongholds.</li>
-                    <li>【Urban Terrain Cover】Urban zones grant units 70% bomb damage reduction and 50% direct fire cover. Collateral damage costs -15 CP.</li>
-                    <li>【Fleet AA Umbrella】VT-fuse 5-inch dual-purpose guns and 40mm Bofors batteries shred incoming air raids.</li>
-                  </>
-                )}
-              </>
             )}
           </ul>
         </div>
@@ -188,7 +152,7 @@ export const BriefingModal: React.FC<BriefingModalProps> = ({
               onClick={onQuickStart}
               className="flex items-center gap-1.5 px-4 py-2.5 bg-[#0B233A] hover:bg-[#14375A] border border-emerald-400/70 text-emerald-300 rounded font-mono font-bold text-xs transition-all active:scale-95 whitespace-nowrap"
             >
-              <span>⚡ {lang === 'zh' ? '立即投入作戰 (預設編制)' : 'Quick Launch (Default Wing)'}</span>
+              <span>⚡ 立即投入作戰 (預設編制)</span>
             </button>
           )}
           <button
@@ -197,7 +161,7 @@ export const BriefingModal: React.FC<BriefingModalProps> = ({
             className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#1976D2] to-[#0288D1] hover:from-[#2196F3] hover:to-[#039BE5] text-white rounded font-mono font-bold text-xs transition-all shadow-lg active:scale-95 whitespace-nowrap"
           >
             <CheckCircle2 className="w-4 h-4 text-emerald-300" />
-            <span>{t.commenceAction}</span>
+            <span>接受訓令 · 全軍展開作戰</span>
           </button>
         </div>
       </div>
