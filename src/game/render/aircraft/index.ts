@@ -3,6 +3,7 @@ import { RenderContext, Camera, isWorldCircleVisible } from '../context';
 import { drawUnitSelectionRing } from '../ships';
 import { drawJapaneseIFFLeadingEdge } from './insignia';
 import { AIRCRAFT_MODEL_DRAWERS } from './models';
+import { TAIL_SPECS, drawTailFins, drawTailplane } from './tails';
 
 // Airframes that cast a swept / delta wing shadow instead of a straight wing.
 const SWEPT_WING_SHADOW: ReadonlySet<AircraftModel> = new Set<AircraftModel>([
@@ -1058,6 +1059,8 @@ export function drawSpecificAircraftModel(rc: RenderContext, plane: Aircraft, co
   const m = plane.model;
 
   const drawAirframe = AIRCRAFT_MODEL_DRAWERS[m];
+  const tail = TAIL_SPECS[m];
+  if (tail) drawTailplane(rc, tail, color);
   if (drawAirframe) {
     drawAirframe(rc, plane, color);
   } else {
@@ -1068,6 +1071,8 @@ export function drawSpecificAircraftModel(rc: RenderContext, plane: Aircraft, co
     ctx.fill();
     ctx.stroke();
   }
+  if (tail) drawTailFins(rc, tail, color);
+
 
   drawMountedOrdnance(rc, plane);
 
