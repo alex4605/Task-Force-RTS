@@ -46,7 +46,7 @@ export const BriefingModal: React.FC<BriefingModalProps> = ({
             </div>
             <div>
               <div className="text-[10px] text-[#90CAF9] tracking-widest uppercase font-bold flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#00E5FF] inline-block" />
+                <span className="text-[#00E5FF]">[CINCPAC]</span>
                 <span>{t.briefingSubtitle}</span>
               </div>
               <h2 className="text-base font-bold text-[#E0F7FA] tracking-wide mt-0.5">

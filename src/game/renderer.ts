@@ -15,6 +15,7 @@ import {
   Sonobuoy,
   Era,
 } from '../types/game';
+import { drawGroundSilhouette } from './unitPreviewRenderer';
 
 export interface Camera {
   x: number;
@@ -46,6 +47,18 @@ export class VectorRenderer {
 
   public updateTime(dt: number) {
     this.time += dt;
+  }
+
+  private isWorldCircleVisible(x: number, y: number, radius: number, camera: Camera): boolean {
+    if (this.width <= 0 || this.height <= 0 || camera.zoom <= 0) return true;
+    const halfW = (this.width * 0.5) / camera.zoom;
+    const halfH = (this.height * 0.5) / camera.zoom;
+    return (
+      x + radius >= camera.x - halfW &&
+      x - radius <= camera.x + halfW &&
+      y + radius >= camera.y - halfH &&
+      y - radius <= camera.y + halfH
+    );
   }
 
   // Clear & Draw Ocean Grid with Radar Sweep & Chart Markings
@@ -325,6 +338,31 @@ export class VectorRenderer {
     const wavePulse = (Math.sin(this.time * 2) + 1) * 0.5;
 
     for (const island of islands) {
+      if (!this.isWorldCircleVisible(island.center.x, island.center.y, island.radius + 260, camera)) {
+        continue;
+      }
+
+      // 0. Shallow-water turquoise reef shoal contour
+      if (island.points.length >= 3) {
+        ctx.fillStyle = 'rgba(0, 150, 175, 0.14)';
+        ctx.strokeStyle = 'rgba(38, 198, 218, 0.22)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i < island.points.length; i++) {
+          const p = island.points[i];
+          const dx = p.x - island.center.x;
+          const dy = p.y - island.center.y;
+          const dist = Math.hypot(dx, dy) || 1;
+          const reefX = p.x + (dx / dist) * 28;
+          const reefY = p.y + (dy / dist) * 28;
+          if (i === 0) ctx.moveTo(reefX, reefY);
+          else ctx.lineTo(reefX, reefY);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+
       // 1. Shore ripple
       ctx.strokeStyle = `rgba(100, 181, 246, ${0.15 + wavePulse * 0.15})`;
       ctx.lineWidth = 1.5;
@@ -333,7 +371,7 @@ export class VectorRenderer {
         const p = island.points[i];
         const dx = p.x - island.center.x;
         const dy = p.y - island.center.y;
-        const dist = Math.hypot(dx, dy);
+        const dist = Math.hypot(dx, dy) || 1;
         const expX = p.x + (dx / dist) * (14 + wavePulse * 8);
         const expY = p.y + (dy / dist) * (14 + wavePulse * 8);
         if (i === 0) ctx.moveTo(expX, expY);
@@ -389,13 +427,15 @@ export class VectorRenderer {
           ctx.stroke();
 
           // Lagoon Navigational Marker & Depth Sounding
-          ctx.font = 'bold 9px monospace';
-          ctx.fillStyle = 'rgba(128, 222, 234, 0.85)';
-          ctx.textAlign = 'center';
-          ctx.fillText(`⚓ ${island.name.split(' ')[0]} 內海深水潟湖 (Navigable Lagoon)`, lag.center.x, lag.center.y);
-          ctx.font = '8px monospace';
-          ctx.fillStyle = 'rgba(77, 208, 225, 0.65)';
-          ctx.fillText('水深 26M · 艦船舟艇可安全進出通航', lag.center.x, lag.center.y + 12);
+          if (camera.zoom >= 0.42) {
+            ctx.font = 'bold 9px monospace';
+            ctx.fillStyle = 'rgba(128, 222, 234, 0.85)';
+            ctx.textAlign = 'center';
+            ctx.fillText(`⚓ ${island.name.split(' ')[0]} 內海深水潟湖 (Navigable Lagoon)`, lag.center.x, lag.center.y);
+            ctx.font = '8px monospace';
+            ctx.fillStyle = 'rgba(77, 208, 225, 0.65)';
+            ctx.fillText('水深 26M · 艦船舟艇可安全進出通航', lag.center.x, lag.center.y + 12);
+          }
 
           // Navigable channel breach markers (水門通路)
           if (lag.channelBreaches) {
@@ -409,9 +449,11 @@ export class VectorRenderer {
               ctx.arc(chX, chY, 24, 0, Math.PI * 2);
               ctx.stroke();
               ctx.setLineDash([]);
-              ctx.fillStyle = '#80DEEA';
-              ctx.font = '8px monospace';
-              ctx.fillText('通行水門', chX, chY - 28);
+              if (camera.zoom >= 0.42) {
+                ctx.fillStyle = '#80DEEA';
+                ctx.font = '8px monospace';
+                ctx.fillText('通行水門', chX, chY - 28);
+              }
             }
           }
         }
@@ -611,13 +653,15 @@ export class VectorRenderer {
           }
 
           // Central subtle ribbon label
-          const midIdx = Math.floor(belt.points.length / 2);
-          const midP = belt.points[midIdx];
-          if (midP) {
-            ctx.font = '8.5px monospace';
-            ctx.fillStyle = 'rgba(165, 214, 167, 0.7)';
-            ctx.textAlign = 'center';
-            ctx.fillText(labelText, midP.x, midP.y);
+          if (camera.zoom >= 0.42) {
+            const midIdx = Math.floor(belt.points.length / 2);
+            const midP = belt.points[midIdx];
+            if (midP) {
+              ctx.font = '8.5px monospace';
+              ctx.fillStyle = 'rgba(165, 214, 167, 0.7)';
+              ctx.textAlign = 'center';
+              ctx.fillText(labelText, midP.x, midP.y);
+            }
           }
         }
         ctx.restore();
@@ -734,23 +778,53 @@ export class VectorRenderer {
     ctx.strokeStyle = color;
     ctx.fillStyle = 'rgba(18, 38, 58, 0.9)';
 
-    if (inst.type === 'airfield') {
-      ctx.lineWidth = 2;
-      ctx.strokeRect(-65, -12, 130, 24);
-      ctx.fillRect(-65, -12, 130, 24);
+    // Universal terrain contact drop-shadow for physical depth
+    if (inst.type !== 'airfield' && inst.type !== 'city' && inst.type !== 'town') {
+      ctx.save();
+      ctx.fillStyle = 'rgba(2, 6, 12, 0.42)';
+      ctx.beginPath();
+      ctx.ellipse(2.5, 3.5, 19, 13, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
 
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+    if (inst.type === 'airfield') {
+      // Runway concrete apron & blast pad shadow
+      ctx.fillStyle = 'rgba(2, 8, 16, 0.55)';
+      ctx.fillRect(-67, -11, 134, 26);
+
+      ctx.lineWidth = 2;
+      ctx.fillStyle = '#0F1C2A';
+      ctx.fillRect(-65, -12, 130, 24);
+      ctx.strokeRect(-65, -12, 130, 24);
+
+      // Runway threshold piano keys
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+      for (const tx of [-61, 55]) {
+        for (const ty of [-8, -3, 2, 7]) {
+          ctx.fillRect(tx, ty - 1, 6, 2);
+        }
+      }
+
+      // Centerline dashes
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
       ctx.lineWidth = 1.5;
       ctx.setLineDash([8, 8]);
       ctx.beginPath();
-      ctx.moveTo(-55, 0);
-      ctx.lineTo(55, 0);
+      ctx.moveTo(-48, 0);
+      ctx.lineTo(48, 0);
       ctx.stroke();
       ctx.setLineDash([]);
 
+      // Hangar & control tower apron
+      ctx.fillStyle = '#182C3E';
       ctx.strokeStyle = color;
       ctx.lineWidth = 1.5;
-      ctx.strokeRect(10, 16, 14, 14);
+      ctx.fillRect(10, 15, 16, 13);
+      ctx.strokeRect(10, 15, 16, 13);
+      ctx.fillStyle = '#FFD54F';
+      ctx.fillRect(-6, 15, 7, 7);
+      ctx.strokeRect(-6, 15, 7, 7);
 
       ctx.fillStyle = labelColor;
       ctx.font = 'bold 8.5px monospace';
@@ -825,10 +899,28 @@ export class VectorRenderer {
         ctx.fillText(isPlayer ? `[友軍岸防砲連] ${calText}` : `[敵軍岸防重砲] ${calText}`, 0, -20);
       }
     } else if (inst.type === 'radar_station') {
+      ctx.fillStyle = '#0F2234';
       ctx.lineWidth = 2;
+      ctx.fillRect(-10, -10, 20, 20);
       ctx.strokeRect(-10, -10, 20, 20);
 
       const radarAngle = this.time * 3;
+      // Soft sweep wedge
+      ctx.fillStyle = isPlayer ? 'rgba(100, 255, 218, 0.14)' : 'rgba(255, 138, 128, 0.14)';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, 28, radarAngle - 0.35, radarAngle);
+      ctx.closePath();
+      ctx.fill();
+
+      // Rotating parabolic dish reflector bar
+      ctx.strokeStyle = '#ECEFF1';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(-Math.sin(radarAngle) * 7, Math.cos(radarAngle) * 7);
+      ctx.lineTo(Math.sin(radarAngle) * 7, -Math.cos(radarAngle) * 7);
+      ctx.stroke();
+
       ctx.strokeStyle = isPlayer ? 'rgba(100, 255, 218, 0.7)' : 'rgba(255, 138, 128, 0.7)';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
@@ -844,23 +936,39 @@ export class VectorRenderer {
       ctx.textAlign = 'center';
       ctx.fillText(isPlayer ? '[友軍早期電探哨] SCR-270' : '[敵軍防空電探哨] 二一號', 0, -22);
     } else if (inst.type === 'ammo_depot') {
+      // Hexagonal sandbagged revetment bunker + fuel/ordnance canisters + hazard diamond
       ctx.lineWidth = 2;
+      ctx.fillStyle = isPlayer ? 'rgba(21, 101, 192, 0.55)' : 'rgba(62, 39, 35, 0.78)';
       ctx.beginPath();
       for (let i = 0; i < 6; i++) {
         const a = (i * Math.PI) / 3;
-        const x = Math.cos(a) * 14;
-        const y = Math.sin(a) * 14;
+        const x = Math.cos(a) * 16;
+        const y = Math.sin(a) * 16;
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       }
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Inner reinforced roof & 3 fuel/ammo drums
+      ctx.fillStyle = '#33691E';
+      ctx.strokeStyle = '#AED581';
+      ctx.lineWidth = 1;
+      ctx.fillRect(-8, -6, 7, 5);
+      ctx.strokeRect(-8, -6, 7, 5);
+      ctx.fillRect(1, -6, 7, 5);
+      ctx.strokeRect(1, -6, 7, 5);
+      ctx.fillStyle = '#FFA726';
+      ctx.beginPath();
+      ctx.arc(-4, 4, 2.8, 0, Math.PI * 2);
+      ctx.arc(4, 4, 2.8, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.fillStyle = labelColor;
       ctx.font = 'bold 8.5px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(isPlayer ? '[友軍戰略油彈庫]' : '[敵軍戰略彈藥庫]', 0, -22);
+      ctx.fillText(isPlayer ? '[友軍戰略油彈庫]' : '[敵軍戰略彈藥庫]', 0, -23);
     } else if (inst.type === 'infantry_squad') {
       // ════ NATO 步兵班 (APP-6 Infantry Squad: Tactical Box + X + Squad Dot) ════
       // 1. NATO APP-6 Tactical Box Frame (友軍藍 / 敵軍紅)
@@ -1718,7 +1826,28 @@ export class VectorRenderer {
       ctx.fill();
       ctx.stroke();
 
-      if (inst.type === 'sa3_sam_site') {
+      if (inst.type === 's300_sam_site') {
+        // S-300PMU 4連裝垂直冷發射圓筒 TEL (Quad VLS Launch Tubes) + 混凝土防爆坪
+        ctx.fillStyle = '#263238';
+        ctx.strokeStyle = '#90A4AE';
+        ctx.lineWidth = 1.4;
+        ctx.fillRect(-13, -7, 26, 22);
+        ctx.strokeRect(-13, -7, 26, 22);
+        ctx.fillStyle = '#455A64';
+        ctx.strokeStyle = '#FF5252';
+        ctx.lineWidth = 1.5;
+        for (const [vx, vy] of [[-6, -1], [6, -1], [-6, 9], [6, 9]]) {
+          ctx.beginPath();
+          ctx.arc(vx, vy, 3.6, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#FFAB40';
+          ctx.beginPath();
+          ctx.arc(vx, vy, 1.3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#455A64';
+        }
+      } else if (inst.type === 'sa3_sam_site') {
         // 雙聯裝 SA-3 固定旋轉傾斜發射架
         ctx.strokeStyle = '#B0BEC5';
         ctx.lineWidth = 2.0;
@@ -1747,7 +1876,7 @@ export class VectorRenderer {
         ctx.lineTo(-5, 8);
         ctx.stroke();
       } else {
-        // 2. 六邊形發射架滑軌
+        // 2. 六邊形發射架滑軌 (SA-2 Guideline)
         ctx.strokeStyle = '#B0BEC5';
         ctx.lineWidth = 2.0;
         ctx.beginPath();
@@ -1794,99 +1923,130 @@ export class VectorRenderer {
         -22
       );
     } else if (inst.type === 'coastal_harpoon') {
-      // ════ 友軍岸置魚叉反艦飛彈連 (Coastal Harpoon Battery) ════
+      // ════ 友軍岸置魚叉反艦飛彈連 (Coastal Harpoon Battery: Sandbag Berm + Quad Canisters) ════
+      ctx.fillStyle = 'rgba(38, 50, 56, 0.85)';
+      ctx.strokeStyle = '#90A4AE';
+      ctx.lineWidth = 1.8;
+      ctx.fillRect(-19, -13, 38, 26);
+      ctx.strokeRect(-19, -13, 38, 26);
+      // 4連裝 Mk-141 發射筒組
       ctx.fillStyle = '#1565C0';
-      ctx.strokeStyle = '#42A5F5';
-      ctx.lineWidth = 2.0;
-      ctx.strokeRect(-16, -10, 32, 20);
-      ctx.fillRect(-16, -10, 32, 20);
-      ctx.strokeStyle = '#ECEFF1';
-      ctx.lineWidth = 2;
-      for (let i = -10; i <= 10; i += 6) {
-        ctx.beginPath();
-        ctx.moveTo(i, -8);
-        ctx.lineTo(i + 4, 8);
-        ctx.stroke();
+      ctx.strokeStyle = '#4FC3F7';
+      ctx.lineWidth = 1.4;
+      for (const cy of [-8.5, -3.5, 1.5, 6.5]) {
+        ctx.fillRect(-13, cy - 1.5, 26, 3.2);
+        ctx.strokeRect(-13, cy - 1.5, 26, 3.2);
+        ctx.fillStyle = '#FFD54F';
+        ctx.fillRect(10.5, cy - 1.2, 2.2, 2.4);
+        ctx.fillStyle = '#1565C0';
       }
       ctx.fillStyle = '#80DEEA';
       ctx.font = 'bold 8.5px monospace';
       ctx.textAlign = 'center';
       ctx.fillText('🚀 [NATO 岸置魚叉反艦飛彈連] RGM-84 Harpoon (掠海突防 4500m)', 0, -24);
     } else if (inst.type === 'glcm_site') {
-      // ════ 友軍陸基戰斧巡弋飛彈連 (GLCM Site) ════
+      // ════ 友軍陸基戰斧巡弋飛彈連 (BGM-109G Gryphon TEL + 4-Tube Canister Pod) ════
       ctx.fillStyle = '#1E3A8A';
       ctx.strokeStyle = '#60A5FA';
       ctx.lineWidth = 2.0;
-      ctx.strokeRect(-18, -12, 36, 24);
-      ctx.fillRect(-18, -12, 36, 24);
-      ctx.fillStyle = '#374151';
-      ctx.fillRect(-12, -8, 24, 16);
+      ctx.fillRect(-20, -12, 40, 24);
+      ctx.strokeRect(-20, -12, 40, 24);
+      // Tractor cab + armored quad TEL box
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(10, -8, 7, 16);
+      ctx.fillStyle = '#1D4ED8';
+      ctx.strokeStyle = '#93C5FD';
+      ctx.fillRect(-15, -7, 22, 14);
+      ctx.strokeRect(-15, -7, 22, 14);
+      ctx.fillStyle = '#FFD54F';
+      for (const cy of [-4, 0, 4]) {
+        ctx.fillRect(-12, cy - 1, 16, 1.8);
+      }
       ctx.fillStyle = '#93C5FD';
       ctx.font = 'bold 8.5px monospace';
       ctx.textAlign = 'center';
       ctx.fillText('🎯 [NATO 陸基戰斧巡弋飛彈連] BGM-109G GLCM (TERCOM 6000m)', 0, -24);
     } else if (inst.type === 'coastal_rubezh') {
-      // ════ 敵軍 4K51 邊界岸置反艦飛彈連 (Coastal Rubezh) ════
-      ctx.fillStyle = '#7F1D1D';
+      // ════ 敵軍 4K51 邊界岸置反艦飛彈連 (Coastal Rubezh Twin P-15M/P-21 Armored Tubes) ════
+      ctx.fillStyle = '#5F1616';
       ctx.strokeStyle = '#EF4444';
       ctx.lineWidth = 2.0;
-      ctx.strokeRect(-18, -12, 36, 24);
-      ctx.fillRect(-18, -12, 36, 24);
-      ctx.fillStyle = '#1F2937';
-      ctx.fillRect(-14, -8, 28, 16);
+      ctx.fillRect(-20, -13, 40, 26);
+      ctx.strokeRect(-20, -13, 40, 26);
+      // Twin massive armored KT-161 canisters + radar mast
+      ctx.fillStyle = '#37474F';
+      ctx.strokeStyle = '#FCA5A5';
+      ctx.fillRect(-14, -8.5, 28, 6.5);
+      ctx.strokeRect(-14, -8.5, 28, 6.5);
+      ctx.fillRect(-14, 2, 28, 6.5);
+      ctx.strokeRect(-14, 2, 28, 6.5);
+      ctx.fillStyle = '#FF7043';
+      ctx.fillRect(11, -7.5, 3, 4.5);
+      ctx.fillRect(11, 3, 3, 4.5);
       ctx.fillStyle = '#FCA5A5';
       ctx.font = 'bold 8.5px monospace';
       ctx.textAlign = 'center';
       ctx.fillText('🚀 [華約 4K51 邊界岸防飛彈連] Rubezh (超重型反艦 4800m)', 0, -24);
     } else if (inst.type === 'scud_site') {
-      // ════ 華約 9K72 飛毛腿-B 戰術彈道飛彈發射營 (Scud-B Site) ════
+      // ════ 華約 9K72 飛毛腿-B 戰術彈道飛彈發射營 (Scud-B MAZ-543 TEL) ════
       ctx.fillStyle = '#450A0A';
       ctx.strokeStyle = '#DC2626';
       ctx.lineWidth = 2.2;
-      ctx.strokeRect(-20, -14, 40, 28);
-      ctx.fillRect(-20, -14, 40, 28);
-      // MAZ-543 重型 8x8 底盤輪胎
+      ctx.fillRect(-21, -13, 42, 26);
+      ctx.strokeRect(-21, -13, 42, 26);
+      // MAZ-543 重型 8x8 底盤輪胎 + 雙前置駕駛艙
       ctx.fillStyle = '#111827';
-      for (let w = -16; w <= 16; w += 10) {
-        ctx.fillRect(w - 3, -17, 6, 4);
-        ctx.fillRect(w - 3, 13, 6, 4);
+      for (let w = -15; w <= 15; w += 10) {
+        ctx.fillRect(w - 3, -16, 6, 3.5);
+        ctx.fillRect(w - 3, 12.5, 6, 3.5);
       }
-      // 豎起之 9M21 重型高爆彈道飛彈
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(12, -11, 7, 7);
+      ctx.fillRect(12, 4, 7, 7);
+      // 豎起之 9M21 重型高爆彈道飛彈 + 尾翼
+      ctx.fillStyle = '#ECEFF1';
       ctx.strokeStyle = '#F87171';
-      ctx.lineWidth = 3.5;
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
-      ctx.moveTo(-10, 0);
-      ctx.lineTo(12, 0);
+      ctx.moveTo(-16, -2.5);
+      ctx.lineTo(9, -2.5);
+      ctx.lineTo(17, 0);
+      ctx.lineTo(9, 2.5);
+      ctx.lineTo(-16, 2.5);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
-      ctx.strokeStyle = '#FEF2F2';
-      ctx.lineWidth = 2.0;
-      ctx.beginPath();
-      ctx.moveTo(8, -3);
-      ctx.lineTo(14, 0);
-      ctx.lineTo(8, 3);
-      ctx.stroke();
+      ctx.fillStyle = '#D32F2F';
+      ctx.fillRect(-17, -4.5, 3, 9);
       ctx.fillStyle = '#F87171';
       ctx.font = 'bold 8.5px monospace';
       ctx.textAlign = 'center';
       ctx.fillText('🚀 [華約 9K72 飛毛腿-B 戰術飛彈營] Scud-B SSM (6500m)', 0, -24);
     } else if (inst.type === 'fan_song_radar') {
-      // ════ 敵軍扇歌射控火控雷達 (Fan Song Fire Control Radar) ════
+      // ════ 敵軍扇歌射控火控雷達 (SNR-75 Fan Song Dual Orthogonal Lewis Scanners) ════
       ctx.fillStyle = '#263238';
       ctx.strokeStyle = '#FF1744';
-      ctx.lineWidth = 2.2;
-      ctx.strokeRect(-12, -10, 24, 20);
-      ctx.fillRect(-12, -10, 24, 20);
-
-      // 動態旋轉的方位角天線與雙拋物面天線
-      const radarRot = this.time * 2.8;
-      ctx.strokeStyle = '#FF5252';
       ctx.lineWidth = 2.0;
+      ctx.fillRect(-13, -10, 26, 20);
+      ctx.strokeRect(-13, -10, 26, 20);
+
+      // 雙正交橙紅拋物面扇形掃描天線 (Horizontal + Vertical Fan Arrays)
+      const radarRot = this.time * 2.2;
+      ctx.save();
+      ctx.rotate(radarRot);
+      ctx.strokeStyle = '#FF8A65';
+      ctx.lineWidth = 2.8;
       ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(Math.cos(radarRot) * 22, Math.sin(radarRot) * 22);
-      ctx.moveTo(0, 0);
-      ctx.lineTo(Math.cos(radarRot + Math.PI / 2) * 16, Math.sin(radarRot + Math.PI / 2) * 16);
+      ctx.moveTo(-10, -4);
+      ctx.lineTo(10, -4);
+      ctx.moveTo(4, -10);
+      ctx.lineTo(4, 10);
       ctx.stroke();
+      ctx.fillStyle = '#FF5252';
+      ctx.beginPath();
+      ctx.arc(0, 0, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
 
       // 電磁波輻射環 (供 AGM-45 反輻射飛彈鎖定示意)
       const radPulse = (Math.sin(this.time * 6) + 1) * 0.5;
@@ -1894,7 +2054,7 @@ export class VectorRenderer {
       ctx.lineWidth = 1.5;
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
-      ctx.arc(0, 0, 24 + radPulse * 8, 0, Math.PI * 2);
+      ctx.arc(0, 0, 22 + radPulse * 8, 0, Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
 
@@ -2120,6 +2280,11 @@ export class VectorRenderer {
         continue; // Undetected enemy submarine stays hidden under Fog of War
       }
 
+      const isSelected = selectedUnitIds.includes(ship.id);
+      if (!isSelected && !this.isWorldCircleVisible(ship.pos.x, ship.pos.y, Math.max(ship.length * 1.35, 260), camera)) {
+        continue;
+      }
+
       this.drawWake(ship);
 
       // Submarine Sonar Contact / Stealth Bubble Ring
@@ -2153,8 +2318,6 @@ export class VectorRenderer {
           }
         }
       }
-
-      const isSelected = selectedUnitIds.includes(ship.id);
 
       // RTS A* Sea-Lane Waypoint Path Line
       if (isSelected && ship.order.targetPos && (ship.order.type === 'move' || ship.order.type === 'attack')) {
@@ -2274,8 +2437,18 @@ export class VectorRenderer {
           ctx.rotate(ship.heading + ship.sinkProgress * 0.4);
         } else {
           ctx.rotate(ship.heading);
+          // Subsurface ocean drop shadow & waterline cushion for surfaced ships
+          if (!(this.isSubmarineShip(ship) && (ship.isSubmerged ?? true))) {
+            ctx.fillStyle = 'rgba(2, 7, 15, 0.48)';
+            ctx.beginPath();
+            ctx.ellipse(2, 3, ship.length * 0.51, ship.width * 0.48, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
         }
         this.renderShipHullByType(ship, hullColor, detailColor);
+        if (!ship.isSunk) {
+          this.drawShipUniversalDetails(ship, hullColor, detailColor);
+        }
         ctx.restore();
       }
 
@@ -2529,17 +2702,42 @@ export class VectorRenderer {
     ctx.restore();
   }
 
-  // Draw RTS Selection Ring
+  // Draw RTS Selection Ring with CIC corner lock-on brackets
   private drawUnitSelectionRing(pos: Vector2D, radius: number) {
     const ctx = this.ctx;
     ctx.save();
     ctx.strokeStyle = '#00E676';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1.8;
     ctx.setLineDash([6, 6]);
     ctx.beginPath();
     ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
     ctx.stroke();
     ctx.setLineDash([]);
+
+    // 4 crisp CIC corner lock-on reticle brackets
+    const b = radius + 5;
+    const arm = Math.max(6, Math.min(12, radius * 0.26));
+    ctx.strokeStyle = '#69F0AE';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    // Top-Left
+    ctx.moveTo(pos.x - b, pos.y - b + arm);
+    ctx.lineTo(pos.x - b, pos.y - b);
+    ctx.lineTo(pos.x - b + arm, pos.y - b);
+    // Top-Right
+    ctx.moveTo(pos.x + b - arm, pos.y - b);
+    ctx.lineTo(pos.x + b, pos.y - b);
+    ctx.lineTo(pos.x + b, pos.y - b + arm);
+    // Bottom-Right
+    ctx.moveTo(pos.x + b, pos.y + b - arm);
+    ctx.lineTo(pos.x + b, pos.y + b);
+    ctx.lineTo(pos.x + b - arm, pos.y + b);
+    // Bottom-Left
+    ctx.moveTo(pos.x - b + arm, pos.y + b);
+    ctx.lineTo(pos.x - b, pos.y + b);
+    ctx.lineTo(pos.x - b, pos.y + b - arm);
+    ctx.stroke();
+
     ctx.restore();
   }
 
@@ -2694,6 +2892,30 @@ export class VectorRenderer {
     ctx.arc(-l * 0.42, -w * 0.46, 4, 0, Math.PI * 2);
     ctx.arc(-l * 0.42, w * 0.46, 4, 0, Math.PI * 2);
     ctx.stroke();
+
+    // Deck Edge Foul Stripes & Parked Aircraft Wing Silhouettes
+    ctx.strokeStyle = 'rgba(255, 213, 79, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-l * 0.42, -w * 0.40);
+    ctx.lineTo(l * 0.42, -w * 0.40);
+    ctx.stroke();
+
+    const readyDeckPlanes = ship.carrierPlanes
+      ? Object.values(ship.carrierPlanes.ready).reduce((sum, n) => sum + n, 0)
+      : 0;
+    const parkedCount = Math.min(4, Math.ceil(readyDeckPlanes / 3));
+    for (let p = 0; p < parkedCount; p++) {
+      const px = -l * 0.34 + p * (l * 0.14);
+      const py = p % 2 === 0 ? w * 0.28 : -w * 0.28;
+      ctx.fillStyle = '#90CAF9';
+      ctx.beginPath();
+      ctx.moveTo(px + 3, py);
+      ctx.lineTo(px - 2, py - 3.2);
+      ctx.lineTo(px - 2, py + 3.2);
+      ctx.closePath();
+      ctx.fill();
+    }
 
     // Pennant number on bow deck
     ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
@@ -3030,6 +3252,16 @@ export class VectorRenderer {
       ctx.lineTo(variant === 'ijn_sub' ? -l * 0.24 : l * 0.24, 0);
       ctx.stroke();
     }
+
+    // Bow & Stern Hydroplanes (Diving Planes)
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(l * 0.34, -w * 0.52);
+    ctx.lineTo(l * 0.34, w * 0.52);
+    ctx.moveTo(-l * 0.42, -w * 0.48);
+    ctx.lineTo(-l * 0.42, w * 0.48);
+    ctx.stroke();
 
     ctx.setLineDash([]);
   }
@@ -3432,38 +3664,47 @@ export class VectorRenderer {
       ctx.translate(turret.relX, turret.relY);
       ctx.rotate(turret.angle - ship.heading);
 
+      const r = turret.barrelCount > 2 ? 6.5 : 4.8;
+      // Beveled armored gun house (trapezoid/octagonal barbette profile)
       ctx.fillStyle = '#0D2235';
       ctx.strokeStyle = color;
       ctx.lineWidth = 1.5;
-
       ctx.beginPath();
-      ctx.arc(0, 0, turret.barrelCount > 2 ? 6.5 : 5, 0, Math.PI * 2);
+      ctx.moveTo(r * 0.95, -r * 0.58);
+      ctx.lineTo(r * 0.25, -r * 0.92);
+      ctx.lineTo(-r * 0.92, -r * 0.80);
+      ctx.lineTo(-r * 0.92, r * 0.80);
+      ctx.lineTo(r * 0.25, r * 0.92);
+      ctx.lineTo(r * 0.95, r * 0.58);
+      ctx.closePath();
       ctx.fill();
       ctx.stroke();
 
-      ctx.lineWidth = 2;
+      // Top armored roof hatch & rangefinder highlight
+      ctx.fillStyle = '#1E3F5E';
+      ctx.fillRect(-r * 0.55, -r * 0.46, r * 0.9, r * 0.92);
+
+      // Recoil barrel jackets + gun barrels
       const bLen = turret.barrelCount > 2 ? 16 : 12;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      const drawBarrel = (by: number) => {
+        ctx.fillStyle = '#546E7A';
+        ctx.fillRect(r * 0.65, by - 1.3, 3.2, 2.6);
+        ctx.beginPath();
+        ctx.moveTo(r * 0.7, by);
+        ctx.lineTo(bLen, by);
+        ctx.stroke();
+      };
       if (turret.barrelCount === 1) {
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(bLen, 0);
-        ctx.stroke();
+        drawBarrel(0);
       } else if (turret.barrelCount === 2) {
-        ctx.beginPath();
-        ctx.moveTo(0, -2.5);
-        ctx.lineTo(bLen, -2.5);
-        ctx.moveTo(0, 2.5);
-        ctx.lineTo(bLen, 2.5);
-        ctx.stroke();
+        drawBarrel(-2.3);
+        drawBarrel(2.3);
       } else if (turret.barrelCount >= 3) {
-        ctx.beginPath();
-        ctx.moveTo(0, -3.5);
-        ctx.lineTo(bLen, -3.5);
-        ctx.moveTo(0, 0);
-        ctx.lineTo(bLen, 0);
-        ctx.moveTo(0, 3.5);
-        ctx.lineTo(bLen, 3.5);
-        ctx.stroke();
+        drawBarrel(-3.3);
+        drawBarrel(0);
+        drawBarrel(3.3);
       }
 
       ctx.restore();
@@ -3593,6 +3834,33 @@ export class VectorRenderer {
     ctx.textAlign = 'center';
     ctx.fillText('63', 0, 0);
     ctx.restore();
+
+    // Jet Blast Deflectors (JBDs) & Deck Edge Foul Stripes + Parked Aircraft
+    ctx.fillStyle = '#CFD8DC';
+    ctx.fillRect(l * 0.12, w * 0.08, 2.5, 5);
+    ctx.fillRect(l * 0.12, -w * 0.08, 2.5, 5);
+    ctx.strokeStyle = 'rgba(255, 213, 79, 0.55)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-l * 0.34, -w * 0.44);
+    ctx.lineTo(l * 0.16, -w * 0.50);
+    ctx.stroke();
+
+    const readyDeckPlanes = ship.carrierPlanes
+      ? Object.values(ship.carrierPlanes.ready).reduce((sum, n) => sum + n, 0)
+      : 0;
+    const parkedCount = Math.min(4, Math.ceil(readyDeckPlanes / 3));
+    for (let p = 0; p < parkedCount; p++) {
+      const px = -l * 0.30 + p * (l * 0.13);
+      const py = p % 2 === 0 ? w * 0.30 : -w * 0.38;
+      ctx.fillStyle = '#90CAF9';
+      ctx.beginPath();
+      ctx.moveTo(px + 3.5, py);
+      ctx.lineTo(px - 2.5, py - 3.5);
+      ctx.lineTo(px - 2.5, py + 3.5);
+      ctx.closePath();
+      ctx.fill();
+    }
 
     // RIM-7 Sea Sparrow Launchers
     ctx.fillStyle = '#37474F';
@@ -4391,6 +4659,16 @@ export class VectorRenderer {
       ctx.fill();
       ctx.stroke();
 
+      // Fairwater Sail Planes & Bow/Stern Hydroplanes
+      ctx.strokeStyle = detailColor;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(l * 0.14, -w * 0.38);
+      ctx.lineTo(l * 0.14, w * 0.38);
+      ctx.moveTo(-l * 0.44, -w * 0.44);
+      ctx.lineTo(-l * 0.44, w * 0.44);
+      ctx.stroke();
+
       // Red Star insignia
       ctx.fillStyle = '#D50000';
       ctx.beginPath();
@@ -4682,6 +4960,29 @@ export class VectorRenderer {
       ctx.fillRect(l * 0.28 + (i % 2) * 8, -w * 0.28 + Math.floor(i / 2) * 12, 12, 4);
     }
 
+    // Yellow angled deck foul stripe & Yak-38 deck spots
+    ctx.strokeStyle = 'rgba(255, 213, 79, 0.55)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-l * 0.45, -w * 0.42);
+    ctx.lineTo(l * 0.22, -w * 0.40);
+    ctx.stroke();
+
+    const readyDeckPlanes = ship.carrierPlanes
+      ? Object.values(ship.carrierPlanes.ready).reduce((sum, n) => sum + n, 0)
+      : 0;
+    const parkedCount = Math.min(3, Math.ceil(readyDeckPlanes / 3));
+    for (let p = 0; p < parkedCount; p++) {
+      const px = -l * 0.34 + p * (l * 0.14);
+      ctx.fillStyle = '#EF9A9A';
+      ctx.beginPath();
+      ctx.moveTo(px + 3, -w * 0.32);
+      ctx.lineTo(px - 2, -w * 0.32 - 2.8);
+      ctx.lineTo(px - 2, -w * 0.32 + 2.8);
+      ctx.closePath();
+      ctx.fill();
+    }
+
     this.drawShipTurrets(ship, hullColor);
   }
 
@@ -4883,7 +5184,34 @@ export class VectorRenderer {
     ctx.fillRect(-l * 0.02, w * 0.31, 3, 3);
     ctx.fillRect(l * 0.04, w * 0.31, 3, 3);
 
-    // 5. Weapon Sponsons: Mk 29 Sea Sparrow & Phalanx CIWS
+    // 5. Jet Blast Deflectors, Foul Edge Lines & Parked Air Wing Silhouettes
+    ctx.fillStyle = '#CFD8DC';
+    ctx.fillRect(l * 0.15, w * 0.10, 2.5, 5);
+    ctx.fillRect(l * 0.15, -w * 0.07, 2.5, 5);
+    ctx.strokeStyle = 'rgba(255, 213, 79, 0.6)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-l * 0.36, -w * 0.46);
+    ctx.lineTo(l * 0.18, -w * 0.52);
+    ctx.stroke();
+
+    const readyDeckPlanes = ship.carrierPlanes
+      ? Object.values(ship.carrierPlanes.ready).reduce((sum, n) => sum + n, 0)
+      : 0;
+    const parkedCount = Math.min(4, Math.ceil(readyDeckPlanes / 4));
+    for (let p = 0; p < parkedCount; p++) {
+      const px = -l * 0.32 + p * (l * 0.13);
+      const py = p % 2 === 0 ? w * 0.28 : -w * 0.40;
+      ctx.fillStyle = '#90CAF9';
+      ctx.beginPath();
+      ctx.moveTo(px + 3.5, py);
+      ctx.lineTo(px - 2.5, py - 3.5);
+      ctx.lineTo(px - 2.5, py + 3.5);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // 6. Weapon Sponsons: Mk 29 Sea Sparrow & Phalanx CIWS
     ctx.fillStyle = '#37474F';
     ctx.strokeStyle = '#80DEEA';
     ctx.lineWidth = 1;
@@ -5242,10 +5570,10 @@ export class VectorRenderer {
     ctx.strokeStyle = hullColor;
     ctx.lineWidth = 2.0;
     ctx.beginPath();
-    ctx.moveTo(-l * 0.46, -w * 0.48);
-    ctx.lineTo(-l * 0.52, -w * 0.48);
-    ctx.moveTo(-l * 0.46, w * 0.48);
-    ctx.lineTo(-l * 0.52, w * 0.48);
+    ctx.moveTo(-l * 0.45, -w * 0.48);
+    ctx.lineTo(-l * 0.45, w * 0.48);
+    ctx.moveTo(-l * 0.51, -w * 0.18);
+    ctx.lineTo(-l * 0.51, w * 0.18);
     ctx.stroke();
   }
 
@@ -6261,6 +6589,73 @@ export class VectorRenderer {
     }
   }
 
+  // Universal Surface & Subsurface Ship Tactical Details (Breakwater, Spinning Radar Mast, Port/Starboard Nav Lights)
+  private drawShipUniversalDetails(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+    const isSub = this.isSubmarineShip(ship);
+
+    if (isSub) {
+      // Subtle periscope / sail feather ripple when submerged & moving
+      if ((ship.isSubmerged ?? true) && ship.speed > 1.5) {
+        ctx.strokeStyle = 'rgba(128, 222, 234, 0.35)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(l * 0.1, 0);
+        ctx.lineTo(-l * 0.25, -4);
+        ctx.moveTo(l * 0.1, 0);
+        ctx.lineTo(-l * 0.25, 4);
+        ctx.stroke();
+      }
+      return;
+    }
+
+    const isCarrier =
+      ship.type === 'carrier' ||
+      ship.type === 'cve' ||
+      ship.type === 'cv63' ||
+      ship.type === 'cvn' ||
+      ship.type === 'cvhg_kiev' ||
+      ship.type === 'lph';
+    const isLandingCraft = ship.type === 'lcvp' || ship.type === 'lcm8' || ship.type === 'lcac';
+
+    // 1. Bow Breakwater V-Shield & Subtle Deck Centerline on Surface Warships
+    if (!isCarrier && !isLandingCraft) {
+      ctx.strokeStyle = detailColor;
+      ctx.globalAlpha = 0.42;
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.moveTo(l * 0.25, -w * 0.24);
+      ctx.lineTo(l * 0.36, 0);
+      ctx.lineTo(l * 0.25, w * 0.24);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // 2. Animated Spinning Search Radar Bar atop Major Surface Combatants
+    if (!isLandingCraft) {
+      const radarX = isCarrier ? (ship.type === 'cvn' ? -l * 0.01 : l * 0.12) : -l * 0.02;
+      const radarY = isCarrier ? (ship.type === 'cvn' || ship.type === 'cv63' ? w * 0.32 : -w * 0.48) : 0;
+      const rAng = this.time * 3.4 + (ship.heading || 0);
+      const barR = Math.max(3.8, Math.min(6.2, w * 0.26));
+      ctx.strokeStyle = hullColor;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(radarX - Math.cos(rAng) * barR, radarY - Math.sin(rAng) * barR);
+      ctx.lineTo(radarX + Math.cos(rAng) * barR, radarY + Math.sin(rAng) * barR);
+      ctx.stroke();
+    }
+
+    // 3. International Port (Red) / Starboard (Green) / Stern Navigation Lights
+    ctx.fillStyle = '#FF5252';
+    ctx.fillRect(0, -w * 0.45, 2.2, 2.2);
+    ctx.fillStyle = '#00E676';
+    ctx.fillRect(0, w * 0.45 - 2.2, 2.2, 2.2);
+    ctx.fillStyle = '#FFF9C4';
+    ctx.fillRect(-l * 0.48, -1, 2, 2);
+  }
+
   private drawShipStatus(ship: Ship, zoom: number = 0.65, isSelected: boolean = false) {
     const ctx = this.ctx;
     const isPlayer = ship.side === 'player';
@@ -6374,6 +6769,10 @@ export class VectorRenderer {
       if (plane.state === 'shot_down' && (plane.deathTimer || 0) <= 0) continue;
 
       const isSelected = selectedUnitIds.includes(plane.id);
+      if (!isSelected && !this.isWorldCircleVisible(plane.pos.x, plane.pos.y, 180, camera)) {
+        continue;
+      }
+
       const isPlayer = plane.side === 'player';
       const cosH = Math.cos(plane.heading);
       const sinH = Math.sin(plane.heading);
@@ -6384,25 +6783,77 @@ export class VectorRenderer {
       if (plane.altitude > 0.08) {
         const altOffset = plane.altitude * 32;
         const shadowScale = 0.85 + plane.altitude * 0.25;
-        const shadowAlpha = 0.32 * Math.min(1, plane.altitude * 1.6);
+        const shadowAlpha = 0.34 * Math.min(1, plane.altitude * 1.6);
+        const isHeloShadow =
+          plane.model === 'ho3s1' ||
+          plane.model === 'uh2' ||
+          plane.model === 'uh1' ||
+          plane.model === 'ah1' ||
+          plane.model === 'sh2' ||
+          plane.model === 'sh3f' ||
+          plane.model === 'ch53' ||
+          plane.model === 'ah64a' ||
+          plane.model === 'ah1w' ||
+          plane.model === 'ka27' ||
+          plane.model === 'mi24';
+        const isSweptWing =
+          plane.model === 'f14a' ||
+          plane.model === 'fa18a' ||
+          plane.model === 'f15a' ||
+          plane.model === 'f16a' ||
+          plane.model === 'f111' ||
+          plane.model === 'f4b' ||
+          plane.model === 'f4j' ||
+          plane.model === 'f4e' ||
+          plane.model === 'b52' ||
+          plane.model === 'tu22m3' ||
+          plane.model === 'tu95' ||
+          plane.model === 'mig29a' ||
+          plane.model === 'su27' ||
+          plane.model === 'mirage3' ||
+          plane.model === 'mirage2000';
+        const isHeavySpan = plane.role === 'level_bomber' || plane.model === 'tu95' || plane.model === 'e3a' || plane.model === 'c130';
+
         ctx.save();
         ctx.translate(plane.pos.x + altOffset * 0.72, plane.pos.y + altOffset * 0.72);
         ctx.rotate(plane.heading);
         ctx.scale(shadowScale, shadowScale);
         ctx.fillStyle = `rgba(3, 9, 18, ${shadowAlpha})`;
 
-        // Fuselage shadow
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 11, 3.8, 0, 0, Math.PI * 2);
-        ctx.fill();
-        // Wings shadow
-        ctx.beginPath();
-        ctx.ellipse(1, 0, 4.2, 17, 0, 0, Math.PI * 2);
-        ctx.fill();
-        // Tail shadow
-        ctx.beginPath();
-        ctx.ellipse(-9, 0, 2.5, 7, 0, 0, Math.PI * 2);
-        ctx.fill();
+        if (isHeloShadow) {
+          ctx.beginPath();
+          ctx.ellipse(-2, 0, 14, 3.2, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(0, 0, 13, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(3, 9, 18, ${shadowAlpha * 0.45})`;
+          ctx.fill();
+        } else if (isSweptWing) {
+          const spanMul = isHeavySpan ? 1.55 : 1.0;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 15 * spanMul, 3.4, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(6 * spanMul, 0);
+          ctx.lineTo(-7 * spanMul, -18 * spanMul);
+          ctx.lineTo(-12 * spanMul, -18 * spanMul);
+          ctx.lineTo(-4 * spanMul, 0);
+          ctx.lineTo(-12 * spanMul, 18 * spanMul);
+          ctx.lineTo(-7 * spanMul, 18 * spanMul);
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          const spanMul = isHeavySpan ? 1.5 : 1.0;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 11 * spanMul, 3.6, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.ellipse(1, 0, 4.2 * spanMul, 17 * spanMul, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.ellipse(-9 * spanMul, 0, 2.5, 7 * spanMul, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
 
         ctx.restore();
       }
@@ -6570,6 +7021,25 @@ export class VectorRenderer {
         ctx.lineWidth = 1.5;
 
         this.drawSpecificAircraftModel(plane, color);
+
+        // Crisp Wingtip Navigation Strobes (Port Red / Starboard Green) on airborne aircraft
+        if (plane.altitude > 0.15) {
+          const tipSpan =
+            plane.role === 'level_bomber' || plane.model === 'e3a' || plane.model === 'c130' || plane.model === 'tu95'
+              ? 30
+              : plane.model === 'e2c' || plane.model === 'a10a' || plane.model === 's3a'
+              ? 24
+              : 16;
+          const tipX = -4;
+          ctx.fillStyle = 'rgba(255, 82, 82, 0.85)';
+          ctx.beginPath();
+          ctx.arc(tipX, -tipSpan, 1.3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = 'rgba(0, 230, 118, 0.85)';
+          ctx.beginPath();
+          ctx.arc(tipX, tipSpan, 1.3, 0, Math.PI * 2);
+          ctx.fill();
+        }
 
         // ══════════════════════════════════════════════════════════
         // 現代噴射機尾焰與直升機旋翼動效 (Jet Flame & Helicopter Rotor)
@@ -7333,6 +7803,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Distinctive inverted gull wings: crank down from roots, then extend flat
+      ctx.fillStyle = '#0B1F34';
       ctx.beginPath();
       // Port wing
       ctx.moveTo(3, 0);
@@ -7341,6 +7812,11 @@ export class VectorRenderer {
       ctx.lineTo(-2, -17);
       ctx.lineTo(-3, -6);
       ctx.lineTo(-1, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.beginPath();
       // Starboard wing
       ctx.moveTo(3, 0);
       ctx.lineTo(1, 6);
@@ -7348,9 +7824,12 @@ export class VectorRenderer {
       ctx.lineTo(-2, 17);
       ctx.lineTo(-3, 6);
       ctx.lineTo(-1, 0);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Horizontal Stabilizer / Tailplane
+      ctx.strokeStyle = color;
       ctx.beginPath();
       ctx.moveTo(-10, -7);
       ctx.lineTo(-8, -7);
@@ -7390,6 +7869,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Clipped square wings
+      ctx.fillStyle = '#0B1F34';
       ctx.beginPath();
       ctx.moveTo(2, -13);
       ctx.lineTo(4, -13);
@@ -7399,6 +7879,7 @@ export class VectorRenderer {
       ctx.lineTo(-3, 13);
       ctx.lineTo(-3, -13);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Teardrop bubble canopy
@@ -7419,6 +7900,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Square-tipped wings with yellow wingtips
+      ctx.fillStyle = '#0B1F34';
       ctx.beginPath();
       ctx.moveTo(2, -15);
       ctx.lineTo(4, -15);
@@ -7428,6 +7910,7 @@ export class VectorRenderer {
       ctx.lineTo(-3, 15);
       ctx.lineTo(-3, -15);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Wingtip yellow recognition strips
@@ -7440,7 +7923,9 @@ export class VectorRenderer {
       ctx.lineTo(-3, 15);
       ctx.stroke();
 
-      // Greenhouse canopy frames
+      // Greenhouse canopy frames + glass glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.45)';
+      ctx.fillRect(-1, -2, 5, 4);
       ctx.strokeStyle = color;
       ctx.lineWidth = 1;
       ctx.strokeRect(-1, -2, 5, 4);
@@ -7455,6 +7940,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Broad wings with 6 machine guns
+      ctx.fillStyle = '#0A1E33';
       ctx.beginPath();
       ctx.moveTo(3, -16);
       ctx.lineTo(5, -16);
@@ -7464,6 +7950,7 @@ export class VectorRenderer {
       ctx.lineTo(-3, 16);
       ctx.lineTo(-3, -16);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // 6 gun ports on wing leading edge
@@ -7473,6 +7960,10 @@ export class VectorRenderer {
         const gy = g * 3.5;
         ctx.fillRect(4, gy - 0.5, 2, 1);
       }
+
+      // Cockpit canopy glass
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.52)';
+      ctx.fillRect(0, -1.7, 5.2, 3.4);
 
       if (isPlayer) this.drawUSInsignia(1, -10, 3.5);
     } else if (m === 'sbd' || m === 'sb2c') {
@@ -7484,6 +7975,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Broad tapered dive-bombing wings
+      ctx.fillStyle = '#0A1E33';
       ctx.beginPath();
       ctx.moveTo(3, -16);
       ctx.lineTo(5, -16);
@@ -7493,6 +7985,7 @@ export class VectorRenderer {
       ctx.lineTo(-4, 16);
       ctx.lineTo(-4, -16);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Famous Perforated Split Dive-Flap Dots ("Swiss-Cheese Flaps")
@@ -7520,6 +8013,9 @@ export class VectorRenderer {
       }
 
       // Greenhouse pilot canopy + rear twin .30 gunner station
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.48)';
+      ctx.fillRect(0, -2, 6, 4);
+      ctx.fillRect(-5, -1.8, 3, 3.6);
       ctx.strokeStyle = color;
       ctx.strokeRect(0, -2, 6, 4);
       ctx.strokeRect(-5, -1.8, 3, 3.6);
@@ -7540,6 +8036,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Broad wingspan with thick dihedral
+      ctx.fillStyle = '#0A1E33';
       ctx.beginPath();
       ctx.moveTo(2, -18);
       ctx.lineTo(4, -18);
@@ -7549,13 +8046,17 @@ export class VectorRenderer {
       ctx.lineTo(-4, 18);
       ctx.lineTo(-4, -18);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
-      // Dorsal Power Ball Turret Dome (Grumman spherical glass turret)
+      // Pilot cockpit greenhouse + Dorsal Power Ball Turret Dome
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
+      ctx.fillRect(2, -1.7, 5, 3.4);
       ctx.strokeStyle = '#80DEEA';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.arc(-2, 0, 3.5, 0, Math.PI * 2);
+      ctx.fill();
       ctx.stroke();
       // .50 cal machine gun barrel protruding from ball turret
       ctx.beginPath();
@@ -7573,13 +8074,19 @@ export class VectorRenderer {
       ctx.stroke();
 
       // High monoplane wings
+      ctx.fillStyle = '#0B1F34';
       ctx.beginPath();
       ctx.moveTo(3, -16);
       ctx.lineTo(3, 16);
       ctx.lineTo(-3, 16);
       ctx.lineTo(-3, -16);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Tandem greenhouse canopy
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.48)';
+      ctx.fillRect(-1, -1.6, 5.5, 3.2);
 
       // Massive Central Catamaran Float Pontoon
       ctx.strokeStyle = '#80DEEA';
@@ -7618,6 +8125,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Clean low-wing cantilever layout with dihedral tips
+      ctx.fillStyle = '#0B1F34';
       ctx.beginPath();
       ctx.moveTo(3, -17);
       ctx.lineTo(5, -17);
@@ -7627,6 +8135,7 @@ export class VectorRenderer {
       ctx.lineTo(-3, 17);
       ctx.lineTo(-3, -17);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Wing-mounted 20mm M2 autocannons
@@ -7685,6 +8194,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // High-lift broad cantilever wing (Wingspan 52)
+      ctx.fillStyle = '#0D2134';
       ctx.beginPath();
       ctx.moveTo(5, -26);
       ctx.lineTo(8, -26);
@@ -7694,6 +8204,7 @@ export class VectorRenderer {
       ctx.lineTo(-4, 26);
       ctx.lineTo(-4, -26);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // 4x Wright R-1820 Cyclone Radial Engine Nacelles
@@ -7735,6 +8246,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Davis High-Aspect Ratio Wings (Wingspan 56)
+      ctx.fillStyle = '#0D2134';
       ctx.beginPath();
       ctx.moveTo(6, -28);
       ctx.lineTo(8, -28);
@@ -7744,6 +8256,7 @@ export class VectorRenderer {
       ctx.lineTo(-3, 28);
       ctx.lineTo(-3, -28);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // 4x Twin Wasp Engines with Cowling Rings
@@ -7782,6 +8295,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Cantilever low-wings
+      ctx.fillStyle = '#0E241C';
       ctx.beginPath();
       ctx.moveTo(2, -16);
       ctx.lineTo(4, -16);
@@ -7791,7 +8305,12 @@ export class VectorRenderer {
       ctx.lineTo(-3, 16);
       ctx.lineTo(-3, -16);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Framed cockpit glass
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
+      ctx.fillRect(-1, -1.5, 5, 3);
 
       // Iconic Large Chin Radiator Scoop
       ctx.fillStyle = '#C62828';
@@ -7846,6 +8365,8 @@ export class VectorRenderer {
       ctx.stroke();
 
       // 2. High-speed Wing (Wingspan 42)
+      ctx.fillStyle = '#0E241C';
+      ctx.strokeStyle = color;
       ctx.beginPath();
       ctx.moveTo(3, -21);
       ctx.lineTo(5, -21);
@@ -7855,6 +8376,7 @@ export class VectorRenderer {
       ctx.lineTo(-3, 21);
       ctx.lineTo(-3, -21);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // 3. Twin Engine Booms (y = ±9.5) with Twin Vertical Fins & Horizontal Elevator
@@ -7900,6 +8422,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Shoulder-mounted wings (Wingspan 38)
+      ctx.fillStyle = '#0E241C';
       ctx.beginPath();
       ctx.moveTo(3, -19);
       ctx.lineTo(5, -19);
@@ -7909,7 +8432,12 @@ export class VectorRenderer {
       ctx.lineTo(-3, 19);
       ctx.lineTo(-3, -19);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Pilot & nose glass canopy
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.48)';
+      ctx.fillRect(5, -1.8, 5, 3.6);
 
       // Twin Wright R-2600 Engine Nacelles (y = ±9)
       for (const ey of [-9, 9]) {
@@ -7947,6 +8475,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Laminar-flow attack wing (Wingspan 42)
+      ctx.fillStyle = '#0B1F34';
       ctx.beginPath();
       ctx.moveTo(4, -21);
       ctx.lineTo(6, -21);
@@ -7956,7 +8485,12 @@ export class VectorRenderer {
       ctx.lineTo(-3, 21);
       ctx.lineTo(-3, -21);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Clamshell canopy glass
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
+      ctx.fillRect(6, -1.8, 5, 3.6);
 
       // Heavy Double Wasp Nacelles (y = ±10)
       for (const ey of [-10, 10]) {
@@ -7994,6 +8528,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Sleek rounded Mitsubishi wings
+      ctx.fillStyle = '#18242C';
       ctx.beginPath();
       ctx.moveTo(2, -15);
       ctx.lineTo(4, -15);
@@ -8003,7 +8538,12 @@ export class VectorRenderer {
       ctx.lineTo(-3, 15);
       ctx.lineTo(-3, -15);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Framed Mitsubishi greenhouse canopy
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
+      ctx.fillRect(-1, -1.4, 5, 2.8);
 
       // Wingtip folding hinge lines (二一型航母甲板折疊翼端)
       ctx.strokeStyle = '#4FC3F7';
@@ -8032,6 +8572,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Clipped square-tip wings (五二型圓角改切角)
+      ctx.fillStyle = '#0D241C';
       ctx.beginPath();
       ctx.moveTo(2, -14);
       ctx.lineTo(4, -14);
@@ -8041,7 +8582,12 @@ export class VectorRenderer {
       ctx.lineTo(-3.5, 14);
       ctx.lineTo(-3.5, -14);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Canopy glass glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
+      ctx.fillRect(-1, -1.4, 5, 2.8);
 
       // Multiple individual thrust exhaust stacks (推力式單排氣管)
       ctx.strokeStyle = '#FF7043';
@@ -8083,6 +8629,8 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Tapered wings (Wingspan 36)
+      ctx.fillStyle = '#142228';
+      ctx.strokeStyle = color;
       ctx.beginPath();
       ctx.moveTo(2, -16);
       ctx.lineTo(4, -16);
@@ -8092,7 +8640,12 @@ export class VectorRenderer {
       ctx.lineTo(-3, 16);
       ctx.lineTo(-3, -16);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Cockpit canopy glass
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
+      ctx.fillRect(-1, -1.4, 5, 2.8);
 
       // Ventral radiator bath (機腹冷卻散熱器)
       ctx.fillStyle = '#102027';
@@ -8111,6 +8664,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Broad low-mid laminar-flow wings
+      ctx.fillStyle = '#0D241C';
       ctx.beginPath();
       ctx.moveTo(3, -17);
       ctx.lineTo(5, -17);
@@ -8120,7 +8674,12 @@ export class VectorRenderer {
       ctx.lineTo(-3.5, 17);
       ctx.lineTo(-3.5, -17);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Canopy glass
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
+      ctx.fillRect(-1, -1.6, 5, 3.2);
 
       // 4x 20mm long gun barrels extending forward from wing leading edge
       ctx.strokeStyle = '#FFE082';
@@ -8147,9 +8706,15 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Elliptical wings
+      ctx.fillStyle = '#142228';
       ctx.beginPath();
       ctx.ellipse(0, 0, 5, 16, 0, 0, Math.PI * 2);
+      ctx.fill();
       ctx.stroke();
+
+      // Long tandem greenhouse canopy
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
+      ctx.fillRect(-2, -1.5, 7, 3);
 
       // Val Fixed Streamlined Spatted Landing Gear Pants
       if (m === 'val') {
@@ -8170,6 +8735,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Long wingspan
+      ctx.fillStyle = '#0D241C';
       ctx.beginPath();
       ctx.moveTo(2, -18);
       ctx.lineTo(4, -18);
@@ -8179,7 +8745,12 @@ export class VectorRenderer {
       ctx.lineTo(-4, 18);
       ctx.lineTo(-4, -18);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Three-seat long greenhouse canopy
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.48)';
+      ctx.fillRect(-3, -1.6, 8, 3.2);
 
       this.drawHinomaru(0, -11, 3.8);
       this.drawHinomaru(0, 11, 3.8);
@@ -8193,6 +8764,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Wide tapered wings with dual engine nacelles
+      ctx.fillStyle = '#0D241C';
       ctx.beginPath();
       ctx.moveTo(4, -26);
       ctx.lineTo(7, -26);
@@ -8202,7 +8774,12 @@ export class VectorRenderer {
       ctx.lineTo(-5, 26);
       ctx.lineTo(-5, -26);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Glazed navigator nose & stepped cockpit glass
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.fillRect(10, -2.1, 6, 4.2);
 
       // Twin Kasei engine nacelles with dual spinning props
       ctx.strokeStyle = '#424242';
@@ -8318,6 +8895,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Wings
+      ctx.fillStyle = '#1B5E20';
       ctx.beginPath();
       ctx.moveTo(2, -15);
       ctx.lineTo(4, -15);
@@ -8327,7 +8905,12 @@ export class VectorRenderer {
       ctx.lineTo(-3, 15);
       ctx.lineTo(-3, -15);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Cockpit glass
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
+      ctx.fillRect(1, -1.4, 4.5, 2.8);
 
       // White "Hachimaki" / identification stripe across fuselage
       ctx.fillStyle = '#FFFFFF';
@@ -8363,6 +8946,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Straight wings with leading-edge root fillets (Wingspan 38)
+      ctx.fillStyle = '#0B1F34';
       ctx.beginPath();
       ctx.moveTo(3, 0);
       ctx.lineTo(2, -18);
@@ -8371,6 +8955,7 @@ export class VectorRenderer {
       ctx.lineTo(-4, 18);
       ctx.lineTo(2, 18);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Wingtip Auxiliary Fuel Drop Tanks (Permanent teardrop tip tanks)
@@ -8420,18 +9005,27 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Outer wings extending to wingtip tanks (Wingspan 42)
+      ctx.fillStyle = '#0B1F34';
       ctx.beginPath();
       ctx.moveTo(2, -8);
       ctx.lineTo(1, -21);
       ctx.lineTo(-5, -21);
       ctx.lineTo(-4, -8);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
       ctx.beginPath();
       ctx.moveTo(2, 8);
       ctx.lineTo(1, 21);
       ctx.lineTo(-5, 21);
       ctx.lineTo(-4, 8);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Bubble canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.58)';
+      ctx.fillRect(6, -1.5, 5, 3);
 
       // Large cylindrical wingtip fuel tanks
       for (const ty of [-21, 21]) {
@@ -8470,6 +9064,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Broad straight wings (Wingspan 46) with 15 weapons hardpoints
+      ctx.fillStyle = '#0B1F34';
       ctx.beginPath();
       ctx.moveTo(3, -23);
       ctx.lineTo(5, -23);
@@ -8479,7 +9074,12 @@ export class VectorRenderer {
       ctx.lineTo(-4, 23);
       ctx.lineTo(-4, -23);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Bubble canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.fillRect(1, -1.7, 5, 3.4);
 
       // 4-blade propeller
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
@@ -8514,6 +9114,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Inverted Gull Wings
+      ctx.fillStyle = '#0B1F34';
       ctx.beginPath();
       ctx.moveTo(3, 0);
       ctx.lineTo(1, -7);
@@ -8526,7 +9127,12 @@ export class VectorRenderer {
       ctx.lineTo(4, 19);
       ctx.lineTo(1, 7);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Aft-set Corsair bubble canopy
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.fillRect(-2, -1.7, 5, 3.4);
 
       // 4-blade prop
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
@@ -8555,6 +9161,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Wings (Wingspan 44)
+      ctx.fillStyle = '#0B1F34';
       ctx.beginPath();
       ctx.moveTo(3, -22);
       ctx.lineTo(4, 0);
@@ -8563,7 +9170,12 @@ export class VectorRenderer {
       ctx.lineTo(-3, 0);
       ctx.lineTo(-4, -22);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Canopy glass
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
+      ctx.fillRect(1, -1.7, 5.5, 3.4);
 
       // Starboard Wing Radome Pod & Port Searchlight
       ctx.fillStyle = '#0B2544';
@@ -8589,6 +9201,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Wings
+      ctx.fillStyle = '#0B1F34';
       ctx.beginPath();
       ctx.moveTo(3, -22);
       ctx.lineTo(4, 0);
@@ -8597,6 +9210,7 @@ export class VectorRenderer {
       ctx.lineTo(-3, 0);
       ctx.lineTo(-4, -22);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // ★ 腹部大型 AN/APS-20 搜索雷達罩 (Giant Bulbous Ventral Radome)
@@ -8679,6 +9293,9 @@ export class VectorRenderer {
       ctx.stroke();
 
       // 35-Degree Swept Wings (Wingspan 36)
+      ctx.fillStyle = '#1D1319';
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
       ctx.moveTo(5, 0);
       ctx.lineTo(-3, -18);
@@ -8687,7 +9304,12 @@ export class VectorRenderer {
       ctx.lineTo(-9, 17);
       ctx.lineTo(-3, 18);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Bubble canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.fillRect(3, -1.5, 5, 3);
 
       // Wing Fences (Boundary layer fences on swept wings)
       ctx.strokeStyle = '#FF8A80';
@@ -8737,6 +9359,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Straight shoulder wings with twin underslung jet nacelles (Wingspan 44)
+      ctx.fillStyle = '#1D1319';
       ctx.beginPath();
       ctx.moveTo(4, -22);
       ctx.lineTo(6, -22);
@@ -8746,7 +9369,12 @@ export class VectorRenderer {
       ctx.lineTo(-4, 22);
       ctx.lineTo(-4, -22);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Glazed nose & cockpit canopy
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.fillRect(12, -2, 6, 4);
 
       // Twin Klimov VK-1 Jet Nacelles (y = ±9)
       for (const ey of [-9, 9]) {
@@ -8780,6 +9408,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // High-Aspect Ratio Wings (Wingspan 62)
+      ctx.fillStyle = '#0E2133';
       ctx.beginPath();
       ctx.moveTo(6, -31);
       ctx.lineTo(9, -31);
@@ -8789,6 +9418,7 @@ export class VectorRenderer {
       ctx.lineTo(-4, 31);
       ctx.lineTo(-4, -31);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // 4x Wright R-3350 Duplex-Cyclone Turbo-supercharged Radial Nacelles
@@ -8885,6 +9515,7 @@ export class VectorRenderer {
       ctx.strokeRect(-3, -1.6, 6, 3.2);
 
       // Laminar-flow clipped wings (Wingspan 36)
+      ctx.fillStyle = '#0D2235';
       ctx.beginPath();
       ctx.moveTo(3, -18);
       ctx.lineTo(5, -18);
@@ -8894,6 +9525,7 @@ export class VectorRenderer {
       ctx.lineTo(-3, 18);
       ctx.lineTo(-3, -18);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Teardrop bubble canopy
@@ -8932,6 +9564,8 @@ export class VectorRenderer {
       ctx.strokeRect(10, -3.2, 4, 6.4);
 
       // Broad elliptical high-lift wings (Wingspan 42)
+      ctx.fillStyle = '#0D2235';
+      ctx.strokeStyle = color;
       ctx.beginPath();
       ctx.moveTo(3, -21);
       ctx.lineTo(6, -21);
@@ -8941,6 +9575,7 @@ export class VectorRenderer {
       ctx.lineTo(-4, 21);
       ctx.lineTo(-4, -21);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // 8x .50 cal Browning M2 Heavy Machine Gun Battery
@@ -8979,6 +9614,8 @@ export class VectorRenderer {
       ctx.strokeRect(14, -1.8, 2.5, 3.6);
 
       // 35-degree swept wings (Wingspan 38)
+      ctx.fillStyle = '#0D2235';
+      ctx.strokeStyle = color;
       ctx.beginPath();
       ctx.moveTo(4, 0);
       ctx.lineTo(-3, -19);
@@ -8987,6 +9624,7 @@ export class VectorRenderer {
       ctx.lineTo(-9, 19);
       ctx.lineTo(-3, 19);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // 6x .50 M3 Colt machine guns in nose
@@ -9021,6 +9659,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Straight tapered wings with rounded tips (Wingspan 33)
+      ctx.fillStyle = '#1D1319';
       ctx.beginPath();
       ctx.moveTo(3, -16.5);
       ctx.lineTo(5, -16.5);
@@ -9030,6 +9669,7 @@ export class VectorRenderer {
       ctx.lineTo(-3.5, 16.5);
       ctx.lineTo(-3.5, -16.5);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Teardrop sliding canopy
@@ -9067,6 +9707,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Heavy inverted gull dihedral wings with broad wing root (Wingspan 41)
+      ctx.fillStyle = '#1D1319';
       ctx.beginPath();
       ctx.moveTo(4, -20.5);
       ctx.lineTo(7, -20.5);
@@ -9076,6 +9717,7 @@ export class VectorRenderer {
       ctx.lineTo(-4.5, 20.5);
       ctx.lineTo(-4.5, -20.5);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Armoured cockpit tandem greenhouse (Pilot + Rear Gunner)
@@ -9136,6 +9778,7 @@ export class VectorRenderer {
       }
 
       // Swept wings (45°) with outer wing panels cranked upward (dihedral)
+      ctx.fillStyle = '#0B1F34';
       ctx.beginPath();
       ctx.moveTo(3, 0);
       ctx.lineTo(-2, -9);
@@ -9148,9 +9791,11 @@ export class VectorRenderer {
       ctx.lineTo(1, 19);
       ctx.lineTo(-2, 9);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Anhedral tailplanes (sloping downward like inverted V)
+      ctx.fillStyle = '#0B1F34';
       ctx.beginPath();
       ctx.moveTo(-11, 0);
       ctx.lineTo(-15, -8);
@@ -9159,6 +9804,7 @@ export class VectorRenderer {
       ctx.lineTo(-17, 7);
       ctx.lineTo(-15, 8);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Tandem twin cockpit canopy
@@ -9191,6 +9837,7 @@ export class VectorRenderer {
       ctx.strokeRect(10, -1.5, 3, 3);
 
       // High swept wing (variable-incidence wing)
+      ctx.fillStyle = '#0B1F34';
       ctx.beginPath();
       ctx.moveTo(4, 0);
       ctx.lineTo(-2, -15);
@@ -9199,6 +9846,7 @@ export class VectorRenderer {
       ctx.lineTo(-7, 15);
       ctx.lineTo(-2, 15);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Low all-flying tailplanes
@@ -9210,10 +9858,12 @@ export class VectorRenderer {
       ctx.lineTo(-10, 6);
       ctx.stroke();
 
-      // 4x 20mm Colt Mk 12 cannon ports
+      // 4x 20mm Colt Mk 12 cannon ports & bubble canopy glint
       ctx.fillStyle = '#FFD54F';
       ctx.fillRect(4, -2.4, 3, 1);
       ctx.fillRect(4, 1.4, 3, 1);
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.58)';
+      ctx.fillRect(6, -1.4, 5, 2.8);
 
       if (isPlayer) this.drawUSInsignia(0, -9, 3);
     } else if (m === 'a4') {
@@ -9226,6 +9876,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Compact modified delta wing (Wingspan 27 - no folding wings!)
+      ctx.fillStyle = '#0B1F34';
       ctx.beginPath();
       ctx.moveTo(3, 0);
       ctx.lineTo(-5, -13);
@@ -9234,13 +9885,16 @@ export class VectorRenderer {
       ctx.lineTo(-8, 13);
       ctx.lineTo(-5, 13);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Dorsal avionics hump behind cockpit
       ctx.fillStyle = '#37474F';
       ctx.fillRect(-2, -1.2, 5, 2.4);
 
-      // Refueling probe on starboard nose
+      // Canopy glint & refueling probe
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.58)';
+      ctx.fillRect(4, -1.5, 4.5, 3);
       ctx.strokeStyle = '#80DEEA';
       ctx.lineWidth = 1.2;
       ctx.beginPath();
@@ -9265,6 +9919,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Broad swept wings with wingtip speedbrakes
+      ctx.fillStyle = '#0B1F34';
       ctx.beginPath();
       ctx.moveTo(4, 0);
       ctx.lineTo(-3, -19);
@@ -9273,6 +9928,7 @@ export class VectorRenderer {
       ctx.lineTo(-8, 19);
       ctx.lineTo(-3, 19);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Side-by-side cockpit canopy
@@ -9297,6 +9953,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Giant 35° swept high wings (wingspan 48)
+      ctx.fillStyle = '#0D2134';
       ctx.beginPath();
       ctx.moveTo(6, 0);
       ctx.lineTo(-12, -28);
@@ -9305,6 +9962,7 @@ export class VectorRenderer {
       ctx.lineTo(-18, 28);
       ctx.lineTo(-12, 28);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // 4 twin-engine pods on forward pylons
@@ -9339,6 +9997,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Swept wings with forward-swept root intakes
+      ctx.fillStyle = '#0B1F34';
       ctx.beginPath();
       ctx.moveTo(3, 0);
       ctx.lineTo(-3, -15);
@@ -9347,6 +10006,7 @@ export class VectorRenderer {
       ctx.lineTo(-8, 15);
       ctx.lineTo(-3, 15);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Unique root forward-swept intakes
@@ -9369,6 +10029,8 @@ export class VectorRenderer {
       ctx.strokeRect(10, -2, 3, 4);
 
       // High swept wings with 6 underwing weapon pylons
+      ctx.fillStyle = '#0B1F34';
+      ctx.strokeStyle = color;
       ctx.beginPath();
       ctx.moveTo(4, 0);
       ctx.lineTo(-3, -18);
@@ -9377,7 +10039,12 @@ export class VectorRenderer {
       ctx.lineTo(-8, 18);
       ctx.lineTo(-3, 18);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Forward-mounted canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.58)';
+      ctx.fillRect(4, -1.7, 5, 3.4);
 
       if (isPlayer) this.drawUSInsignia(0, -11, 3.2);
     } else if (m === 'ov10') {
@@ -9390,7 +10057,11 @@ export class VectorRenderer {
       ctx.stroke();
 
       // High straight wing
+      ctx.fillStyle = '#0E241C';
+      ctx.fillRect(-2, -18, 5, 36);
       ctx.strokeRect(-2, -18, 5, 36);
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.58)';
+      ctx.fillRect(3, -1.6, 5.5, 3.2);
 
       // Twin tail booms extending from twin engines
       ctx.strokeStyle = color;
@@ -9478,6 +10149,8 @@ export class VectorRenderer {
       ctx.stroke();
 
       // High straight wings with twin radial engines
+      ctx.fillStyle = '#0B1F34';
+      ctx.fillRect(-2, -22, 6, 44);
       ctx.strokeRect(-2, -22, 6, 44);
 
       // Huge teardrop aerodynamic dorsal radome ("Flying Saucer")
@@ -9551,7 +10224,11 @@ export class VectorRenderer {
       ctx.stroke();
 
       // High straight wing with twin radial engines
+      ctx.fillStyle = '#0B1F34';
+      ctx.fillRect(-2, -22, 6, 44);
       ctx.strokeRect(-2, -22, 6, 44);
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.52)';
+      ctx.fillRect(6, -1.8, 4.5, 3.6);
 
       // Twin propellers
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
@@ -9623,6 +10300,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Broad high-aspect ratio straight wings (wingspan 48)
+      ctx.fillStyle = '#0B1F34';
       ctx.beginPath();
       ctx.moveTo(5, -24);
       ctx.lineTo(8, -24);
@@ -9632,7 +10310,12 @@ export class VectorRenderer {
       ctx.lineTo(-3, 24);
       ctx.lineTo(-3, -24);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Flight deck cockpit windshield
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.6)';
+      ctx.fillRect(17, -2.1, 4.5, 4.2);
 
       // 4x Allison T56 Turboprop Engine Nacelles (y = ±9, ±17)
       ctx.fillStyle = '#263238';
@@ -9701,6 +10384,8 @@ export class VectorRenderer {
       ctx.fill();
 
       // Pure delta wing (57° sweep)
+      ctx.fillStyle = '#22141B';
+      ctx.strokeStyle = '#FF5252';
       ctx.beginPath();
       ctx.moveTo(4, 0);
       ctx.lineTo(-6, -13);
@@ -9709,7 +10394,12 @@ export class VectorRenderer {
       ctx.lineTo(-8, 13);
       ctx.lineTo(-6, 13);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Bubble canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.fillRect(4, -1.2, 4.8, 2.4);
 
       // Swept tailplanes & large dorsal spine
       ctx.beginPath();
@@ -9736,6 +10426,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // 45° swept wings with 3 wing fences on each side
+      ctx.fillStyle = '#22141B';
       ctx.beginPath();
       ctx.moveTo(3, 0);
       ctx.lineTo(-3, -16);
@@ -9744,7 +10435,12 @@ export class VectorRenderer {
       ctx.lineTo(-8, 16);
       ctx.lineTo(-3, 16);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.fillRect(3, -1.4, 4.8, 2.8);
 
       // Wing fences
       for (const wy of [-12, -7, 7, 12]) {
@@ -9771,6 +10467,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // High straight wings with twin Klimov jet engine nacelles
+      ctx.fillStyle = '#22141B';
       ctx.beginPath();
       ctx.moveTo(4, -25);
       ctx.lineTo(6, -25);
@@ -9780,7 +10477,13 @@ export class VectorRenderer {
       ctx.lineTo(-4, 25);
       ctx.lineTo(-4, -25);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Glazed navigator nose & bubble canopy
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.fillRect(14, -1.8, 5, 3.6);
+      ctx.fillRect(6, -1.5, 4.5, 3);
 
       // Twin jet nacelles under wings
       ctx.fillStyle = '#263238';
@@ -9815,6 +10518,8 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Heavily swept 62-degree wings with prominent wing fences
+      ctx.fillStyle = '#201B1E';
+      ctx.strokeStyle = '#FF5252';
       ctx.beginPath();
       ctx.moveTo(6, 0);
       ctx.lineTo(-4, -18);
@@ -9823,7 +10528,12 @@ export class VectorRenderer {
       ctx.lineTo(-9, 18);
       ctx.lineTo(-4, 18);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.fillRect(6, -1.4, 5, 2.8);
 
       // Wing boundary-layer fences
       ctx.beginPath();
@@ -9865,6 +10575,7 @@ export class VectorRenderer {
       ctx.fillRect(-13, 0.4, 3, 2.2);
 
       // 55° sharply swept wings
+      ctx.fillStyle = '#201B1E';
       ctx.beginPath();
       ctx.moveTo(4, 0);
       ctx.lineTo(-4, -17);
@@ -9873,7 +10584,12 @@ export class VectorRenderer {
       ctx.lineTo(-8, 17);
       ctx.lineTo(-4, 17);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.fillRect(4, -1.4, 4.8, 2.8);
 
       // Wing fence on each wing
       ctx.beginPath();
@@ -9922,6 +10638,7 @@ export class VectorRenderer {
       ctx.fillRect(14, -2, 4.5, 4);
 
       // Large 35° swept wings
+      ctx.fillStyle = '#18222C';
       ctx.beginPath();
       ctx.moveTo(8, 0);
       ctx.lineTo(-8, -34);
@@ -9930,6 +10647,7 @@ export class VectorRenderer {
       ctx.lineTo(-15, 34);
       ctx.lineTo(-8, 34);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Huge Mikulin AM-3 turbojet nacelles blended into wing roots
@@ -9988,16 +10706,29 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Variable-Sweep Wings (Swept position for high-speed intercept)
+      ctx.fillStyle = '#0D2238';
       ctx.beginPath();
       ctx.moveTo(6, -5);
       ctx.lineTo(-6, -22);
       ctx.lineTo(-12, -22);
       ctx.lineTo(-4, -5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(6, 5);
       ctx.lineTo(-6, 22);
       ctx.lineTo(-12, 22);
       ctx.lineTo(-4, 5);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Cockpit canopy glass highlight
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.6)';
+      ctx.beginPath();
+      ctx.ellipse(9, 0, 4.5, 1.7, 0, 0, Math.PI * 2);
+      ctx.fill();
 
       // Twin canted vertical stabilizers
       ctx.strokeStyle = '#4FC3F7';
@@ -10032,16 +10763,29 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Mid-mounted 20-degree swept wings
+      ctx.fillStyle = '#0D2238';
       ctx.beginPath();
       ctx.moveTo(2, -4.5);
       ctx.lineTo(-2, -18);
       ctx.lineTo(-7, -18);
       ctx.lineTo(-6, -4.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(2, 4.5);
       ctx.lineTo(-2, 18);
       ctx.lineTo(-7, 18);
       ctx.lineTo(-6, 4.5);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Cockpit canopy highlight
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.6)';
+      ctx.beginPath();
+      ctx.ellipse(8, 0, 3.8, 1.4, 0, 0, Math.PI * 2);
+      ctx.fill();
 
       // Twin outward-canted rudders
       ctx.strokeStyle = '#29B6F6';
@@ -10070,12 +10814,14 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Long unswept wings (Wide Wingspan)
+      ctx.fillStyle = '#0D2332';
       ctx.beginPath();
       ctx.moveTo(4, -26);
       ctx.lineTo(4, 26);
       ctx.lineTo(-4, 26);
       ctx.lineTo(-4, -26);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Twin elevated TF34 turbofans mounted on rear fuselage
@@ -10103,16 +10849,29 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Large clipped-delta wings
+      ctx.fillStyle = '#0D2238';
       ctx.beginPath();
       ctx.moveTo(6, -4.5);
       ctx.lineTo(-4, -22);
       ctx.lineTo(-11, -22);
       ctx.lineTo(-8, -4.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(6, 4.5);
       ctx.lineTo(-4, 22);
       ctx.lineTo(-11, 22);
       ctx.lineTo(-8, 4.8);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.6)';
+      ctx.beginPath();
+      ctx.ellipse(9, 0, 4.2, 1.5, 0, 0, Math.PI * 2);
+      ctx.fill();
 
       // Twin vertical fins
       ctx.strokeStyle = '#00E5FF';
@@ -10140,16 +10899,29 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Cropped-delta wing with missile rails on tips
+      ctx.fillStyle = '#0D2238';
       ctx.beginPath();
       ctx.moveTo(3, -3.2);
       ctx.lineTo(-3, -16);
       ctx.lineTo(-7, -16);
       ctx.lineTo(-6, -3.4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(3, 3.2);
       ctx.lineTo(-3, 16);
       ctx.lineTo(-7, 16);
       ctx.lineTo(-6, 3.4);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Bubble canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.65)';
+      ctx.beginPath();
+      ctx.ellipse(7, 0, 3.8, 1.4, 0, 0, Math.PI * 2);
+      ctx.fill();
 
       if (isPlayer) this.drawUSInsignia(-1, -9, 2.6);
     } else if (m === 'mig29a' || m === 'su27') {
@@ -10172,15 +10944,22 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Swept wing with prominent root extensions
+      ctx.fillStyle = '#28151D';
       ctx.beginPath();
       ctx.moveTo(2 * scale, -4 * scale);
       ctx.lineTo(-4 * scale, -18 * scale);
       ctx.lineTo(-9 * scale, -18 * scale);
       ctx.lineTo(-7 * scale, -4.5 * scale);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(2 * scale, 4 * scale);
       ctx.lineTo(-4 * scale, 18 * scale);
       ctx.lineTo(-9 * scale, 18 * scale);
       ctx.lineTo(-7 * scale, 4.5 * scale);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Soviet Red Stars
@@ -10207,16 +10986,27 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Variable sweep wings swept back for supersonic penetration
+      ctx.fillStyle = '#24141C';
       ctx.beginPath();
       ctx.moveTo(8, -6);
       ctx.lineTo(-6, -26);
       ctx.lineTo(-12, -26);
       ctx.lineTo(-4, -6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(8, 6);
       ctx.lineTo(-6, 26);
       ctx.lineTo(-12, 26);
       ctx.lineTo(-4, 6);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Side-by-side cockpit canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.fillRect(10, -2, 6, 4);
 
       // Kh-22 (AS-4 Kitchen) heavy supersonic anti-ship missile mounted under belly
       ctx.fillStyle = '#ECEFF1';
@@ -10343,16 +11133,27 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Variable sweep wings
+      ctx.fillStyle = '#0E2232';
       ctx.beginPath();
       ctx.moveTo(8, -5);
       ctx.lineTo(-5, -24);
       ctx.lineTo(-11, -24);
       ctx.lineTo(-7, -5.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(8, 5);
       ctx.lineTo(-5, 24);
       ctx.lineTo(-11, 24);
       ctx.lineTo(-7, 5.2);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Side-by-side cockpit capsule glass
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.58)';
+      ctx.fillRect(9, -2.2, 5.5, 4.4);
 
       // Horizontal stabs & twin exhausts
       ctx.beginPath();
@@ -10384,16 +11185,27 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Swept wings with 4 turbofan nacelles
+      ctx.fillStyle = '#14283D';
       ctx.beginPath();
       ctx.moveTo(6, -4.8);
       ctx.lineTo(-8, -32);
       ctx.lineTo(-14, -32);
       ctx.lineTo(-6, -4.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(6, 4.8);
       ctx.lineTo(-8, 32);
       ctx.lineTo(-14, 32);
       ctx.lineTo(-6, 4.8);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Flight deck cockpit glass
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.58)';
+      ctx.fillRect(18, -2, 5, 4);
 
       // 4 CFM56 Turbofan engines
       ctx.fillStyle = '#37474F';
@@ -10444,13 +11256,19 @@ export class VectorRenderer {
       ctx.stroke();
 
       // High straight wings
+      ctx.fillStyle = '#0E2438';
       ctx.beginPath();
       ctx.moveTo(3, -26);
       ctx.lineTo(3, 26);
       ctx.lineTo(-4, 26);
       ctx.lineTo(-4, -26);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Flight deck glass
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.58)';
+      ctx.fillRect(10, -2, 4.5, 4);
 
       // Twin Allison T56 turboprop nacelles & propeller blur discs
       ctx.fillStyle = '#263238';
@@ -10522,16 +11340,28 @@ export class VectorRenderer {
       ctx.fill();
 
       // Mid-mounted swept wings with wingtip speed brakes
+      ctx.fillStyle = '#0D2234';
+      ctx.strokeStyle = '#29B6F6';
       ctx.beginPath();
       ctx.moveTo(4, -4.5);
       ctx.lineTo(-4, -22);
       ctx.lineTo(-9, -22);
       ctx.lineTo(-6, -4.6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(4, 4.5);
       ctx.lineTo(-4, 22);
       ctx.lineTo(-9, 22);
       ctx.lineTo(-6, 4.6);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Side-by-side cockpit canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.58)';
+      ctx.fillRect(4, -2.5, 5.5, 5);
 
       if (isPlayer) this.drawUSInsignia(-2, -12, 2.8);
     } else if (m === 'ea6b') {
@@ -10556,15 +11386,23 @@ export class VectorRenderer {
       ctx.fillRect(4, -2.8, 8, 5.6);
 
       // Swept wings
+      ctx.fillStyle = '#0D2234';
+      ctx.strokeStyle = '#00E5FF';
       ctx.beginPath();
       ctx.moveTo(5, -4.5);
       ctx.lineTo(-4, -22);
       ctx.lineTo(-9, -22);
       ctx.lineTo(-6, -4.6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(5, 4.5);
       ctx.lineTo(-4, 22);
       ctx.lineTo(-9, 22);
       ctx.lineTo(-6, 4.6);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Football ECM pod on top of vertical fin
@@ -10598,16 +11436,27 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Supercritical high wing with anhedral droop
+      ctx.fillStyle = '#0E2432';
       ctx.beginPath();
       ctx.moveTo(3, -3.6);
       ctx.lineTo(-2, -16);
       ctx.lineTo(-7, -16);
       ctx.lineTo(-5, -3.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(3, 3.6);
       ctx.lineTo(-2, 16);
       ctx.lineTo(-7, 16);
       ctx.lineTo(-5, 3.8);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Raised bubble canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.6)';
+      ctx.fillRect(5, -1.5, 5, 3);
 
       // Wingtip outrigger landing gear fairings
       ctx.fillStyle = '#CFD8DC';
@@ -10640,16 +11489,27 @@ export class VectorRenderer {
       ctx.stroke();
 
       // High swept wings
+      ctx.fillStyle = '#0D2234';
       ctx.beginPath();
       ctx.moveTo(3, -4);
       ctx.lineTo(-3, -24);
       ctx.lineTo(-8, -24);
       ctx.lineTo(-5, -4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(3, 4);
       ctx.lineTo(-3, 24);
       ctx.lineTo(-8, 24);
       ctx.lineTo(-5, 4);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Side-by-side cockpit windshield
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.58)';
+      ctx.fillRect(7, -2, 5, 4);
 
       // Twin TF34 turbofan nacelles under wings
       ctx.fillStyle = '#37474F';
@@ -10688,13 +11548,19 @@ export class VectorRenderer {
       ctx.stroke();
 
       // High straight wings
+      ctx.fillStyle = '#0F2532';
       ctx.beginPath();
       ctx.moveTo(6, -34);
       ctx.lineTo(6, 34);
       ctx.lineTo(-4, 34);
       ctx.lineTo(-4, -34);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Stepped flight deck greenhouse
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.fillRect(15, -2.2, 4.5, 4.4);
 
       // 4 Allison T56 Turboprop engines and blur discs
       ctx.fillStyle = '#263238';
@@ -10731,13 +11597,19 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Wings
+      ctx.fillStyle = '#0D2234';
       ctx.beginPath();
       ctx.moveTo(3, -25);
       ctx.lineTo(3, 25);
       ctx.lineTo(-4, 25);
       ctx.lineTo(-4, -25);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Cockpit windshield
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.58)';
+      ctx.fillRect(10, -2, 4.5, 4);
 
       // Turboprops
       ctx.fillStyle = '#263238';
@@ -10850,16 +11722,27 @@ export class VectorRenderer {
       ctx.stroke();
 
       // 35-degree heavily swept giant wings
+      ctx.fillStyle = '#24161D';
       ctx.beginPath();
       ctx.moveTo(8, -5);
       ctx.lineTo(-18, -42);
       ctx.lineTo(-26, -42);
       ctx.lineTo(-10, -5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(8, 5);
       ctx.lineTo(-18, 42);
       ctx.lineTo(-26, 42);
       ctx.lineTo(-10, 5);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Glazed navigator nose & flight deck
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.52)';
+      ctx.fillRect(20, -2, 6, 4);
 
       // 4 Kuznetsov NK-12 Turboprop engine nacelles
       ctx.fillStyle = '#37474F';
@@ -11016,16 +11899,28 @@ export class VectorRenderer {
       ctx.fillRect(4, -2.2, 5, 4.4);
 
       // Small cropped-delta wings
+      ctx.fillStyle = '#24161E';
+      ctx.strokeStyle = '#FF5252';
       ctx.beginPath();
       ctx.moveTo(1, -3.6);
       ctx.lineTo(-3, -13);
       ctx.lineTo(-7, -13);
       ctx.lineTo(-6, -3.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(1, 3.6);
       ctx.lineTo(-3, 13);
       ctx.lineTo(-7, 13);
       ctx.lineTo(-6, 3.8);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Forward bubble canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.fillRect(8, -1.3, 4.2, 2.6);
 
       // Red Star
       ctx.fillStyle = '#D50000';
@@ -11051,16 +11946,27 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Swept high wings
+      ctx.fillStyle = '#24161C';
       ctx.beginPath();
       ctx.moveTo(6, -5.2);
       ctx.lineTo(-8, -32);
       ctx.lineTo(-14, -32);
       ctx.lineTo(-6, -5.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(6, 5.2);
       ctx.lineTo(-8, 32);
       ctx.lineTo(-14, 32);
       ctx.lineTo(-6, 5.2);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Glazed Il-76 navigator nose & flight deck
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.fillRect(19, -2.2, 6, 4.4);
 
       // 4 D-30KP Turbofan engines
       ctx.fillStyle = '#37474F';
@@ -11111,16 +12017,27 @@ export class VectorRenderer {
       ctx.stroke();
 
       // High-aspect straight wings with wingtip speed brake pods
+      ctx.fillStyle = '#24171A';
       ctx.beginPath();
       ctx.moveTo(3, -4.2);
       ctx.lineTo(0, -21);
       ctx.lineTo(-6, -21);
       ctx.lineTo(-5, -4.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(3, 4.2);
       ctx.lineTo(0, 21);
       ctx.lineTo(-6, 21);
       ctx.lineTo(-5, 4.2);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Armored cockpit canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.fillRect(6, -1.5, 5, 3);
 
       // Wingtip pods
       ctx.fillStyle = '#CFD8DC';
@@ -11150,13 +12067,19 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Rounded Curtiss wings
+      ctx.fillStyle = '#0E241C';
       ctx.beginPath();
       ctx.moveTo(3, -16);
       ctx.quadraticCurveTo(5, 0, 3, 16);
       ctx.lineTo(-3, 16);
       ctx.quadraticCurveTo(-4, 0, -3, -16);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Canopy glass
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
+      ctx.fillRect(-1, -1.5, 4.5, 3);
 
       // Big Twin Wasp radial engine cowling
       ctx.fillStyle = '#37474F';
@@ -11190,6 +12113,7 @@ export class VectorRenderer {
       ctx.fill();
 
       // Broad shoulder wings (Wingspan 44)
+      ctx.fillStyle = '#0E241C';
       ctx.beginPath();
       ctx.moveTo(5, -22);
       ctx.lineTo(7, -22);
@@ -11199,6 +12123,7 @@ export class VectorRenderer {
       ctx.lineTo(-4, 22);
       ctx.lineTo(-4, -22);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Twin Wright R-2600 engine nacelles
@@ -11243,6 +12168,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Tapered wings with rounded tips
+      ctx.fillStyle = '#0E241C';
       ctx.beginPath();
       ctx.moveTo(2, -15);
       ctx.lineTo(4, -15);
@@ -11252,7 +12178,12 @@ export class VectorRenderer {
       ctx.lineTo(-3, 15);
       ctx.lineTo(-3, -15);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Forward-set car-door canopy glass
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.52)';
+      ctx.fillRect(2, -1.4, 4.5, 2.8);
 
       // Centerline 37mm Oldsmobile T9 cannon muzzle sticking out through prop hub
       ctx.strokeStyle = '#FFD54F';
@@ -11276,6 +12207,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Wingspan 54
+      ctx.fillStyle = '#0D2234';
       ctx.beginPath();
       ctx.moveTo(5, -27);
       ctx.lineTo(8, -27);
@@ -11285,6 +12217,7 @@ export class VectorRenderer {
       ctx.lineTo(-5, 27);
       ctx.lineTo(-5, -27);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // 4 Wright Cyclone R-1820 engine nacelles
@@ -11353,6 +12286,7 @@ export class VectorRenderer {
       }
 
       // Outer wings and center connecting wing
+      ctx.fillStyle = '#0D2234';
       ctx.strokeStyle = color;
       ctx.lineWidth = 1.6;
       ctx.beginPath();
@@ -11374,6 +12308,7 @@ export class VectorRenderer {
       ctx.lineTo(-3, 22);
       ctx.lineTo(-3, 7.5);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Common continuous horizontal tailplane connecting both vertical fins
@@ -11402,6 +12337,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Wide broad straight wings (Wingspan 40)
+      ctx.fillStyle = '#0D2234';
       ctx.beginPath();
       ctx.moveTo(3, -20);
       ctx.lineTo(5, -20);
@@ -11411,7 +12347,12 @@ export class VectorRenderer {
       ctx.lineTo(-5, 20);
       ctx.lineTo(-5, -20);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Bubble canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.fillRect(1, -1.7, 5, 3.4);
 
       // 4 wing-mounted 20mm M3 cannons
       ctx.strokeStyle = '#FFD54F';
@@ -11452,12 +12393,14 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Straight wings with prominent wingtip fuel tanks
+      ctx.fillStyle = '#0E241C';
       ctx.beginPath();
       ctx.moveTo(2, -15);
       ctx.lineTo(2, 15);
       ctx.lineTo(-4, 15);
       ctx.lineTo(-4, -15);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Distinctive wingtip fuel tanks
@@ -11492,16 +12435,27 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Low aspect ratio trapezoidal wings
+      ctx.fillStyle = '#0D2234';
       ctx.beginPath();
       ctx.moveTo(2, -2.6);
       ctx.lineTo(-2, -13);
       ctx.lineTo(-6, -13);
       ctx.lineTo(-5, -2.6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(2, 2.6);
       ctx.lineTo(-2, 13);
       ctx.lineTo(-6, 13);
       ctx.lineTo(-5, 2.6);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Slender canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.58)';
+      ctx.fillRect(4, -1.2, 5, 2.4);
 
       // Wingtip missile launch rails with AIM-9 Sidewinders
       ctx.strokeStyle = '#FFFFFF';
@@ -11540,16 +12494,27 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Razor-thin trapezoidal stub wings with negative dihedral (droop)
+      ctx.fillStyle = '#0D2234';
       ctx.beginPath();
       ctx.moveTo(0, -2.2);
       ctx.lineTo(-2, -11);
       ctx.lineTo(-6, -11);
       ctx.lineTo(-5, -2.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(0, 2.2);
       ctx.lineTo(-2, 11);
       ctx.lineTo(-6, 11);
       ctx.lineTo(-5, 2.2);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Forward canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.6)';
+      ctx.fillRect(6, -1.2, 5, 2.4);
 
       // High T-Tail horizontal stabilizer mounted atop tall vertical fin
       ctx.strokeStyle = color;
@@ -11580,6 +12545,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Thick RAF five-spar wings with wide chord
+      ctx.fillStyle = '#0B1D20';
       ctx.beginPath();
       ctx.moveTo(3, -17);
       ctx.lineTo(4, -17);
@@ -11589,7 +12555,12 @@ export class VectorRenderer {
       ctx.lineTo(-4, 17);
       ctx.lineTo(-4, -17);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Framed greenhouse canopy glass
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
+      ctx.fillRect(-1, -1.5, 4.8, 3);
 
       // 4x 20mm Hispano cannons (Mk.IIc) protruding from wings
       ctx.strokeStyle = '#FFD54F';
@@ -11617,9 +12588,15 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Pure iconic elliptical wings (雙橢圓機翼)
+      ctx.fillStyle = '#0B1D20';
       ctx.beginPath();
       ctx.ellipse(1, 0, 4.5, 17, 0, 0, Math.PI * 2);
+      ctx.fill();
       ctx.stroke();
+
+      // Bubble canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.52)';
+      ctx.fillRect(-1, -1.4, 4.8, 2.8);
 
       // Twin 20mm Hispano cannon fairings & twin .303 brownings
       ctx.strokeStyle = '#FFD54F';
@@ -11653,6 +12630,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Thick straight-taper wings (Wingspan 38)
+      ctx.fillStyle = '#0B1D20';
       ctx.beginPath();
       ctx.moveTo(4, -19);
       ctx.lineTo(6, -19);
@@ -11662,7 +12640,12 @@ export class VectorRenderer {
       ctx.lineTo(-4, 19);
       ctx.lineTo(-4, -19);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Pilot & observer glass canopy
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
+      ctx.fillRect(5, -1.7, 5, 3.4);
 
       // Twin Bristol Hercules radial engines
       for (const ey of [-8.5, 8.5]) {
@@ -11693,6 +12676,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Upper and lower biplane wings
+      ctx.fillStyle = '#0B1D20';
       ctx.strokeStyle = color;
       ctx.lineWidth = 1.6;
       ctx.beginPath();
@@ -11701,6 +12685,7 @@ export class VectorRenderer {
       ctx.lineTo(-3, 19);
       ctx.lineTo(-3, -19);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Interplane struts & bracing wires
@@ -11728,8 +12713,10 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Elliptical wings with E-wing armament (2x 20mm + 2x .50 cal)
+      ctx.fillStyle = '#0B1D20';
       ctx.beginPath();
       ctx.ellipse(1, 0, 4.4, 17, 0, 0, Math.PI * 2);
+      ctx.fill();
       ctx.stroke();
 
       // Pointed rudder & teardrop bubble canopy
@@ -11761,6 +12748,8 @@ export class VectorRenderer {
       ctx.strokeRect(8, -2.5, 6, 5);
 
       // Semi-elliptical laminar flow wings
+      ctx.fillStyle = '#0B1D20';
+      ctx.strokeStyle = color;
       ctx.beginPath();
       ctx.moveTo(3, -18);
       ctx.lineTo(5, -18);
@@ -11770,7 +12759,12 @@ export class VectorRenderer {
       ctx.lineTo(-4, 18);
       ctx.lineTo(-4, -18);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Bubble canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
+      ctx.fillRect(0, -1.5, 4.5, 3);
 
       // 4x 20mm Hispano Mk.V short barrel flush cannons
       ctx.strokeStyle = '#FFD54F';
@@ -11793,6 +12787,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Pointed swept wings (Wingspan 38)
+      ctx.fillStyle = '#0B1D20';
       ctx.beginPath();
       ctx.moveTo(4, -19);
       ctx.lineTo(6, 0);
@@ -11801,7 +12796,12 @@ export class VectorRenderer {
       ctx.lineTo(-2, 0);
       ctx.lineTo(-3, -19);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Cockpit greenhouse glass
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.52)';
+      ctx.fillRect(6, -1.6, 5, 3.2);
 
       // Twin Rolls-Royce Merlin nacelles
       for (const ey of [-8, 8]) {
@@ -11831,6 +12831,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Broad tapering wings (Wingspan 56)
+      ctx.fillStyle = '#0B1D20';
       ctx.beginPath();
       ctx.moveTo(6, -28);
       ctx.lineTo(8, -28);
@@ -11840,7 +12841,12 @@ export class VectorRenderer {
       ctx.lineTo(-5, 28);
       ctx.lineTo(-5, -28);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Flight deck greenhouse glass
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
+      ctx.fillRect(9, -2.1, 5.5, 4.2);
 
       // 4 Merlin engines
       for (const ey of [-19, -11, 11, 19]) {
@@ -11874,6 +12880,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Straight wings with two large Derwent turbojet nacelles breaking through mid-wing
+      ctx.fillStyle = '#0B1D20';
       ctx.beginPath();
       ctx.moveTo(2, -18);
       ctx.lineTo(4, 0);
@@ -11882,7 +12889,12 @@ export class VectorRenderer {
       ctx.lineTo(-2, 0);
       ctx.lineTo(-4, -18);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Bubble canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.52)';
+      ctx.fillRect(4, -1.4, 4.8, 2.8);
 
       // Twin Derwent engine tubes
       for (const ey of [-8, 8]) {
@@ -11909,6 +12921,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Semi-elliptical wings
+      ctx.fillStyle = '#0B1D20';
       ctx.beginPath();
       ctx.moveTo(3, -17);
       ctx.lineTo(5, -17);
@@ -11918,7 +12931,12 @@ export class VectorRenderer {
       ctx.lineTo(-4, 17);
       ctx.lineTo(-4, -17);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Bubble canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.52)';
+      ctx.fillRect(0, -1.6, 4.8, 3.2);
 
       // 4x 20mm Hispano Mk.V cannons
       ctx.strokeStyle = '#FFD54F';
@@ -11946,6 +12964,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Laminar flow wings
+      ctx.fillStyle = '#0D2235';
       ctx.beginPath();
       ctx.moveTo(4, -16);
       ctx.lineTo(6, -16);
@@ -11955,6 +12974,7 @@ export class VectorRenderer {
       ctx.lineTo(-3, 16);
       ctx.lineTo(-3, -16);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Belly radiator scoop
@@ -11983,6 +13003,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Broad elliptical wings
+      ctx.fillStyle = '#0B1D20';
       ctx.beginPath();
       ctx.moveTo(3, -18);
       ctx.lineTo(5, 0);
@@ -11991,7 +13012,12 @@ export class VectorRenderer {
       ctx.lineTo(-2, 0);
       ctx.lineTo(-4, -18);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Tandem cockpit canopies
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
+      ctx.fillRect(0, -1.6, 6, 3.2);
 
       // Distinctive ASH radar pod slung under starboard wing leading edge
       ctx.fillStyle = '#263238';
@@ -12020,12 +13046,18 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Pure 60° Delta Wing (無尾翼三角翼)
+      ctx.fillStyle = '#0D2234';
       ctx.beginPath();
       ctx.moveTo(6, 0);
       ctx.lineTo(-14, -17);
       ctx.lineTo(-14, 17);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.58)';
+      ctx.fillRect(4, -1.3, 5, 2.6);
 
       // Half-cone shock spikes on air intakes
       ctx.fillStyle = '#37474F';
@@ -12043,6 +13075,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Swept wings with wing-root air intakes
+      ctx.fillStyle = '#0B1D20';
       ctx.beginPath();
       ctx.moveTo(4, 0);
       ctx.lineTo(-3, -16);
@@ -12051,7 +13084,12 @@ export class VectorRenderer {
       ctx.lineTo(-7, 16);
       ctx.lineTo(-3, 16);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Bubble canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.fillRect(4, -1.4, 5, 2.8);
 
       // 4x 30mm ADEN cannon pack in lower forward fuselage
       ctx.fillStyle = '#FFD54F';
@@ -12074,16 +13112,27 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Variable sweep wings swept at 45°
+      ctx.fillStyle = '#0B1D20';
       ctx.beginPath();
       ctx.moveTo(4, -3.5);
       ctx.lineTo(-5, -17);
       ctx.lineTo(-9, -17);
       ctx.lineTo(-3, -3.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(4, 3.5);
       ctx.lineTo(-5, 17);
       ctx.lineTo(-9, 17);
       ctx.lineTo(-3, 3.5);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Tandem canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.58)';
+      ctx.fillRect(5, -1.6, 6, 3.2);
 
       // Huge tall swept vertical tail
       ctx.fillStyle = '#37474F';
@@ -12116,16 +13165,27 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Variable sweep wings swept at 25° for high altitude patrol
+      ctx.fillStyle = '#0B1D20';
       ctx.beginPath();
       ctx.moveTo(4, -3.5);
       ctx.lineTo(-2, -18);
       ctx.lineTo(-6, -18);
       ctx.lineTo(-2, -3.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(4, 3.5);
       ctx.lineTo(-2, 18);
       ctx.lineTo(-6, 18);
       ctx.lineTo(-2, 3.5);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Tandem interceptor canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.58)';
+      ctx.fillRect(5, -1.6, 6.5, 3.2);
 
       // 4x Skyflash SARH semi-recessed in fuselage belly
       ctx.strokeStyle = '#00E5FF';
@@ -12158,6 +13218,7 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Large cambered delta wing
+      ctx.fillStyle = '#0D2234';
       ctx.beginPath();
       ctx.moveTo(7, 0);
       ctx.lineTo(-12, -18);
@@ -12166,7 +13227,12 @@ export class VectorRenderer {
       ctx.lineTo(-14, 18);
       ctx.lineTo(-12, 18);
       ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Bubble canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.6)';
+      ctx.fillRect(5, -1.3, 5.2, 2.6);
 
       // 2x Matra Super 530D SARH under wings
       ctx.strokeStyle = '#00E5FF';
@@ -12196,16 +13262,27 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Shoulder mounted swept wings with anhedral (droop)
+      ctx.fillStyle = '#0B1D20';
       ctx.beginPath();
       ctx.moveTo(3, -2.5);
       ctx.lineTo(-4, -14);
       ctx.lineTo(-7, -14);
       ctx.lineTo(-4, -2.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(3, 2.5);
       ctx.lineTo(-4, 14);
       ctx.lineTo(-7, 14);
       ctx.lineTo(-4, 2.5);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.58)';
+      ctx.fillRect(5, -1.3, 5, 2.6);
 
       // Iconic OVER-WING missile pylons (Magic/Sidewinder mounted ON TOP of wing)
       ctx.strokeStyle = '#FFFFFF';
@@ -12234,15 +13311,22 @@ export class VectorRenderer {
       ctx.stroke();
 
       // Distinctive Foreplane Canards with flaps (前置主翼鴨翼)
+      ctx.fillStyle = '#0D2234';
       ctx.beginPath();
       ctx.moveTo(10, -2.5);
       ctx.lineTo(6, -8.5);
       ctx.lineTo(4, -8.5);
       ctx.lineTo(6, -2.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
       ctx.moveTo(10, 2.5);
       ctx.lineTo(6, 8.5);
       ctx.lineTo(4, 8.5);
       ctx.lineTo(6, 2.5);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
 
       // Main Double Delta Wing
@@ -12254,7 +13338,13 @@ export class VectorRenderer {
       ctx.lineTo(-13, 17);
       ctx.lineTo(0, 9);
       ctx.lineTo(3, 3.5);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
+
+      // Canopy glint
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.58)';
+      ctx.fillRect(5, -1.4, 5, 2.8);
 
       // Swedish Air Force Tre Kronor (Three Crowns) roundel
       ctx.fillStyle = '#0D47A1';
@@ -12811,6 +13901,7 @@ export class VectorRenderer {
 
     for (const proj of projectiles) {
       if (proj.isDead) continue;
+      if (!this.isWorldCircleVisible(proj.pos.x, proj.pos.y, 300, camera)) continue;
 
       if (proj.type === 'shell') {
         // High-Angle Ballistic Naval Artillery Trajectory
@@ -14043,6 +15134,7 @@ export class VectorRenderer {
     ctx.translate(-camera.x, -camera.y);
 
     for (const p of particles) {
+      if (!this.isWorldCircleVisible(p.x, p.y, p.radius + 90, camera)) continue;
       const alpha = Math.max(0, p.life / p.maxLife);
       ctx.save();
       ctx.globalAlpha = alpha;
@@ -14354,13 +15446,30 @@ export class VectorRenderer {
       ctx.save();
       ctx.translate(unit.pos.x, unit.pos.y);
 
+      // 0. Physical Top-Down Vehicle / Fireteam Silhouette underneath NATO frame
+      const moveHeading = unit.order.targetPos
+        ? Math.atan2(unit.order.targetPos.y - unit.pos.y, unit.order.targetPos.x - unit.pos.x)
+        : isPlayer
+        ? 0
+        : Math.PI;
+      ctx.save();
+      ctx.translate(0, 2);
+      ctx.rotate(moveHeading);
+      // Soft ground contact shadow for crisp silhouette pop over island terrain
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
+      ctx.beginPath();
+      ctx.ellipse(-1, 1.5, 13.5, 8.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      drawGroundSilhouette(ctx, unit.type, isPlayer, 1.08);
+      ctx.restore();
+
       // 1. NATO APP-6 Tactical Frame (藍色長方形 友軍 vs 紅色菱形 敵軍)
       const isHostile = !isPlayer;
-      const midY = -12;
-      const boxW = 28;
-      const boxH = 17;
+      const midY = -20;
+      const boxW = 25;
+      const boxH = 14;
       const frameColor = isPlayer ? '#42A5F5' : '#FF5252';
-      const frameFill = isPlayer ? 'rgba(21, 101, 192, 0.65)' : 'rgba(183, 28, 28, 0.65)';
+      const frameFill = isPlayer ? 'rgba(13, 71, 161, 0.72)' : 'rgba(183, 28, 28, 0.72)';
 
       // If unit is in Banzai Charge, render pulsating flaming spikes around the frame
       if (unit.isBanzaiCharging) {
@@ -14385,10 +15494,10 @@ export class VectorRenderer {
       if (isHostile) {
         // NATO APP-6 敵軍菱形邊框 (Hostile Diamond Frame)
         ctx.beginPath();
-        ctx.moveTo(0, midY - 11);
-        ctx.lineTo(13, midY);
-        ctx.lineTo(0, midY + 11);
-        ctx.lineTo(-13, midY);
+        ctx.moveTo(0, midY - 10);
+        ctx.lineTo(12, midY);
+        ctx.lineTo(0, midY + 10);
+        ctx.lineTo(-12, midY);
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
@@ -14583,25 +15692,25 @@ export class VectorRenderer {
       const barW = 32;
 
       // Background plate
-      ctx.fillStyle = 'rgba(4, 12, 22, 0.85)';
-      ctx.fillRect(-barW / 2 - 1, 8, barW + 2, 7.5);
+      ctx.fillStyle = 'rgba(4, 12, 22, 0.88)';
+      ctx.fillRect(-barW / 2 - 1, 16, barW + 2, 7.5);
       ctx.strokeStyle = '#1E3A5F';
       ctx.lineWidth = 0.8;
-      ctx.strokeRect(-barW / 2 - 1, 8, barW + 2, 7.5);
+      ctx.strokeRect(-barW / 2 - 1, 16, barW + 2, 7.5);
 
       // Bar 1: 組織度 ORG (綠色 / 混亂時黃色 / 崩潰時紅色)
       ctx.fillStyle = orgPct > 0.45 ? '#00E676' : orgPct > 0.2 ? '#FFD54F' : '#FF1744';
-      ctx.fillRect(-barW / 2, 9, barW * orgPct, 2.5);
+      ctx.fillRect(-barW / 2, 17, barW * orgPct, 2.5);
 
       // Bar 2: 建制度 STR (鋼藍色 / 受損時橙色)
       ctx.fillStyle = strPct > 0.5 ? '#00E5FF' : '#FF9100';
-      ctx.fillRect(-barW / 2, 12.2, barW * strPct, 2.5);
+      ctx.fillRect(-barW / 2, 20.2, barW * strPct, 2.5);
 
       // Bar 3: 火力壓制條 SUPPRESSION (受擊壓制時顯示紅/琥珀色進度條)
       if (unit.suppression && unit.suppression > 5) {
         const suppPct = Math.min(1, unit.suppression / 100);
         ctx.fillStyle = unit.suppression >= 50 ? '#FF1744' : '#FF9100';
-        ctx.fillRect(-barW / 2, 15.4, barW * suppPct, 2.2);
+        ctx.fillRect(-barW / 2, 23.4, barW * suppPct, 2.2);
       }
 
       // 6. Tactical Status Badges & Unit Name (保留純粹洗鍊 NATO 圖標，僅在選中或極端狀態下顯示戰術標籤)
@@ -14609,7 +15718,7 @@ export class VectorRenderer {
         ctx.font = 'bold 7.5px monospace';
         ctx.textAlign = 'center';
         ctx.fillStyle = '#00E5FF';
-        ctx.fillText('🛡️ [URBAN 掩體 -70%航彈 -50%直射]', 0, isSelected ? -38 : -26);
+        ctx.fillText('🛡️ [URBAN 掩體 -70%航彈 -50%直射]', 0, isSelected ? -46 : -36);
       }
 
       // 火力壓制警示標籤 (Progressive Suppression Badges)
@@ -14619,10 +15728,10 @@ export class VectorRenderer {
         const spdPenalty = Math.round((0.30 + (unit.suppression / 100) * 0.50) * 100);
         if (unit.suppression >= 50 || unit.isPinned) {
           ctx.fillStyle = '#FF1744';
-          ctx.fillText(`🛑【重度壓制 PINNED -${spdPenalty}% SPD】`, 0, isSelected ? -46 : -32);
+          ctx.fillText(`🛑【重度壓制 PINNED -${spdPenalty}% SPD】`, 0, isSelected ? -55 : -43);
         } else {
           ctx.fillStyle = '#FF9100';
-          ctx.fillText(`⚠️【火力壓制 SUPPRESSED -${spdPenalty}% SPD】`, 0, isSelected ? -46 : -32);
+          ctx.fillText(`⚠️【火力壓制 SUPPRESSED -${spdPenalty}% SPD】`, 0, isSelected ? -55 : -43);
         }
       }
 
@@ -14631,7 +15740,7 @@ export class VectorRenderer {
         ctx.font = 'bold 8.5px monospace';
         ctx.textAlign = 'center';
         ctx.fillStyle = '#FF1744';
-        ctx.fillText('📡🎯【反砲擊火控雷達鎖定 COUNTER-BATTERY】', 0, isSelected ? -56 : -42);
+        ctx.fillText('📡🎯【反砲擊火控雷達鎖定 COUNTER-BATTERY】', 0, isSelected ? -65 : -53);
         const pingR = (Math.sin(this.time * 10) + 1) * 6 + 14;
         ctx.strokeStyle = 'rgba(255, 23, 68, 0.75)';
         ctx.lineWidth = 1.4;
@@ -14646,23 +15755,23 @@ export class VectorRenderer {
 
         if (unit.isSurrendered) {
           ctx.fillStyle = '#FFFFFF';
-          ctx.fillText('🏳️【已降 SURRENDER】', 0, -25);
+          ctx.fillText('🏳️【已降 SURRENDER】', 0, -35);
         } else if (unit.isBanzaiCharging) {
           ctx.fillStyle = '#FF1744';
-          ctx.fillText('🔥【萬歲衝鋒 BANZAI】', 0, -25);
+          ctx.fillText('🔥【萬歲衝鋒 BANZAI】', 0, -35);
         } else if (unit.disorganized) {
           ctx.fillStyle = '#FFD54F';
-          ctx.fillText('⚠️【混亂壓制 DISORGANIZED】', 0, -25);
+          ctx.fillText('⚠️【混亂壓制 DISORGANIZED】', 0, -35);
         } else {
           ctx.fillStyle = isPlayer ? '#90CAF9' : '#FFAB91';
-          ctx.fillText(unit.name, 0, -25);
+          ctx.fillText(unit.name, 0, -35);
         }
 
         // 僅在選中時顯示詳細補給與數值，平時維持最高戰術地圖專業可讀性
         if (isSelected) {
           ctx.font = 'bold 7px monospace';
           ctx.fillStyle = unit.isSupplied ? '#00E676' : '#FF5252';
-          ctx.fillText(`ORG ${Math.round(orgPct * 100)}% · STR ${Math.round(strPct * 100)}% ${unit.isSupplied ? '[補給通]' : '[斷補]'}`, 0, 20);
+          ctx.fillText(`ORG ${Math.round(orgPct * 100)}% · STR ${Math.round(strPct * 100)}% ${unit.isSupplied ? '[補給通]' : '[斷補]'}`, 0, 32);
         }
       }
 

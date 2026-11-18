@@ -1,0 +1,1971 @@
+import { AircraftPayloadType } from '../types/game';
+
+export type UnitPreviewKind = 'ship' | 'aircraft' | 'ground' | 'installation';
+
+export interface UnitPreviewOptions {
+  payloadType?: AircraftPayloadType;
+  compact?: boolean;
+  isPlayer?: boolean;
+}
+
+/**
+ * Normalizes requisition typeTag / id / model keys into canonical preview identifiers.
+ */
+function normalizeKey(raw: string): string {
+  const k = raw.trim().toLowerCase();
+  if (k.startsWith('air_')) {
+    return k.slice(4);
+  }
+  return k;
+}
+
+/**
+ * Shared physical top-down silhouette renderer for Ground Units.
+ * Used both on the tactical canvas (`VectorRenderer.drawGroundUnits`) and in build menu preview cards.
+ */
+export function drawGroundSilhouette(
+  ctx: CanvasRenderingContext2D,
+  unitType: string,
+  isPlayer: boolean,
+  scale: number = 1
+): void {
+  const t = unitType.toLowerCase();
+  const hullFill = isPlayer ? '#1B3A2B' : '#3A2322';
+  const hullHighlight = isPlayer ? '#295740' : '#4E2F2D';
+  const hullStroke = isPlayer ? '#66BB6A' : '#EF9A9A';
+  const turretFill = isPlayer ? '#2E5A44' : '#52302E';
+  const trackColor = '#0F1419';
+  const barrelColor = isPlayer ? '#CFD8DC' : '#FFCCBC';
+  const accentColor = isPlayer ? '#4FC3F7' : '#FF5252';
+
+  ctx.save();
+  ctx.scale(scale, scale);
+
+  // Crisp terrain contact drop-shadow
+  ctx.fillStyle = 'rgba(2, 6, 12, 0.62)';
+  ctx.beginPath();
+  ctx.ellipse(1.6, 2.2, 13.5, 8.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const isRocketTel =
+    t.includes('atacms') ||
+    t.includes('mlrs') ||
+    t.includes('m270') ||
+    t.includes('calliope') ||
+    t.includes('grad') ||
+    t.includes('uragan') ||
+    t.includes('scud');
+
+  const isTank =
+    t.includes('abrams') ||
+    t.includes('m1ip') ||
+    t.includes('m60') ||
+    t.includes('m48') ||
+    t.includes('patton') ||
+    t.includes('tank') ||
+    t.includes('armor') ||
+    t.includes('t72') ||
+    t.includes('t80') ||
+    t.includes('t62') ||
+    t.includes('t55') ||
+    t.includes('t54') ||
+    t.includes('t34') ||
+    t.includes('is3') ||
+    t.includes('pt76') ||
+    t.includes('type95') ||
+    t.includes('type97') ||
+    t.includes('m4') ||
+    t.includes('m3') ||
+    t.includes('ontos') ||
+    t.includes('su100') ||
+    t.includes('su_100');
+
+  const isSpg =
+    t.includes('spg') ||
+    t.includes('paladin') ||
+    t.includes('m109') ||
+    t.includes('priest') ||
+    t.includes('m44') ||
+    t.includes('hummel') ||
+    t.includes('2s1') ||
+    t.includes('2s3') ||
+    t.includes('2s19');
+
+  const isTowed =
+    t.includes('artillery') ||
+    t.includes('m198') ||
+    t.includes('howitzer') ||
+    t.includes('155') ||
+    t.includes('105') ||
+    t.includes('zu23');
+
+  const isIfvApc =
+    t.includes('lav') ||
+    t.includes('bradley') ||
+    t.includes('aav') ||
+    t.includes('lvtp') ||
+    t.includes('lvt') ||
+    t.includes('m113') ||
+    t.includes('bmp') ||
+    t.includes('btr') ||
+    t.includes('mech');
+
+  const isAirDefense =
+    t.includes('chaparral') ||
+    t.includes('sam') ||
+    t.includes('vads') ||
+    t.includes('m163') ||
+    t.includes('flak') ||
+    t.includes('aa') ||
+    t.includes('shilka') ||
+    t.includes('tunguska') ||
+    t.includes('zsu') ||
+    t.includes('sa6') ||
+    t.includes('sa8') ||
+    t.includes('sa9') ||
+    t.includes('sa11') ||
+    t.includes('sa15') ||
+    t.includes('kub') ||
+    t.includes('buk') ||
+    t.includes('tor') ||
+    t.includes('osa') ||
+    t.includes('strela');
+
+  if (isRocketTel) {
+    const isNuke = t.includes('nuclear');
+    const isAtacms = t.includes('atacms');
+    const isScud = t.includes('scud');
+    const isTruckMlrs = t.includes('grad') || t.includes('uragan');
+    const isCalliope = t.includes('calliope');
+
+    if (isScud) {
+      // 8x8 MAZ-543 TEL + Split Forward Cabs + R-17 Ballistic Missile
+      ctx.fillStyle = trackColor;
+      for (const wx of [-9.5, -3.5, 2.8, 9]) {
+        ctx.fillRect(wx - 1.9, -7.8, 3.8, 2.3);
+        ctx.fillRect(wx - 1.9, 5.5, 3.8, 2.3);
+      }
+      ctx.fillStyle = hullFill;
+      ctx.strokeStyle = isNuke ? '#FFAB00' : hullStroke;
+      ctx.lineWidth = 1.2;
+      ctx.fillRect(-12, -5.5, 24, 11);
+      ctx.strokeRect(-12, -5.5, 24, 11);
+      // Iconic split twin forward cabs
+      ctx.fillStyle = turretFill;
+      ctx.fillRect(7.5, -5.2, 4.2, 3.6);
+      ctx.fillRect(7.5, 1.6, 4.2, 3.6);
+      // Ballistic missile fuselage + tail fins + red warhead
+      ctx.fillStyle = '#ECEFF1';
+      ctx.strokeStyle = isNuke ? '#FFAB00' : '#FF5252';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-11, -2);
+      ctx.lineTo(8.5, -2);
+      ctx.lineTo(14.5, 0);
+      ctx.lineTo(8.5, 2);
+      ctx.lineTo(-11, 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = isNuke ? '#FFAB00' : '#D32F2F';
+      ctx.beginPath();
+      ctx.moveTo(8.5, -1.8);
+      ctx.lineTo(14.5, 0);
+      ctx.lineTo(8.5, 1.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillRect(-11.5, -3.4, 2.5, 6.8);
+    } else if (isTruckMlrs) {
+      // BM-21 Grad / BM-27 Uragan Wheeled Rocket Truck
+      const axles = t.includes('uragan') ? [-8, -2, 4, 9] : [-7, 0, 8];
+      ctx.fillStyle = trackColor;
+      for (const wx of axles) {
+        ctx.fillRect(wx - 1.7, -7, 3.4, 2);
+        ctx.fillRect(wx - 1.7, 5, 3.4, 2);
+      }
+      ctx.fillStyle = hullFill;
+      ctx.strokeStyle = hullStroke;
+      ctx.lineWidth = 1.2;
+      ctx.fillRect(-11, -5, 22, 10);
+      ctx.strokeRect(-11, -5, 22, 10);
+      // Forward Ural/ZIL truck cab
+      ctx.fillStyle = turretFill;
+      ctx.fillRect(5, -4.5, 5.5, 9);
+      ctx.fillStyle = '#80DEEA';
+      ctx.fillRect(8.5, -3.6, 1.4, 7.2);
+      // Rear multi-tube rocket rack
+      ctx.fillStyle = '#37474F';
+      ctx.strokeStyle = '#FFAB91';
+      ctx.fillRect(-10, -4.2, 13, 8.4);
+      ctx.strokeRect(-10, -4.2, 13, 8.4);
+      ctx.fillStyle = '#FF7043';
+      for (const ry of [-2.8, -0.9, 0.9, 2.8]) {
+        ctx.fillRect(-8.5, ry - 0.5, 10, 1);
+      }
+    } else if (isCalliope) {
+      // M4 Sherman + Roof-Mounted T34 60-Tube Rocket Frame
+      ctx.fillStyle = trackColor;
+      ctx.fillRect(-11, -7.5, 22, 2.8);
+      ctx.fillRect(-11, 4.7, 22, 2.8);
+      ctx.fillStyle = hullFill;
+      ctx.strokeStyle = hullStroke;
+      ctx.lineWidth = 1.2;
+      ctx.fillRect(-10, -5, 20, 10);
+      ctx.strokeRect(-10, -5, 20, 10);
+      ctx.strokeStyle = barrelColor;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(2, 0);
+      ctx.lineTo(13, 0);
+      ctx.stroke();
+      // Overhead 60-tube steel rocket rack
+      ctx.fillStyle = '#455A64';
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 1.1;
+      ctx.fillRect(-5, -5.2, 10, 10.4);
+      ctx.strokeRect(-5, -5.2, 10, 10.4);
+      ctx.fillStyle = '#FFB300';
+      for (let ry = -3.5; ry <= 3.5; ry += 1.75) {
+        ctx.fillRect(-4, ry - 0.5, 8, 1);
+      }
+    } else {
+      // Tracked M270 MLRS / ATACMS / Nuclear ATACMS
+      ctx.fillStyle = trackColor;
+      ctx.fillRect(-11.5, -7.6, 23, 3);
+      ctx.fillRect(-11.5, 4.6, 23, 3);
+      ctx.fillStyle = hullFill;
+      ctx.strokeStyle = isNuke ? '#FFAB00' : hullStroke;
+      ctx.lineWidth = 1.2;
+      ctx.fillRect(-10.5, -5, 21, 10);
+      ctx.strokeRect(-10.5, -5, 21, 10);
+      // Forward armored cab with split windshields
+      ctx.fillStyle = turretFill;
+      ctx.fillRect(4.5, -4.6, 5.5, 9.2);
+      ctx.fillStyle = '#80DEEA';
+      ctx.fillRect(8.5, -3.5, 1.1, 2.8);
+      ctx.fillRect(8.5, 0.7, 1.1, 2.8);
+      // Rear launcher pod box
+      ctx.fillStyle = isNuke ? '#8E1515' : '#37474F';
+      ctx.strokeStyle = isNuke ? '#FFD54F' : '#80DEEA';
+      ctx.fillRect(-9.5, -4.4, 12.5, 8.8);
+      ctx.strokeRect(-9.5, -4.4, 12.5, 8.8);
+      ctx.fillStyle = isNuke ? '#FFEA00' : isAtacms ? '#FF8A65' : '#FFD54F';
+      if (isAtacms) {
+        ctx.beginPath();
+        ctx.arc(0.5, -2, 1.7, 0, Math.PI * 2);
+        ctx.arc(0.5, 2, 1.7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(-7.5, -2.9, 6.5, 1.8);
+        ctx.fillRect(-7.5, 1.1, 6.5, 1.8);
+      } else {
+        for (const r of [-2.4, 0, 2.4]) {
+          ctx.fillRect(-7.5, r - 0.65, 9, 1.3);
+        }
+      }
+    }
+  } else if (isTank) {
+    const isAbrams = t.includes('abrams') || t.includes('m1ip');
+    const isSovietEra = t.includes('t72') || t.includes('t80');
+    const isSovietMid = t.includes('t54') || t.includes('t55') || t.includes('t62') || t.includes('t34');
+    const isIs3 = t.includes('is3');
+    const isPt76 = t.includes('pt76');
+    const isSu100 = t.includes('su100') || t.includes('su_100');
+    const isOntos = t.includes('ontos');
+    const isPatton = t.includes('m60') || t.includes('m48') || t.includes('patton');
+
+    // Tracks
+    ctx.fillStyle = trackColor;
+    ctx.fillRect(-12, -8, 24, 3);
+    ctx.fillRect(-12, 5, 24, 3);
+
+    // Hull geometry
+    ctx.fillStyle = hullFill;
+    ctx.strokeStyle = hullStroke;
+    ctx.lineWidth = 1.2;
+    if (isIs3 || isPt76) {
+      // Pike-nose IS-3 or pointed boat bow PT-76
+      ctx.beginPath();
+      ctx.moveTo(13.5, 0);
+      ctx.lineTo(8.5, -5.4);
+      ctx.lineTo(-11, -5.4);
+      ctx.lineTo(-11, 5.4);
+      ctx.lineTo(8.5, 5.4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.fillRect(-11, -5.5, 22, 11);
+      ctx.strokeRect(-11, -5.5, 22, 11);
+      // Engine deck louver accent
+      ctx.fillStyle = hullHighlight;
+      ctx.fillRect(-9.5, -3.6, 5.5, 7.2);
+    }
+
+    // Soviet external rear fuel drums (T-34 / T-55 / T-72 / T-80)
+    if (isSovietEra || isSovietMid) {
+      ctx.fillStyle = '#455A64';
+      ctx.fillRect(-12.2, -4.4, 2.2, 3.6);
+      ctx.fillRect(-12.2, 0.8, 2.2, 3.6);
+    }
+
+    if (isOntos) {
+      // M50 Ontos 6x 106mm recoilless rifles
+      ctx.fillStyle = turretFill;
+      ctx.fillRect(-4, -3.5, 8, 7);
+      ctx.strokeRect(-4, -3.5, 8, 7);
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 1.15;
+      for (const ry of [-4.4, -2.9, -1.4, 1.4, 2.9, 4.4]) {
+        ctx.beginPath();
+        ctx.moveTo(1, ry);
+        ctx.lineTo(12, ry);
+        ctx.stroke();
+      }
+    } else if (isSu100) {
+      // SU-100 Casemate sloped hull + long 100mm gun
+      ctx.fillStyle = turretFill;
+      ctx.fillRect(-2, -4.4, 10, 8.8);
+      ctx.strokeRect(-2, -4.4, 10, 8.8);
+      ctx.strokeStyle = barrelColor;
+      ctx.lineWidth = 2.1;
+      ctx.beginPath();
+      ctx.moveTo(7, 0);
+      ctx.lineTo(18, 0);
+      ctx.stroke();
+    } else if (isAbrams) {
+      // Armored ballistic side skirts
+      ctx.fillStyle = hullHighlight;
+      ctx.fillRect(-11, -6.8, 21.5, 1.6);
+      ctx.fillRect(-11, 5.2, 21.5, 1.6);
+      // Angular Chobham turret + rear bustle rack
+      ctx.fillStyle = turretFill;
+      ctx.strokeStyle = hullStroke;
+      ctx.beginPath();
+      ctx.moveTo(6.2, -2.6);
+      ctx.lineTo(-0.5, -5);
+      ctx.lineTo(-8.5, -4.6);
+      ctx.lineTo(-8.5, 4.6);
+      ctx.lineTo(-0.5, 5);
+      ctx.lineTo(6.2, 2.6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      // Bustle stowage rack & roof hatch
+      ctx.strokeStyle = '#80DEEA';
+      ctx.lineWidth = 0.8;
+      ctx.strokeRect(-8.2, -3.6, 2.2, 7.2);
+      ctx.fillStyle = '#CFD8DC';
+      ctx.beginPath();
+      ctx.arc(-2, -2, 1.2, 0, Math.PI * 2);
+      ctx.fill();
+      // 105mm/120mm gun + bore evacuator
+      ctx.strokeStyle = barrelColor;
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(5, 0);
+      ctx.lineTo(17.5, 0);
+      ctx.stroke();
+      ctx.fillStyle = barrelColor;
+      ctx.fillRect(10, -1.4, 3, 2.8);
+    } else {
+      // Cast dome turret (T-72/T-80 ERA, M60 RISE, T-34, Sherman)
+      if (isSovietEra || t.includes('rise')) {
+        // Glacis Kontakt-1 / RISE ERA armor bricks
+        ctx.fillStyle = turretFill;
+        ctx.fillRect(8.5, -4.5, 2.2, 9);
+      }
+      ctx.fillStyle = turretFill;
+      ctx.strokeStyle = hullStroke;
+      ctx.beginPath();
+      ctx.ellipse(-0.5, 0, isPt76 ? 4.4 : 5.4, isPt76 ? 3.8 : 4.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      if (isSovietEra) {
+        // Turret front ERA wedge blocks
+        ctx.strokeStyle = '#FFB300';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.arc(0, 0, 5.2, -0.75, 0.75);
+        ctx.stroke();
+      } else if (isPatton) {
+        // M60 / M48 xenon IR searchlight box on mantlet
+        ctx.fillStyle = '#FFE082';
+        ctx.fillRect(3.2, -3.2, 2.2, 1.8);
+      }
+      // Cannon barrel + bore evacuator / muzzle brake
+      ctx.strokeStyle = barrelColor;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(4, 0);
+      ctx.lineTo(isSovietEra || isIs3 ? 16.8 : 15.2, 0);
+      ctx.stroke();
+      ctx.fillStyle = isIs3 ? '#FFD54F' : barrelColor;
+      ctx.fillRect(isSovietEra ? 9.5 : 13.8, -1.2, 2.2, 2.4);
+    }
+  } else if (isSpg) {
+    const isOpenTop = t.includes('priest') || t.includes('hummel');
+    ctx.fillStyle = trackColor;
+    ctx.fillRect(-11, -7.5, 22, 2.8);
+    ctx.fillRect(-11, 4.7, 22, 2.8);
+    ctx.fillStyle = hullFill;
+    ctx.strokeStyle = hullStroke;
+    ctx.lineWidth = 1.2;
+    ctx.fillRect(-10, -5, 20, 10);
+    ctx.strokeRect(-10, -5, 20, 10);
+    // Turret / Fighting compartment
+    ctx.fillStyle = isOpenTop ? '#1E272E' : turretFill;
+    ctx.strokeStyle = hullStroke;
+    ctx.fillRect(-8.5, -4, 11.5, 8);
+    ctx.strokeRect(-8.5, -4, 11.5, 8);
+    // Recoil spades at rear
+    ctx.fillStyle = '#455A64';
+    ctx.fillRect(-11.5, -4.5, 1.5, 2.2);
+    ctx.fillRect(-11.5, 2.3, 1.5, 2.2);
+    // Long heavy howitzer barrel + muzzle brake
+    ctx.strokeStyle = '#FFD54F';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(2, 0);
+    ctx.lineTo(17.5, 0);
+    ctx.stroke();
+    ctx.fillStyle = '#FFE082';
+    ctx.fillRect(15.6, -1.5, 2.4, 3);
+  } else if (isTowed) {
+    const isZu23 = t.includes('zu23');
+    ctx.fillStyle = trackColor;
+    ctx.fillRect(-2, -7.5, 5, 2.5);
+    ctx.fillRect(-2, 5, 5, 2.5);
+    ctx.strokeStyle = hullStroke;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-12, -5.5);
+    ctx.moveTo(0, 0);
+    ctx.lineTo(-12, 5.5);
+    ctx.stroke();
+    ctx.strokeStyle = '#B0BEC5';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(2, -5.5);
+    ctx.lineTo(2, 5.5);
+    ctx.stroke();
+    if (isZu23) {
+      ctx.strokeStyle = '#80DEEA';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(1, -1.6);
+      ctx.lineTo(14, -1.6);
+      ctx.moveTo(1, 1.6);
+      ctx.lineTo(14, 1.6);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(1, 0);
+      ctx.lineTo(16.5, 0);
+      ctx.stroke();
+      ctx.fillStyle = '#FFE082';
+      ctx.fillRect(15, -1.3, 2, 2.6);
+    }
+  } else if (isAirDefense) {
+    const isTunguska = t.includes('tunguska');
+    const isShilka = t.includes('shilka');
+    const isZsu57 = t.includes('zsu57');
+    const isVads = t.includes('vads') || t.includes('m163');
+    const isOsa = t.includes('sa8') || t.includes('osa');
+    const isStrela = t.includes('sa9') || t.includes('strela');
+    const isKub = t.includes('sa6') || t.includes('kub');
+    const isBuk = t.includes('sa11') || t.includes('buk');
+    const isTor = t.includes('sa15') || t.includes('tor');
+    const isSamRails = t.includes('chaparral') || (!isTunguska && !isShilka && !isZsu57 && !isVads && (t.includes('sam') || isKub || isBuk || isOsa || isStrela || isTor));
+
+    if (isOsa || isStrela) {
+      // 6x6 or 4x4 wheeled SAM hull
+      const wxList = isOsa ? [-7, 0, 7] : [-6, 6];
+      ctx.fillStyle = trackColor;
+      for (const wx of wxList) {
+        ctx.fillRect(wx - 1.8, -7.2, 3.6, 2.1);
+        ctx.fillRect(wx - 1.8, 5.1, 3.6, 2.1);
+      }
+    } else {
+      ctx.fillStyle = trackColor;
+      ctx.fillRect(-10.5, -7.2, 21, 2.6);
+      ctx.fillRect(-10.5, 4.6, 21, 2.6);
+    }
+
+    ctx.fillStyle = hullFill;
+    ctx.strokeStyle = accentColor;
+    ctx.lineWidth = 1.2;
+    ctx.fillRect(-9.5, -4.8, 19, 9.6);
+    ctx.strokeRect(-9.5, -4.8, 19, 9.6);
+
+    if (isTunguska) {
+      // Large turret + dish radar + twin 30mm guns + 8 side missile tubes
+      ctx.fillStyle = turretFill;
+      ctx.fillRect(-5, -4, 9, 8);
+      ctx.strokeRect(-5, -4, 9, 8);
+      ctx.fillStyle = '#FF5252';
+      ctx.fillRect(-3.5, -6, 6, 1.8);
+      ctx.fillRect(-3.5, 4.2, 6, 1.8);
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(3, -2);
+      ctx.lineTo(13, -2);
+      ctx.moveTo(3, 2);
+      ctx.lineTo(13, 2);
+      ctx.stroke();
+      ctx.fillStyle = '#80DEEA';
+      ctx.fillRect(-5.5, -2.5, 2, 5);
+    } else if (isShilka) {
+      // ZSU-23-4 flat turret + quad 23mm barrels + circular dish radar
+      ctx.fillStyle = turretFill;
+      ctx.fillRect(-4.5, -4, 8.5, 8);
+      ctx.strokeRect(-4.5, -4, 8.5, 8);
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 1.1;
+      for (const gy of [-2.4, -0.8, 0.8, 2.4]) {
+        ctx.beginPath();
+        ctx.moveTo(3.5, gy);
+        ctx.lineTo(12, gy);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = '#80DEEA';
+      ctx.beginPath();
+      ctx.arc(-4.5, 0, 2.4, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (isKub || isBuk) {
+      // SA-6 (3 big cream missiles) or SA-11 (4 missiles + front radar nose)
+      const offsets = isBuk ? [-3.3, -1.1, 1.1, 3.3] : [-2.8, 0, 2.8];
+      if (isBuk) {
+        ctx.fillStyle = '#ECEFF1';
+        ctx.beginPath();
+        ctx.arc(3.5, 0, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.strokeStyle = '#ECEFF1';
+      ctx.lineWidth = 1.7;
+      for (const my of offsets) {
+        ctx.beginPath();
+        ctx.moveTo(-6, my);
+        ctx.lineTo(8, my);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#FF5252';
+      ctx.fillRect(6.5, -3.8, 1.8, 7.6);
+    } else if (isTor) {
+      // SA-15 Tor tall radar/VLS box turret
+      ctx.fillStyle = turretFill;
+      ctx.fillRect(-4, -3.8, 8, 7.6);
+      ctx.strokeRect(-4, -3.8, 8, 7.6);
+      ctx.fillStyle = '#00E5FF';
+      ctx.fillRect(-2, -3.2, 4, 1.4);
+      ctx.fillStyle = '#FF5252';
+      ctx.fillRect(1, -2.5, 2.5, 5);
+    } else if (isOsa) {
+      // SA-8 wide H-band folding radar + 6 canisters
+      ctx.fillStyle = '#ECEFF1';
+      ctx.fillRect(-3, -5.5, 2, 11);
+      ctx.fillStyle = '#FF7043';
+      ctx.fillRect(-0.5, -4, 6, 2);
+      ctx.fillRect(-0.5, 2, 6, 2);
+    } else if (isSamRails) {
+      // Chaparral / SA-9 4-rail missiles
+      ctx.strokeStyle = '#ECEFF1';
+      ctx.lineWidth = 1.5;
+      for (const my of [-3.4, -1.1, 1.1, 3.4]) {
+        ctx.beginPath();
+        ctx.moveTo(-4.5, my);
+        ctx.lineTo(7, my);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#FF5252';
+      ctx.fillRect(5.8, -4, 1.6, 8);
+    } else {
+      // M163 VADS / ZSU-57-2 / Flak AA
+      ctx.fillStyle = isZsu57 ? '#1A232A' : turretFill;
+      ctx.beginPath();
+      ctx.arc(0, 0, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = isZsu57 ? 1.5 : 1.3;
+      ctx.beginPath();
+      ctx.moveTo(2, -1.5);
+      ctx.lineTo(isZsu57 ? 13 : 11, -1.5);
+      ctx.moveTo(2, 1.5);
+      ctx.lineTo(isZsu57 ? 13 : 11, 1.5);
+      ctx.stroke();
+      if (isVads) {
+        ctx.fillStyle = '#69F0AE';
+        ctx.beginPath();
+        ctx.arc(-2.5, -2.5, 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  } else if (isIfvApc) {
+    const isWheeled = t.includes('lav') || t.includes('btr');
+    const isAmphib = t.includes('lvt') || t.includes('aav') || t.includes('lvtp');
+    const isSamAd = t.includes('lav_ad');
+    const isBmp = t.includes('bmp');
+
+    if (isWheeled) {
+      ctx.fillStyle = trackColor;
+      for (const wx of [-8, -2.8, 2.8, 8]) {
+        ctx.fillRect(wx - 1.6, -7.2, 3.2, 2);
+        ctx.fillRect(wx - 1.6, 5.2, 3.2, 2);
+      }
+    } else {
+      ctx.fillStyle = trackColor;
+      ctx.fillRect(-11, -7.2, 22, 2.6);
+      ctx.fillRect(-11, 4.6, 22, 2.6);
+    }
+
+    ctx.fillStyle = isAmphib ? '#173A4A' : hullFill;
+    ctx.strokeStyle = isAmphib ? '#4FC3F7' : hullStroke;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(11, -4.5);
+    ctx.lineTo(13.5, 0);
+    ctx.lineTo(11, 4.5);
+    ctx.lineTo(-11, 4.8);
+    ctx.lineTo(-11, -4.8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    if (isAmphib) {
+      // Bow wave-deflector trim vane + rear waterjet shrouds
+      ctx.strokeStyle = '#80DEEA';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(11.5, -4);
+      ctx.lineTo(11.5, 4);
+      ctx.stroke();
+      ctx.fillStyle = '#263238';
+      ctx.fillRect(-12, -3.5, 1.8, 2.2);
+      ctx.fillRect(-12, 1.3, 1.8, 2.2);
+    }
+
+    // Turret / Autocannon / Stinger or TOW Pod
+    ctx.fillStyle = turretFill;
+    ctx.beginPath();
+    ctx.arc(isBmp ? 2 : 1, 0, 3.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = isSamAd ? '#80DEEA' : barrelColor;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(3, 0);
+    ctx.lineTo(isBmp ? 12.5 : 11, 0);
+    ctx.stroke();
+    if (isSamAd || t.includes('bradley') || isBmp) {
+      ctx.fillStyle = '#FFD54F';
+      ctx.fillRect(-0.5, 3, 4.5, 2.1);
+    }
+  } else if (t.includes('engineer')) {
+    ctx.fillStyle = trackColor;
+    ctx.fillRect(-9, -6.5, 18, 2.5);
+    ctx.fillRect(-9, 4, 18, 2.5);
+    ctx.fillStyle = '#4A3B12';
+    ctx.strokeStyle = '#FFD54F';
+    ctx.lineWidth = 1.2;
+    ctx.fillRect(-8, -4.5, 15, 9);
+    ctx.strokeRect(-8, -4.5, 15, 9);
+    // Angled heavy front bulldozer blade + push arms
+    ctx.fillStyle = '#FFB300';
+    ctx.fillRect(8, -6.8, 3.2, 13.6);
+    ctx.strokeRect(8, -6.8, 3.2, 13.6);
+    ctx.fillStyle = '#263238';
+    ctx.fillRect(6.5, -4.2, 1.8, 1.5);
+    ctx.fillRect(6.5, 2.7, 1.8, 1.5);
+  } else if (t.includes('atgm') || t.includes('dragon')) {
+    ctx.strokeStyle = '#BCAAA4';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(1, 0, 6.5, -Math.PI * 0.65, Math.PI * 0.65);
+    ctx.stroke();
+    ctx.strokeStyle = '#FFD54F';
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(-4, 0);
+    ctx.lineTo(10, 0);
+    ctx.stroke();
+    ctx.fillStyle = '#FF5252';
+    ctx.fillRect(8.5, -1, 2, 2);
+    ctx.fillStyle = hullStroke;
+    ctx.beginPath();
+    ctx.arc(-2, -3.5, 2.2, 0, Math.PI * 2);
+    ctx.arc(-2, 3.5, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (t.includes('mortar')) {
+    ctx.strokeStyle = '#BCAAA4';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.arc(1, 0, 6.5, -Math.PI * 0.6, Math.PI * 0.6);
+    ctx.stroke();
+    ctx.fillStyle = '#37474F';
+    ctx.beginPath();
+    ctx.arc(0, 0, 2.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#FFD54F';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(7, 0);
+    ctx.stroke();
+    ctx.fillStyle = hullStroke;
+    ctx.beginPath();
+    ctx.arc(-3.5, -3.2, 2.1, 0, Math.PI * 2);
+    ctx.arc(-3.5, 3.2, 2.1, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    // Infantry / Air Assault / Recon Squad: 3-man directional fireteam + packs + sandbag arc
+    ctx.strokeStyle = t.includes('air_assault') ? '#80DEEA' : '#BCAAA4';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(2.5, 0, 7.2, -Math.PI * 0.55, Math.PI * 0.55);
+    ctx.stroke();
+    const soldiers: Array<[number, number]> = [
+      [3.8, 0],
+      [-2.4, -3.9],
+      [-2.4, 3.9],
+    ];
+    for (const [sx, sy] of soldiers) {
+      ctx.strokeStyle = barrelColor;
+      ctx.lineWidth = 1.15;
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + 5, sy);
+      ctx.stroke();
+      ctx.fillStyle = hullHighlight;
+      ctx.fillRect(sx - 3.2, sy - 1.3, 1.5, 2.6);
+      ctx.fillStyle = hullFill;
+      ctx.strokeStyle = hullStroke;
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.arc(sx, sy, 2.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawBlueprintBackdrop(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  kind: UnitPreviewKind,
+  isNuclear: boolean
+) {
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  if (isNuclear) {
+    grad.addColorStop(0, '#1B0B10');
+    grad.addColorStop(1, '#2D1114');
+  } else if (kind === 'ship') {
+    grad.addColorStop(0, '#041224');
+    grad.addColorStop(1, '#08213D');
+  } else if (kind === 'aircraft') {
+    grad.addColorStop(0, '#051526');
+    grad.addColorStop(1, '#0B243B');
+  } else if (kind === 'ground') {
+    grad.addColorStop(0, '#06171C');
+    grad.addColorStop(1, '#0C2522');
+  } else {
+    grad.addColorStop(0, '#101622');
+    grad.addColorStop(1, '#1A2230');
+  }
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  // Subtle blueprint tactical grid
+  ctx.strokeStyle = isNuclear ? 'rgba(255, 193, 7, 0.10)' : 'rgba(128, 222, 234, 0.08)';
+  ctx.lineWidth = 0.75;
+  const step = 12;
+  ctx.beginPath();
+  for (let x = step; x < w; x += step) {
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+  }
+  for (let y = step; y < h; y += step) {
+    ctx.moveTo(0, y);
+    ctx.lineTo(w, y);
+  }
+  ctx.stroke();
+
+  // Corner reticle ticks
+  ctx.strokeStyle = isNuclear ? 'rgba(255, 213, 79, 0.45)' : 'rgba(79, 195, 247, 0.35)';
+  ctx.lineWidth = 1;
+  const t = 5;
+  ctx.beginPath();
+  ctx.moveTo(2, 2 + t);
+  ctx.lineTo(2, 2);
+  ctx.lineTo(2 + t, 2);
+  ctx.moveTo(w - 2 - t, 2);
+  ctx.lineTo(w - 2, 2);
+  ctx.lineTo(w - 2, 2 + t);
+  ctx.moveTo(2, h - 2 - t);
+  ctx.lineTo(2, h - 2);
+  ctx.lineTo(2 + t, h - 2);
+  ctx.moveTo(w - 2 - t, h - 2);
+  ctx.lineTo(w - 2, h - 2);
+  ctx.lineTo(w - 2, h - 2 - t);
+  ctx.stroke();
+}
+
+function drawShipPreview(ctx: CanvasRenderingContext2D, w: number, h: number, rawKey: string) {
+  const k = normalizeKey(rawKey);
+  const cx = w * 0.5;
+  const cy = h * 0.52;
+  const scale = Math.min(w / 138, h / 46);
+
+  const isOpfor =
+    k.includes('kiev') ||
+    k.includes('kirov') ||
+    k.includes('sovremenny') ||
+    k.includes('udaloy') ||
+    k.includes('kynda') ||
+    k.includes('sverdlov') ||
+    k.includes('petya') ||
+    k.includes('riga') ||
+    k.includes('kashin') ||
+    k.includes('komar') ||
+    k.includes('osa') ||
+    k.includes('foxtrot') ||
+    k.includes('oscar');
+
+  const hullColor = isOpfor ? '#2A141A' : '#0B2136';
+  const strokeColor = isOpfor ? '#EF5350' : '#4FC3F7';
+  const deckRim = isOpfor ? 'rgba(255, 138, 128, 0.35)' : 'rgba(128, 222, 234, 0.30)';
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(scale, scale);
+
+  // Sea wake + bow V-spray
+  ctx.strokeStyle = 'rgba(128, 222, 234, 0.25)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(-48, -2);
+  ctx.lineTo(-65, -7.5);
+  ctx.moveTo(-48, 2);
+  ctx.lineTo(-65, 7.5);
+  ctx.stroke();
+
+  if (k === 'cvn' || k === 'cv63' || k === 'carrier' || k === 'cve' || k === 'lph' || k === 'cvhg_kiev') {
+    const isModern = k === 'cvn' || k === 'cv63';
+    const isKiev = k === 'cvhg_kiev';
+    const isLph = k === 'lph';
+    ctx.fillStyle = isKiev ? '#261318' : '#0D263E';
+    ctx.strokeStyle = isKiev ? '#EF5350' : isLph ? '#4DB6AC' : '#4FC3F7';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    if (isModern) {
+      ctx.moveTo(52, -7);
+      ctx.lineTo(50, 9);
+      ctx.lineTo(14, 12);
+      ctx.lineTo(-10, 15);
+      ctx.lineTo(-42, 14);
+      ctx.lineTo(-52, 8);
+      ctx.lineTo(-52, -10);
+      ctx.lineTo(-36, -14);
+      ctx.lineTo(18, -14);
+    } else if (isKiev) {
+      ctx.moveTo(50, 0);
+      ctx.lineTo(34, -8);
+      ctx.lineTo(-46, -13);
+      ctx.lineTo(-50, 0);
+      ctx.lineTo(-46, 10);
+      ctx.lineTo(28, 8);
+    } else {
+      ctx.moveTo(48, -10);
+      ctx.lineTo(52, 0);
+      ctx.lineTo(48, 10);
+      ctx.lineTo(-48, 11);
+      ctx.lineTo(-51, 0);
+      ctx.lineTo(-48, -11);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Yellow foul edge lines & runway dashed axis
+    ctx.strokeStyle = 'rgba(255, 213, 79, 0.55)';
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(-45, -11);
+    ctx.lineTo(20, -11);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    if (isModern || isKiev) {
+      ctx.moveTo(-46, -5);
+      ctx.lineTo(22, 4);
+    } else {
+      ctx.moveTo(-42, 0);
+      ctx.lineTo(44, 0);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    if (isKiev) {
+      // Forward P-500 Bazalt missile tubes on foredeck
+      ctx.fillStyle = '#FF7043';
+      ctx.fillRect(22, -4, 14, 8);
+    } else {
+      // Catapult tracks
+      ctx.strokeStyle = '#FFE082';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(18, -2);
+      ctx.lineTo(46, -2);
+      ctx.moveTo(18, 4);
+      ctx.lineTo(46, 4);
+      ctx.stroke();
+    }
+
+    // Island superstructure + radar bar
+    ctx.fillStyle = isKiev ? '#3B1D24' : '#1C3F60';
+    ctx.strokeStyle = isKiev ? '#FF8A80' : '#80DEEA';
+    ctx.fillRect(isModern ? -10 : 8, 6.5, 16, 6);
+    ctx.strokeRect(isModern ? -10 : 8, 6.5, 16, 6);
+    ctx.strokeStyle = '#FFD54F';
+    ctx.beginPath();
+    ctx.moveTo(isModern ? -2 : 16, 5.5);
+    ctx.lineTo(isModern ? -2 : 16, 13.5);
+    ctx.stroke();
+
+    // Parked miniature deck aircraft silhouettes
+    ctx.fillStyle = '#90CAF9';
+    for (const ax of [-34, -22]) {
+      ctx.fillRect(ax, -10, 4, 2.2);
+    }
+  } else if (k === 'ohio_ssbn' || k === 'ssn_la' || k === 'ss' || k === 'foxtrot' || k === 'ssgn_oscar') {
+    const isBoomer = k === 'ohio_ssbn';
+    const isOscar = k === 'ssgn_oscar';
+    const isNukeSub = isBoomer || k === 'ssn_la' || isOscar;
+    ctx.fillStyle = isBoomer ? '#1A1120' : isOscar ? '#241219' : '#0B1D2C';
+    ctx.strokeStyle = isBoomer ? '#FFD54F' : isOscar ? '#FF5252' : '#4DD0E1';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, isBoomer ? 52 : 46, isOscar ? 9 : isBoomer ? 7.5 : 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    // Bow diving planes + stern cruciform stabilizers
+    ctx.fillStyle = '#263238';
+    ctx.fillRect(10, -2.5, 13, 5);
+    ctx.strokeRect(10, -2.5, 13, 5);
+    ctx.fillRect(14, -5.5, 2.5, 11);
+    ctx.fillRect(-45, -7, 3, 14);
+    if (isBoomer) {
+      ctx.fillStyle = '#FF5252';
+      for (let mx = -28; mx <= 2; mx += 5) {
+        ctx.fillRect(mx, -3.2, 3, 2.2);
+        ctx.fillRect(mx, 1, 3, 2.2);
+      }
+    } else if (isOscar) {
+      ctx.fillStyle = '#FF7043';
+      for (let mx = -14; mx <= 26; mx += 6) {
+        ctx.fillRect(mx, -7, 4, 2.2);
+        ctx.fillRect(mx, 4.8, 4, 2.2);
+      }
+    } else if (!isNukeSub) {
+      ctx.strokeStyle = '#CFD8DC';
+      ctx.beginPath();
+      ctx.moveTo(23, 0);
+      ctx.lineTo(31, 0);
+      ctx.stroke();
+    }
+  } else if (k === 'lcac') {
+    ctx.fillStyle = '#1E252B';
+    ctx.strokeStyle = '#80DEEA';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(-34, -14, 68, 28, 5);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#37474F';
+    ctx.fillRect(-24, -8, 48, 16);
+    ctx.strokeStyle = '#00E5FF';
+    ctx.beginPath();
+    ctx.arc(-26, -10, 4.5, 0, Math.PI * 2);
+    ctx.arc(-26, 10, 4.5, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = '#FFE082';
+    ctx.fillRect(16, -12, 8, 4);
+  } else if (k === 'lpd' || k === 'lst' || k === 'lcvp' || k === 'lcm8' || k === 'lsm_r') {
+    const isBig = k === 'lpd' || k === 'lst';
+    const isRocket = k === 'lsm_r';
+    ctx.fillStyle = '#0B2034';
+    ctx.strokeStyle = '#4FC3F7';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(isBig ? 44 : 32, -9);
+    ctx.lineTo(isBig ? 48 : 34, 0);
+    ctx.lineTo(isBig ? 44 : 32, 9);
+    ctx.lineTo(isBig ? -44 : -32, 10);
+    ctx.lineTo(isBig ? -44 : -32, -10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = k === 'lpd' ? 'rgba(0, 188, 212, 0.35)' : '#1C3144';
+    ctx.fillRect(isBig ? -38 : -20, -6, isBig ? 42 : 40, 12);
+    ctx.strokeRect(isBig ? -38 : -20, -6, isBig ? 42 : 40, 12);
+    if (k === 'lpd') {
+      ctx.fillStyle = '#163856';
+      ctx.fillRect(10, -7, 18, 14);
+      ctx.strokeRect(10, -7, 18, 14);
+    } else if (isRocket) {
+      ctx.fillStyle = '#FFAB00';
+      for (let rx = -14; rx <= 14; rx += 7) {
+        ctx.fillRect(rx, -4.5, 4, 9);
+      }
+    }
+  } else if (k.startsWith('bb') || k === 'kongo') {
+    const isMod = k === 'bb_iowa_mod';
+    ctx.fillStyle = hullColor;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(54, 0);
+    ctx.lineTo(36, -9);
+    ctx.lineTo(-40, -10);
+    ctx.lineTo(-50, 0);
+    ctx.lineTo(-40, 10);
+    ctx.lineTo(36, 9);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // Deck centerline & citadel
+    ctx.strokeStyle = deckRim;
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(-44, 0);
+    ctx.lineTo(48, 0);
+    ctx.stroke();
+    ctx.fillStyle = '#183754';
+    ctx.strokeStyle = strokeColor;
+    ctx.fillRect(-16, -6, 32, 12);
+    ctx.strokeRect(-16, -6, 32, 12);
+    // Triple turrets
+    ctx.fillStyle = '#546E7A';
+    ctx.strokeStyle = '#FFE082';
+    for (const tx of [30, 18, -32]) {
+      ctx.fillRect(tx - 4, -4, 8, 8);
+      ctx.strokeRect(tx - 4, -4, 8, 8);
+      ctx.beginPath();
+      const dir = tx > 0 ? 1 : -1;
+      for (const gy of [-2, 0, 2]) {
+        ctx.moveTo(tx, gy);
+        ctx.lineTo(tx + dir * 11, gy);
+      }
+      ctx.stroke();
+    }
+    if (isMod) {
+      ctx.fillStyle = '#00E5FF';
+      ctx.fillRect(-2, -8, 10, 2.5);
+      ctx.fillRect(-2, 5.5, 10, 2.5);
+    }
+  } else if (k.startsWith('cg') || k === 'cgn_kirov' || k === 'kynda') {
+    const isTico = k === 'cg_tico';
+    const isKirov = k === 'cgn_kirov';
+    ctx.fillStyle = hullColor;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(49, 0);
+    ctx.lineTo(30, -8);
+    ctx.lineTo(-42, -8);
+    ctx.lineTo(-47, 0);
+    ctx.lineTo(-42, 8);
+    ctx.lineTo(30, 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = isOpfor ? '#421C24' : '#163858';
+    ctx.fillRect(-14, -5.5, 28, 11);
+    ctx.strokeRect(-14, -5.5, 28, 11);
+    if (isTico) {
+      ctx.fillStyle = '#00E5FF';
+      ctx.fillRect(8, -6.5, 5, 2);
+      ctx.fillRect(8, 4.5, 5, 2);
+    }
+    ctx.fillStyle = isKirov ? '#FF7043' : '#FFD54F';
+    ctx.fillRect(20, -3.5, 10, 7);
+    ctx.fillRect(-30, -3.5, 9, 7);
+    ctx.strokeStyle = '#ECEFF1';
+    ctx.beginPath();
+    ctx.moveTo(35, 0);
+    ctx.lineTo(45, 0);
+    ctx.stroke();
+  } else {
+    // Cruiser / Destroyer / Frigate / FAC
+    const isFfg = k.includes('ffg') || k === 'petya' || k === 'riga';
+    const isFac = k === 'komar_ptg' || k === 'osa';
+    const len = isFac ? 30 : isFfg ? 42 : 46;
+    ctx.fillStyle = hullColor;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(len, 0);
+    ctx.lineTo(len * 0.62, -7);
+    ctx.lineTo(-len * 0.85, -7);
+    ctx.lineTo(-len * 0.96, 0);
+    ctx.lineTo(-len * 0.85, 7);
+    ctx.lineTo(len * 0.62, 7);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // Bow breakwater V-shield
+    ctx.strokeStyle = deckRim;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(len * 0.45, -4);
+    ctx.lineTo(len * 0.62, 0);
+    ctx.lineTo(len * 0.45, 4);
+    ctx.stroke();
+    // Superstructure & radar mast bar
+    ctx.fillStyle = isOpfor ? '#421C24' : '#173A5C';
+    ctx.strokeStyle = strokeColor;
+    ctx.fillRect(-10, -4.5, 22, 9);
+    ctx.strokeRect(-10, -4.5, 22, 9);
+    ctx.strokeStyle = '#FFD54F';
+    ctx.beginPath();
+    ctx.moveTo(2, -6);
+    ctx.lineTo(2, 6);
+    ctx.stroke();
+    // Forward gun / missile canisters
+    if (isFac) {
+      ctx.fillStyle = '#FF7043';
+      ctx.fillRect(-16, -6.2, 12, 2.4);
+      ctx.fillRect(-16, 3.8, 12, 2.4);
+    } else {
+      ctx.fillStyle = isFfg ? '#FFD54F' : '#80DEEA';
+      ctx.beginPath();
+      ctx.arc(22, 0, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#CFD8DC';
+      ctx.beginPath();
+      ctx.moveTo(24, 0);
+      ctx.lineTo(34, 0);
+      ctx.stroke();
+      ctx.strokeStyle = strokeColor;
+      ctx.strokeRect(-len * 0.8, -4.5, 14, 9);
+    }
+  }
+
+  // Port (Red) & Starboard (Green) navigation light pips
+  ctx.fillStyle = '#FF5252';
+  ctx.fillRect(-2, -9.5, 2, 2);
+  ctx.fillStyle = '#00E676';
+  ctx.fillRect(-2, 7.5, 2, 2);
+
+  ctx.restore();
+}
+
+function drawAircraftPreview(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  rawKey: string,
+  payloadType?: AircraftPayloadType
+) {
+  const m = normalizeKey(rawKey);
+  const cx = w * 0.5;
+  const cy = h * 0.52;
+  const scale = Math.min(w / 76, h / 46);
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(scale, scale);
+
+  const isHeli =
+    m === 'ah64a' ||
+    m === 'ah1w' ||
+    m === 'ah1' ||
+    m === 'uh1' ||
+    m === 'ch53' ||
+    m === 'ch47' ||
+    m === 'sh3f' ||
+    m === 'sh3' ||
+    m === 'sh2' ||
+    m === 'ka27' ||
+    m === 'mi24' ||
+    m === 'ho3s1' ||
+    m === 'sar_ho3s1' ||
+    m.includes('sar');
+
+  const isHeavyBomber =
+    m === 'b52' ||
+    m === 'b29' ||
+    m === 'b17' ||
+    m === 'b17_late' ||
+    m === 'b24' ||
+    m === 'b25' ||
+    m === 'lancaster' ||
+    m === 'tu16' ||
+    m === 'tu95' ||
+    m === 'tu22m3' ||
+    m === 'heavy_bomber_pool' ||
+    m === 'c130' ||
+    m === 'c47' ||
+    m === 'c1' ||
+    m === 'c2a' ||
+    m === 'p3' ||
+    m === 'il38';
+
+  const isAwacs = m === 'e2c' || m === 'e3a' || m === 'e2' || m === 'e1' || m === 'a50' || m === 'aew_ad3w' || m === 'ad3w';
+  const isDelta = m === 'mirage3' || m === 'mirage2000' || m === 'mig21' || m === 'a4' || m === 'su7' || m === 'viggen_ja37';
+  const isSwingWing = m === 'f14a' || m === 'f111' || m === 'tornado_gr1' || m === 'tornado_ids' || m === 'tornado_adv' || m === 'su24' || m === 'tu22m3';
+  const isTwinBoom = m === 'p38' || m === 'ov10' || m === 'f82';
+  const isJet =
+    isDelta ||
+    isSwingWing ||
+    m === 'fa18a' ||
+    m === 'f15a' ||
+    m === 'f16a' ||
+    m === 'a6e' ||
+    m === 'a6a' ||
+    m === 'ea6b' ||
+    m === 'av8b' ||
+    m === 's3a' ||
+    m === 'a10a' ||
+    m === 'f4b' ||
+    m === 'f4j' ||
+    m === 'f4e' ||
+    m === 'f8' ||
+    m === 'a7' ||
+    m === 'f105' ||
+    m === 'f86' ||
+    m === 'f9f' ||
+    m === 'f2h' ||
+    m === 'fighter_jet_f9f' ||
+    m === 'fighter_jet_f2h' ||
+    m === 'f104g' ||
+    m === 'f5a' ||
+    m === 'a37b' ||
+    m === 'jaguar_gr1' ||
+    m === 'hunter_fga9' ||
+    m === 'meteor' ||
+    m === 'mig15' ||
+    m === 'mig17' ||
+    m === 'mig19' ||
+    m === 'mig23' ||
+    m === 'mig25' ||
+    m === 'mig29' ||
+    m === 'su25' ||
+    m === 'su27' ||
+    m === 'yak38' ||
+    m === 'il28';
+
+  const primaryStroke = isHeli ? '#66BB6A' : isHeavyBomber ? '#80CBC4' : '#4FC3F7';
+  const bodyFill = '#0F2740';
+
+  if (isHeli) {
+    ctx.fillStyle = bodyFill;
+    ctx.strokeStyle = primaryStroke;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(16, 0);
+    ctx.lineTo(8, -3.5);
+    ctx.lineTo(-8, -3.5);
+    ctx.lineTo(-20, -1.2);
+    ctx.lineTo(-22, 0);
+    ctx.lineTo(-20, 1.2);
+    ctx.lineTo(-8, 3.5);
+    ctx.lineTo(8, 3.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // Stub wings / sponsons
+    ctx.beginPath();
+    ctx.moveTo(1, -10.5);
+    ctx.lineTo(-3, -10.5);
+    ctx.lineTo(-3, 10.5);
+    ctx.lineTo(1, 10.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // Cockpit glass
+    ctx.fillStyle = '#80DEEA';
+    ctx.beginPath();
+    ctx.ellipse(9, 0, 3.2, 1.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Rotor arc + blades
+    ctx.strokeStyle = 'rgba(128, 222, 234, 0.35)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(0, 0, 17, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = '#E0F7FA';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(-12, -12);
+    ctx.lineTo(12, 12);
+    ctx.moveTo(-12, 12);
+    ctx.lineTo(12, -12);
+    ctx.stroke();
+  } else if (isAwacs) {
+    ctx.fillStyle = bodyFill;
+    ctx.strokeStyle = primaryStroke;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 22, 3.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    if (m === 'e3a' || m === 'a50') {
+      ctx.moveTo(5, 0);
+      ctx.lineTo(-8, -20);
+      ctx.lineTo(-13, -20);
+      ctx.lineTo(-5, 0);
+      ctx.lineTo(-13, 20);
+      ctx.lineTo(-8, 20);
+    } else {
+      ctx.moveTo(4, -20);
+      ctx.lineTo(4, 20);
+      ctx.lineTo(-4, 20);
+      ctx.lineTo(-4, -20);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#ECEFF1';
+    ctx.strokeStyle = '#00E5FF';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(-2, 0, 7.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-9, 0);
+    ctx.lineTo(5, 0);
+    ctx.stroke();
+  } else if (isHeavyBomber) {
+    const isSwept = m === 'b52' || m === 'tu16' || m === 'tu95' || m === 'tu22m3';
+    ctx.fillStyle = bodyFill;
+    ctx.strokeStyle = primaryStroke;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 25, 3.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    if (isSwept) {
+      ctx.moveTo(7, -3);
+      ctx.lineTo(-9, -22);
+      ctx.lineTo(-15, -22);
+      ctx.lineTo(-4, -3);
+      ctx.lineTo(-4, 3);
+      ctx.lineTo(-15, 22);
+      ctx.lineTo(-9, 22);
+      ctx.lineTo(7, 3);
+    } else {
+      ctx.moveTo(5, -22);
+      ctx.lineTo(5, 22);
+      ctx.lineTo(-4, 22);
+      ctx.lineTo(-4, -22);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // 4 Engine Pods (or 2 for B-25)
+    ctx.fillStyle = '#FFD54F';
+    const pods = m === 'b25' ? [-9, 9] : [-14, -8, 8, 14];
+    for (const ey of pods) {
+      ctx.fillRect(0, ey - 1.2, 6, 2.4);
+    }
+    // Tailplane + MAD tail stinger on P-3/IL-38
+    ctx.fillStyle = bodyFill;
+    ctx.beginPath();
+    ctx.moveTo(-19, -9);
+    ctx.lineTo(-24, -9);
+    ctx.lineTo(-24, 9);
+    ctx.lineTo(-19, 9);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    if (m === 'p3' || m === 'il38') {
+      ctx.strokeStyle = '#FF5252';
+      ctx.beginPath();
+      ctx.moveTo(-24, 0);
+      ctx.lineTo(-30, 0);
+      ctx.stroke();
+    }
+  } else if (isSwingWing) {
+    ctx.fillStyle = bodyFill;
+    ctx.strokeStyle = primaryStroke;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(8, 0);
+    ctx.lineTo(-7, -19);
+    ctx.lineTo(-13, -19);
+    ctx.lineTo(-5, 0);
+    ctx.lineTo(-13, 19);
+    ctx.lineTo(-7, 19);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(22, 0);
+    ctx.lineTo(10, -4.5);
+    ctx.lineTo(-18, -5);
+    ctx.lineTo(-20, 5);
+    ctx.lineTo(10, 4.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#80DEEA';
+    ctx.beginPath();
+    ctx.ellipse(9, 0, 4.5, 1.8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FFB300';
+    ctx.fillRect(-22, -4, 3, 2.2);
+    ctx.fillRect(-22, 1.8, 3, 2.2);
+  } else if (isDelta) {
+    // Pure Delta (Mirage III/2000, MiG-21, A-4) or Canard Delta (Viggen)
+    ctx.fillStyle = bodyFill;
+    ctx.strokeStyle = primaryStroke;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(9, 0);
+    ctx.lineTo(-14, -17);
+    ctx.lineTo(-16, 0);
+    ctx.lineTo(-14, 17);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    if (m === 'viggen_ja37') {
+      ctx.beginPath();
+      ctx.moveTo(15, 0);
+      ctx.lineTo(7, -8);
+      ctx.lineTo(7, 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.moveTo(22, 0);
+    ctx.lineTo(10, -2.8);
+    ctx.lineTo(-19, -3);
+    ctx.lineTo(-19, 3);
+    ctx.lineTo(10, 2.8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#80DEEA';
+    ctx.beginPath();
+    ctx.ellipse(8, 0, 4, 1.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FF9100';
+    ctx.fillRect(-21.5, -1.6, 2.5, 3.2);
+  } else if (m === 'a10a') {
+    ctx.fillStyle = bodyFill;
+    ctx.strokeStyle = primaryStroke;
+    ctx.lineWidth = 1.4;
+    ctx.fillRect(-3, -21, 7, 42);
+    ctx.strokeRect(-3, -21, 7, 42);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 18, 3, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#455A64';
+    ctx.fillRect(-10, -6.5, 8, 3);
+    ctx.fillRect(-10, 3.5, 8, 3);
+    ctx.fillStyle = '#80DEEA';
+    ctx.beginPath();
+    ctx.ellipse(7, 0, 3.8, 1.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FFD54F';
+    ctx.fillRect(17, -0.8, 4, 1.6);
+  } else if (isTwinBoom) {
+    // P-38 / OV-10 / F-82 Twin Boom or Twin Fuselage
+    ctx.fillStyle = bodyFill;
+    ctx.strokeStyle = primaryStroke;
+    ctx.lineWidth = 1.4;
+    ctx.fillRect(-3, -20, 7, 40);
+    ctx.strokeRect(-3, -20, 7, 40);
+    ctx.fillRect(-17, -9.5, 28, 3.2);
+    ctx.strokeRect(-17, -9.5, 28, 3.2);
+    ctx.fillRect(-17, 6.3, 28, 3.2);
+    ctx.strokeRect(-17, 6.3, 28, 3.2);
+    ctx.fillRect(-17, -10, 3.5, 20);
+    ctx.strokeRect(-17, -10, 3.5, 20);
+    if (m !== 'f82') {
+      ctx.beginPath();
+      ctx.ellipse(3, 0, 10, 2.8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  } else if (isJet) {
+    ctx.fillStyle = bodyFill;
+    ctx.strokeStyle = primaryStroke;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(5, 0);
+    ctx.lineTo(-5, -18);
+    ctx.lineTo(-11, -18);
+    ctx.lineTo(-7, 0);
+    ctx.lineTo(-11, 18);
+    ctx.lineTo(-5, 18);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-12, 0);
+    ctx.lineTo(-18, -9);
+    ctx.lineTo(-21, -9);
+    ctx.lineTo(-17, 0);
+    ctx.lineTo(-21, 9);
+    ctx.lineTo(-18, 9);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(21, 0);
+    ctx.lineTo(10, -3);
+    ctx.lineTo(-18, -3.5);
+    ctx.lineTo(-20, 0);
+    ctx.lineTo(-18, 3.5);
+    ctx.lineTo(10, 3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#80DEEA';
+    ctx.beginPath();
+    ctx.ellipse(8, 0, 4.5, 1.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FF9100';
+    ctx.fillRect(-22, -1.6, 2.5, 3.2);
+  } else {
+    // Classic WWII / Korean Prop Fighter, Gull-Wing F4U, Elliptical Spitfire, Dive/Torpedo Bomber
+    const isTorp = m.includes('tbf') || m.includes('tbd') || m.includes('torpedo') || m.includes('af2');
+    const isGull = m === 'f4u' || m === 'f4u4';
+    ctx.fillStyle = bodyFill;
+    ctx.strokeStyle = primaryStroke;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    if (isGull) {
+      ctx.moveTo(5, -19);
+      ctx.lineTo(8, -7);
+      ctx.lineTo(6, 0);
+      ctx.lineTo(8, 7);
+      ctx.lineTo(5, 19);
+      ctx.lineTo(-3, 19);
+      ctx.lineTo(-3, -19);
+    } else {
+      ctx.moveTo(5, -19);
+      ctx.lineTo(7, 0);
+      ctx.lineTo(5, 19);
+      ctx.lineTo(-3, 19);
+      ctx.lineTo(-3, -19);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-12, -8);
+    ctx.lineTo(-16, -8);
+    ctx.lineTo(-16, 8);
+    ctx.lineTo(-12, 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(1, 0, 16, 3.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#80DEEA';
+    ctx.beginPath();
+    ctx.ellipse(-1, 0, 3.4, 1.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.beginPath();
+    ctx.arc(18, 0, 6, 0, Math.PI * 2);
+    ctx.stroke();
+    if (isTorp) {
+      ctx.fillStyle = '#00E5FF';
+      ctx.fillRect(-4, -1.2, 10, 2.4);
+    }
+  }
+
+  // Wingtip navigation lights
+  ctx.fillStyle = '#FF5252';
+  ctx.fillRect(-8, -19.5, 2, 1.5);
+  ctx.fillStyle = '#00E676';
+  ctx.fillRect(-8, 18, 2, 1.5);
+
+  if (payloadType) {
+    if (payloadType.includes('nuke')) {
+      ctx.fillStyle = '#FFAB00';
+      ctx.beginPath();
+      ctx.arc(24, -12, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#1A0B0E';
+      ctx.font = 'bold 7px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('☢', 24, -12);
+    } else if (payloadType === 'rgm84_harpoon' || payloadType === 'aim54_phoenix' || payloadType === 'agm88_harm') {
+      ctx.strokeStyle = '#FF5252';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(-1, -11);
+      ctx.lineTo(7, -11);
+      ctx.moveTo(-1, 11);
+      ctx.lineTo(7, 11);
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawGroundPreview(ctx: CanvasRenderingContext2D, w: number, h: number, rawKey: string) {
+  const t = normalizeKey(rawKey);
+  const cx = w * 0.52;
+  const cy = h * 0.54;
+  const scale = Math.min(w / 46, h / 28);
+
+  drawGroundSilhouetteAt(ctx, t, cx, cy, scale);
+
+  // Mini NATO tactical glyph in top-left corner so player maps card -> battlefield symbol effortlessly
+  const boxX = 6;
+  const boxY = 6;
+  const boxW = 16;
+  const boxH = 10;
+  ctx.fillStyle = 'rgba(21, 101, 192, 0.65)';
+  ctx.strokeStyle = '#42A5F5';
+  ctx.lineWidth = 1.1;
+  ctx.fillRect(boxX, boxY, boxW, boxH);
+  ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.fillStyle = '#FFFFFF';
+  ctx.lineWidth = 1.1;
+  const mx = boxX + boxW / 2;
+  const my = boxY + boxH / 2;
+
+  if (t.includes('tank') || t.includes('abrams') || t.includes('m60') || t.includes('m48') || t.includes('armor') || t.includes('ontos') || t.includes('t72') || t.includes('t80')) {
+    ctx.beginPath();
+    ctx.ellipse(mx, my, 5, 2.5, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (t.includes('spg') || t.includes('paladin') || t.includes('m109') || t.includes('priest') || t.includes('m44') || t.includes('2s')) {
+    ctx.beginPath();
+    ctx.ellipse(mx, my, 5, 2.5, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(mx, my, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (t.includes('artillery') || t.includes('m198') || t.includes('mlrs') || t.includes('atacms') || t.includes('calliope') || t.includes('grad') || t.includes('scud')) {
+    ctx.beginPath();
+    ctx.arc(mx, my, 2, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (t.includes('sam') || t.includes('chaparral') || t.includes('lav_ad') || t.includes('vads') || t.includes('shilka') || t.includes('tunguska')) {
+    ctx.beginPath();
+    ctx.arc(mx, my + 2, 4, Math.PI, 0);
+    ctx.stroke();
+  } else if (t.includes('lvt') || t.includes('aav') || t.includes('lav') || t.includes('bradley') || t.includes('m113') || t.includes('bmp') || t.includes('mech')) {
+    ctx.beginPath();
+    ctx.ellipse(mx, my, 5, 2.5, 0, 0, Math.PI * 2);
+    ctx.moveTo(mx - 3, my - 2);
+    ctx.lineTo(mx + 3, my + 2);
+    ctx.moveTo(mx + 3, my - 2);
+    ctx.lineTo(mx - 3, my + 2);
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(mx - 4.5, my - 2.5);
+    ctx.lineTo(mx + 4.5, my + 2.5);
+    ctx.moveTo(mx + 4.5, my - 2.5);
+    ctx.lineTo(mx - 4.5, my + 2.5);
+    ctx.stroke();
+  }
+}
+
+function drawGroundSilhouetteAt(
+  ctx: CanvasRenderingContext2D,
+  unitType: string,
+  cx: number,
+  cy: number,
+  scale: number
+) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  drawGroundSilhouette(ctx, unitType, true, scale);
+  ctx.restore();
+}
+
+function drawInstallationPreview(ctx: CanvasRenderingContext2D, w: number, h: number, rawKey: string) {
+  const k = normalizeKey(rawKey);
+  const cx = w * 0.5;
+  const cy = h * 0.54;
+  const scale = Math.min(w / 82, h / 42);
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(scale, scale);
+
+  // Subtle ground pad drop shadow
+  ctx.fillStyle = 'rgba(2, 6, 12, 0.5)';
+  ctx.beginPath();
+  ctx.ellipse(1.5, 3, 24, 13, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (k.includes('s300')) {
+    // 4-tube Vertical Launch System (VLS) cluster on concrete apron
+    ctx.fillStyle = '#263238';
+    ctx.strokeStyle = '#90A4AE';
+    ctx.lineWidth = 1.2;
+    ctx.fillRect(-16, -12, 32, 24);
+    ctx.strokeRect(-16, -12, 32, 24);
+    ctx.fillStyle = '#37474F';
+    ctx.strokeStyle = '#FF5252';
+    for (const [vx, vy] of [[-7, -5], [7, -5], [-7, 5], [7, 5]]) {
+      ctx.beginPath();
+      ctx.arc(vx, vy, 3.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+  } else if (k.includes('patriot') || k.includes('hawk') || k.includes('sam')) {
+    const isPatriot = k.includes('patriot');
+    ctx.fillStyle = '#182C3E';
+    ctx.strokeStyle = '#4FC3F7';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(0, 2, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    const count = isPatriot ? 4 : 3;
+    for (let i = 0; i < count; i++) {
+      const ang = -0.7 + i * 0.45;
+      ctx.strokeStyle = '#ECEFF1';
+      ctx.lineWidth = isPatriot ? 2.6 : 2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(ang) * 3, 2 + Math.sin(ang) * 3);
+      ctx.lineTo(Math.cos(ang) * 16, 2 + Math.sin(ang) * 16);
+      ctx.stroke();
+      ctx.fillStyle = isPatriot ? '#00E5FF' : '#FF5252';
+      ctx.beginPath();
+      ctx.arc(Math.cos(ang) * 16, 2 + Math.sin(ang) * 16, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (k.includes('harpoon') || k.includes('rubezh') || k.includes('glcm') || k.includes('scud_site')) {
+    // Revetment earth berm + concrete launcher pad + missile canisters
+    ctx.fillStyle = '#263238';
+    ctx.strokeStyle = '#78909C';
+    ctx.lineWidth = 1.4;
+    ctx.fillRect(-18, -11, 36, 22);
+    ctx.strokeRect(-18, -11, 36, 22);
+    ctx.fillStyle = '#455A64';
+    ctx.strokeStyle = k.includes('rubezh') || k.includes('scud') ? '#FF5252' : '#4FC3F7';
+    ctx.fillRect(-12, -7, 24, 5);
+    ctx.strokeRect(-12, -7, 24, 5);
+    ctx.fillRect(-12, 2, 24, 5);
+    ctx.strokeRect(-12, 2, 24, 5);
+    ctx.fillStyle = '#FFAB00';
+    ctx.fillRect(10, -6.5, 3, 4);
+    ctx.fillRect(10, 2.5, 3, 4);
+  } else if (k.includes('heavy_aa') || k.includes('flak')) {
+    ctx.fillStyle = '#182C3E';
+    ctx.strokeStyle = '#64B5F6';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(0, 2, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = '#80DEEA';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(15, -7);
+    ctx.moveTo(0, 4);
+    ctx.lineTo(15, -3);
+    ctx.stroke();
+  } else if (k.includes('240') || k.includes('coastal_gun')) {
+    const is240 = k.includes('240');
+    ctx.fillStyle = '#1A344D';
+    ctx.strokeStyle = '#4FC3F7';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(-6, 1, is240 ? 12 : 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = '#FFD54F';
+    ctx.lineWidth = is240 ? 3.2 : 2.2;
+    ctx.beginPath();
+    ctx.moveTo(-4, 1);
+    ctx.lineTo(25, 1);
+    if (!is240) {
+      ctx.moveTo(-4, -3);
+      ctx.lineTo(19, -3);
+    }
+    ctx.stroke();
+  } else if (k.includes('airfield')) {
+    ctx.fillStyle = '#152536';
+    ctx.strokeStyle = '#4FC3F7';
+    ctx.lineWidth = 1.3;
+    ctx.fillRect(-32, -8, 64, 16);
+    ctx.strokeRect(-32, -8, 64, 16);
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1.1;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.moveTo(-26, 0);
+    ctx.lineTo(26, 0);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#263238';
+    ctx.strokeStyle = '#80DEEA';
+    ctx.fillRect(6, 9, 12, 7);
+    ctx.strokeRect(6, 9, 12, 7);
+    ctx.fillRect(-20, -14, 11, 5.5);
+    ctx.strokeRect(-20, -14, 11, 5.5);
+  } else if (k.includes('radar')) {
+    ctx.fillStyle = '#122638';
+    ctx.strokeStyle = '#00E5FF';
+    ctx.lineWidth = 1.3;
+    ctx.fillRect(-9, -9, 18, 18);
+    ctx.strokeRect(-9, -9, 18, 18);
+    ctx.strokeStyle = 'rgba(100, 255, 218, 0.7)';
+    ctx.beginPath();
+    ctx.arc(0, 0, 14, -Math.PI * 0.35, Math.PI * 0.35);
+    ctx.moveTo(0, 0);
+    ctx.lineTo(14, -6);
+    ctx.moveTo(0, 0);
+    ctx.lineTo(14, 6);
+    ctx.stroke();
+  } else if (k.includes('dockyard') || k.includes('major_naval_port') || k.includes('pontoon_pier')) {
+    const isPort = k.includes('major_naval_port');
+    const isPier = k.includes('pontoon_pier');
+    if (isPier) {
+      ctx.fillStyle = 'rgba(2, 136, 209, 0.5)';
+      ctx.strokeStyle = '#4FC3F7';
+      ctx.fillRect(-26, -6, 52, 12);
+      ctx.strokeRect(-26, -6, 52, 12);
+      ctx.strokeStyle = '#FFD54F';
+      ctx.beginPath();
+      ctx.moveTo(12, 0);
+      ctx.lineTo(22, -10);
+      ctx.stroke();
+    } else if (isPort) {
+      ctx.fillStyle = 'rgba(0, 151, 167, 0.55)';
+      ctx.strokeStyle = '#00E5FF';
+      ctx.fillRect(-30, -9, 60, 18);
+      ctx.strokeRect(-30, -9, 60, 18);
+      ctx.strokeStyle = '#FFE082';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(-14, -9);
+      ctx.lineTo(-14, -15);
+      ctx.lineTo(14, -15);
+      ctx.lineTo(14, -9);
+      ctx.stroke();
+    } else {
+      ctx.fillStyle = '#182C3E';
+      ctx.strokeStyle = '#42A5F5';
+      ctx.fillRect(-16, -12, 7, 26);
+      ctx.strokeRect(-16, -12, 7, 26);
+      ctx.fillRect(9, -12, 7, 26);
+      ctx.strokeRect(9, -12, 7, 26);
+      ctx.fillStyle = 'rgba(0, 229, 255, 0.25)';
+      ctx.fillRect(-9, -12, 18, 26);
+      ctx.strokeStyle = '#FFD54F';
+      ctx.beginPath();
+      ctx.moveTo(-12, 0);
+      ctx.lineTo(2, -8);
+      ctx.stroke();
+    }
+  } else if (k.includes('hospital')) {
+    ctx.fillStyle = '#ECEFF1';
+    ctx.strokeStyle = '#EF5350';
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(-16, -10, 32, 20);
+    ctx.strokeRect(-16, -10, 32, 20);
+    ctx.fillStyle = '#D32F2F';
+    ctx.fillRect(-2.5, -7, 5, 14);
+    ctx.fillRect(-7, -2.5, 14, 5);
+  } else if (k.includes('supply') || k.includes('ammo')) {
+    ctx.fillStyle = '#2B2219';
+    ctx.strokeStyle = '#FFA726';
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(-18, -10, 36, 20);
+    ctx.strokeRect(-18, -10, 36, 20);
+    ctx.fillStyle = '#558B2F';
+    ctx.strokeStyle = '#FFE082';
+    ctx.fillRect(-12, -5, 10, 10);
+    ctx.strokeRect(-12, -5, 10, 10);
+    ctx.fillRect(2, -5, 10, 10);
+    ctx.strokeRect(2, -5, 10, 10);
+  } else {
+    const isFob = k.includes('fob');
+    ctx.fillStyle = '#152C44';
+    ctx.strokeStyle = isFob ? '#00E676' : '#4FC3F7';
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(-18, -11, 36, 22);
+    ctx.strokeRect(-18, -11, 36, 22);
+    if (isFob) {
+      ctx.strokeStyle = '#FFD54F';
+      ctx.beginPath();
+      ctx.arc(-7, 0, 6.5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = '#FFD54F';
+      ctx.font = 'bold 8px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('H', -7, 0.5);
+      ctx.fillStyle = '#2E7D32';
+      ctx.fillRect(4, -7, 10, 14);
+    } else {
+      ctx.fillStyle = '#FFD54F';
+      ctx.fillRect(-10, -2, 20, 4);
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.beginPath();
+      ctx.moveTo(-14, -11);
+      ctx.lineTo(-14, -17);
+      ctx.stroke();
+      ctx.fillStyle = '#4FC3F7';
+      ctx.fillRect(-14, -17, 7, 4);
+    }
+  }
+
+  ctx.restore();
+}
+
+export function drawUnitPreview(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  kind: UnitPreviewKind,
+  unitKey: string,
+  options: UnitPreviewOptions = {}
+): void {
+  const k = unitKey.toLowerCase();
+  const isNuclear =
+    k.includes('nuclear') ||
+    k.includes('ohio_ssbn') ||
+    Boolean(options.payloadType && options.payloadType.includes('nuke'));
+
+  if (!options.compact) {
+    drawBlueprintBackdrop(ctx, width, height, kind, isNuclear);
+  } else {
+    ctx.clearRect(0, 0, width, height);
+  }
+
+  if (kind === 'ship') {
+    drawShipPreview(ctx, width, height, unitKey);
+  } else if (kind === 'aircraft') {
+    drawAircraftPreview(ctx, width, height, unitKey, options.payloadType);
+  } else if (kind === 'ground') {
+    drawGroundPreview(ctx, width, height, unitKey);
+  } else {
+    drawInstallationPreview(ctx, width, height, unitKey);
+  }
+}

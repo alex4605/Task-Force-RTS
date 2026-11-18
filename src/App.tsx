@@ -343,27 +343,14 @@ export default function App() {
   };
 
   const handleApplyUpgrade = (type: keyof FleetUpgrades) => {
-    setUpgrades((prev) => {
-      const val = prev[type];
-      if (typeof val === 'number') {
-        return { ...prev, [type]: val + 1 };
-      }
-      return { ...prev, [type]: true };
-    });
-
-    if (type === 'aaFirepowerLevel') {
-      for (const ship of engine.playerShips) {
-        ship.flakRange *= 1.15;
-      }
-    } else if (type === 'carrierCapacityLevel') {
-      const cv = engine.getFlagship();
-      if (cv && cv.carrierPlanes) {
-        for (const k in cv.carrierPlanes.ready) {
-          cv.carrierPlanes.ready[k] = (cv.carrierPlanes.ready[k] || 0) + 2;
-          cv.carrierPlanes.maxPerType[k] = (cv.carrierPlanes.maxPerType[k] || 6) + 2;
-        }
-      }
-    }
+    const val = upgrades[type];
+    const next: FleetUpgrades = {
+      ...upgrades,
+      [type]: typeof val === 'number' ? val + 1 : true,
+    };
+    setUpgrades(next);
+    engine.applyFleetUpgrades(next);
+    setPlayerShips([...engine.playerShips]);
   };
 
   const handleNextSector = () => {
@@ -377,6 +364,16 @@ export default function App() {
   };
 
   const handleRestart = () => {
+    const baseUpgrades: FleetUpgrades = {
+      hullArmorLevel: 1,
+      aaFirepowerLevel: 1,
+      radarRangeLevel: 1,
+      carrierCapacityLevel: 1,
+      artilleryDamageLevel: 1,
+      depthChargeSonarLevel: 1,
+    };
+    setUpgrades(baseUpgrades);
+    engine.applyFleetUpgrades(baseUpgrades);
     setSectorNumber(1);
     engine.score = {
       enemyShipsSunk: 0,

@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Ship, FleetUpgrades, Era } from '../types/game';
 import { Language, getTranslation } from '../game/i18n';
-import { Wrench, Shield, Plane, Crosshair, X, Sparkles, Anchor, Zap } from 'lucide-react';
+import { Wrench, Shield, Plane, Crosshair, X, Sparkles, Anchor, Zap, Radar, ArrowRight } from 'lucide-react';
 import { soundEngine } from '../game/audio';
 
 interface DockyardModalProps {
@@ -31,8 +31,8 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
   onUpgrade,
   era,
   onSetEra,
-  onNextSector: _onNextSector,
-  canAdvance: _canAdvance = false,
+  onNextSector,
+  canAdvance = false,
   lang = 'zh',
 }) => {
   useEffect(() => {
@@ -127,6 +127,17 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
           ? '火控光學測距儀與穿甲彈藥強化，主砲殺傷力 +20%'
           : 'Enhanced optical rangefinders and heavy AP shells boost naval gunfire damage by 20%',
       icon: <Anchor className="w-4 h-4 text-amber-300" />,
+    },
+    {
+      key: 'depthChargeSonarLevel',
+      name: t.upgradeDepthChargeSonar,
+      level: upgrades.depthChargeSonarLevel,
+      cost: upgrades.depthChargeSonarLevel + 1,
+      desc:
+        lang === 'zh'
+          ? '升級主動艦殼聲納與深水炸彈／刺蝟砲裝藥，聲納半徑 +18%、反潛傷害 +20%'
+          : 'Upgrade active hull sonar arrays and ASW warheads (+18% sonar range, +20% ASW damage)',
+      icon: <Radar className="w-4 h-4 text-emerald-300" />,
     },
   ];
 
@@ -349,7 +360,19 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end pt-1 border-t border-[#1E3A5F]">
+        <div className="flex items-center justify-end gap-2.5 pt-1 border-t border-[#1E3A5F]">
+          {canAdvance && onNextSector && (
+            <button
+              onClick={() => {
+                onClose();
+                onNextSector();
+              }}
+              className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded transition-colors shadow flex items-center gap-1.5"
+            >
+              <span>{t.nextSector}</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          )}
           <button
             onClick={onClose}
             className="px-6 py-2 bg-[#1976D2] hover:bg-[#1565C0] text-white font-bold rounded transition-colors shadow"

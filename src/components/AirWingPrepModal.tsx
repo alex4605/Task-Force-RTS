@@ -3,6 +3,7 @@ import { Era, AirWingLoadout, SectorIntel, AircraftPayloadType, PAYLOAD_CATALOG 
 import { Language, getTranslation } from '../game/i18n';
 import { Plane, Shield, Target, Eye, Play, Crosshair, Wrench, X } from 'lucide-react';
 import { soundEngine } from '../game/audio';
+import { UnitPreviewCanvas } from './hud/UnitPreviewCanvas';
 
 interface AirWingPrepModalProps {
   isOpen: boolean;
@@ -192,6 +193,15 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
       ? 'ESSEX CV-9 (Essex Class)'
       : 'ORISKANY CV-34 (SCB-27A Jet Ready)';
 
+  const fighterPreviewModel =
+    era === 'era5' ? 'f14a' : era === 'era4' ? 'f4j' : era === 'era3' ? 'f9f' : era === 'era2' ? 'f6f' : 'f4f';
+  const divePreviewModel =
+    era === 'era5' ? 'a6e' : era === 'era4' ? 'a6a' : era === 'era3' ? 'a1h' : era === 'era2' ? 'sb2c' : 'sbd';
+  const torpPreviewModel =
+    era === 'era5' ? 's3a' : era === 'era4' ? 'sh2' : era === 'era3' ? 'af2' : era === 'era2' ? 'tbf' : 'tbd';
+  const scoutPreviewModel =
+    era === 'era5' || era === 'era4' ? 'e2c' : era === 'era3' ? 'ad3w' : era === 'era2' ? 'sc1' : 'os2u';
+
   return (
     <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
       <div className="bg-[#071322] border border-[#1E3A5F] rounded-xl max-w-2xl w-full p-6 shadow-2xl flex flex-col gap-4 font-mono text-xs max-h-[92vh] overflow-y-auto">
@@ -265,22 +275,31 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
         <div className="space-y-3">
           {/* 1. Fighters */}
           <div className="bg-[#040C16] border border-[#1E3A5F] rounded-lg p-3 space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="flex items-center gap-2 text-white font-bold text-xs">
-                <Shield className="w-4 h-4 text-[#80DEEA]" />
-                <span>
-                  {era === 'era5'
-                    ? 'F-14A Tomcat 雄貓 / F/A-18A Hornet 艦載超音速戰機'
-                    : era === 'era4'
-                    ? 'F-4 Phantom II / F-8 Crusader 艦載超音速戰鬥機'
-                    : era === 'era1'
-                    ? 'F4F Wildcat 戰鬥機'
-                    : era === 'era2'
-                    ? 'F6F Hellcat / F4U Corsair 戰鬥機'
-                    : 'F9F Panther / F2H Banshee / F8F Bearcat 噴射/攔截機'}
+            <div className="flex justify-between items-center gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <UnitPreviewCanvas
+                  kind="aircraft"
+                  unitKey={fighterPreviewModel}
+                  width={72}
+                  height={32}
+                  payloadType={fighterPayload}
+                />
+                <span className="flex items-center gap-1.5 text-white font-bold text-xs truncate">
+                  <Shield className="w-4 h-4 text-[#80DEEA] shrink-0" />
+                  <span className="truncate">
+                    {era === 'era5'
+                      ? 'F-14A Tomcat 雄貓 / F/A-18A Hornet 艦載超音速戰機'
+                      : era === 'era4'
+                      ? 'F-4 Phantom II / F-8 Crusader 艦載超音速戰鬥機'
+                      : era === 'era1'
+                      ? 'F4F Wildcat 戰鬥機'
+                      : era === 'era2'
+                      ? 'F6F Hellcat / F4U Corsair 戰鬥機'
+                      : 'F9F Panther / F2H Banshee / F8F Bearcat 噴射/攔截機'}
+                  </span>
                 </span>
-              </span>
-              <span className="tabular-nums font-bold text-sm text-[#80DEEA]">{fighters} 架</span>
+              </div>
+              <span className="tabular-nums font-bold text-sm text-[#80DEEA] shrink-0">{fighters} 架</span>
             </div>
             <input
               type="range"
@@ -324,22 +343,31 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
 
           {/* 2. Dive Bombers */}
           <div className="bg-[#040C16] border border-[#1E3A5F] rounded-lg p-3 space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="flex items-center gap-2 text-white font-bold text-xs">
-                <Target className="w-4 h-4 text-[#FFD54F]" />
-                <span>
-                  {era === 'era5'
-                    ? 'A-6E Intruder / AV-8B Harrier II / EA-6B 全天候攻擊聯隊'
-                    : era === 'era4'
-                    ? 'A-4 Skyhawk / A-7 Corsair II / A-6 Intruder 艦載全天候攻擊機'
-                    : era === 'era1'
-                    ? 'SBD Dauntless 俯衝轟炸機'
-                    : era === 'era2'
-                    ? 'SB2C Helldiver 俯衝轟炸機'
-                    : 'AD-1 Skyraider / F4U-4 天襲者重型攻擊機'}
+            <div className="flex justify-between items-center gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <UnitPreviewCanvas
+                  kind="aircraft"
+                  unitKey={divePreviewModel}
+                  width={72}
+                  height={32}
+                  payloadType={diveBomberPayload}
+                />
+                <span className="flex items-center gap-1.5 text-white font-bold text-xs truncate">
+                  <Target className="w-4 h-4 text-[#FFD54F] shrink-0" />
+                  <span className="truncate">
+                    {era === 'era5'
+                      ? 'A-6E Intruder / AV-8B Harrier II / EA-6B 全天候攻擊聯隊'
+                      : era === 'era4'
+                      ? 'A-4 Skyhawk / A-7 Corsair II / A-6 Intruder 艦載全天候攻擊機'
+                      : era === 'era1'
+                      ? 'SBD Dauntless 俯衝轟炸機'
+                      : era === 'era2'
+                      ? 'SB2C Helldiver 俯衝轟炸機'
+                      : 'AD-1 Skyraider / F4U-4 天襲者重型攻擊機'}
+                  </span>
                 </span>
-              </span>
-              <span className="tabular-nums font-bold text-sm text-[#FFD54F]">{diveBombers} 架</span>
+              </div>
+              <span className="tabular-nums font-bold text-sm text-[#FFD54F] shrink-0">{diveBombers} 架</span>
             </div>
             <input
               type="range"
@@ -383,22 +411,31 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
 
           {/* 3. Torpedo Bombers */}
           <div className="bg-[#040C16] border border-[#1E3A5F] rounded-lg p-3 space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="flex items-center gap-2 text-white font-bold text-xs">
-                <Crosshair className="w-4 h-4 text-[#80DEEA]" />
-                <span>
-                  {era === 'era5'
-                    ? 'S-3A Viking 維京反潛機 / SH-3F Sea King (聲納浮標 · Mk 46)'
-                    : era === 'era4'
-                    ? 'S-2 Tracker / SH-3 Sea King (Mk 46 聲導反潛魚雷/反艦)'
-                    : era === 'era1'
-                    ? 'TBD Devastator 魚雷轟炸機'
-                    : era === 'era2'
-                    ? 'TBF Avenger 魚雷轟炸機'
-                    : 'AF-2 Guardian 獵潛衛士 (ASW反潛魚雷機)'}
+            <div className="flex justify-between items-center gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <UnitPreviewCanvas
+                  kind="aircraft"
+                  unitKey={torpPreviewModel}
+                  width={72}
+                  height={32}
+                  payloadType={torpedoBomberPayload}
+                />
+                <span className="flex items-center gap-1.5 text-white font-bold text-xs truncate">
+                  <Crosshair className="w-4 h-4 text-[#80DEEA] shrink-0" />
+                  <span className="truncate">
+                    {era === 'era5'
+                      ? 'S-3A Viking 維京反潛機 / SH-3F Sea King (聲納浮標 · Mk 46)'
+                      : era === 'era4'
+                      ? 'S-2 Tracker / SH-3 Sea King (Mk 46 聲導反潛魚雷/反艦)'
+                      : era === 'era1'
+                      ? 'TBD Devastator 魚雷轟炸機'
+                      : era === 'era2'
+                      ? 'TBF Avenger 魚雷轟炸機'
+                      : 'AF-2 Guardian 獵潛衛士 (ASW反潛魚雷機)'}
+                  </span>
                 </span>
-              </span>
-              <span className="tabular-nums font-bold text-sm text-[#80DEEA]">{torpedoBombers} 架</span>
+              </div>
+              <span className="tabular-nums font-bold text-sm text-[#80DEEA] shrink-0">{torpedoBombers} 架</span>
             </div>
             <input
               type="range"
@@ -442,22 +479,31 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
 
           {/* 4. Recon Scout */}
           <div className="bg-[#040C16] border border-[#1E3A5F] rounded-lg p-3 space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="flex items-center gap-2 text-white font-bold text-xs">
-                <Eye className="w-4 h-4 text-[#A7FFEB]" />
-                <span>
-                  {era === 'era5'
-                    ? 'E-2C Hawkeye 鷹眼預警機 / C-2A 艦載戰術運輸機'
-                    : era === 'era4'
-                    ? 'E-2 Hawkeye 空中預警機 / RA-5C Vigilante 戰術超音速偵察機'
-                    : era === 'era1'
-                    ? 'OS2U Kingfisher 水上偵察機'
-                    : era === 'era2'
-                    ? 'SC-1 Seahawk 水上偵察機'
-                    : 'AD-3W 空中預警機 / HO3S-1 搜救醫療直升機'}
+            <div className="flex justify-between items-center gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <UnitPreviewCanvas
+                  kind="aircraft"
+                  unitKey={scoutPreviewModel}
+                  width={72}
+                  height={32}
+                  payloadType={scoutPayload}
+                />
+                <span className="flex items-center gap-1.5 text-white font-bold text-xs truncate">
+                  <Eye className="w-4 h-4 text-[#A7FFEB] shrink-0" />
+                  <span className="truncate">
+                    {era === 'era5'
+                      ? 'E-2C Hawkeye 鷹眼預警機 / C-2A 艦載戰術運輸機'
+                      : era === 'era4'
+                      ? 'E-2 Hawkeye 空中預警機 / RA-5C Vigilante 戰術超音速偵察機'
+                      : era === 'era1'
+                      ? 'OS2U Kingfisher 水上偵察機'
+                      : era === 'era2'
+                      ? 'SC-1 Seahawk 水上偵察機'
+                      : 'AD-3W 空中預警機 / HO3S-1 搜救醫療直升機'}
+                  </span>
                 </span>
-              </span>
-              <span className="tabular-nums font-bold text-sm text-[#A7FFEB]">{scouts} 架</span>
+              </div>
+              <span className="tabular-nums font-bold text-sm text-[#A7FFEB] shrink-0">{scouts} 架</span>
             </div>
             <input
               type="range"

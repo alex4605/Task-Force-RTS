@@ -1,7 +1,7 @@
 import React from 'react';
 import { GameScore, SectorIntel } from '../types/game';
 import { Language, getTranslation } from '../game/i18n';
-import { Trophy, Skull, RotateCcw, ArrowRight, Award, ShieldAlert, Star } from 'lucide-react';
+import { Trophy, Skull, RotateCcw, ArrowRight, Award, Star } from 'lucide-react';
 
 interface GameOverModalProps {
   isVictory: boolean;
@@ -72,22 +72,30 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
 
           <div className="flex justify-between text-slate-300">
             <span>{lang === 'zh' ? '擊沉敵水面戰艦：' : 'Enemy Warships Sunk:'}</span>
-            <span className="tabular-nums font-bold text-white">{score.enemyShipsSunk} 艘</span>
+            <span className="tabular-nums font-bold text-white">
+              {score.enemyShipsSunk}{lang === 'zh' ? ' 艘' : ''}
+            </span>
           </div>
 
           <div className="flex justify-between text-slate-300">
             <span>{lang === 'zh' ? '擊落敵戰備戰機：' : 'Enemy Aircraft Downed:'}</span>
-            <span className="tabular-nums font-bold text-white">{score.enemyPlanesDowned} 架</span>
+            <span className="tabular-nums font-bold text-white">
+              {score.enemyPlanesDowned}{lang === 'zh' ? ' 架' : ''}
+            </span>
           </div>
 
           <div className="flex justify-between text-slate-300">
             <span>{lang === 'zh' ? '摧毀要塞砲台／岸防設施：' : 'Shore Forts Destroyed:'}</span>
-            <span className="tabular-nums font-bold text-white">{score.installationsDestroyed} 座</span>
+            <span className="tabular-nums font-bold text-white">
+              {score.installationsDestroyed}{lang === 'zh' ? ' 座' : ''}
+            </span>
           </div>
 
           <div className="flex justify-between text-slate-300">
             <span>{lang === 'zh' ? '累計肅清戰區海域：' : 'Sectors Cleared:'}</span>
-            <span className="tabular-nums font-bold text-white">{score.sectorsCleared} 區</span>
+            <span className="tabular-nums font-bold text-white">
+              {score.sectorsCleared}{lang === 'zh' ? ' 區' : ''}
+            </span>
           </div>
 
           <div className="pt-2 border-t border-[#1E3A5F] flex justify-between text-[#FFD54F] font-bold text-sm">

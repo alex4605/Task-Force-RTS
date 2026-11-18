@@ -33,6 +33,7 @@ import {
   PendingMissileLaunch,
   AshmVariant,
   AshmFlightProfile,
+  FleetUpgrades,
 } from '../types/game';
 
 type CombatTargetEntity = Ship | Aircraft | GroundUnit | Installation;
@@ -297,6 +298,28 @@ export class GameEngine {
   };
 
   public sectorIntel: SectorIntel | null = null;
+  public fleetUpgrades: FleetUpgrades = {
+    hullArmorLevel: 1,
+    aaFirepowerLevel: 1,
+    radarRangeLevel: 1,
+    carrierCapacityLevel: 1,
+    artilleryDamageLevel: 1,
+    depthChargeSonarLevel: 1,
+  };
+  private shipBaseStats = new WeakMap<
+    Ship,
+    {
+      maxHealth: number;
+      maxWeaponControlHealth: number;
+      maxHullCrewHealth: number;
+      armor: number;
+      flakRange: number;
+      detectionRange: number;
+      sonarRange?: number;
+      turretDamages: number[];
+      carrierCapacityApplied: number;
+    }
+  >();
   public isVictory: boolean = false;
   public isDefeat: boolean = false;
   public isPaused: boolean = true;
@@ -404,6 +427,87 @@ export class GameEngine {
     this.activePayloads[role] = payload;
   }
 
+  public applyFleetUpgrades(upgrades: FleetUpgrades) {
+    this.fleetUpgrades = { ...upgrades };
+    for (const ship of this.playerShips) {
+      this.applyUpgradesToShip(ship);
+    }
+  }
+
+  private applyUpgradesToShip(ship: Ship) {
+    if (ship.side !== 'player') return;
+    let base = this.shipBaseStats.get(ship);
+    if (!base) {
+      base = {
+        maxHealth: ship.maxHealth,
+        maxWeaponControlHealth: ship.maxWeaponControlHealth ?? ship.maxHealth,
+        maxHullCrewHealth: ship.maxHullCrewHealth ?? ship.maxHealth,
+        armor: ship.armor,
+        flakRange: ship.flakRange,
+        detectionRange: ship.detectionRange,
+        sonarRange: ship.sonarRange,
+        turretDamages: ship.turrets.map((t) => t.damage),
+        carrierCapacityApplied: 1,
+      };
+      this.shipBaseStats.set(ship, base);
+    }
+
+    const hullLvl = Math.max(1, this.fleetUpgrades.hullArmorLevel);
+    const aaLvl = Math.max(1, this.fleetUpgrades.aaFirepowerLevel);
+    const radarLvl = Math.max(1, this.fleetUpgrades.radarRangeLevel);
+    const artLvl = Math.max(1, this.fleetUpgrades.artilleryDamageLevel);
+    const aswLvl = Math.max(1, this.fleetUpgrades.depthChargeSonarLevel);
+    const capLvl = Math.max(1, this.fleetUpgrades.carrierCapacityLevel);
+
+    const oldMaxHp = Math.max(1, ship.maxHealth);
+    const newMaxHp = Math.round(base.maxHealth * (1 + 0.1 * (hullLvl - 1)));
+    ship.maxHealth = newMaxHp;
+    ship.armor = Math.min(0.85, base.armor + (hullLvl - 1) * 0.06);
+    if (!ship.isSunk) {
+      ship.health = Math.min(newMaxHp, Math.round(ship.health * (newMaxHp / oldMaxHp)));
+    }
+
+    if (ship.maxWeaponControlHealth !== undefined && ship.weaponControlHealth !== undefined) {
+      const oldWcs = Math.max(1, ship.maxWeaponControlHealth);
+      const newWcs = Math.round(base.maxWeaponControlHealth * (1 + 0.1 * (hullLvl - 1)));
+      ship.maxWeaponControlHealth = newWcs;
+      if (!ship.isSunk) {
+        ship.weaponControlHealth = Math.min(newWcs, Math.round(ship.weaponControlHealth * (newWcs / oldWcs)));
+      }
+    }
+
+    if (ship.maxHullCrewHealth !== undefined && ship.hullCrewHealth !== undefined) {
+      const oldHci = Math.max(1, ship.maxHullCrewHealth);
+      const newHci = Math.round(base.maxHullCrewHealth * (1 + 0.1 * (hullLvl - 1)));
+      ship.maxHullCrewHealth = newHci;
+      if (!ship.isSunk) {
+        ship.hullCrewHealth = Math.min(newHci, Math.round(ship.hullCrewHealth * (newHci / oldHci)));
+      }
+    }
+
+    ship.flakRange = Math.round(base.flakRange * (1 + 0.15 * (aaLvl - 1)));
+    ship.detectionRange = Math.round(base.detectionRange * (1 + 0.18 * (radarLvl - 1)));
+
+    if (base.sonarRange !== undefined) {
+      ship.sonarRange = Math.round(base.sonarRange * (1 + 0.18 * (aswLvl - 1)));
+    }
+
+    const artMult = 1 + 0.2 * (artLvl - 1);
+    ship.turrets.forEach((turret, idx) => {
+      const baseDmg = base.turretDamages[idx] ?? turret.damage;
+      turret.damage = Math.round(baseDmg * artMult);
+    });
+
+    if (ship.carrierPlanes && capLvl > base.carrierCapacityApplied) {
+      const deltaPlanes = (capLvl - base.carrierCapacityApplied) * 2;
+      for (const k of Object.keys(ship.carrierPlanes.maxPerType)) {
+        ship.carrierPlanes.maxPerType[k] = (ship.carrierPlanes.maxPerType[k] || 6) + deltaPlanes;
+        ship.carrierPlanes.ready[k] = (ship.carrierPlanes.ready[k] || 0) + deltaPlanes;
+      }
+      base.carrierCapacityApplied = capLvl;
+    }
+  }
+
   public loadSector(sectorNum: number, era: Era = this.era) {
     this.sectorNumber = sectorNum;
     this.era = era;
@@ -454,6 +558,7 @@ export class GameEngine {
         s.enemySpottedTimer = 0;
       }
     }
+    this.playerShips.forEach((s) => this.applyUpgradesToShip(s));
 
     // Initialize friendly airbase planes & replenishment timers (包含水平轟炸機、陸基戰鬥機、陸基攻擊機)
     this.airbasePlanes =
@@ -5253,7 +5358,10 @@ export class GameEngine {
       flightProgress: 0,
       maxDistance: 0,
       distanceTraveled: 0,
-      damage: 500,
+      damage:
+        ship.side === 'player' || ship.side === 'allied'
+          ? Math.round(500 * (1 + 0.2 * (this.fleetUpgrades.depthChargeSonarLevel - 1)))
+          : 500,
       blastRadius: 70,
       speed: 0,
       heading: 0,
@@ -5318,7 +5426,10 @@ export class GameEngine {
           flightProgress: 0,
           maxDistance: cellDist,
           distanceTraveled: 0,
-          damage: 780,
+          damage:
+            ship.side === 'player' || ship.side === 'allied'
+              ? Math.round(780 * (1 + 0.2 * (this.fleetUpgrades.depthChargeSonarLevel - 1)))
+              : 780,
           blastRadius: 28,
           speed: mortarSpeed,
           heading: launchAngle,
@@ -5434,7 +5545,12 @@ export class GameEngine {
 
     if (isFlakHit) {
       const isCrit = roll >= (isEra3AA ? 78 : isEra2AA ? 82 : 95);
-      const flakDmg = isCrit ? (isEra3AA ? 175 : isEra2AA ? 120 : 60) : (isEra3AA ? 72 : isEra2AA ? 48 : 22);
+      const baseFlakDmg = isCrit ? (isEra3AA ? 175 : isEra2AA ? 120 : 60) : (isEra3AA ? 72 : isEra2AA ? 48 : 22);
+      const aaUpgradeMult =
+        sourceSide === 'player' || sourceSide === 'allied'
+          ? 1 + 0.15 * (this.fleetUpgrades.aaFirepowerLevel - 1)
+          : 1;
+      const flakDmg = Math.round(baseFlakDmg * aaUpgradeMult);
       plane.health -= flakDmg;
 
       const pName = plane.flightName || plane.name;
@@ -9406,6 +9522,7 @@ export class GameEngine {
       if (newShip) {
         newShip.heading = -Math.PI / 4; // 朝向東北戰區航進
         this.playerShips.push(newShip);
+        this.applyUpgradesToShip(newShip);
         this.addBannerAlert(`⚓【艦隊邊界增援】「${newShip.name}」自地圖邊緣駛入戰區！`, 'player', 'capture', 6.0);
         this.addCombatLog({
           category: 'naval',
@@ -12816,7 +12933,11 @@ export class GameEngine {
           : 1.0;
 
       // 專注集中火力灌注於此單一飛彈目標 (Single-target concentration)
-      const tickDamage = baseBarrageDps * rangeMultiplier * dispersionJitter * ciwsProfileMult * dt;
+      const ciwsUpgradeMult =
+        ship.side === 'player' || ship.side === 'allied'
+          ? 1 + 0.15 * (this.fleetUpgrades.aaFirepowerLevel - 1)
+          : 1;
+      const tickDamage = baseBarrageDps * rangeMultiplier * dispersionJitter * ciwsProfileMult * ciwsUpgradeMult * dt;
       lockedMissile.missileHealth = (lockedMissile.missileHealth ?? 130) - tickDamage;
       lockedMissile.flakHitAccum = (lockedMissile.flakHitAccum || 0) + tickDamage;
 
@@ -15934,6 +16055,7 @@ export class GameEngine {
       this.nextConvoyEscort = escorts[Math.floor(Math.random() * escorts.length)];
     }
     this.playerShips.push(escortShip);
+    this.applyUpgradesToShip(escortShip);
 
     soundEngine.playPlaneSortie();
     this.addCombatLog({

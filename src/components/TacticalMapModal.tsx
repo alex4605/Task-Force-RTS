@@ -559,41 +559,63 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
 
         <div className="flex flex-col gap-1.5 text-[#90CAF9] text-[10.5px] pt-1 border-t border-[#1E3A5F]">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#00E676]" />
-                <span>旗艦 Flagship</span>
+                <span>{lang === 'zh' ? '旗艦 Flagship' : 'Flagship'}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#4FC3F7]" />
-                <span>友軍特遣艦隊 (TF)</span>
+                <span>{lang === 'zh' ? '友軍特遣艦隊 (TF)' : 'Allied Task Force (TF)'}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-[#EF5350]" />
                 <span>
-                  {era === 'era5'
-                    ? '蘇聯紅海軍水面打擊群 (OPFOR SAG)'
+                  {lang === 'zh'
+                    ? era === 'era5'
+                      ? '蘇聯紅海軍水面打擊群 (OPFOR SAG)'
+                      : era === 'era4'
+                      ? '北越/蘇聯海空作戰群 (OPFOR SAG)'
+                      : era === 'era3'
+                      ? '蘇聯遠東紅海軍 (OPFOR Fleet)'
+                      : '敵水面艦隊 (IJN)'
+                    : era === 'era5'
+                    ? 'Soviet Surface Action Group (OPFOR)'
                     : era === 'era4'
-                    ? '北越/蘇聯海空作戰群 (OPFOR SAG)'
+                    ? 'OPFOR Surface & Air Group'
                     : era === 'era3'
-                    ? '蘇聯遠東紅海軍 (OPFOR Fleet)'
-                    : '敵水面艦隊 (IJN)'}
+                    ? 'OPFOR Far East Fleet'
+                    : 'Enemy Surface Fleet (IJN)'}
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="px-1 py-0.5 rounded bg-emerald-600 text-white font-bold text-[9px]">CP</span>
-                <span className="text-emerald-400 font-bold">指揮所據點 (佔領區)</span>
+                <span className="text-emerald-400 font-bold">
+                  {lang === 'zh' ? '指揮所據點 (佔領區)' : 'Command Post (Capture)'}
+                </span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="px-1 py-0.5 rounded bg-blue-600 text-white font-bold text-[9px]">USMC</span>
-                <span className="text-blue-400 font-bold">陸戰隊地面部隊</span>
+                <span className="text-blue-400 font-bold">
+                  {lang === 'zh' ? '陸戰隊地面部隊' : 'USMC Ground Forces'}
+                </span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="px-1 py-0.5 rounded bg-red-600 text-white font-bold text-[9px]">
                   {era === 'era5' || era === 'era4' ? 'AShM' : era === 'era3' ? 'KS-1' : 'OHKA'}
                 </span>
                 <span className="text-red-400 font-bold">
-                  {era === 'era5' || era === 'era4' ? '導引反艦巡弋飛彈' : era === 'era3' ? '長程反艦飛彈' : '反艦火箭飛彈'}
+                  {lang === 'zh'
+                    ? era === 'era5' || era === 'era4'
+                      ? '導引反艦巡弋飛彈'
+                      : era === 'era3'
+                      ? '長程反艦飛彈'
+                      : '反艦火箭飛彈'
+                    : era === 'era5' || era === 'era4'
+                    ? 'Guided Anti-Ship Missile'
+                    : era === 'era3'
+                    ? 'Long-Range AShM'
+                    : 'Rocket Bomb'}
                 </span>
               </div>
               <div className="flex items-center gap-1.5">
@@ -601,22 +623,67 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
                   {era === 'era5' || era === 'era4' || era === 'era3' ? 'JET' : 'KAMI'}
                 </span>
                 <span className="text-orange-400 font-bold">
-                  {era === 'era5' || era === 'era4' || era === 'era3' ? '噴射攔截機' : '特攻機'}
+                  {lang === 'zh'
+                    ? era === 'era5' || era === 'era4' || era === 'era3'
+                      ? '噴射攔截機'
+                      : '特攻機'
+                    : era === 'era5' || era === 'era4' || era === 'era3'
+                    ? 'Jet Interceptor'
+                    : 'Kamikaze'}
                 </span>
               </div>
             </div>
-            <span className="text-slate-400">海圖比例尺: 1:14,000 NM (深遠作戰海域)</span>
+            <span className="text-slate-400">
+              {lang === 'zh' ? '海圖比例尺: 1:14,000 NM (深遠作戰海域)' : 'Chart Scale: 1:14,000 NM (Deep Theater)'}
+            </span>
           </div>
 
-          <div className="flex items-center gap-3 text-[10px] text-slate-300 bg-[#040C16] p-1.5 rounded border border-[#1E3A5F]/60">
-            <span className="font-bold text-[#80DEEA]">NATO APP-6 地面戰術標誌:</span>
-            <span className="flex items-center gap-1"><span className="text-blue-400 font-mono font-bold">[X]</span> USMC 步兵排</span>
-            <span className="flex items-center gap-1"><span className="text-blue-400 font-mono font-bold">[⬭]</span> USMC 戰車/LVT</span>
-            <span className="flex items-center gap-1"><span className="text-red-400 font-mono font-bold">[X]</span> {era === 'era5' ? '蘇軍守備/特種伏擊連' : era === 'era4' ? 'OPFOR 守備/滲透排' : era === 'era3' ? '志願軍/人民軍守備排' : '日軍守備/伏擊排'}</span>
-            <span className="flex items-center gap-1"><span className="text-amber-300 font-mono font-bold">[⬭]</span> 敵戰車</span>
-            <span className="flex items-center gap-1"><span className="text-orange-400 font-mono font-bold">[●]</span> 野戰砲兵</span>
-            <span className="flex items-center gap-1"><span className="text-red-300 font-mono font-bold">[⌢]</span> 防空砲</span>
-            <span className="flex items-center gap-1"><span className="text-yellow-400 font-mono font-bold">[✈]</span> 航空基地</span>
+          <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-300 bg-[#040C16] p-1.5 rounded border border-[#1E3A5F]/60">
+            <span className="font-bold text-[#80DEEA]">
+              {lang === 'zh' ? 'NATO APP-6 地面戰術標誌:' : 'NATO APP-6 Ground Symbology:'}
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="text-blue-400 font-mono font-bold">[X]</span>
+              {lang === 'zh' ? 'USMC 步兵排' : 'USMC Infantry'}
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="text-blue-400 font-mono font-bold">[⬭]</span>
+              {lang === 'zh' ? 'USMC 戰車/LVT' : 'USMC Armor/LVT'}
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="text-red-400 font-mono font-bold">[X]</span>
+              {lang === 'zh'
+                ? era === 'era5'
+                  ? '蘇軍守備/特種伏擊連'
+                  : era === 'era4'
+                  ? 'OPFOR 守備/滲透排'
+                  : era === 'era3'
+                  ? '志願軍/人民軍守備排'
+                  : '日軍守備/伏擊排'
+                : era === 'era5'
+                ? 'Soviet Spetsnaz/Garrison'
+                : era === 'era4'
+                ? 'OPFOR Garrison'
+                : era === 'era3'
+                ? 'Coalition Infantry'
+                : 'IJN Garrison'}
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="text-amber-300 font-mono font-bold">[⬭]</span>
+              {lang === 'zh' ? '敵戰車' : 'Hostile Armor'}
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="text-orange-400 font-mono font-bold">[●]</span>
+              {lang === 'zh' ? '野戰砲兵' : 'Field Artillery'}
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="text-red-300 font-mono font-bold">[⌢]</span>
+              {lang === 'zh' ? '防空砲' : 'AA / SAM Battery'}
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="text-yellow-400 font-mono font-bold">[✈]</span>
+              {lang === 'zh' ? '航空基地' : 'Airfield'}
+            </span>
           </div>
         </div>
       </div>

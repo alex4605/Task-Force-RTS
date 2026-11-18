@@ -808,7 +808,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       if (e.key === ' ' || e.code === 'Space') {
         e.preventDefault();
-        engine.triggerFleetFlakBarrage();
+        if (engine.isPaused) {
+          onTogglePauseRef.current?.();
+        } else {
+          engine.triggerFleetFlakBarrage();
+        }
       } else if (e.key === 'f' || e.key === 'F') {
         // Focus Camera on Selected Units or Flagship Carrier
         const flagship = engine.getFlagship();

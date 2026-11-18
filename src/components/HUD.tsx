@@ -17,11 +17,25 @@ import {
   RequisitionItem,
   RequisitionCategory,
   CasualtiesReport,
-  ResourceState,
   Sonobuoy,
 } from '../types/game';
-import { REQUISITION_CATALOG, getRequisitionCatalog } from '../game/requisition';
+import { getRequisitionCatalog } from '../game/requisition';
 import { BattleAlertBanner } from '../game/engine';
+import {
+  DEFAULT_AFB_FORMATION_COUNTS,
+  DEFAULT_AFB_PAYLOADS,
+  DEFAULT_CARRIER_FORMATION_COUNTS,
+  getAfbCompatiblePayloads,
+  getAfbModelsForEra,
+  getCarrierModelsForEra,
+  getCompatiblePayloads,
+  getDefaultAfbPayloadForUnit,
+  getDefaultCarrierPayloads,
+} from '../game/airWingCatalog';
+import { MiniRadar } from './hud/MiniRadar';
+import { ActiveArmamentTrayState, ArmamentTrayModal } from './hud/ArmamentTrayModal';
+import { SelectedUnitsPanel } from './hud/SelectedUnitsPanel';
+import { UnitPreviewCanvas } from './hud/UnitPreviewCanvas';
 import {
   ShieldAlert,
   Plane,
@@ -31,27 +45,19 @@ import {
   HelpCircle,
   Wrench,
   Compass,
-  Square,
-  Crosshair,
   Anchor,
   Sliders,
-  Eye,
   Zap,
   Play,
   Pause,
   ScrollText,
   Radio,
   Flag,
-  Rocket,
   Shield,
   Layers,
   AlertTriangle,
   ShoppingCart,
-  TrendingUp,
-  Check,
-  Plus,
   MapPin,
-  Languages,
   Hammer,
 } from 'lucide-react';
 import { Language, getTranslation } from '../game/i18n';
@@ -236,7 +242,7 @@ export const HUD: React.FC<HUDProps> = ({
   onSetSpeed,
   onSteer,
   onTriggerFlak,
-  intel,
+  intel: _intel,
   score,
   onOpenBriefing,
   onOpenMap,
@@ -257,8 +263,8 @@ export const HUD: React.FC<HUDProps> = ({
   onToggleMute,
   airbasePlanes = {},
   airbaseReplenishTimer = 45,
-  convoyReinforceTimer = 100,
-  nextConvoyEscort = 'dd',
+  convoyReinforceTimer: _convoyReinforceTimer = 100,
+  nextConvoyEscort: _nextConvoyEscort = 'dd',
   onFerryPlanes,
   onLaunchAirbaseSortie,
   onToggleTransportEmbark,
@@ -267,9 +273,9 @@ export const HUD: React.FC<HUDProps> = ({
   onUnloadAircraft,
   resourcePoints = 1200,
   commandPointsPerSec = 15,
-  totalCpEarned = 1200,
-  totalCpSpent = 0,
-  casualties,
+  totalCpEarned: _totalCpEarned = 1200,
+  totalCpSpent: _totalCpSpent = 0,
+  casualties: _casualties,
   onPurchaseRequisition,
   activePlacementItem,
   onStartPlacement,
@@ -292,318 +298,21 @@ export const HUD: React.FC<HUDProps> = ({
   onSetLang,
 }) => {
   const t = getTranslation(lang);
-  const currentSpeed = flagship ? Math.round(flagship.speed) : 0;
   const planes = flagship?.carrierPlanes?.ready || {};
-  const miniMapCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const isMiniMapDraggingRef = useRef<boolean>(false);
   const currentCatalog = useMemo(() => getRequisitionCatalog(era), [era]);
 
-  // Render Mini-Radar Map
-  useEffect(() => {
-    const canvas = miniMapCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const size = canvas.width;
-    const scale = size / worldSize;
-
-    ctx.fillStyle = '#050D18';
-    ctx.fillRect(0, 0, size, size);
-
-    // Nautical Grid Lines
-    ctx.strokeStyle = 'rgba(23, 46, 75, 0.4)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(0, 0, size, size);
-
-    // Islands
-    for (const isl of islands) {
-      ctx.fillStyle = 'rgba(18, 42, 66, 0.9)';
-      ctx.strokeStyle = '#4FC3F7';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      for (let i = 0; i < isl.points.length; i++) {
-        const p = isl.points[i];
-        if (i === 0) ctx.moveTo(p.x * scale, p.y * scale);
-        else ctx.lineTo(p.x * scale, p.y * scale);
-      }
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-
-      // Island Ground Installations
-      for (const inst of isl.installations) {
-        if (inst.isDestroyed) continue;
-        const ix = inst.pos.x * scale;
-        const iy = inst.pos.y * scale;
-        const isFriendly = inst.side === 'player';
-        const isNeutral = inst.side === 'neutral';
-        const col = isFriendly ? '#00E5FF' : isNeutral ? '#F59E0B' : '#EF4444';
-
-        ctx.fillStyle = col;
-        if (inst.type === 'airfield' || inst.type === 'command_post' || inst.type === 'forward_fob') {
-          ctx.fillRect(ix - 2, iy - 2, 4, 4);
-        } else if (
-          inst.type === 'sam_hawk' ||
-          inst.type === 'sam_patriot' ||
-          inst.type === 'sa2_sam_site' ||
-          inst.type === 'sa3_sam_site' ||
-          inst.type === 's300_sam_site' ||
-          inst.type === 'fan_song_radar' ||
-          inst.type === 'radar_station'
-        ) {
-          ctx.beginPath();
-          ctx.arc(ix, iy, 2, 0, Math.PI * 2);
-          ctx.fill();
-        } else if (inst.type === 'towed_artillery' || inst.type === 'coastal_gun') {
-          ctx.beginPath();
-          ctx.arc(ix, iy, 1.5, 0, Math.PI * 2);
-          ctx.fill();
-        } else {
-          ctx.fillRect(ix - 1, iy - 1, 2, 2);
-        }
-      }
-    }
-
-    // Hostile Ships
-    for (const ship of enemyShips) {
-      if (ship.isSunk) continue;
-      ctx.fillStyle = '#EF5350';
-      ctx.beginPath();
-      ctx.arc(ship.pos.x * scale, ship.pos.y * scale, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Player Ships
-    for (const ship of playerShips) {
-      if (ship.isSunk) continue;
-      ctx.fillStyle = ship.isFlagship ? '#00E676' : '#80D8FF';
-      ctx.beginPath();
-      ctx.arc(ship.pos.x * scale, ship.pos.y * scale, ship.isFlagship ? 3.5 : 2.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Active Passive Sonobuoys
-    for (const buoy of sonobuoys) {
-      const bx = buoy.pos.x * scale;
-      const by = buoy.pos.y * scale;
-      const hasContact = (buoy.contactFlashTimer ?? 0) > 0;
-      ctx.strokeStyle = hasContact ? 'rgba(255, 82, 82, 0.85)' : 'rgba(38, 198, 218, 0.45)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(bx, by, Math.max(3, buoy.detectionRadius * scale), 0, Math.PI * 2);
-      ctx.stroke();
-
-      ctx.fillStyle = hasContact ? '#FF5252' : '#26C6DA';
-      ctx.fillRect(bx - 1.5, by - 1.5, 3, 3);
-    }
-
-    // Airborne Planes
-    for (const p of aircraft) {
-      if (p.state === 'shot_down') continue;
-      ctx.fillStyle = p.side === 'player' ? '#80DEEA' : '#FF8A80';
-      ctx.fillRect(p.pos.x * scale - 1, p.pos.y * scale - 1, 2, 2);
-    }
-
-    // Live Camera Viewport Box
-    if (cameraViewport && cameraViewport.zoom > 0) {
-      const vw = (cameraViewport.viewW / cameraViewport.zoom) * scale;
-      const vh = (cameraViewport.viewH / cameraViewport.zoom) * scale;
-      const vx = Math.max(0.5, Math.min(size - vw - 0.5, cameraViewport.x * scale - vw / 2));
-      const vy = Math.max(0.5, Math.min(size - vh - 0.5, cameraViewport.y * scale - vh / 2));
-      ctx.strokeStyle = 'rgba(0, 229, 255, 0.9)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(vx, vy, Math.min(vw, size - 1), Math.min(vh, size - 1));
-    }
-  }, [islands, playerShips, enemyShips, aircraft, sonobuoys, worldSize, cameraViewport]);
-
-  // Mini-Radar pointer pan helpers (supports click & drag-to-pan)
-  const panMiniMapFromClient = (clientX: number, clientY: number) => {
-    const canvas = miniMapCanvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
-    const y = Math.max(0, Math.min(rect.height, clientY - rect.top));
-    const worldX = (x / rect.width) * worldSize;
-    const worldY = (y / rect.height) * worldSize;
-    onMiniMapClick({ x: worldX, y: worldY });
-  };
-
-  const handleMiniMapPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    isMiniMapDraggingRef.current = true;
-    panMiniMapFromClient(e.clientX, e.clientY);
-  };
-
-  const handleMiniMapPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isMiniMapDraggingRef.current) return;
-    panMiniMapFromClient(e.clientX, e.clientY);
-  };
-
-  const handleMiniMapPointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (isMiniMapDraggingRef.current) {
-      isMiniMapDraggingRef.current = false;
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-        e.currentTarget.releasePointerCapture(e.pointerId);
-      }
-    }
-  };
-
-  const era1Models: { model: AircraftModel; label: string; role: AircraftRole; desc: string }[] = [
-    { model: 'f4f', label: 'F4F Wildcat', role: 'fighter', desc: '4x .50 cal · CAP Escort' },
-    { model: 'sbd', label: 'SBD Dauntless', role: 'dive_bomber', desc: 'AP Bomb / Dual 500lb' },
-    { model: 'tbd', label: 'TBD Devastator', role: 'torpedo_bomber', desc: 'Mk 13 Torpedo / ASW' },
-    { model: 'os2u', label: 'OS2U Kingfisher', role: 'scout', desc: 'Air Recon & Spotting' },
-  ];
-
-  const era2Models: { model: AircraftModel; label: string; role: AircraftRole; desc: string }[] = [
-    { model: 'f6f', label: 'F6F Hellcat', role: 'fighter', desc: '6x .50 cal · Heavy fighter' },
-    { model: 'f4u', label: 'F4U Corsair', role: 'fighter', desc: 'Bent-wing speed bird' },
-    { model: 'f8f', label: 'F8F Bearcat', role: 'fighter', desc: 'Climb rocket · 20mm cannons' },
-    { model: 'sb2c', label: 'SB2C Helldiver', role: 'dive_bomber', desc: 'Twin 20mm + Heavy Bomb' },
-    { model: 'tbf', label: 'TBF Avenger', role: 'torpedo_bomber', desc: 'Heavy naval torpedo strike' },
-    { model: 'sc1', label: 'SC-1 Seahawk', role: 'scout', desc: 'High-speed Floatplane & Radar' },
-  ];
-
-  const era3Models: { model: AircraftModel; label: string; role: AircraftRole; desc: string }[] = [
-    { model: 'f8f', label: 'F8F Bearcat', role: 'fighter', desc: 'Climb rocket · 4x 20mm M3' },
-    { model: 'f9f', label: 'F9F Panther', role: 'fighter', desc: 'Carrier Jet · 4x 20mm Colt · HVAR' },
-    { model: 'f2h', label: 'F2H Banshee', role: 'fighter', desc: 'Twin Jet Interceptor · Long Range' },
-    { model: 'ad1', label: 'AD-1 Skyraider', role: 'attacker', desc: 'Tiny Tim / Napalm / 2000lb Bomb' },
-    { model: 'f4u4', label: 'F4U-4 Corsair', role: 'fighter', desc: 'Late Fighter-Bomber · 4x 20mm' },
-    { model: 'af_guardian', label: 'AF Guardian', role: 'torpedo_bomber', desc: 'Hunter-Killer ASW · Homing Torp' },
-    { model: 'ad3w', label: 'AD-3W Skyraider', role: 'aew', desc: '6500m Radar Sentry · Global AEW' },
-    { model: 'ho3s1', label: 'HO3S-1 Dragonfly', role: 'rescue', desc: 'SAR Helicopter · Pilot Rescue' },
-  ];
-
-  const era4Models: { model: AircraftModel; label: string; role: AircraftRole; desc: string }[] = [
-    { model: 'f4b', label: 'F-4B Phantom II', role: 'fighter', desc: '超音速重型戰鬥機 · AIM-7麻雀/AIM-9響尾蛇' },
-    { model: 'f4j', label: 'F-4J Phantom II', role: 'fighter', desc: '雷達火控升級 · 全天候空空飛彈截擊' },
-    { model: 'f8', label: 'F-8 Crusader', role: 'fighter', desc: '最後的十字軍近戰機 · 4x 20mm 機砲 · 響尾蛇' },
-    { model: 'a4', label: 'A-4 Skyhawk', role: 'attacker', desc: '天鷹輕型攻擊機 · 蛇眼減速航彈 / 白眼' },
-    { model: 'a6a', label: 'A-6A Intruder', role: 'attacker', desc: '全天候夜戰重攻擊機 · DIANE雷達系統' },
-    { model: 'a6b_weasel', label: 'A-6B Wild Weasel', role: 'attacker', desc: '防空網壓制野鼬機 · AGM-45反輻射飛彈' },
-    { model: 'e1', label: 'E-1 Tracer', role: 'aew', desc: '艦載預警機 · 7500m 早期遠程警戒雷達' },
-    { model: 's2', label: 'S-2 Tracker', role: 'scout', desc: '雙發艦載反潛巡邏機 · 聲納浮標與反潛魚雷' },
-    { model: 'uh2', label: 'UH-2 Seasprite', role: 'rescue', desc: '艦載搜救直升機 · 自動跳傘飛行員即時打撈' },
-    { model: 'sh2', label: 'SH-2 Seasprite', role: 'torpedo_bomber', desc: 'LAMPS I 艦載反潛直升機 · 聲納浮標與Mk 46魚雷' },
-    { model: 'p3', label: 'P-3C Orion', role: 'torpedo_bomber', desc: '長程陸基反潛巡邏機 · MAD磁異探測儀與聲導魚雷' },
-    { model: 'c1', label: 'C-1 Trader', role: 'transport', desc: '艦載突擊機 · 傘兵空投作戰' },
-  ];
-
-  const era5Models: { model: AircraftModel; label: string; role: AircraftRole; desc: string }[] = [
-    { model: 'f14a', label: 'F-14A Tomcat', role: 'fighter', desc: 'AWG-9 脈衝都卜勒雷達 · AIM-54 鳳凰超長程攔截' },
-    { model: 'fa18a', label: 'F/A-18A Hornet', role: 'fighter', desc: '全天候艦載多用途打擊戰鬥機 · AIM-7/9/魚叉' },
-    { model: 'a6e', label: 'A-6E TRAM', role: 'attacker', desc: 'TRAM 光電夜戰打擊系統 · 鋪路雷射/魚叉/集束彈' },
-    { model: 'ea6b', label: 'EA-6B Prowler', role: 'attacker', desc: 'ALQ-99 電戰干擾莢艙 · AGM-88 HARM 高速反輻射' },
-    { model: 'av8b', label: 'AV-8B Harrier II', role: 'attacker', desc: '陸戰隊垂直起降攻擊機 · 近接對地支援 CAS' },
-    { model: 's3a', label: 'S-3A Viking', role: 'scout', desc: '雙噴射艦載反潛機 · 聲納浮標與魚雷' },
-    { model: 'e2c', label: 'E-2C Hawkeye', role: 'aew', desc: 'APS-120 圓盤預警雷達 · 8500m 全域預警' },
-    { model: 'sh3f', label: 'SH-3F Sea King', role: 'torpedo_bomber', desc: '重型艦載反潛直升機 · 吊放聲納與Mk 46魚雷' },
-    { model: 'ch53', label: 'CH-53D Sea Stallion', role: 'rescue', desc: '重型直升機 · 突擊部隊垂直機降與人員搜救' },
-    { model: 'c2a', label: 'C-2A Greyhound', role: 'transport', desc: 'COD 艦載空運機 · 前線傘降與快速補給' },
-    { model: 'a10a', label: 'A-10A Thunderbolt II', role: 'attacker', desc: '30mm GAU-8 復仇者機砲 · 幼獅小牛飛彈 (CAS王牌)' },
-    { model: 'f15a', label: 'F-15A Eagle', role: 'fighter', desc: '空中優勢制空戰機 · AIM-7/AIM-9 不敗傳奇' },
-    { model: 'f16a', label: 'F-16A Fighting Falcon', role: 'fighter', desc: '輕型多用途戰鬥機 · 9G 大過載格鬥與打擊' },
-    { model: 'ah64a', label: 'AH-64A Apache', role: 'attacker', desc: '地獄火雷射導引反戰車飛彈 · 30mm 鏈砲' },
-    { model: 'ah1w', label: 'AH-1W SuperCobra', role: 'attacker', desc: '陸戰隊雙發重武裝攻擊直升機 · 陶式/地獄火' },
-    { model: 'e3a', label: 'E-3A Sentry', role: 'aew', desc: '大型旋轉雷達罩長程戰略預警機 · 全戰區破霧' },
-    { model: 'f111', label: 'F-111 Aardvark', role: 'attacker', desc: '可變翼超音速地貌穿透長程重型打擊機' },
-  ];
-
-  const flightModels =
-    era === 'era1'
-      ? era1Models
-      : era === 'era2'
-      ? era2Models
-      : era === 'era3'
-      ? era3Models
-      : era === 'era4'
-      ? era4Models
-      : era5Models;
+  const flightModels = useMemo(() => getCarrierModelsForEra(era, lang), [era, lang]);
 
   // Per-model formation count state: e.g. 1, 2, 4, or max available
-  const [formationCounts, setFormationCounts] = React.useState<Partial<Record<AircraftModel, number>>>({
-    f4f: 2,
-    sbd: 2,
-    tbd: 2,
-    os2u: 1,
-    f6f: 2,
-    f4u: 2,
-    f8f: 2,
-    sb2c: 2,
-    tbf: 2,
-    sc1: 1,
-    f9f: 2,
-    f2h: 2,
-    ad1: 2,
-    f4u4: 2,
-    af_guardian: 2,
-    ad3w: 1,
-    ho3s1: 1,
-    f4b: 2,
-    f4j: 2,
-    f8: 2,
-    a4: 2,
-    a6a: 2,
-    a6b_weasel: 1,
-    e1: 1,
-    s2: 2,
-    uh2: 1,
-    sh2: 2,
-    p3: 1,
-    c1: 1,
-    b52: 2,
-    f4e: 2,
-    f105: 2,
-    a7: 2,
-    ov10: 2,
-    uh1: 2,
-    ah1: 2,
-  });
+  const [formationCounts, setFormationCounts] = React.useState<Partial<Record<AircraftModel, number>>>(
+    () => ({ ...DEFAULT_CARRIER_FORMATION_COUNTS })
+  );
 
   // Per-model chosen payload: defaults to role's active payload
-  const [modelPayloads, setModelPayloads] = React.useState<Partial<Record<AircraftModel, AircraftPayloadType>>>({
-    f4f: activePayloads.fighter,
-    sbd: activePayloads.dive_bomber,
-    tbd: activePayloads.torpedo_bomber,
-    os2u: activePayloads.scout,
-    f6f: activePayloads.fighter,
-    f4u: activePayloads.fighter,
-    f8f: activePayloads.fighter,
-    sb2c: activePayloads.dive_bomber,
-    tbf: activePayloads.torpedo_bomber,
-    sc1: activePayloads.scout,
-    f9f: activePayloads.fighter,
-    f2h: activePayloads.fighter,
-    ad1: activePayloads.attacker || 'tiny_tim_rocket',
-    f4u4: activePayloads.fighter,
-    af_guardian: activePayloads.torpedo_bomber || 'asw_torpedo',
-    ad3w: 'clean_guns',
-    ho3s1: 'clean_guns',
-    f4b: 'aim7_sparrow',
-    f4j: 'aim7_sparrow',
-    f8: 'aim9_sidewinder',
-    a4: 'bombs_snakeye_retarded',
-    a6a: 'bombs_snakeye_retarded',
-    a6b_weasel: 'agm45_shrike',
-    e1: 'clean_guns',
-    s2: 'clean_guns',
-    uh2: 'clean_guns',
-    sh2: 'asw_torpedo',
-    p3: 'asw_torpedo',
-    c1: 'c1_paratroopers',
-    b52: 'b52_megaton_carpet',
-    f4e: 'aim7_sparrow',
-    f105: 'agm45_shrike',
-    a7: 'agm62_walleye',
-    ov10: 'ffar_rockets_pod',
-    uh1: 'helo_assault_troops',
-    ah1: 'ffar_rockets_pod',
-  });
+  const [modelPayloads, setModelPayloads] = React.useState<Partial<Record<AircraftModel, AircraftPayloadType>>>(
+    () => getDefaultCarrierPayloads(activePayloads)
+  );
 
-  const [openPayloadPicker, setOpenPayloadPicker] = React.useState<AircraftModel | null>(null);
-  const [inspectingShipId, setInspectingShipId] = React.useState<string | null>(null);
   const [rightPanelTab, setRightPanelTab] = React.useState<'flights' | 'cps'>('flights');
   const [isGuideCollapsed, setIsGuideCollapsed] = React.useState<boolean>(false);
 
@@ -614,18 +323,18 @@ export const HUD: React.FC<HUDProps> = ({
   const [selectedBuildIslandId, setSelectedBuildIslandId] = useState<string>('');
 
   // 1. 工兵部隊選中判定
-  const isEngineerSelected = selectedUnits.some(
+  const _isEngineerSelected = selectedUnits.some(
     (u) => ('type' in u) && u.type === 'usmc_engineer'
   ) || (selectedAirfacility !== null && (typeof selectedAirfacility === 'object' ? selectedAirfacility.type === 'engineer_construction' : selectedAirfacility === 'engineer_construction'));
 
   // 2. 營指揮所選中判定 (專屬呼叫支援選單)
-  const isBattalionCpSelected = selectedAirfacility !== null && (typeof selectedAirfacility === 'object' ? selectedAirfacility.type === 'battalion_cp' : selectedAirfacility === 'battalion_cp');
+  const _isBattalionCpSelected = selectedAirfacility !== null && (typeof selectedAirfacility === 'object' ? selectedAirfacility.type === 'battalion_cp' : selectedAirfacility === 'battalion_cp');
 
   // 3. 機場選中判定 (只能打開陸基飛機選單)
-  const isAirbaseSelected = !isEngineerSelected && !isBattalionCpSelected && (selectedAirfacility !== null && (typeof selectedAirfacility === 'object' ? selectedAirfacility.type === 'airbase' : selectedAirfacility === 'airbase'));
+  const _isAirbaseSelected = !_isEngineerSelected && !_isBattalionCpSelected && (selectedAirfacility !== null && (typeof selectedAirfacility === 'object' ? selectedAirfacility.type === 'airbase' : selectedAirfacility === 'airbase'));
 
   // 4. 航母選中判定 (只能顯示從該艦起飛的飛機) - 支援 CV-6 / CV-9 / CV-34 / CV-63 / CVN-68 與 LPH-2
-  const isCarrierSelected = !isEngineerSelected && !isBattalionCpSelected && !isAirbaseSelected && (selectedUnits.some(
+  const _isCarrierSelected = !_isEngineerSelected && !_isBattalionCpSelected && !_isAirbaseSelected && (selectedUnits.some(
     (u) => ('type' in u) && (u.type === 'carrier' || u.type === 'cve' || u.type === 'cv63' || u.type === 'cvn' || u.type === 'lph')
   ) || (selectedAirfacility !== null && (typeof selectedAirfacility === 'object' ? (selectedAirfacility.type === 'carrier' || selectedAirfacility.type === 'cve' || selectedAirfacility.type === 'cv63' || selectedAirfacility.type === 'lph') : selectedAirfacility === 'carrier')));
 
@@ -649,12 +358,6 @@ export const HUD: React.FC<HUDProps> = ({
   const hasPlayerCarrier = playerShips.some(
     (s) => !s.isSunk && (s.type === 'carrier' || s.type === 'cve' || s.type === 'cv63' || s.type === 'cvn' || s.type === 'lph')
   ) || !!flagship;
-  const hasPlayerAirbase = islands.some((isl) =>
-    isl.installations.some((i) => i.type === 'airfield' && i.side === 'player' && !i.isDestroyed)
-  );
-  const hasEngineerUnit = groundUnits.some(
-    (u) => u.type === 'usmc_engineer' && u.side === 'player' && !u.isDestroyed
-  );
 
   // 指揮出擊與支援選單常時可供最高指揮官調遣檢視
   const isAirFacilityActive = true;
@@ -708,7 +411,6 @@ export const HUD: React.FC<HUDProps> = ({
         }
       } else if (e.key === 'Escape') {
         setActiveArmamentTray(null);
-        setOpenPayloadPicker(null);
         if (isDesignatingSonobuoy) onCancelSonobuoy?.();
         if (isDesignatingCap) onCancelCap?.();
       }
@@ -725,63 +427,18 @@ export const HUD: React.FC<HUDProps> = ({
   ]);
 
   // Land-Based Airbase (AFB) formation counts & payload selections
-  const [afbFormationCounts, setAfbFormationCounts] = useState<Partial<Record<string, number>>>({
-    b17: 2,
-    b24: 2,
-    b29: 2,
-    p40: 2,
-    p38: 2,
-    p51: 2,
-    p47: 2,
-    f86: 2,
-    a20: 2,
-    a26: 2,
-    f4f: 2,
-    f6f: 2,
-    f4u: 2,
-    f9f: 2,
-    f2h: 2,
-    ad1: 2,
-    f4u4: 2,
-    af_guardian: 2,
-    c47: 1,
-    c1: 1,
-    c2a: 1,
-    c130: 1,
-    ch53: 1,
-    uh1: 2,
-  });
-  const [afbPayloads, setAfbPayloads] = useState<Partial<Record<string, AircraftPayloadType>>>({
-    b17: 'bombs_carpet_250',
-    b24: 'bombs_quad_500',
-    b29: 'tactical_nuke',
-    p40: 'clean_guns',
-    p38: 'hvar_rockets',
-    p51: 'clean_guns',
-    p47: 'mixed_bombs_rockets',
-    f86: 'clean_guns',
-    a20: 'bombs_dual_500',
-    a26: 'napalm_canister',
-    c47: 'c1_paratroopers',
-    c1: 'c1_paratroopers',
-    c2a: 'c1_paratroopers',
-    c130: 'c1_paratroopers',
-    ch53: 'helo_assault_troops',
-  });
-  const [openAfbPayloadPicker, setOpenAfbPayloadPicker] = useState<string | null>(null);
+  const [afbFormationCounts, setAfbFormationCounts] = useState<Partial<Record<string, number>>>(
+    () => ({ ...DEFAULT_AFB_FORMATION_COUNTS })
+  );
+  const [afbPayloads, setAfbPayloads] = useState<Partial<Record<string, AircraftPayloadType>>>(
+    () => ({ ...DEFAULT_AFB_PAYLOADS })
+  );
 
   // Bottom Deck Filters & Tactical Armament Selector Tray State
   const [carrierFilter, setCarrierFilter] = useState<'all' | 'fighter' | 'dive_bomber' | 'torpedo_bomber' | 'attacker' | 'special'>('all');
   const [afbFilter, setAfbFilter] = useState<'all' | 'level_bomber' | 'fighter' | 'attacker' | 'navy'>('all');
   const [engineerTab, setEngineerTab] = useState<'all' | 'aviation' | 'air_defense' | 'naval' | 'fortification'>('all');
-  const [activeArmamentTray, setActiveArmamentTray] = useState<{
-    planeId: string;
-    planeLabel: string;
-    role: AircraftRole;
-    isAirbase: boolean;
-    compatiblePayloads: AircraftPayloadType[];
-    currentPayload: AircraftPayloadType;
-  } | null>(null);
+  const [activeArmamentTray, setActiveArmamentTray] = useState<ActiveArmamentTrayState | null>(null);
 
   // Flatten all island strongholds with island context
   const allStrongholds = React.useMemo(() => {
@@ -851,222 +508,14 @@ export const HUD: React.FC<HUDProps> = ({
 
   // Keep model payloads updated if activePayloads change externally
   React.useEffect(() => {
+    const defaults = getDefaultCarrierPayloads(activePayloads);
     setModelPayloads((prev) => ({
+      ...defaults,
       ...prev,
-      f4f: prev.f4f || activePayloads.fighter,
-      f6f: prev.f6f || activePayloads.fighter,
-      f4u: prev.f4u || activePayloads.fighter,
-      f8f: prev.f8f || activePayloads.fighter,
-      sbd: prev.sbd || activePayloads.dive_bomber,
-      sb2c: prev.sb2c || activePayloads.dive_bomber,
-      tbd: prev.tbd || activePayloads.torpedo_bomber,
-      tbf: prev.tbf || activePayloads.torpedo_bomber,
-      os2u: prev.os2u || activePayloads.scout,
     }));
   }, [activePayloads]);
 
-  const getCompatiblePayloads = (role: AircraftRole, currentEra: Era): AircraftPayloadType[] => {
-    if (role === 'fighter') {
-      return currentEra === 'era5'
-        ? ['aim54_phoenix', 'aim7_aim9_combo', 'rgm84_harpoon', 'aim7_sparrow', 'aim9_sidewinder', 'clean_guns', 'gbu10_laser_paveway', 'cbu_cluster_bombs']
-        : currentEra === 'era4'
-        ? ['tactical_b61_nuke', 'aim7_aim9_combo', 'aim7_sparrow', 'aim9_sidewinder', 'clean_guns', 'blu27_napalm', 'bombs_snakeye_retarded', 'agm12_bullpup']
-        : currentEra === 'era3'
-        ? ['clean_guns', 'hvar_rockets', 'bomb_500', 'bomb_1000', 'napalm_canister']
-        : ['clean_guns', 'hvar_rockets', 'bomb_500', 'bombs_dual_500'];
-    }
-    if (role === 'attacker') {
-      return currentEra === 'era5'
-        ? ['rgm84_harpoon', 'agm88_harm', 'gbu10_laser_paveway', 'agm65_maverick', 'cbu_cluster_bombs', 'mer_iron_bombs', 'bombs_snakeye_retarded', 'clean_guns']
-        : currentEra === 'era4'
-        ? ['tactical_b61_nuke', 'gbu10_laser_paveway', 'agm78_standard_arm', 'mer_iron_bombs', 'cbu_cluster_bombs', 'blu27_napalm', 'agm62_walleye', 'agm45_shrike', 'agm12_bullpup', 'bombs_snakeye_retarded', 'ffar_rockets_pod', 'bomb_2000', 'clean_guns']
-        : currentEra === 'era3'
-        ? ['tiny_tim_rocket', 'napalm_canister', 'bomb_2000', 'bomb_1000', 'aerial_torpedo', 'hvar_rockets']
-        : ['mixed_bombs_rockets', 'hvar_rockets', 'bomb_1000', 'bombs_dual_500', 'clean_guns'];
-    }
-    if (role === 'dive_bomber') {
-      return currentEra === 'era5' || currentEra === 'era4'
-        ? ['gbu10_laser_paveway', 'cbu_cluster_bombs', 'blu27_napalm', 'mer_iron_bombs', 'bombs_snakeye_retarded', 'agm12_bullpup', 'agm62_walleye', 'bomb_2000']
-        : currentEra === 'era3'
-        ? ['bomb_1000', 'bomb_2000', 'bombs_dual_500']
-        : currentEra === 'era2'
-        ? ['bomb_1000', 'bombs_dual_500', 'bomb_1600']
-        : ['bomb_1000', 'bombs_dual_500'];
-    }
-    if (role === 'torpedo_bomber') {
-      return currentEra === 'era5'
-        ? ['asw_torpedo', 'depth_bombs', 'rgm84_harpoon', 'bomb_1000']
-        : currentEra === 'era4'
-        ? ['asw_torpedo', 'depth_bombs', 'bomb_1000', 'gbu10_laser_paveway']
-        : currentEra === 'era3'
-        ? ['asw_torpedo', 'aerial_torpedo', 'depth_bombs', 'bomb_1000']
-        : ['aerial_torpedo', 'bomb_1000', 'bombs_dual_500', 'depth_bombs'];
-    }
-    if (role === 'scout' || role === 'aew') {
-      return currentEra === 'era5' || currentEra === 'era4'
-        ? ['scout_fuel', 'blu27_napalm', 'ffar_rockets_pod', 'clean_guns']
-        : ['scout_fuel', 'clean_guns', 'bomb_500'];
-    }
-    if (role === 'transport') {
-      return ['c1_paratroopers', 'scout_fuel'];
-    }
-    if (role === 'rescue') {
-      return currentEra === 'era5' || currentEra === 'era4' ? ['helo_assault_troops', 'clean_guns'] : ['clean_guns'];
-    }
-    return ['clean_guns', 'bomb_500'];
-  };
-
-  const getAfbCompatiblePayloads = (id: string, role: AircraftRole, currentEra: Era): AircraftPayloadType[] => {
-    if (role === 'level_bomber') {
-      if (id === 'b52') {
-        return currentEra === 'era5'
-          ? ['rgm84_harpoon', 'b52_megaton_nuke', 'b52_megaton_carpet', 'mer_iron_bombs', 'cbu_cluster_bombs', 'bombs_snakeye_retarded', 'bomb_2000', 'bomb_1000']
-          : ['b52_megaton_nuke', 'b52_megaton_carpet', 'mer_iron_bombs', 'cbu_cluster_bombs', 'bombs_snakeye_retarded', 'bomb_2000', 'bomb_1000'];
-      }
-      if (id === 'f111') {
-        return ['gbu10_laser_paveway', 'rgm84_harpoon', 'mer_iron_bombs', 'bomb_2000', 'cbu_cluster_bombs', 'clean_guns'];
-      }
-      if (id === 'b29') {
-        return [
-          'tactical_nuke',
-          'bombs_carpet_250',
-          'bombs_quad_500',
-          'bomb_1000',
-          'bombs_dual_1000',
-          'bomb_2000',
-          'bomb_1600',
-          'bombs_dual_500',
-        ];
-      }
-      if (id === 'b24') {
-        return [
-          'bombs_quad_500',
-          'bombs_carpet_250',
-          'bomb_1600_ap',
-          'bomb_1600',
-          'bombs_dual_1000',
-          'bomb_1000',
-          'bombs_dual_500',
-        ];
-      }
-      return [
-        'bombs_carpet_250',
-        'bombs_quad_500',
-        'bomb_1000',
-        'bombs_dual_1000',
-        'bombs_dual_500',
-      ];
-    }
-    if (role === 'attacker') {
-      if (id === 'a10a') {
-        return ['agm65_maverick', 'mer_iron_bombs', 'cbu_cluster_bombs', 'bombs_snakeye_retarded', 'clean_guns'];
-      }
-      if (id === 'ah64a') {
-        return ['hellfire_missiles', 'clean_guns'];
-      }
-      if (id === 'ah1w') {
-        return ['tow_missiles', 'aim9_sidewinder', 'clean_guns'];
-      }
-      if (id === 'a6e') {
-        return ['rgm84_harpoon', 'gbu10_laser_paveway', 'agm65_maverick', 'mer_iron_bombs', 'cbu_cluster_bombs', 'clean_guns'];
-      }
-      if (id === 'ea6b') {
-        return ['agm88_harm', 'clean_guns'];
-      }
-      if (id === 'av8b') {
-        return ['agm65_maverick', 'cbu_cluster_bombs', 'bombs_snakeye_retarded', 'clean_guns'];
-      }
-      if (id === 'f105') {
-        return ['tactical_b61_nuke', 'mer_iron_bombs', 'agm78_standard_arm', 'cbu_cluster_bombs', 'agm45_shrike', 'agm12_bullpup', 'bombs_snakeye_retarded', 'bomb_2000', 'bomb_1000', 'clean_guns'];
-      }
-      if (id === 'a7') {
-        return ['tactical_b61_nuke', 'gbu10_laser_paveway', 'mer_iron_bombs', 'cbu_cluster_bombs', 'blu27_napalm', 'agm62_walleye', 'bombs_snakeye_retarded', 'agm12_bullpup', 'bomb_2000', 'bomb_1000', 'clean_guns'];
-      }
-      if (id === 'a6a' || id === 'a6b_weasel') {
-        return ['tactical_b61_nuke', 'gbu10_laser_paveway', 'agm78_standard_arm', 'mer_iron_bombs', 'cbu_cluster_bombs', 'agm62_walleye', 'agm45_shrike', 'agm12_bullpup', 'bombs_snakeye_retarded', 'bomb_2000', 'clean_guns'];
-      }
-      if (id === 'a4') {
-        return ['tactical_b61_nuke', 'gbu10_laser_paveway', 'blu27_napalm', 'cbu_cluster_bombs', 'bombs_snakeye_retarded', 'agm12_bullpup', 'ffar_rockets_pod', 'bomb_1000', 'clean_guns'];
-      }
-      if (id === 'ov10') {
-        return ['blu27_napalm', 'ffar_rockets_pod', 'cbu_cluster_bombs', 'clean_guns'];
-      }
-      if (id === 'ah1') {
-        return ['ffar_rockets_pod', 'clean_guns'];
-      }
-      if (id === 'a26') {
-        return ['napalm_canister', 'tiny_tim_rocket', 'bomb_2000', 'bomb_1000', 'bombs_quad_500', 'bombs_dual_500', 'hvar_rockets'];
-      }
-      if (id === 'p47') {
-        return ['mixed_bombs_rockets', 'hvar_rockets', 'bombs_quad_500', 'bombs_dual_500', 'bomb_1000'];
-      }
-      return ['bombs_dual_500', 'bomb_1000', 'bombs_quad_500', 'hvar_rockets', 'aerial_torpedo', 'asw_depth_bombs', 'depth_bombs'];
-    }
-    if (role === 'fighter') {
-      if (id === 'f14a') {
-        return ['aim54_phoenix', 'aim7_aim9_combo', 'aim7_sparrow', 'aim9_sidewinder', 'clean_guns'];
-      }
-      if (id === 'fa18a') {
-        return ['rgm84_harpoon', 'aim7_aim9_combo', 'agm65_maverick', 'agm88_harm', 'aim9_sidewinder', 'clean_guns'];
-      }
-      if (id === 'f15a') {
-        return ['aim7_aim9_combo', 'aim7_sparrow', 'aim9_sidewinder', 'clean_guns'];
-      }
-      if (id === 'f16a') {
-        return ['aim7_aim9_combo', 'agm65_maverick', 'gbu10_laser_paveway', 'aim9_sidewinder', 'clean_guns'];
-      }
-      if (id === 'f4e' || id === 'f4j' || id === 'f4b') {
-        return ['tactical_b61_nuke', 'aim7_aim9_combo', 'aim7_sparrow', 'aim9_sidewinder', 'blu27_napalm', 'agm12_bullpup', 'bombs_snakeye_retarded', 'clean_guns'];
-      }
-      if (id === 'f8') {
-        return ['aim7_aim9_combo', 'aim9_sidewinder', 'clean_guns', 'bombs_snakeye_retarded'];
-      }
-      if (id === 'f86') {
-        return ['clean_guns', 'hvar_rockets', 'bomb_1000', 'napalm_canister'];
-      }
-      if (id === 'p51') {
-        return ['clean_guns', 'hvar_rockets', 'bomb_500', 'bombs_dual_500'];
-      }
-      if (id === 'p38') {
-        return ['hvar_rockets', 'clean_guns', 'bomb_1000', 'bombs_dual_500'];
-      }
-      return ['clean_guns', 'bomb_500', 'bombs_dual_500', 'hvar_rockets'];
-    }
-    if (role === 'scout' || role === 'aew') {
-      if (id === 's3a') {
-        return ['asw_torpedo', 'rgm84_harpoon', 'depth_bombs', 'scout_fuel', 'clean_guns'];
-      }
-      if (id === 'e3a' || id === 'e2c') {
-        return ['scout_fuel', 'clean_guns'];
-      }
-      if (id === 'ov10') {
-        return ['ffar_rockets_pod', 'scout_fuel', 'clean_guns'];
-      }
-      if (id === 'e1') {
-        return ['scout_fuel', 'clean_guns'];
-      }
-      if (id === 's2') {
-        return ['asw_torpedo', 'depth_bombs', 'scout_fuel', 'clean_guns'];
-      }
-      return ['scout_fuel', 'clean_guns', 'bomb_500'];
-    }
-    if (role === 'rescue') {
-      if (id === 'sh3f') {
-        return ['asw_torpedo', 'depth_bombs', 'clean_guns'];
-      }
-      if (id === 'uh1' || id === 'uh2') {
-        return ['helo_assault_troops', 'clean_guns'];
-      }
-      return ['clean_guns'];
-    }
-    if (role === 'transport') {
-      if (id === 'ch53') {
-        return ['helo_assault_troops', 'c1_paratroopers', 'clean_guns'];
-      }
-      return ['c1_paratroopers', 'scout_fuel'];
-    }
-    return getCompatiblePayloads(role, currentEra);
-  };
+  const afbModels = useMemo(() => getAfbModelsForEra(era, lang), [era, lang]);
 
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-3 pb-2 z-20 select-none overflow-hidden">
@@ -1233,22 +682,51 @@ export const HUD: React.FC<HUDProps> = ({
             </button>
           </div>
 
-          {/* Live Objective Progress Readout */}
+          {/* Live Objective Progress Readout (Interactive Camera Focus) */}
           <div
-            className="hidden xl:flex items-center gap-2 px-2.5 py-1 bg-[#0B1E34] border border-[#1E3A5F] rounded text-[11px] font-mono tabular-nums whitespace-nowrap"
-            title={lang === 'zh' ? '勝利條件：擊沉敵方航空母艦群並解放所有島嶼據點' : 'Victory: Sink enemy carriers & capture all strongholds'}
+            className="hidden md:flex items-center gap-1.5 px-2 py-1 bg-[#0B1E34] border border-[#1E3A5F] rounded text-[11px] font-mono tabular-nums whitespace-nowrap"
+            title={lang === 'zh' ? '點擊目標可直接跳轉鏡頭至最近未解放據點或敵艦' : 'Click objectives to pan camera to nearest stronghold or enemy carrier'}
           >
-            <span className={capturedStrongholdsCount === allStrongholds.length && allStrongholds.length > 0 ? 'text-emerald-400 font-bold' : 'text-[#FF80AB] font-bold'}>
+            <button
+              type="button"
+              onClick={() => {
+                setRightPanelTab('cps');
+                const nextStronghold = allStrongholds.find((sh) => !sh.isCaptured) || allStrongholds[0];
+                if (nextStronghold) onMiniMapClick(nextStronghold.cpPos);
+              }}
+              className={`hover:underline cursor-pointer ${
+                capturedStrongholdsCount === allStrongholds.length && allStrongholds.length > 0
+                  ? 'text-emerald-400 font-bold'
+                  : 'text-[#FF80AB] font-bold'
+              }`}
+            >
               🏴 {capturedStrongholdsCount}/{allStrongholds.length}
-            </span>
+            </button>
             <span className="text-slate-600">·</span>
-            <span className={remainingEnemyCarriers === 0 ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
+            <button
+              type="button"
+              onClick={() => {
+                const targetShip =
+                  enemyShips.find((s) => !s.isSunk && (s.type === 'carrier' || s.type === 'cvhg_kiev')) ||
+                  enemyShips.find((s) => !s.isSunk);
+                if (targetShip) onMiniMapClick(targetShip.pos);
+              }}
+              className={`hover:underline cursor-pointer ${
+                remainingEnemyCarriers === 0 ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'
+              }`}
+            >
               🚢 {lang === 'zh' ? '敵航母' : 'CV'} {remainingEnemyCarriers}
-            </span>
+            </button>
             {sonobuoys.length > 0 && (
               <>
                 <span className="text-slate-600">·</span>
-                <span className="text-cyan-300 font-bold">📡 {sonobuoys.length}</span>
+                <button
+                  type="button"
+                  onClick={() => onMiniMapClick(sonobuoys[0].pos)}
+                  className="text-cyan-300 font-bold hover:underline cursor-pointer"
+                >
+                  📡 {sonobuoys.length}
+                </button>
               </>
             )}
           </div>
@@ -1388,7 +866,9 @@ export const HUD: React.FC<HUDProps> = ({
             <div className="flex items-center gap-2 text-cyan-300">
               <MapPin className="w-4 h-4 text-cyan-400" />
               <span className="font-extrabold text-sm text-[#E0F7FA]">
-                🏗️【戰地設施自由戳記盤】點擊海圖任意位置即可立即戳記落成
+                {lang === 'zh'
+                  ? '🏗️【戰地設施自由戳記盤】點擊海圖任意位置即可立即戳記落成'
+                  : '🏗️ Facility Stamping Palette — Click map to construct instantly'}
               </span>
             </div>
             <div className="flex items-center gap-2.5">
@@ -1398,7 +878,11 @@ export const HUD: React.FC<HUDProps> = ({
                     ? 'bg-emerald-950/90 text-emerald-300 border-emerald-400 ring-1 ring-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
                     : 'bg-[#071322] hover:bg-[#0c1f36] text-slate-300 border-[#1E3A5F]'
                 }`}
-                title="開啟後戳記建造設施完全不扣除 CP 資源點數，可無限制自由測試與佈防"
+                title={
+                  lang === 'zh'
+                    ? '開啟後戳記建造設施完全不扣除 CP 資源點數，可無限制自由測試與佈防'
+                    : 'Build facilities without spending CP (Sandbox Mode)'
+                }
               >
                 <input
                   type="checkbox"
@@ -1406,7 +890,7 @@ export const HUD: React.FC<HUDProps> = ({
                   onChange={() => onToggleSandboxStamp?.()}
                   className="rounded text-emerald-400 focus:ring-0 cursor-pointer"
                 />
-                <span>✨ 免CP沙盒自由建造</span>
+                <span>{lang === 'zh' ? '✨ 免CP沙盒自由建造' : '✨ Sandbox Free Build'}</span>
               </label>
 
               <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-amber-300 bg-amber-950/60 px-2 py-1 rounded border border-amber-600/40">
@@ -1416,7 +900,7 @@ export const HUD: React.FC<HUDProps> = ({
                   onChange={() => onToggleContinuousStamp?.()}
                   className="rounded text-amber-500 focus:ring-0 cursor-pointer"
                 />
-                <span>連續戳記模式</span>
+                <span>{lang === 'zh' ? '連續戳記模式' : 'Continuous Stamp'}</span>
               </label>
               <div className="flex items-center gap-1 font-bold text-amber-300 text-xs px-2 py-0.5 bg-[#071322] border border-amber-500/60 rounded">
                 <Layers className="w-3.5 h-3.5 text-amber-400" />
@@ -1427,7 +911,7 @@ export const HUD: React.FC<HUDProps> = ({
                 onClick={() => onCancelPlacement?.()}
                 className="px-2.5 py-1 bg-rose-950 hover:bg-rose-900 border border-rose-500 text-rose-200 rounded font-bold transition-all shadow active:scale-95 text-xs"
               >
-                ✖ 結束戳記 (ESC)
+                {lang === 'zh' ? '✖ 結束戳記 (ESC)' : '✖ Exit Stamp (ESC)'}
               </button>
             </div>
           </div>
@@ -1442,17 +926,24 @@ export const HUD: React.FC<HUDProps> = ({
                   key={fac.id}
                   type="button"
                   onClick={() => onStartPlacement?.(fac)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-mono transition-all shrink-0 active:scale-95 ${
+                  className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border text-xs font-mono transition-all shrink-0 active:scale-95 ${
                     isSelected
                       ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white border-cyan-300 shadow-[0_0_12px_rgba(0,229,255,0.7)] scale-105 font-bold'
                       : canAfford
                       ? 'bg-[#071526] hover:bg-[#102A45] border-[#1E3A5F] text-slate-200 hover:border-amber-400'
                       : 'bg-slate-900 border-slate-800 text-slate-500 opacity-60'
                   }`}
-                  title={`${fac.nameZh} (${fac.cost} CP)\n${fac.desc}`}
+                  title={`${lang === 'zh' ? fac.nameZh : fac.name} (${fac.cost} CP)\n${fac.desc}`}
                 >
-                  <span className="font-bold">{fac.nameZh.split(' ')[0]}</span>
-                  <span className={`text-[10px] px-1 rounded font-bold ${isSelected ? 'bg-black/40 text-amber-300' : 'text-amber-400'}`}>
+                  <UnitPreviewCanvas
+                    kind="installation"
+                    unitKey={fac.typeTag || fac.id}
+                    width={26}
+                    height={16}
+                    compact
+                  />
+                  <span className="font-bold">{lang === 'zh' ? fac.nameZh.split(' ')[0] : fac.name}</span>
+                  <span className={`tabular-nums text-[10px] px-1 rounded font-bold ${isSelected ? 'bg-black/40 text-amber-300' : 'text-amber-400'}`}>
                     {fac.cost} CP
                   </span>
                 </button>
@@ -1461,10 +952,16 @@ export const HUD: React.FC<HUDProps> = ({
           </div>
 
           <div className="text-[10.5px] text-slate-300 text-center pt-0.5 flex items-center justify-center gap-2">
-            <span className="text-cyan-300 font-bold">👉 目前選定:【{activePlacementItem.nameZh}】</span>
-            <span className="text-slate-400">在海圖任意沿岸或海面點擊【滑鼠左鍵】完成戳記</span>
+            <span className="text-cyan-300 font-bold">
+              👉 {lang === 'zh' ? `目前選定:【${activePlacementItem.nameZh}】` : `Selected: ${activePlacementItem.name}`}
+            </span>
+            <span className="text-slate-400">
+              {lang === 'zh' ? '在海圖任意沿岸或海面點擊【滑鼠左鍵】完成戳記' : 'Left-click shore or sea on map to place'}
+            </span>
             <span className="text-slate-500">|</span>
-            <span className="text-amber-300">按【ESC】或【滑鼠右鍵】取消退出</span>
+            <span className="text-amber-300">
+              {lang === 'zh' ? '按【ESC】或【滑鼠右鍵】取消退出' : 'ESC or Right-click to exit'}
+            </span>
           </div>
         </div>
       )}
@@ -1476,10 +973,10 @@ export const HUD: React.FC<HUDProps> = ({
             <div className="flex items-center gap-2">
               <Shield className="w-4 h-4 text-cyan-300" />
               <span className="font-bold text-white tracking-wide text-[12px]">
-                🛡️【CAP 戰鬥空巡指定模式】
+                {lang === 'zh' ? '🛡️【CAP 戰鬥空巡指定模式】' : '🛡️ CAP Air Patrol Designation'}
               </span>
               <span className="text-[10px] bg-cyan-950 text-cyan-300 px-2 py-0.5 rounded border border-cyan-600/50">
-                半徑 250m 空巡警戒防護圈
+                {lang === 'zh' ? '半徑 250m 空巡警戒防護圈' : '250m CAP Patrol Zone'}
               </span>
             </div>
             <button
@@ -1487,12 +984,18 @@ export const HUD: React.FC<HUDProps> = ({
               onClick={onCancelCap}
               className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] border border-slate-600"
             >
-              取消退出 (ESC)
+              {lang === 'zh' ? '取消退出 (ESC)' : 'Cancel (ESC)'}
             </button>
           </div>
           <div className="text-[11px] text-cyan-100 flex items-center justify-between">
-            <span>👉 請在海圖任意海域點擊【滑鼠左鍵】建立 CAP 空巡核心區！</span>
-            <span className="text-amber-300 font-bold">右鍵或 ESC 取消</span>
+            <span>
+              {lang === 'zh'
+                ? '👉 請在海圖任意海域點擊【滑鼠左鍵】建立 CAP 空巡核心區！'
+                : '👉 Left-click anywhere on the map to assign CAP orbit center!'}
+            </span>
+            <span className="text-amber-300 font-bold">
+              {lang === 'zh' ? '右鍵或 ESC 取消' : 'Right-click or ESC to cancel'}
+            </span>
           </div>
         </div>
       )}
@@ -1524,7 +1027,7 @@ export const HUD: React.FC<HUDProps> = ({
                 <span className="font-bold text-xs tracking-wide">{banner.text}</span>
               </div>
               <span className="text-[10px] text-slate-300 hover:text-white uppercase font-bold shrink-0">
-                查看戰報 ➔
+                {lang === 'zh' ? '查看戰報 ➔' : 'View Log ➔'}
               </span>
             </div>
           ))}
@@ -1533,519 +1036,47 @@ export const HUD: React.FC<HUDProps> = ({
 
       {/* Middle Floating Panels */}
       <div className="flex-1 min-h-0 pointer-events-none flex justify-between items-start my-1 overflow-hidden">
-        {/* Left: 單位選擇列表 & Direct Orders */}
-        {selectedUnits.length > 0 ? (
-          <div className="pointer-events-auto bg-[#071322]/90 backdrop-blur-md border border-[#00E676]/60 rounded-lg p-3 w-80 text-xs font-mono space-y-2.5 shadow-xl">
-            <div className="flex justify-between items-center text-[#00E676] font-bold border-b border-[#1E3A5F] pb-1">
-              <span>{lang === 'zh' ? '單位選擇列表' : 'SELECTED UNITS'} ({selectedUnits.length})</span>
-              <span className="text-[10px] text-slate-400">{lang === 'zh' ? '右鍵指派移動 / 攻擊' : 'R-Click to Move / Attack'}</span>
-            </div>
-
-            <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
-              {selectedUnits.slice(0, 6).map((u) => {
-                const hpPct = Math.max(0, u.health / u.maxHealth);
-                const isPlane = 'flightName' in u || 'role' in u;
-                const isGround = 'type' in u && !isPlane && !('wakePoints' in u);
-                const isShip = 'type' in u && !isPlane && !isGround;
-                const isTransport = isShip && (u.type === 'lcvp' || u.type === 'lst' || u.type === 'lcm8' || u.type === 'lpd' || u.type === 'lcac');
-                const isLSMR = isShip && u.type === 'lsm_r';
-                const planeName = u.name;
-                const parentFlight = 'flightName' in u ? u.flightName : undefined;
-
-                return (
-                  <div key={u.id} className="bg-[#040C16] p-1.5 rounded border border-[#1E3A5F]/60 space-y-1">
-                    <div className="flex justify-between items-center text-[11px]">
-                      <div>
-                        <div className="font-semibold text-white truncate max-w-[165px] flex items-center gap-1">
-                          {isPlane && <Plane className="w-3 h-3 text-[#80DEEA]" />}
-                          {isShip && <Anchor className="w-3 h-3 text-[#80D8FF]" />}
-                          {isGround && <Shield className="w-3 h-3 text-[#42A5F5]" />}
-                          <span title={planeName}>{planeName}</span>
-                        </div>
-                        <div className="text-[9.5px] text-[#90CAF9] truncate max-w-[165px]">
-                          {isPlane && parentFlight && (
-                            <span className="text-slate-400 mr-1">[{parentFlight.split('(')[0].trim()}]</span>
-                          )}
-                          {isGround
-                            ? 'embarkedInShipId' in u && u.embarkedInShipId
-                              ? (lang === 'zh' ? '⚓ 已裝載於登陸艦艇' : '⚓ Embarked in Transport')
-                              : (lang === 'zh' ? '🎖️ 地面戰鬥展開中' : '🎖️ Ground Combat Deployed')
-                            : 'order' in u
-                            ? u.order.type === 'patrol'
-                              ? (lang === 'zh' ? '巡邏中 (PATROL)' : 'PATROL')
-                              : u.order.type === 'attack'
-                              ? (lang === 'zh' ? '攻擊中 (ATTACK)' : 'ATTACK')
-                              : u.order.type === 'rtb'
-                              ? (lang === 'zh' ? '返航中 (RTB)' : 'RTB')
-                              : u.order.type === 'move'
-                              ? (lang === 'zh' ? '移動中 (MOVING)' : 'MOVING')
-                              : (lang === 'zh' ? '待命 (IDLE)' : 'IDLE')
-                            : (lang === 'zh' ? '戰鬥就緒' : 'COMBAT READY')}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="tabular-nums text-emerald-400 font-bold">{Math.round(hpPct * 100)}%</div>
-                        <div className="w-14 h-1 bg-[#1E3A5F] rounded overflow-hidden mt-0.5">
-                          <div className="h-full bg-emerald-400" style={{ width: `${hpPct * 100}%` }} />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Ground Unit Dual Parameters (組織度 ORG & 建制度 STR) & Supply Line Status */}
-                    {isGround && (
-                      <div className="text-[9.5px] pt-1 border-t border-[#1E3A5F]/40 space-y-1">
-                        {/* Dual Parameters Gauges */}
-                        <div className="grid grid-cols-2 gap-2 text-[9px] font-mono">
-                          <div className="bg-[#071322] p-1 rounded border border-[#1E3A5F]/50">
-                            <div className="flex justify-between items-center text-emerald-400 font-bold mb-0.5">
-                              <span>{lang === 'zh' ? '士氣組織度 (ORG)' : 'Organization (ORG)'}</span>
-                              <span>{'organization' in u ? Math.round(u.organization ?? 100) : 100}%</span>
-                            </div>
-                            <div className="w-full h-1 bg-[#1E3A5F] rounded overflow-hidden">
-                              <div
-                                className="h-full bg-emerald-400 transition-all"
-                                style={{ width: `${Math.min(100, 'organization' in u ? (u.organization ?? 100) : 100)}%` }}
-                              />
-                            </div>
-                          </div>
-                          <div className="bg-[#071322] p-1 rounded border border-[#1E3A5F]/50">
-                            <div className="flex justify-between items-center text-[#00E5FF] font-bold mb-0.5">
-                              <span>{lang === 'zh' ? '編裝建制度 (STR)' : 'Strength (STR)'}</span>
-                              <span>{'strength' in u ? Math.round(u.strength ?? 100) : 100}%</span>
-                            </div>
-                            <div className="w-full h-1 bg-[#1E3A5F] rounded overflow-hidden">
-                              <div
-                                className="h-full bg-[#00E5FF] transition-all"
-                                style={{ width: `${Math.min(100, 'strength' in u ? (u.strength ?? 100) : 100)}%` }}
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Dual-Mode Artillery Badge */}
-                        {'isArtillery' in u && u.isArtillery && (
-                          <div className="flex items-center justify-between text-[8.5px] px-1 py-0.5 bg-amber-950/40 border border-amber-600/40 rounded text-amber-300 font-mono">
-                            <span>{lang === 'zh' ? '砲兵模式: 直瞄平射(<700m) / 曲射壓制(≥700m)' : 'Dual Artillery: Direct (<700m) / Arc (≥700m)'}</span>
-                            <span className="font-bold text-amber-200">
-                              {u.artilleryMode === 'direct_fire' ? (lang === 'zh' ? '【直瞄平射】' : 'DIRECT') : (lang === 'zh' ? '【長程曲射】' : 'BOMBARD')}
-                            </span>
-                          </div>
-                        )}
-
-                        {/* Supply Line Status Badge */}
-                        <div className="flex justify-between items-center text-[9px]">
-                          {'isSupplied' in u && u.isSupplied ? (
-                            <span className="text-emerald-400 font-bold flex items-center gap-1">
-                              <span>{lang === 'zh' ? '🟢 全島補給線暢通 (港口/樞紐連通)' : '🟢 Island Supply Line Intact (Port/Hub)'}</span>
-                            </span>
-                          ) : (
-                            <span className="text-rose-400 font-bold flex items-center gap-1">
-                              <span>{lang === 'zh' ? '🔴 補給線斷絕 (士氣持續衰減)' : '🔴 Supply Line Severed (Morale Decaying)'}</span>
-                            </span>
-                          )}
-                          <span className="text-amber-300 font-bold">{lang === 'zh' ? `DMG:${'damage' in u ? u.damage : 0} · 射程:${'range' in u ? u.range : 0}m` : `DMG:${'damage' in u ? u.damage : 0} · RNG:${'range' in u ? u.range : 0}m`}</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Combat Engineer Airfield & Field Construction Buttons */}
-                    {isGround && 'type' in u && u.type === 'usmc_engineer' && (
-                      <div className="pt-1 border-t border-[#1E3A5F]/40 flex flex-col gap-1">
-                        <div className="flex justify-between items-center gap-1">
-                          <span className="text-[9.5px] text-[#80D8FF] font-semibold">
-                            {'embarkedInShipId' in u && u.embarkedInShipId
-                              ? (lang === 'zh' ? '在登陸艇內 (需先搶灘)' : 'Embarked (Need Landing)')
-                              : (lang === 'zh' ? '工兵戰地急造工程' : 'Combat Field Engineering')}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setBottomDeckTab('engineer_construction');
-                              setIsBottomDeckExpanded(true);
-                            }}
-                            className="px-2 py-0.5 text-[9.5px] font-bold rounded bg-amber-600 hover:bg-amber-500 text-white border border-amber-300 transition-colors shadow-sm flex items-center gap-1"
-                            title={lang === 'zh' ? "打開工兵建造選單 (前進機場/岸防砲/急造設施/營指揮所/雷達)" : "Open Engineer Construction Menu"}
-                          >
-                            <span>{t.btnOpenBuildMenu}</span>
-                          </button>
-                        </div>
-                        <div className="flex justify-end items-center gap-1">
-                          <button
-                            type="button"
-                            disabled={'embarkedInShipId' in u && Boolean(u.embarkedInShipId)}
-                            onClick={() => onBuildAirfield?.(u.id)}
-                            className={`px-2 py-0.5 text-[9px] font-bold rounded border transition-colors shadow-sm ${
-                              !('embarkedInShipId' in u && u.embarkedInShipId)
-                                ? 'bg-[#1565C0] hover:bg-[#1976D2] text-white border-[#42A5F5]'
-                                : 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed'
-                            }`}
-                            title={lang === 'zh' ? "在當前島嶼建立全新前進航空基地與防空砲" : "Construct forward airbase and AA artillery on this island"}
-                          >
-                            🔨 {lang === 'zh' ? '就地闢建機場' : 'Build Airfield Here'}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Transport Craft Embark / Disembark Action Button */}
-                    {isTransport && (
-                      <div className="pt-1 border-t border-[#1E3A5F]/40 flex justify-between items-center gap-1">
-                        <span className="text-[9.5px] text-[#A7FFEB]">
-                          {'embarkedUnitIds' in u && u.embarkedUnitIds && u.embarkedUnitIds.length > 0
-                            ? (lang === 'zh'
-                                ? `載運部隊: ${u.embarkedUnitIds.length}/${'cargoCapacity' in u ? u.cargoCapacity : 2}`
-                                : `Troops: ${u.embarkedUnitIds.length}/${'cargoCapacity' in u ? u.cargoCapacity : 2}`)
-                            : (lang === 'zh'
-                                ? `空載 (容量: ${'cargoCapacity' in u ? u.cargoCapacity : 2})`
-                                : `Empty (Cap: ${'cargoCapacity' in u ? u.cargoCapacity : 2})`)}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => onToggleTransportEmbark?.(u.id)}
-                          className="px-2 py-0.5 bg-[#00695C] hover:bg-[#00897B] text-white text-[9.5px] font-bold rounded border border-[#80CBC4] transition-colors"
-                        >
-                          ⚓ {lang === 'zh' ? '裝載/搶灘' : 'Embark/Landing'}
-                        </button>
-                      </div>
-                    )}
-
-                    {/* LSM(R) Rocket Barrage Button */}
-                    {isLSMR && (
-                      <div className="pt-1 border-t border-[#1E3A5F]/40 flex justify-between items-center gap-1">
-                        <span className="text-[9.5px] text-[#FFE082]">
-                          {lang === 'zh' ? '85聯裝連續火箭彈幕' : '85-Tube Rocket Barrage'}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => onTriggerLSMRocket?.(u.id)}
-                          disabled={'rocketCooldown' in u && (u.rocketCooldown || 0) > 0}
-                          className={`px-2 py-0.5 text-[9.5px] font-bold rounded border transition-colors ${
-                            'rocketCooldown' in u && (u.rocketCooldown || 0) <= 0
-                              ? 'bg-[#E64A19] hover:bg-[#FF5722] text-white border-[#FFAB91]'
-                              : 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed'
-                          }`}
-                        >
-                          🚀 {'rocketCooldown' in u && (u.rocketCooldown || 0) > 0 ? `${Math.ceil(u.rocketCooldown!)}s` : (lang === 'zh' ? '發射火箭' : 'Fire Rockets')}
-                        </button>
-                      </div>
-                    )}
-
-                    {/* 下面殘存彈藥判定 (戰鬥機計算機槍殘彈數量，轟炸機計算航彈/魚雷與自衛機槍，運輸機可隨時卸載空降) */}
-                    {isPlane && (
-                      <div className="text-[10px] pt-0.5 border-t border-[#1E3A5F]/40 space-y-1">
-                        <div className="flex justify-between items-center">
-                          {'role' in u && u.role === 'fighter' && (!('hasPayload' in u) || !u.hasPayload || u.payloadType === 'clean_guns') ? (
-                            <span className="text-amber-300 font-bold flex items-center gap-1">
-                              <span>💥 {lang === 'zh' ? '機槍殘彈:' : 'MG Ammo:'}</span>
-                              <span className="tabular-nums">
-                                {('gunAmmo' in u ? u.gunAmmo : u.ammoRemaining) ?? 1440} / {('maxGunAmmo' in u ? u.maxGunAmmo : u.maxAmmo) ?? 1440} {lang === 'zh' ? '發' : 'rds'}
-                              </span>
-                            </span>
-                          ) : 'hasPayload' in u && u.hasPayload && (u.ammoRemaining ?? 0) > 0 ? (
-                            <div className="flex justify-between items-center w-full">
-                              <span className="text-amber-300 font-bold flex items-center gap-1">
-                                <span>{(u.payloadType === 'c1_paratroopers' || u.payloadType === 'helo_assault_troops') ? '🪂' : '💥'} {lang === 'zh' ? ((u.payloadType === 'c1_paratroopers' || u.payloadType === 'helo_assault_troops') ? '空降編制:' : '航彈/火箭:') : 'Payload:'}</span>
-                                <span>[{u.payloadName}] x{u.ammoRemaining}</span>
-                              </span>
-                              {'gunAmmo' in u && u.gunAmmo !== undefined && u.gunAmmo > 0 && (
-                                <span className="text-emerald-400 font-bold tabular-nums text-[9px]">
-                                  {lang === 'zh' ? '機槍' : 'MG'}:{u.gunAmmo}
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="flex justify-between items-center w-full text-slate-400">
-                              <span>⚠️ {lang === 'zh' ? '彈藥/兵員已投罄 (返航補給中)' : 'Payload Expended (RTB Supply)'}</span>
-                              {'gunAmmo' in u && u.gunAmmo !== undefined && u.gunAmmo > 0 && (
-                                <span className="text-slate-400 tabular-nums text-[9px]">
-                                  {lang === 'zh' ? '機槍' : 'MG'}:{u.gunAmmo}
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                        {'maxSonobuoyAmmo' in u && (u.maxSonobuoyAmmo ?? 0) > 0 && (
-                          <div className="flex justify-between items-center text-[10px] text-[#80DEEA]">
-                            <span className="truncate">
-                              📡 {u.sonobuoyModel || (lang === 'zh' ? '被動聲納浮標' : 'Passive Sonobuoys')}
-                            </span>
-                            <span className="font-bold tabular-nums shrink-0 ml-2">
-                              {u.sonobuoyAmmo ?? 0} / {u.maxSonobuoyAmmo}
-                            </span>
-                          </div>
-                        )}
-                        {'hasPayload' in u &&
-                          u.hasPayload &&
-                          (u.ammoRemaining ?? 0) > 0 &&
-                          (u.payloadType === 'c1_paratroopers' || u.payloadType === 'helo_assault_troops') && (
-                            <button
-                              type="button"
-                              onClick={() => onUnloadAircraft?.()}
-                              className="w-full py-1 px-2 bg-gradient-to-r from-[#00695C] to-[#00897B] hover:from-[#00897B] hover:to-[#00ACC1] text-white font-bold text-[10px] rounded border border-[#80CBC4] shadow flex items-center justify-center gap-1 transition-all"
-                              title={lang === 'zh' ? '於所在島嶼（或最近海岸）立即卸載傘兵/機降部隊 (快捷鍵 U)' : 'Airdrop / Unload troops onto nearest island (Hotkey U)'}
-                            >
-                              <span>🪂 {lang === 'zh' ? '立即卸載 / 空降部隊 (U)' : 'Unload / Airdrop Troops (U)'}</span>
-                            </button>
-                          )}
-                      </div>
-                    )}
-                    {isShip && !isTransport && !isLSMR && 'detailedArmaments' in u && u.detailedArmaments && (
-                      <div className="text-[9.5px] pt-0.5 border-t border-[#1E3A5F]/40 text-slate-400 truncate">
-                        <span>{lang === 'zh' ? '武裝' : 'Armament'}: {u.detailedArmaments.slice(0, 2).map((a) => a.name).join(' · ')}</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {selectedUnits.length > 6 && (
-                <div className="text-[10px] text-slate-400 text-center">
-                  +{selectedUnits.length - 6} {lang === 'zh' ? '個其他單位' : 'other units'}
-                </div>
-              )}
-            </div>
-
-            {/* RTS Action Command Buttons including Full Stop */}
-            <div className="grid grid-cols-4 gap-1 pt-1 border-t border-[#1E3A5F]">
-              <button
-                onClick={() => onOrderSelected('patrol')}
-                className="py-1 bg-[#0B1E34] hover:bg-[#1976D2] border border-[#1E3A5F] rounded text-[10px] text-[#E0F7FA] font-bold"
-              >
-                {t.orderPatrol} (P)
-              </button>
-              <button
-                onClick={() => onOrderSelected('rtb')}
-                className="py-1 bg-[#0B1E34] hover:bg-[#C2185B] border border-[#1E3A5F] rounded text-[10px] text-[#FF80AB] font-bold"
-              >
-                {t.orderRtb} (B)
-              </button>
-              <button
-                onClick={onStopUnits}
-                className="py-1 bg-[#D32F2F] hover:bg-[#B71C1C] border border-[#FF8A80] rounded text-[10px] text-white font-bold"
-                title={t.orderStop}
-              >
-                {t.orderStop} (X)
-              </button>
-              <button
-                onClick={() => onOrderSelected('idle')}
-                className="py-1 bg-[#0B1E34] hover:bg-slate-700 border border-[#1E3A5F] rounded text-[10px] text-slate-300 font-bold"
-              >
-                {lang === 'zh' ? '待命' : 'Idle'}
-              </button>
-            </div>
-
-            {selectedUnits.some(
-              (u) =>
-                ('flightName' in u || 'role' in u) &&
-                'hasPayload' in u &&
-                u.hasPayload &&
-                (u.ammoRemaining ?? 0) > 0 &&
-                (u.payloadType === 'c1_paratroopers' || u.payloadType === 'helo_assault_troops')
-            ) && (
-              <div className="pt-1 border-t border-[#1E3A5F]/60">
-                <button
-                  type="button"
-                  onClick={() => onUnloadAircraft?.()}
-                  className="w-full py-1.5 px-2 rounded text-xs font-mono font-bold bg-gradient-to-r from-[#00695C] to-[#00897B] hover:from-[#00897B] hover:to-[#00ACC1] text-white border border-[#80CBC4] flex items-center justify-center gap-1.5 shadow-md transition-all"
-                  title={lang === 'zh' ? '對所有選中的運輸機/突擊直升機下達空降卸載指令 (也可直接右鍵點擊任一島嶼)' : 'Drop paratroopers/air-assault troops onto nearest island (Hotkey U)'}
-                >
-                  <span>🪂 {lang === 'zh' ? '卸載空降傘兵 / 機降突擊部隊 (U)' : 'Unload / Airdrop Troops (U)'}</span>
-                </button>
-              </div>
-            )}
-
-            {/* CAP 空中戰鬥巡邏專屬指令按鈕 */}
-            <div className="pt-1 border-t border-[#1E3A5F]/60">
-              <button
-                type="button"
-                onClick={() => {
-                  if (isDesignatingCap) {
-                    onCancelCap?.();
-                  } else {
-                    onStartCapDesignation?.();
-                  }
-                }}
-                className={`w-full py-1.5 px-2 rounded text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all shadow-md whitespace-nowrap ${
-                  isDesignatingCap
-                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white border border-cyan-300 ring-2 ring-cyan-400'
-                    : 'bg-gradient-to-r from-[#00838F] to-[#006064] hover:from-[#0097A7] hover:to-[#00838F] text-[#E0F7FA] border border-[#4DD0E1]/70'
-                }`}
-                title={t.orderCapOrbitHint}
-              >
-                <Shield className="w-3.5 h-3.5 text-cyan-200" />
-                <span>{isDesignatingCap ? (lang === 'zh' ? '⚡ 正在指定空巡空域 (點地圖)' : '⚡ Designating CAP (Click Map)') : t.orderCapOrbit}</span>
-              </button>
-            </div>
-
-            {/* Era 3-5 空投被動聲納浮標 ("插眼") 專屬按鈕 */}
-            {selectedUnits.some(
-              (u) =>
-                'model' in u &&
-                ('maxSonobuoyAmmo' in u ||
-                  u.role === 'scout' ||
-                  u.role === 'rescue' ||
-                  u.model === 'af_guardian' ||
-                  u.model === 'firefly_as5' ||
-                  u.model === 'ho3s1' ||
-                  u.model === 's2' ||
-                  u.model === 'p3' ||
-                  u.model === 'sh2' ||
-                  u.model === 'uh2' ||
-                  u.model === 's3a' ||
-                  u.model === 'sh3f')
-            ) && (() => {
-              const isLegacyEra = era === 'era1' || era === 'era2';
-              const hasBuoyAmmo = selectedUnits.some((u) => 'sonobuoyAmmo' in u && (u.sonobuoyAmmo ?? 0) > 0);
-              const disabled = isLegacyEra || !hasBuoyAmmo;
-              return (
-                <div className="pt-1 border-t border-[#1E3A5F]/60">
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => {
-                      if (disabled) return;
-                      if (isDesignatingSonobuoy) {
-                        onCancelSonobuoy?.();
-                      } else {
-                        onStartSonobuoyDesignation?.();
-                      }
-                    }}
-                    className={`w-full py-1.5 px-2 rounded text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all shadow-md whitespace-nowrap ${
-                      disabled
-                        ? 'bg-slate-800/70 text-slate-500 border border-slate-700 cursor-not-allowed'
-                        : isDesignatingSonobuoy
-                        ? 'bg-gradient-to-r from-teal-500 to-cyan-600 text-white border border-cyan-200 ring-2 ring-cyan-400'
-                        : 'bg-gradient-to-r from-[#00695C] to-[#004D40] hover:from-[#00897B] hover:to-[#00695C] text-[#E0F2F1] border border-[#4DB6AC]/70'
-                    }`}
-                    title={
-                      isLegacyEra
-                        ? lang === 'zh'
-                          ? '二戰時期（時代一～二）尚無空投被動聲納浮標'
-                          : 'Passive air-dropped sonobuoys require Era 3+'
-                        : t.orderDropSonobuoyHint
-                    }
-                  >
-                    <Radio className="w-3.5 h-3.5 text-teal-200 shrink-0" />
-                    <span>
-                      {isLegacyEra
-                        ? lang === 'zh'
-                          ? '📡 被動聲納浮標 (ERA 3+ 解鎖)'
-                          : '📡 Sonobuoys (Era 3+)'
-                        : !hasBuoyAmmo
-                        ? lang === 'zh'
-                          ? '📡 聲納浮標已耗盡'
-                          : '📡 Sonobuoys Expended'
-                        : isDesignatingSonobuoy
-                        ? t.cancelSonobuoy
-                        : t.orderDropSonobuoy}
-                    </span>
-                  </button>
-                </div>
-              );
-            })()}
-          </div>
-        ) : isGuideCollapsed ? (
-          /* Minimized Tactical Controls Guide */
-          <div
-            onClick={() => setIsGuideCollapsed(false)}
-            className="pointer-events-auto bg-[#071322]/85 backdrop-blur-md border border-[#1E3A5F] hover:border-[#80DEEA]/60 rounded-lg px-2.5 py-1.5 text-xs font-mono shadow-lg flex items-center justify-between gap-2.5 cursor-pointer transition-all"
-            title={lang === 'zh' ? '點擊展開操作指南' : 'Click to expand controls guide'}
-          >
-            <div className="text-[#80DEEA] font-bold flex items-center gap-1.5 text-[11px]">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_#34D399]" />
-              <span>{lang === 'zh' ? '戰術操作指南' : 'Controls Guide'}</span>
-            </div>
-            <span className="text-[10px] text-emerald-400 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40">
-              {lang === 'zh' ? '展開 ➕' : 'Expand ➕'}
-            </span>
-          </div>
-        ) : (
-          /* Camera Movement Guide / Controls Help Banner when no unit is selected */
-          <div className="pointer-events-auto bg-[#071322]/85 backdrop-blur-md border border-[#1E3A5F] rounded-lg p-3 w-72 text-xs font-mono space-y-1.5 shadow-lg">
-            <div className="text-[#80DEEA] font-bold flex items-center justify-between border-b border-[#1E3A5F] pb-1">
-              <span>{lang === 'zh' ? '戰術視角與移動操作指南' : 'Tactical Controls Guide'}</span>
-              <button
-                type="button"
-                onClick={() => setIsGuideCollapsed(true)}
-                className="text-[10px] text-slate-400 hover:text-white bg-[#0A1E35] hover:bg-[#1E3A5F] px-1.5 py-0.5 rounded border border-[#1E3A5F] transition-all cursor-pointer"
-                title={lang === 'zh' ? '縮小指南' : 'Collapse guide'}
-              >
-                {lang === 'zh' ? '收合 ➖' : 'Collapse ➖'}
-              </button>
-            </div>
-            <div className="text-[11px] text-slate-300 space-y-1">
-              <div className="flex justify-between">
-                <span className="text-[#90CAF9]">{lang === 'zh' ? '平移畫面：' : 'Pan Camera:'}</span>
-                <span className="font-semibold text-white">WASD / Arrows</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#90CAF9]">{lang === 'zh' ? '拖曳鏡頭：' : 'Drag Pan:'}</span>
-                <span className="font-semibold text-white">{lang === 'zh' ? '滑鼠中鍵 / 邊緣游標' : 'Middle Click / Edge'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#90CAF9]">{lang === 'zh' ? '縮放視角：' : 'Zoom View:'}</span>
-                <span className="font-semibold text-white">{lang === 'zh' ? '滑鼠滾輪 (Wheel)' : 'Mouse Wheel'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#90CAF9]">{lang === 'zh' ? '鏡頭鎖定航母：' : 'Lock Flagship:'}</span>
-                <span className="font-semibold text-[#80DEEA]">F key</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#90CAF9]">{lang === 'zh' ? '框選單位：' : 'Select Units:'}</span>
-                <span className="font-semibold text-white">{lang === 'zh' ? '滑鼠左鍵拉框' : 'Left Click Drag'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#90CAF9]">{lang === 'zh' ? '移動 / 攻擊：' : 'Move / Attack:'}</span>
-                <span className="font-semibold text-[#00E676]">{lang === 'zh' ? '滑鼠右鍵點擊' : 'Right Click'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#90CAF9]">{lang === 'zh' ? '暫停 / 倍速：' : 'Pause / Speed:'}</span>
-                <span className="font-semibold text-white">Backspace · [ / ]</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#90CAF9]">{lang === 'zh' ? '編隊設定 / 呼叫：' : 'Squad Groups:'}</span>
-                <span className="font-semibold text-[#FFD54F]">Ctrl+1~4 / 1~4</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#90CAF9]">{lang === 'zh' ? 'CAP 空巡 / 浮標：' : 'CAP / Sonobuoy:'}</span>
-                <span className="font-semibold text-cyan-300">C / G (Shift連點)</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#90CAF9]">{lang === 'zh' ? '傘降卸載 / 防空：' : 'Unload / Flak:'}</span>
-                <span className="font-semibold text-amber-300">U / Space</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#90CAF9]">{lang === 'zh' ? '全速停俥：' : 'Full Stop:'}</span>
-                <span className="font-semibold text-red-400">X key</span>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Left: 單位選擇列表 / Controls Guide */}
+        <SelectedUnitsPanel
+          lang={lang}
+          t={t}
+          era={era}
+          selectedUnits={selectedUnits}
+          isGuideCollapsed={isGuideCollapsed}
+          onSetGuideCollapsed={setIsGuideCollapsed}
+          onOrderSelected={onOrderSelected}
+          onStopUnits={onStopUnits}
+          onOpenEngineerDeck={() => {
+            setBottomDeckTab('engineer_construction');
+            setIsBottomDeckExpanded(true);
+          }}
+          onBuildAirfield={onBuildAirfield}
+          onToggleTransportEmbark={onToggleTransportEmbark}
+          onTriggerLSMRocket={onTriggerLSMRocket}
+          onUnloadAircraft={onUnloadAircraft}
+          isDesignatingCap={isDesignatingCap}
+          onStartCapDesignation={onStartCapDesignation}
+          onCancelCap={onCancelCap}
+          isDesignatingSonobuoy={isDesignatingSonobuoy}
+          onStartSonobuoyDesignation={onStartSonobuoyDesignation}
+          onCancelSonobuoy={onCancelSonobuoy}
+        />
 
         {/* Right: Corner Mini-Radar Scope + 飛行單位/戰艦狀態欄 (Tab切換，保證不遮擋下方甲板) */}
         <div className="flex flex-col items-end gap-1.5">
           {/* Interactive Mini-Radar Widget (Click to Jump Camera) */}
-          <div className="pointer-events-auto bg-[#071322]/90 backdrop-blur-md border border-[#1E3A5F] rounded-lg p-1.5 shadow-2xl flex flex-col items-center">
-            <div className="w-full flex justify-between text-[10px] font-mono text-[#80DEEA] pb-0.5 border-b border-[#1E3A5F]">
-              <span>{t.miniMapTitle}</span>
-              <span className="text-slate-400 text-[9px]">{lang === 'zh' ? '點擊 / 拖曳跳轉' : 'Click / Drag Pan'}</span>
-            </div>
-            <div className="relative mt-0.5">
-              <span className="absolute top-0.5 left-1/2 -translate-x-1/2 text-[8px] text-cyan-300 font-bold pointer-events-none drop-shadow">N</span>
-              <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 text-[8px] text-slate-400 pointer-events-none">S</span>
-              <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[8px] text-slate-400 pointer-events-none">W</span>
-              <span className="absolute right-1 top-1/2 -translate-y-1/2 text-[8px] text-slate-400 pointer-events-none">E</span>
-              <canvas
-                ref={miniMapCanvasRef}
-                width={124}
-                height={124}
-                onPointerDown={handleMiniMapPointerDown}
-                onPointerMove={handleMiniMapPointerMove}
-                onPointerUp={handleMiniMapPointerUp}
-                onPointerCancel={handleMiniMapPointerUp}
-                className="w-[124px] h-[124px] cursor-pointer rounded bg-[#040C16] border border-[#1E3A5F]/50 touch-none"
-              />
-            </div>
-          </div>
+          <MiniRadar
+            title={t.miniMapTitle}
+            lang={lang}
+            islands={islands}
+            playerShips={playerShips}
+            enemyShips={enemyShips}
+            aircraft={aircraft}
+            sonobuoys={sonobuoys}
+            worldSize={worldSize}
+            cameraViewport={cameraViewport}
+            onMiniMapClick={onMiniMapClick}
+          />
 
           {/* Right Panel Tab Switcher */}
           <div className="pointer-events-auto bg-[#071322]/95 backdrop-blur-md border border-[#1E3A5F] rounded-lg p-0.5 w-64 flex items-center justify-between text-[10px] font-mono shadow-md">
@@ -2584,7 +1615,9 @@ export const HUD: React.FC<HUDProps> = ({
                     <Zap className="w-3.5 h-3.5" />
                     <span>{lang === 'zh' ? '母艦全裝備庫' : 'Carrier Armory'}</span>
                   </button>
-                  <span className="text-[10px] text-slate-400">{lang === 'zh' ? '空白鍵暫停' : 'Space to Pause'}</span>
+                  <span className="text-[10px] text-slate-400">
+                    {lang === 'zh' ? 'Backspace 暫停 · Space 防空' : 'Backspace: Pause · Space: Flak'}
+                  </span>
                 </div>
               </div>
 
@@ -2629,17 +1662,15 @@ export const HUD: React.FC<HUDProps> = ({
                     return (
                       <div
                         key={model}
-                        className="relative flex flex-col justify-between bg-[#071526] border border-[#1E3A5F] hover:border-[#388E3C]/80 rounded-lg p-2 text-xs font-mono shadow-md min-w-[150px] max-w-[165px] transition-colors shrink-0"
+                        title={`${label} — ${desc}`}
+                        className="relative flex flex-col justify-between bg-[#071526] border border-[#1E3A5F] hover:border-[#388E3C]/80 rounded-lg p-2 text-xs font-mono shadow-md min-w-[156px] max-w-[168px] transition-colors shrink-0"
                       >
                         {/* Header: Name & Count */}
                         <div>
-                          <div className="flex items-center justify-between pb-1 border-b border-[#1E3A5F]/60">
-                            <div className="flex flex-col truncate pr-0.5">
-                              <span className="font-bold text-[#E0F7FA] text-[10.5px] truncate" title={`${label} (${desc})`}>
-                                {label}
-                              </span>
-                              <span className="text-[8.5px] text-[#80DEEA]">{roleBadge}</span>
-                            </div>
+                          <div className="flex items-center justify-between gap-1 pb-1 border-b border-[#1E3A5F]/60">
+                            <span className="font-bold text-[#E0F7FA] text-[10.5px] truncate">
+                              {label}
+                            </span>
                             <span
                               className={`tabular-nums text-[9px] px-1 py-0.2 rounded font-bold shrink-0 ${
                                 hasReady
@@ -2648,6 +1679,20 @@ export const HUD: React.FC<HUDProps> = ({
                               }`}
                             >
                               {readyCount}{lang === 'zh' ? '架' : 'Rdy'}
+                            </span>
+                          </div>
+
+                          {/* Unit Demonstration Blueprint Preview */}
+                          <div className="relative mt-1">
+                            <UnitPreviewCanvas
+                              kind="aircraft"
+                              unitKey={model}
+                              width={144}
+                              height={42}
+                              payloadType={currentPayload}
+                            />
+                            <span className="absolute bottom-0.5 left-1 px-1 py-0.2 rounded bg-[#040C16]/85 border border-[#1E3A5F]/80 text-[8px] font-bold text-[#80DEEA]">
+                              {roleBadge.replace(/[【】]/g, '')}
                             </span>
                           </div>
 
@@ -2810,87 +1855,7 @@ export const HUD: React.FC<HUDProps> = ({
 
               {/* AFB Aircraft Cards with Draggable and Wheel Scroll */}
               <DraggableScrollContainer className="gap-2 pb-1">
-                {(era === 'era1'
-                  ? [
-                      { id: 'b17', label: 'B-17 飛行堡壘', role: 'level_bomber' as AircraftRole, desc: '4發重型水平轟炸機 · 12枚連環地毯轟炸', isNavy: false },
-                      { id: 'b25', label: 'B-25B 米切爾', role: 'level_bomber' as AircraftRole, desc: '雙發中型轟炸機 · 雙垂尾 · 8枚地毯轟炸', isNavy: false },
-                      { id: 'p40', label: 'P-40 戰鷹', role: 'fighter' as AircraftRole, desc: '陸航空優戰鬥機 · 截擊空戰', isNavy: false },
-                      { id: 'p36a', label: 'P-36A 鷹式', role: 'fighter' as AircraftRole, desc: '陸航早期主力戰機 · 靈巧盤旋截擊', isNavy: false },
-                      { id: 'p39d', label: 'P-39D 空中眼鏡蛇', role: 'attacker' as AircraftRole, desc: '中置引擎 · 槳轂37mm機砲重穿甲', isNavy: false },
-                      { id: 'a20', label: 'A-20 浩劫', role: 'attacker' as AircraftRole, desc: '雙發對艦/對地重攻擊機', isNavy: false },
-                      { id: 'c47', label: 'C-47 空中列車', role: 'transport' as AircraftRole, desc: '戰術傘兵運輸機 · 空投陸戰/空降傘兵奪島 (按U卸載)', isNavy: false },
-                      { id: 'f4f', label: 'F4F 野貓 (海軍陸基)', role: 'fighter' as AircraftRole, desc: '可轉場回企業號航艦', isNavy: true },
-                      { id: 'sbd', label: 'SBD 無畏 (海軍陸基)', role: 'dive_bomber' as AircraftRole, desc: '可轉場回企業號航艦', isNavy: true },
-                      { id: 'tbd', label: 'TBD 毀滅者 (海軍陸基)', role: 'torpedo_bomber' as AircraftRole, desc: '可轉場回企業號航艦', isNavy: true },
-                    ]
-                  : era === 'era2'
-                  ? [
-                      { id: 'b24', label: 'B-24 解放者', role: 'level_bomber' as AircraftRole, desc: '超重型遠程水平轟炸機 · 16枚地毯連環航彈', isNavy: false },
-                      { id: 'b17_late', label: 'B-17G 飛行堡壘 (後期)', role: 'level_bomber' as AircraftRole, desc: '下顎雙聯.50機砲砲塔 · 密集防禦火網 · 16枚地毯轟炸', isNavy: false },
-                      { id: 'p51', label: 'P-51 野馬', role: 'fighter' as AircraftRole, desc: '長程高速空優戰鬥機 · 6x .50 機槍 / 火箭 / 航彈', isNavy: false },
-                      { id: 'p47', label: 'P-47 雷霆 (Jug)', role: 'attacker' as AircraftRole, desc: '裝甲戰鬥轟炸機 · 8x .50機槍 + 火箭/雙航彈', isNavy: false },
-                      { id: 'p38', label: 'P-38 閃電', role: 'fighter' as AircraftRole, desc: '雙身重戰鬥機 · 20mm機砲 + 4x .50機槍', isNavy: false },
-                      { id: 'c47', label: 'C-47 空中列車', role: 'transport' as AircraftRole, desc: '戰術傘兵運輸機 · 空投陸戰/空降傘兵奪島 (按U卸載)', isNavy: false },
-                      { id: 'f6f', label: 'F6F 地獄貓 (海軍陸基)', role: 'fighter' as AircraftRole, desc: '可轉場回艾塞克斯號', isNavy: true },
-                      { id: 'f4u', label: 'F4U 海盜 (海軍陸基)', role: 'fighter' as AircraftRole, desc: '可轉場回艾塞克斯號', isNavy: true },
-                      { id: 'sb2c', label: 'SB2C 地獄俯衝者', role: 'dive_bomber' as AircraftRole, desc: '可轉場回艾塞克斯號', isNavy: true },
-                      { id: 'tbf', label: 'TBF 復仇者 (海軍陸基)', role: 'torpedo_bomber' as AircraftRole, desc: '可轉場回艾塞克斯號', isNavy: true },
-                    ]
-                  : era === 'era3'
-                  ? [
-                      { id: 'b29', label: 'B-29 超級堡壘', role: 'level_bomber' as AircraftRole, desc: '萬米平流層戰略重轟 · 24枚連環地毯航彈 / Mk 4 戰術核彈', isNavy: false },
-                      { id: 'f86', label: 'F-86 軍刀', role: 'fighter' as AircraftRole, desc: '後掠翼噴射空優王者 · 6x .50 M3 柯爾特高射速機砲', isNavy: false },
-                      { id: 'f82', label: 'F-82 雙野馬長程截擊機', role: 'fighter' as AircraftRole, desc: '雙機身超長程護航戰機 · 6x .50高射速機砲', isNavy: false },
-                      { id: 'a26', label: 'A-26 入侵者', role: 'attacker' as AircraftRole, desc: '雙發高速重攻擊機 · 凝固汽油燃燒彈 / 小蒂姆火箭 / 巨彈', isNavy: false },
-                      { id: 'c47', label: 'C-47 空中列車', role: 'transport' as AircraftRole, desc: '戰術傘兵運輸機 · 空投陸戰/空降傘兵奪島 (按U卸載)', isNavy: false },
-                      { id: 'f9f', label: 'F9F 黑豹 (海軍陸基)', role: 'fighter' as AircraftRole, desc: '可轉場回奧里斯卡尼號', isNavy: true },
-                      { id: 'f2h', label: 'F2H 女妖 (海軍陸基)', role: 'fighter' as AircraftRole, desc: '可轉場回奧里斯卡尼號', isNavy: true },
-                      { id: 'ad1', label: 'AD-1 天襲者 (海軍陸基)', role: 'attacker' as AircraftRole, desc: '可轉場回奧里斯卡尼號', isNavy: true },
-                      { id: 'f4u4', label: 'F4U-4 海盜 (海軍陸基)', role: 'attacker' as AircraftRole, desc: '可轉場回奧里斯卡尼號', isNavy: true },
-                      { id: 'af_guardian', label: 'AF-2 獵潛衛士 (海軍陸基)', role: 'scout' as AircraftRole, desc: '可轉場回奧里斯卡尼號', isNavy: true },
-                    ]
-                  : era === 'era4'
-                  ? [
-                      { id: 'b52', label: 'B-52 同溫層堡壘', role: 'level_bomber' as AircraftRole, desc: '8發巨型戰略重轟 · 36枚弧形地毯轟炸 (Arc Light)', isNavy: false },
-                      { id: 'f4e', label: 'F-4E 幽靈II (陸空軍)', role: 'fighter' as AircraftRole, desc: '火神20mm航砲 + 麻雀/響尾蛇飛彈 · 超音速空優', isNavy: false },
-                      { id: 'f105', label: 'F-105D 雷公', role: 'attacker' as AircraftRole, desc: '超音速戰術戰轟機 · 百舌鳥反輻射飛彈 / 蛇眼減速彈', isNavy: false },
-                      { id: 'a7', label: 'A-7D 海盜II', role: 'attacker' as AircraftRole, desc: '對地打擊攻擊機 · 沃爾艾電視滑翔炸彈 / 蛇眼炸彈', isNavy: false },
-                      { id: 'a1h', label: 'A-1H 天襲者 (陸航/海航)', role: 'attacker' as AircraftRole, desc: '重裝活塞攻擊機 · 15個武器掛點 · 巨量航彈與火箭齊射', isNavy: false },
-                      { id: 'a37b', label: 'A-37B 蜻蜓式攻擊機', role: 'attacker' as AircraftRole, desc: '雙發輕型攻擊機 · 7.62mm米尼岡六管機槍 · 蛇眼航彈', isNavy: false },
-                      { id: 'f5a', label: 'F-5A 自由鬥士戰鬥機', role: 'fighter' as AircraftRole, desc: '雙發輕型超音速空優機 · 2x 20mm機砲 + 響尾蛇飛彈', isNavy: false },
-                      { id: 'f104g', label: 'F-104G 星式超音速戰機', role: 'fighter' as AircraftRole, desc: '2.0馬赫有人火箭 · 梯形小展弦比翼 · 響尾蛇飛彈', isNavy: false },
-                      { id: 'ov10', label: 'OV-10A 野馬', role: 'scout' as AircraftRole, desc: '前進空中管制 (FAC) / 觀測偵察 · 70mm FFAR火箭', isNavy: false },
-                      { id: 'ah1', label: 'AH-1G 眼鏡蛇', role: 'attacker' as AircraftRole, desc: '武裝攻擊直升機 · 20mm旋轉機砲 + 70mm火箭火網', isNavy: false },
-                      { id: 'uh1', label: 'UH-1D 休伊', role: 'rescue' as AircraftRole, desc: '陸戰隊空中垂直突擊 / 戰場直升機空降搜救', isNavy: false },
-                      { id: 'c1', label: 'C-1A 貿易商', role: 'transport' as AircraftRole, desc: '戰術艦載/陸基運輸機 · 陸戰隊傘兵空投遠程奪島', isNavy: false },
-                      { id: 'f4j', label: 'F-4J 幽靈 (海軍陸基)', role: 'fighter' as AircraftRole, desc: '可轉場回小鷹號超級航母 · 麻雀 + 響尾蛇飛彈', isNavy: true },
-                      { id: 'a6a', label: 'A-6A 入侵者 (海軍陸基)', role: 'attacker' as AircraftRole, desc: '可轉場回小鷹號超級航母 · 沃爾艾 / 百舌鳥 / 蛇眼', isNavy: true },
-                      { id: 'a4', label: 'A-4F 天鷹 (海軍陸基)', role: 'attacker' as AircraftRole, desc: '可轉場回小鷹號超級航母 · 輕型精準打擊 / 幼畜飛彈', isNavy: true },
-                      { id: 'e1', label: 'E-1B 追蹤者 (海軍陸基)', role: 'aew' as AircraftRole, desc: '可轉場回小鷹號超級航母 · 全向預警雷達', isNavy: true },
-                    ]
-                  : [
-                      // ════ 時代五 (冷戰終局現代化主力戰機與海軍陸基分隊) ════
-                      { id: 'a10a', label: 'A-10A 疣豬攻擊機 (開罐器)', role: 'attacker' as AircraftRole, desc: '30mm GAU-8 復仇者轉管巨砲 + 4x AGM-65 小牛導引飛彈', isNavy: false },
-                      { id: 'ah64a', label: 'AH-64A 阿帕契重裝武裝直升機', role: 'attacker' as AircraftRole, desc: '16枚 AGM-114 地獄火攻頂反戰車飛彈 + 30mm 鏈砲', isNavy: false },
-                      { id: 'ah1w', label: 'AH-1W 超級眼鏡蛇武裝直升機', role: 'attacker' as AircraftRole, desc: '8x 拖式反裝甲飛彈 + 20mm 旋轉機砲 + 響尾蛇空空防衛', isNavy: false },
-                      { id: 'f15a', label: 'F-15A 鷹式純空優戰鬥機', role: 'fighter' as AircraftRole, desc: 'APG-63 雷達 + 4x AIM-7F 麻雀 + 4x AIM-9L 響尾蛇', isNavy: false },
-                      { id: 'f16a', label: 'F-16A 戰隼超音速多用途戰機', role: 'fighter' as AircraftRole, desc: '電傳飛控高過載 + AIM-9L 響尾蛇 + AGM-65 小牛飛彈', isNavy: false },
-                      { id: 'e3a', label: 'E-3A 哨兵望樓預警機', role: 'aew' as AircraftRole, desc: '8000m 戰區巨型雷達早期預警 · 全戰區敵情即時共享', isNavy: false },
-                      { id: 'f111', label: 'F-111 土豚變後掠翼戰轟機', role: 'level_bomber' as AircraftRole, desc: '2.5馬赫低空突防 · 4x GBU-10 鋪路穿甲彈 / 魚叉反艦', isNavy: false },
-                      { id: 'b52', label: 'B-52G 同溫層堡壘 (現代化重轟)', role: 'level_bomber' as AircraftRole, desc: '8發巨型重轟 · 8x 魚叉長程反艦巡弋飛彈 / 走廊地毯轟炸', isNavy: false },
-                      { id: 'c130', label: 'C-130 大力士戰術運輸機', role: 'transport' as AircraftRole, desc: '戰術空投重型物資與陸戰隊傘兵部隊奪島', isNavy: false },
-                      { id: 'f14a', label: 'F-14A 雄貓 (海軍陸基分隊)', role: 'fighter' as AircraftRole, desc: '可轉場回尼米茲號航艦 · 4x AIM-54 鳳凰超遠程飛彈', isNavy: true },
-                      { id: 'fa18a', label: 'F/A-18A 大黃蜂 (海軍陸基分隊)', role: 'fighter' as AircraftRole, desc: '可轉場回尼米茲號航艦 · 魚叉反艦 + 小牛 + 響尾蛇', isNavy: true },
-                      { id: 'a6e', label: 'A-6E 侵入者 (海軍陸基分隊)', role: 'attacker' as AircraftRole, desc: '可轉場回尼米茲號航艦 · TRAM雷射穿甲 + 魚叉反艦', isNavy: true },
-                      { id: 'ea6b', label: 'EA-6B 徘徊者 (海軍陸基分隊)', role: 'attacker' as AircraftRole, desc: '可轉場回尼米茲號航艦 · ALQ-99電戰干擾 + AGM-88 HARM', isNavy: true },
-                      { id: 'av8b', label: 'AV-8B 海獵鷹II (陸戰隊垂直起降)', role: 'attacker' as AircraftRole, desc: '前線野戰短場起降 · GAU-12 25mm機砲 + 小牛飛彈', isNavy: true },
-                      { id: 's3a', label: 'S-3A 維京反潛機 (海軍陸基分隊)', role: 'scout' as AircraftRole, desc: '可轉場回尼米茲號航艦 · 磁異探測 + 魚叉反艦 + 反潛魚雷', isNavy: true },
-                      { id: 'e2c', label: 'E-2C 鷹眼預警機 (海軍陸基分隊)', role: 'aew' as AircraftRole, desc: '可轉場回尼米茲號航艦 · 6500m 超遠空情預警', isNavy: true },
-                      { id: 'sh3f', label: 'SH-3F 海王反潛直升機 (海軍陸基)', role: 'rescue' as AircraftRole, desc: '可轉場回尼米茲號航艦 · 吊放聲吶 + 聲自導反潛魚雷', isNavy: true },
-                      { id: 'ch53', label: 'CH-53 海種馬 (陸戰隊重型運輸)', role: 'transport' as AircraftRole, desc: '重裝甲吊運與大兵力垂直機降突擊', isNavy: true },
-                      { id: 'c2a', label: 'C-2A 灰狗艦載運輸機 (海軍陸基)', role: 'transport' as AircraftRole, desc: '可轉場回尼米茲號航艦 · 快速人員物資與傘兵空投', isNavy: true },
-                    ]
-                )
+                {afbModels
                   .filter((p) => {
                     if (afbFilter === 'all') return true;
                     if (afbFilter === 'level_bomber') return p.role === 'level_bomber';
@@ -2904,71 +1869,7 @@ export const HUD: React.FC<HUDProps> = ({
                     const hasReady = mCount > 0;
                     const selectedCount = afbFormationCounts[id] || 2;
                     const effectiveCount = Math.min(selectedCount, mCount || 1);
-                    const currentPayload =
-                      afbPayloads[id] ||
-                      (role === 'level_bomber'
-                        ? id === 'b52'
-                          ? era === 'era5' ? 'rgm84_harpoon' : 'b52_megaton_carpet'
-                          : id === 'f111'
-                          ? 'gbu10_laser_paveway'
-                          : id === 'b29'
-                          ? 'tactical_nuke'
-                          : id === 'b24'
-                          ? 'bombs_quad_500'
-                          : 'bombs_carpet_250'
-                        : role === 'attacker'
-                        ? id === 'a10a'
-                          ? 'agm65_maverick'
-                          : id === 'ah64a'
-                          ? 'hellfire_missiles'
-                          : id === 'ah1w'
-                          ? 'tow_missiles'
-                          : id === 'a6e'
-                          ? 'rgm84_harpoon'
-                          : id === 'ea6b'
-                          ? 'agm88_harm'
-                          : id === 'av8b'
-                          ? 'agm65_maverick'
-                          : id === 'f105'
-                          ? 'agm45_shrike'
-                          : id === 'a7' || id === 'a6a'
-                          ? 'agm62_walleye'
-                          : id === 'ah1'
-                          ? 'ffar_rockets_pod'
-                          : id === 'a26' && era === 'era3'
-                          ? 'napalm_canister'
-                          : id === 'p47'
-                          ? 'mixed_bombs_rockets'
-                          : era === 'era4'
-                          ? 'bombs_snakeye_retarded'
-                          : 'bombs_dual_500'
-                        : role === 'fighter'
-                        ? id === 'f14a'
-                          ? 'aim54_phoenix'
-                          : id === 'fa18a'
-                          ? 'rgm84_harpoon'
-                          : id === 'f15a' || id === 'f16a'
-                          ? 'aim7_aim9_combo'
-                          : era === 'era4'
-                          ? 'aim7_sparrow'
-                          : 'clean_guns'
-                        : role === 'transport'
-                        ? id === 'ch53'
-                          ? 'helo_assault_troops'
-                          : 'c1_paratroopers'
-                        : role === 'rescue'
-                        ? id === 'sh3f'
-                          ? 'asw_torpedo'
-                          : era === 'era4'
-                          ? 'helo_assault_troops'
-                          : 'clean_guns'
-                        : role === 'scout' || role === 'aew'
-                        ? id === 's3a'
-                          ? 'asw_torpedo'
-                          : 'scout_fuel'
-                        : role === 'dive_bomber'
-                        ? 'bomb_1000'
-                        : 'aerial_torpedo');
+                    const currentPayload = afbPayloads[id] || getDefaultAfbPayloadForUnit(id, role, era);
                     const payloadData = PAYLOAD_CATALOG[currentPayload] || PAYLOAD_CATALOG.clean_guns;
                     const isCarrierCapable = isNavy;
                     const afbCompatiblePayloads = getAfbCompatiblePayloads(id, role, era);
@@ -2997,30 +1898,44 @@ export const HUD: React.FC<HUDProps> = ({
                     return (
                       <div
                         key={id}
-                        className={`relative flex flex-col justify-between rounded-lg p-2 text-xs font-mono shadow-md min-w-[150px] max-w-[165px] transition-colors shrink-0 ${
+                        title={`${label} — ${desc}`}
+                        className={`relative flex flex-col justify-between rounded-lg p-2 text-xs font-mono shadow-md min-w-[158px] max-w-[170px] transition-colors shrink-0 ${
                           isNukeEquipped
                             ? 'bg-[#180E14] border-2 border-amber-400 shadow-[0_0_12px_rgba(255,160,0,0.3)]'
                             : 'bg-[#05151F] border border-[#00695C] hover:border-[#80CBC4]'
                         }`}
                       >
                         {/* Card Header: Model Name & Ready Count */}
-                        <div className="flex items-center justify-between pb-1.5 border-b border-[#004D40]">
-                          <div className="flex flex-col truncate pr-1">
-                            <span className="font-bold text-[#E0F2F1] text-[11px] truncate" title={`${label} (${desc})`}>
-                              {label}
-                            </span>
-                            <span className={`text-[9px] ${isNukeEquipped ? 'text-amber-300 font-bold' : 'text-[#80CBC4]'}`}>
-                              {roleBadge}
-                            </span>
-                          </div>
+                        <div className="flex items-center justify-between gap-1 pb-1 border-b border-[#004D40]">
+                          <span className="font-bold text-[#E0F2F1] text-[10.5px] truncate">
+                            {label}
+                          </span>
                           <span
-                            className={`tabular-nums text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 ${
+                            className={`tabular-nums text-[9.5px] px-1.5 py-0.2 rounded font-bold shrink-0 ${
                               hasReady
                                 ? 'bg-[#004D40] text-[#80CBC4] border border-[#80CBC4]/50'
                                 : 'bg-slate-900 text-slate-500 border border-slate-700'
                             }`}
                           >
-                            {mCount} {lang === 'zh' ? '在基地' : 'at Base'}
+                            {mCount}{lang === 'zh' ? '架' : 'Rdy'}
+                          </span>
+                        </div>
+
+                        {/* Unit Demonstration Blueprint Preview */}
+                        <div className="relative mt-1">
+                          <UnitPreviewCanvas
+                            kind="aircraft"
+                            unitKey={id}
+                            width={144}
+                            height={42}
+                            payloadType={currentPayload}
+                          />
+                          <span
+                            className={`absolute bottom-0.5 left-1 px-1 py-0.2 rounded bg-[#040C16]/85 border border-[#004D40]/90 text-[8px] font-bold ${
+                              isNukeEquipped ? 'text-amber-300' : 'text-[#80CBC4]'
+                            }`}
+                          >
+                            {roleBadge.replace(/[【】]/g, '')}
                           </span>
                         </div>
 
@@ -3116,7 +2031,7 @@ export const HUD: React.FC<HUDProps> = ({
                             className="mt-1 w-full py-1 px-1.5 bg-[#07242B] hover:bg-[#004D40] border border-[#80CBC4]/60 hover:border-[#80CBC4] rounded text-[10px] text-[#80CBC4] hover:text-white font-bold flex items-center justify-center gap-1 transition-colors"
                           >
                             <Sliders className="w-3 h-3 text-[#80CBC4]" />
-                            <span>{lang === 'zh' ? '更換掛載 (開啟軍械庫選擇盤)' : 'Swap Payload (Armory Select)'}</span>
+                            <span>{lang === 'zh' ? '更換掛載' : 'Swap Payload'}</span>
                           </button>
                         </div>
 
@@ -3164,7 +2079,9 @@ export const HUD: React.FC<HUDProps> = ({
                                 ? isNukeEquipped
                                   ? canAffordNuke
                                     ? (lang === 'zh' ? '☢️ 核打擊出擊' : '☢️ Launch Nuke')
-                                    : (lang === 'zh' ? `☢️ 差${4500 - Math.floor(resourcePoints)} CP` : `☢️ Need ${4500 - Math.floor(resourcePoints)} CP`)
+                                    : (lang === 'zh'
+                                        ? `☢️ 差${Math.max(0, requiredNukeCp - Math.floor(resourcePoints))} CP`
+                                        : `☢️ Need ${Math.max(0, requiredNukeCp - Math.floor(resourcePoints))} CP`)
                                   : (lang === 'zh' ? `出擊 ${effectiveCount}機` : `Sortie (${effectiveCount})`)
                                 : (lang === 'zh' ? '無機' : 'Empty')}
                             </span>
@@ -3242,22 +2159,22 @@ export const HUD: React.FC<HUDProps> = ({
                 </span>
 
                 <div className="flex items-center gap-1.5 overflow-x-auto max-w-full py-0.5">
-                  {(era === 'era4'
+                  {(era === 'era4' || era === 'era5'
                     ? [
-                        { id: 'req-fac-sam-hawk', label: '⚡ 霍克SAM飛彈', cost: '380 CP' },
-                        { id: 'req-fac-airfield', label: '⚡ 前進野戰跑道', cost: '320 CP' },
-                        { id: 'req-fac-fob', label: '⚡ 前進基地(FOB)', cost: '450 CP' },
-                        { id: 'req-fac-radar', label: '⚡ SPS-40長程雷達', cost: '220 CP' },
-                        { id: 'req-fac-dockyard', label: '⚡ 應急修護浮塢', cost: '260 CP' },
-                        { id: 'req-fac-m1-240mm', label: '⚡ M1 240mm重砲', cost: '360 CP' },
+                        { id: 'req-fac-sam-hawk', label: lang === 'zh' ? '⚡ 霍克SAM飛彈' : '⚡ HAWK SAM', cost: '380 CP' },
+                        { id: 'req-fac-airfield', label: lang === 'zh' ? '⚡ 前進野戰跑道' : '⚡ Forward Airfield', cost: '320 CP' },
+                        { id: 'req-fac-fob', label: lang === 'zh' ? '⚡ 前進基地(FOB)' : '⚡ Forward FOB', cost: '450 CP' },
+                        { id: 'req-fac-radar', label: lang === 'zh' ? '⚡ SPS-40長程雷達' : '⚡ SPS-40 Radar', cost: '220 CP' },
+                        { id: 'req-fac-dockyard', label: lang === 'zh' ? '⚡ 應急修護浮塢' : '⚡ Repair Dockyard', cost: '260 CP' },
+                        { id: 'req-fac-m1-240mm', label: lang === 'zh' ? '⚡ M1 240mm重砲' : '⚡ M1 240mm Howitzer', cost: '360 CP' },
                       ]
                     : [
-                        { id: 'req-fac-forward-airfield', label: '⚡ 前進野戰跑道', cost: '320 CP' },
-                        { id: 'req-fac-heavy-aa', label: '⚡ 雙聯重型防空砲', cost: '220 CP' },
-                        { id: 'req-fac-battalion-cp', label: '⚡ 營前進指揮所', cost: '250 CP' },
-                        { id: 'req-fac-dockyard', label: '⚡ 戰地修護浮塢', cost: '220 CP' },
-                        { id: 'req-fac-coastal-gun', label: '⚡ 岸防重砲', cost: '350 CP' },
-                        { id: 'req-fac-m1-240mm', label: '⚡ M1 240mm重砲', cost: '340 CP' },
+                        { id: 'req-fac-forward-airfield', label: lang === 'zh' ? '⚡ 前進野戰跑道' : '⚡ Forward Strip', cost: '320 CP' },
+                        { id: 'req-fac-heavy-aa', label: lang === 'zh' ? '⚡ 雙聯重型防空砲' : '⚡ Heavy AA Battery', cost: '220 CP' },
+                        { id: 'req-fac-battalion-cp', label: lang === 'zh' ? '⚡ 營前進指揮所' : '⚡ Battalion CP', cost: '250 CP' },
+                        { id: 'req-fac-dockyard', label: lang === 'zh' ? '⚡ 戰地修護浮塢' : '⚡ Field Dockyard', cost: '220 CP' },
+                        { id: 'req-fac-coastal-gun', label: lang === 'zh' ? '⚡ 岸防重砲' : '⚡ Coastal Battery', cost: '350 CP' },
+                        { id: 'req-fac-m1-240mm', label: lang === 'zh' ? '⚡ M1 240mm重砲' : '⚡ M1 240mm Howitzer', cost: '340 CP' },
                       ]
                   ).map((qItem) => {
                     const matchedItem = currentCatalog.find((c) => c.id === qItem.id);
@@ -3272,15 +2189,22 @@ export const HUD: React.FC<HUDProps> = ({
                         onClick={() => {
                           onPurchaseRequisition?.(matchedItem, selectedBuildIslandId || undefined, selectedEngineerUnit?.pos);
                         }}
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1 whitespace-nowrap transition-transform active:scale-95 ${
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold border flex items-center gap-1.5 whitespace-nowrap transition-transform active:scale-95 ${
                           canAfford
                             ? 'bg-[#0B2138] hover:bg-[#12365D] border-amber-400/60 text-amber-200 hover:text-white shadow-sm'
                             : 'bg-slate-900 border-slate-800 text-slate-500 cursor-not-allowed'
                         }`}
-                        title={`${matchedItem.nameZh} - 快捷在工兵身旁建造 (${matchedItem.cost} CP)`}
+                        title={`${matchedItem.nameZh} — ${matchedItem.desc} (${matchedItem.cost} CP)`}
                       >
+                        <UnitPreviewCanvas
+                          kind="installation"
+                          unitKey={matchedItem.typeTag || matchedItem.id}
+                          width={24}
+                          height={15}
+                          compact
+                        />
                         <span>{qItem.label}</span>
-                        <span className="text-[9px] text-amber-400 font-mono">({qItem.cost})</span>
+                        <span className="tabular-nums text-[9px] text-amber-400 font-mono">({qItem.cost})</span>
                       </button>
                     );
                   })}
@@ -3318,26 +2242,32 @@ export const HUD: React.FC<HUDProps> = ({
                     return (
                       <div
                         key={item.id}
-                        className="flex flex-col justify-between bg-[#071526] border border-amber-500/40 hover:border-amber-400 rounded-lg p-2 text-xs font-mono shadow-md min-w-[155px] max-w-[170px] transition-all shrink-0"
+                        title={`${lang === 'zh' ? item.nameZh : item.name} (${item.cost} CP)\n${item.desc}\n${item.statsDesc}`}
+                        className="flex flex-col justify-between bg-[#071526] border border-amber-500/40 hover:border-amber-400 rounded-lg p-2 text-xs font-mono shadow-md min-w-[162px] max-w-[172px] transition-all shrink-0"
                       >
                         <div>
-                          <div className="flex items-center justify-between pb-1 border-b border-[#1E3A5F]/70">
-                            <span className="font-bold text-[#E0F7FA] text-[10.5px] truncate" title={item.name}>
+                          <div className="flex items-center justify-between gap-1 pb-1 border-b border-[#1E3A5F]/70">
+                            <span className="font-bold text-[#E0F7FA] text-[10.5px] truncate">
                               {lang === 'zh' ? item.nameZh : item.name}
                             </span>
                           </div>
-                          <div className="flex items-center justify-between mt-1">
-                            <span className="px-1 py-0.2 bg-amber-950/80 text-amber-300 border border-amber-600/50 rounded text-[8.5px] font-bold">
-                              {item.badge}
-                            </span>
-                            <span className="text-amber-300 font-bold text-[10.5px] tabular-nums">
+                          <div className="relative mt-1">
+                            <UnitPreviewCanvas
+                              kind="installation"
+                              unitKey={item.typeTag || item.id}
+                              width={148}
+                              height={46}
+                            />
+                            <span className="absolute top-1 right-1 px-1 py-0.2 rounded bg-[#040C16]/90 border border-amber-500/60 text-amber-300 font-bold text-[9.5px] tabular-nums">
                               {item.cost} CP
                             </span>
                           </div>
-                          <div className="text-[9px] text-slate-300 mt-1 line-clamp-2 leading-relaxed">
-                            {item.desc}
+                          <div className="flex items-center justify-between gap-1 mt-1">
+                            <span className="px-1 py-0.2 bg-amber-950/80 text-amber-300 border border-amber-600/50 rounded text-[8.5px] font-bold truncate">
+                              {item.badge}
+                            </span>
                           </div>
-                          <div className="text-[8.5px] text-[#80DEEA] mt-1 bg-[#040C16] p-1 rounded border border-[#1E3A5F]/50 truncate">
+                          <div className="text-[8.5px] text-[#80DEEA] mt-1 bg-[#040C16] px-1 py-0.5 rounded border border-[#1E3A5F]/50 truncate">
                             {item.statsDesc}
                           </div>
                         </div>
@@ -3440,29 +2370,42 @@ export const HUD: React.FC<HUDProps> = ({
                   const canAfford = sandboxStamp || resourcePoints >= item.cost;
                   const shortCp = Math.ceil(item.cost - resourcePoints);
 
+                  const previewKind =
+                    requisitionTab === 'ships'
+                      ? 'ship'
+                      : requisitionTab === 'aircraft'
+                      ? 'aircraft'
+                      : 'ground';
+
                   return (
                     <div
                       key={item.id}
-                      className="flex flex-col justify-between bg-[#071526] border border-[#1E3A5F] hover:border-emerald-400/80 rounded-lg p-2 text-xs font-mono shadow-md min-w-[150px] max-w-[165px] transition-all shrink-0"
+                      title={`${lang === 'zh' ? item.nameZh : item.name} (${item.cost} CP)\n${item.desc}\n${item.statsDesc}`}
+                      className="flex flex-col justify-between bg-[#071526] border border-[#1E3A5F] hover:border-emerald-400/80 rounded-lg p-2 text-xs font-mono shadow-md min-w-[162px] max-w-[172px] transition-all shrink-0"
                     >
                       <div>
-                        <div className="flex items-center justify-between pb-1 border-b border-[#1E3A5F]/70">
-                          <span className="font-bold text-[#E0F7FA] text-[10.5px] truncate" title={item.name}>
+                        <div className="flex items-center justify-between gap-1 pb-1 border-b border-[#1E3A5F]/70">
+                          <span className="font-bold text-[#E0F7FA] text-[10.5px] truncate">
                             {lang === 'zh' ? item.nameZh : item.name}
                           </span>
                         </div>
-                        <div className="flex items-center justify-between mt-1">
-                          <span className="px-1 py-0.2 bg-emerald-950/80 text-emerald-300 border border-emerald-600/50 rounded text-[8.5px] font-bold">
-                            {item.badge}
-                          </span>
-                          <span className="text-amber-300 font-bold text-[10.5px] tabular-nums">
+                        <div className="relative mt-1">
+                          <UnitPreviewCanvas
+                            kind={previewKind}
+                            unitKey={item.typeTag || item.id}
+                            width={148}
+                            height={46}
+                          />
+                          <span className="absolute top-1 right-1 px-1 py-0.2 rounded bg-[#040C16]/90 border border-emerald-500/60 text-amber-300 font-bold text-[9.5px] tabular-nums">
                             {item.cost} CP
                           </span>
                         </div>
-                        <div className="text-[9px] text-slate-300 mt-1 line-clamp-2 leading-relaxed">
-                          {item.desc}
+                        <div className="flex items-center justify-between gap-1 mt-1">
+                          <span className="px-1 py-0.2 bg-emerald-950/80 text-emerald-300 border border-emerald-600/50 rounded text-[8.5px] font-bold truncate">
+                            {item.badge}
+                          </span>
                         </div>
-                        <div className="text-[8.5px] text-[#80DEEA] mt-1 bg-[#040C16] p-1 rounded border border-[#1E3A5F]/50 truncate">
+                        <div className="text-[8.5px] text-[#80DEEA] mt-1 bg-[#040C16] px-1 py-0.5 rounded border border-[#1E3A5F]/50 truncate">
                           {item.statsDesc}
                         </div>
                       </div>
@@ -3499,174 +2442,23 @@ export const HUD: React.FC<HUDProps> = ({
       )
     )}
 
-      {/* ══════════════════════════════════════════════════════════
-          戰地軍械庫掛載選擇盤 (Tactical Armament Selector Tray Modal)
-          全面支援作戰用途標籤、殺傷破壞半徑(m)、戰略CP成本與外觀模型預覽
-          ══════════════════════════════════════════════════════════ */}
-      {activeArmamentTray && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 pointer-events-auto">
-          <div className="bg-[#051322] border-2 border-[#1E3A5F] rounded-xl shadow-2xl max-w-4xl w-full max-h-[88vh] flex flex-col overflow-hidden text-slate-100 font-mono">
-            {/* Tray Header */}
-            <div className="flex items-center justify-between p-3.5 bg-[#081B30] border-b border-[#1E3A5F]">
-              <div className="flex items-center gap-2.5">
-                <Wrench className="w-5 h-5 text-[#80DEEA]" />
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-[#E0F7FA]">
-                      【{activeArmamentTray.planeLabel}】戰地軍械庫掛載武裝配置盤
-                    </span>
-                    <span className="text-[11px] text-[#80CBC4] bg-[#004D40] px-2 py-0.5 rounded border border-[#80CBC4]/40 font-bold">
-                      {activeArmamentTray.isAirbase ? '前進陸基基地' : '母艦飛行甲板'}
-                    </span>
-                  </div>
-                  <div className="text-[11px] text-slate-400 mt-0.5">
-                    作戰用途標註 · 殺傷破壞半徑 (m) · 戰略CP授權 · 機體外觀掛載標籤
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="text-right text-xs">
-                  <span className="text-slate-400">目前可用 CP: </span>
-                  <span className="text-amber-400 font-bold tabular-nums">{Math.floor(resourcePoints)} CP</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveArmamentTray(null)}
-                  className="px-3 py-1.5 bg-[#1E3A5F]/80 hover:bg-[#1E3A5F] text-slate-200 hover:text-white rounded text-xs font-bold transition-colors"
-                >
-                  關閉選擇盤 ✕
-                </button>
-              </div>
-            </div>
-
-            {/* Tray Body: Grid of Payload Cards */}
-            <div className="p-3.5 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-[calc(88vh-80px)]">
-              {activeArmamentTray.compatiblePayloads.map((pid) => {
-                const item = PAYLOAD_CATALOG[pid];
-                if (!item) return null;
-                const isSelected = activeArmamentTray.currentPayload === pid;
-                const isNuke = pid === 'tactical_nuke';
-                const cpCost = item.cpCost || 0;
-                const canAfford = !cpCost || resourcePoints >= cpCost;
-
-                return (
-                  <div
-                    key={pid}
-                    className={`flex flex-col justify-between p-3 rounded-lg border transition-all ${
-                      isSelected
-                        ? isNuke
-                          ? 'bg-[#250F0F] border-amber-400 shadow-[0_0_18px_rgba(255,160,0,0.4)]'
-                          : 'bg-[#0A2540] border-[#00E676] shadow-md'
-                        : isNuke
-                        ? 'bg-[#180A0A] border-red-900/80 hover:border-amber-500/80'
-                        : 'bg-[#06172A] border-[#1E3A5F] hover:border-[#42A5F5]'
-                    }`}
-                  >
-                    <div>
-                      {/* Purpose Badge & Visual Tag */}
-                      <div className="flex items-center justify-between gap-1 mb-1.5 flex-wrap">
-                        <span
-                          className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                            isNuke
-                              ? 'bg-gradient-to-r from-amber-500 via-rose-500 to-red-600 text-black font-extrabold shadow'
-                              : 'bg-[#004D40] text-emerald-300 border border-[#00BFA5]/30'
-                          }`}
-                        >
-                          {item.purposeBadge || '【戰術打擊】'}
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          {item.visualTag || '[標準機載]'}
-                        </span>
-                      </div>
-
-                      {/* Title */}
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className={`text-xs font-bold ${isNuke ? 'text-amber-300' : 'text-white'}`}>
-                          {item.badge}
-                        </span>
-                        <span className="text-[10px] text-slate-400">{item.nameZh}</span>
-                      </div>
-
-                      {/* Metrics: Blast Radius, Damage, CP */}
-                      <div className="grid grid-cols-2 gap-1.5 mt-2 bg-[#030D18] p-2 rounded border border-[#1E3A5F]/60 text-[10px]">
-                        <div>
-                          <span className="text-slate-400">💥 破壞半徑: </span>
-                          <span className="font-bold text-amber-300 tabular-nums">
-                            {item.blastRadius ? `${item.blastRadius}m` : '精密點直擊'}
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400">🎯 殺傷威力: </span>
-                          <span className="font-bold text-emerald-300 tabular-nums">
-                            {item.damage > 0 ? `${item.damage.toLocaleString()} DMG` : '空戰/機砲'}
-                          </span>
-                        </div>
-                        <div className="col-span-2 flex items-center justify-between pt-1 border-t border-[#1E3A5F]/40">
-                          <span className="text-slate-400">戰略CP授權: </span>
-                          <span
-                            className={`font-bold tabular-nums ${
-                              cpCost > 0
-                                ? canAfford
-                                  ? 'text-amber-400'
-                                  : 'text-red-400'
-                                : 'text-emerald-400'
-                            }`}
-                          >
-                            {cpCost > 0 ? `☢️ ${cpCost.toLocaleString()} CP` : '✅ 常規庫存 (0 CP)'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Tactical Pros */}
-                      <p className="text-[10px] text-slate-300 mt-2 line-clamp-3 leading-relaxed">
-                        {item.pros}
-                      </p>
-                    </div>
-
-                    {/* Action Button */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (activeArmamentTray.isAirbase) {
-                          setAfbPayloads((prev) => ({ ...prev, [activeArmamentTray.planeId]: pid }));
-                        } else {
-                          setModelPayloads((prev) => ({ ...prev, [activeArmamentTray.planeId as AircraftModel]: pid }));
-                          onSelectPayload?.(activeArmamentTray.role, pid);
-                        }
-                        setActiveArmamentTray((prev) => (prev ? { ...prev, currentPayload: pid } : null));
-                      }}
-                      className={`mt-3 w-full py-2 px-2 rounded text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all ${
-                        isSelected
-                          ? 'bg-[#00E676] text-black shadow-md cursor-default'
-                          : isNuke
-                          ? canAfford
-                            ? 'bg-gradient-to-r from-amber-600 via-rose-600 to-red-600 hover:from-amber-500 hover:to-red-500 text-white border border-amber-300 shadow'
-                            : 'bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300'
-                          : 'bg-[#1976D2] hover:bg-[#2196F3] text-white shadow'
-                      }`}
-                    >
-                      {isSelected ? (
-                        <>
-                          <Check className="w-3.5 h-3.5" />
-                          <span>✓ 目前已掛裝 (EQUIPPED)</span>
-                        </>
-                      ) : isNuke ? (
-                        canAfford ? (
-                          <span>☢️ 立即掛載原子彈 (具備足額 CP 授權)</span>
-                        ) : (
-                          <span>⚠️ 掛載原子彈 (出擊需 4,500 CP)</span>
-                        )
-                      ) : (
-                        <span>立即更換此武裝 (EQUIP)</span>
-                      )}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 戰地軍械庫掛載選擇盤 (Tactical Armament Selector Tray Modal) */}
+      <ArmamentTrayModal
+        tray={activeArmamentTray}
+        lang={lang}
+        resourcePoints={resourcePoints}
+        onClose={() => setActiveArmamentTray(null)}
+        onSelectPayload={(pid) => {
+          if (!activeArmamentTray) return;
+          if (activeArmamentTray.isAirbase) {
+            setAfbPayloads((prev) => ({ ...prev, [activeArmamentTray.planeId]: pid }));
+          } else {
+            setModelPayloads((prev) => ({ ...prev, [activeArmamentTray.planeId as AircraftModel]: pid }));
+            onSelectPayload?.(activeArmamentTray.role, pid);
+          }
+          setActiveArmamentTray((prev) => (prev ? { ...prev, currentPayload: pid } : null));
+        }}
+      />
       </div>
     </div>
   );
