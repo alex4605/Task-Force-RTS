@@ -1664,14 +1664,14 @@ export class GameEngine {
     }
 
     // High-performance naval and land-based aviation speeds (Supersonic Mach 1.8~2.5+ in Era 5)
-    const rawSpeed = getAircraftBaseSpeed(model, 'carrier');
+    const rawSpeed = getAircraftBaseSpeed(model);
 
     const catalogItem = PAYLOAD_CATALOG[payloadType];
     const speedModifier = catalogItem ? catalogItem.speedModifier : 1.0;
     const baseSpeed = Math.round(rawSpeed * speedModifier);
 
     // Resilient, battle-hardened health pools for carrier and land-based air groups
-    const baseHealth = getAircraftBaseHealth(model, 'carrier');
+    const baseHealth = getAircraftBaseHealth(model);
 
     const hasPayload =
       payloadType === 'hvar_rockets' ||
@@ -1729,7 +1729,7 @@ export class GameEngine {
     const flightName = `${callsign} Flight (${actualCount}x ${model.toUpperCase()})`;
 
     // 戰鬥機機槍彈殘彈數量
-    const gunRounds = getAircraftGunRounds(model, 'carrier');
+    const gunRounds = getAircraftGunRounds(model);
 
     let initialAmmo = 0;
     if (payloadType === 'clean_guns') initialAmmo = gunRounds;
@@ -8605,9 +8605,9 @@ export class GameEngine {
         ? 'transport'
         : 'torpedo_bomber';
 
-    const rawSpeed = getAircraftBaseSpeed(model, 'airbase');
+    const rawSpeed = getAircraftBaseSpeed(model);
 
-    const baseHealth = getAircraftBaseHealth(model, 'airbase');
+    const baseHealth = getAircraftBaseHealth(model);
 
     const pType: AircraftPayloadType =
       payload ||
@@ -8807,7 +8807,7 @@ export class GameEngine {
 
     const flightName = `AFB 出擊機隊 (${count}x ${model.toUpperCase()} ${roleZh})`;
 
-    const gunRounds = getAircraftGunRounds(model, 'airbase');
+    const gunRounds = getAircraftGunRounds(model);
 
     const afbHasPayload = pType !== 'clean_guns' && pType !== 'scout_fuel';
     const afbInitialAmmo =
