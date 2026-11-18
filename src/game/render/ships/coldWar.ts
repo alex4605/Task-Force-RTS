@@ -1190,3 +1190,88 @@ export function drawPetyaFFG(rc: RenderContext, ship: Ship, hullColor: string, d
 
   drawShipTurrets(rc, ship, hullColor);
 }
+
+// Project 183 P-6 Torpedo Boat (Korean War era): planing hull, 2x 533mm side-mounted torpedo tubes,
+// twin 25mm 2M-3 mounts fore and aft, small wheelhouse with radar mast.
+export function drawP6TorpedoBoat(rc: RenderContext, ship: Ship, hullColor: string, detailColor: string) {
+  const ctx = rc.ctx;
+  const l = ship.length;
+  const w = ship.width;
+
+  // Hard-chine planing hull with a fine bow and square transom
+  ctx.fillStyle = '#180E14';
+  ctx.strokeStyle = hullColor;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(l * 0.5, 0);
+  ctx.quadraticCurveTo(l * 0.36, -w * 0.46, l * 0.18, -w * 0.48);
+  ctx.lineTo(-l * 0.48, -w * 0.46);
+  ctx.lineTo(-l * 0.48, w * 0.46);
+  ctx.lineTo(l * 0.18, w * 0.48);
+  ctx.quadraticCurveTo(l * 0.36, w * 0.46, l * 0.5, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Spray strakes along the forward chines
+  ctx.strokeStyle = 'rgba(255, 205, 210, 0.35)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(l * 0.42, -w * 0.12);
+  ctx.lineTo(l * 0.1, -w * 0.3);
+  ctx.moveTo(l * 0.42, w * 0.12);
+  ctx.lineTo(l * 0.1, w * 0.3);
+  ctx.stroke();
+
+  // 533mm torpedo tubes on both sides of the aft deck, angled slightly outboard
+  ctx.fillStyle = '#37474F';
+  ctx.strokeStyle = '#FF5252';
+  ctx.lineWidth = 1.2;
+  for (const side of [-1, 1]) {
+    ctx.save();
+    ctx.translate(-l * 0.18, side * w * 0.3);
+    ctx.rotate(side * 0.06);
+    ctx.fillRect(-l * 0.22, -w * 0.11, l * 0.4, w * 0.22);
+    ctx.strokeRect(-l * 0.22, -w * 0.11, l * 0.4, w * 0.22);
+    // Torpedo warhead visible at the muzzle
+    ctx.fillStyle = '#B0BEC5';
+    ctx.beginPath();
+    ctx.arc(l * 0.18, 0, w * 0.09, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#37474F';
+    ctx.restore();
+  }
+
+  // Wheelhouse with radar mast
+  ctx.fillStyle = '#263238';
+  ctx.strokeStyle = detailColor;
+  ctx.lineWidth = 1.2;
+  ctx.fillRect(l * 0.04, -w * 0.24, l * 0.14, w * 0.48);
+  ctx.strokeRect(l * 0.04, -w * 0.24, l * 0.14, w * 0.48);
+  ctx.strokeStyle = detailColor;
+  ctx.beginPath();
+  ctx.moveTo(l * 0.06, -w * 0.18);
+  ctx.lineTo(l * 0.06, w * 0.18);
+  ctx.stroke();
+  ctx.fillStyle = detailColor;
+  ctx.beginPath();
+  ctx.arc(l * 0.06, 0, 1.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Twin 25mm 2M-3 mounts fore and aft
+  ctx.strokeStyle = '#FF5252';
+  ctx.lineWidth = 1.2;
+  for (const [mx, dir] of [[l * 0.3, 1], [-l * 0.42, -1]] as const) {
+    ctx.fillStyle = '#263238';
+    ctx.beginPath();
+    ctx.arc(mx, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(mx, -1.1);
+    ctx.lineTo(mx + dir * 6, -1.1);
+    ctx.moveTo(mx, 1.1);
+    ctx.lineTo(mx + dir * 6, 1.1);
+    ctx.stroke();
+  }
+}

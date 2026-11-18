@@ -1,9 +1,7 @@
 import { Ship, Vector2D } from '../../../types/game';
 import { RenderContext, Camera, isWorldCircleVisible } from '../context';
 import { drawAlliedSAGShip } from './alliedSag';
-import { drawAkizukiDD, drawBattleship, drawCVE, drawCarrier, drawChokaiCA, drawCruiser, drawDestroyer, drawKongoBB, drawLCVP, drawLSMR, drawLST, drawSubmarine } from './ww2';
-import { drawAdamsDDG, drawBelknapCG, drawCV63, drawForrestShermanDD, drawFoxtrotSS, drawKashinDDG, drawKnoxFFG, drawKomarPTG, drawKyndaCG, drawLCM8, drawLPHIwoJima, drawOsaPTG, drawPetyaFFG, drawRigaFFG, drawSverdlovCL } from './coldWar';
-import { drawAustinLPD, drawIowaModernized, drawKiddDDG, drawKievCVHG, drawKirovCGN, drawLCAC, drawLosAngelesSSN, drawNimitzCVN, drawOscarSSGN, drawPerryFFG, drawSovremennyDD, drawSpruanceDD, drawTiconderogaCG, drawUdaloyDD, drawVirginiaCG } from './modern';
+import { SHIP_HULL_DRAWERS } from './hulls';
 
 function isSubmarineShip(ship: Ship): boolean {
   return (
@@ -758,94 +756,7 @@ function renderShipHullByType(rc: RenderContext, ship: Ship, hullColor: string, 
     drawAlliedSAGShip(rc, ship, hullColor, detailColor);
     return;
   }
-
-  if (ship.type === 'carrier') {
-    drawCarrier(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'cv63') {
-    drawCV63(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'cg') {
-    drawBelknapCG(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'cvn') {
-    drawNimitzCVN(rc, ship, hullColor, detailColor); // Nimitz supercarrier dedicated modern angled deck
-  } else if (ship.type === 'cg_tico') {
-    drawTiconderogaCG(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'cg_virginia') {
-    drawVirginiaCG(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'bb_iowa_mod') {
-    drawIowaModernized(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'dd_spruance') {
-    drawSpruanceDD(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'ddg_kidd') {
-    drawKiddDDG(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'ffg_ohp') {
-    drawPerryFFG(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'ssn_la') {
-    drawLosAngelesSSN(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'lpd') {
-    drawAustinLPD(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'lcac') {
-    drawLCAC(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'cvhg_kiev') {
-    drawKievCVHG(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'cgn_kirov') {
-    drawKirovCGN(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'dd_sovremenny') {
-    drawSovremennyDD(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'dd_udaloy') {
-    drawUdaloyDD(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'ssgn_oscar') {
-    drawOscarSSGN(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'ddg') {
-    drawAdamsDDG(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'dd') {
-    drawForrestShermanDD(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'ffg') {
-    drawKnoxFFG(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'lph') {
-    drawLPHIwoJima(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'lcm8') {
-    drawLCM8(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'komar_ptg') {
-    drawKomarPTG(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'kashin') {
-    drawKashinDDG(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'riga') {
-    drawRigaFFG(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'osa') {
-    drawOsaPTG(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'foxtrot') {
-    drawFoxtrotSS(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'battleship') {
-    drawBattleship(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'cruiser') {
-    drawCruiser(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'destroyer') {
-    drawDestroyer(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'submarine') {
-    drawSubmarine(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'lcvp') {
-    drawLCVP(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'lst') {
-    drawLST(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'lsm_r') {
-    drawLSMR(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'cve') {
-    drawCVE(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'chokai') {
-    drawChokaiCA(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'kongo') {
-    drawKongoBB(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'akizuki') {
-    drawAkizukiDD(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'sverdlov') {
-    drawSverdlovCL(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'kynda') {
-    drawKyndaCG(rc, ship, hullColor, detailColor);
-  } else if (ship.type === 'petya') {
-    drawPetyaFFG(rc, ship, hullColor, detailColor);
-  } else {
-    drawCruiser(rc, ship, hullColor, detailColor);
-  }
+  SHIP_HULL_DRAWERS[ship.type](rc, ship, hullColor, detailColor);
 }
 
 // Universal Surface & Subsurface Ship Tactical Details (Breakwater, Spinning Radar Mast, Port/Starboard Nav Lights)
@@ -915,6 +826,26 @@ function drawShipUniversalDetails(rc: RenderContext, ship: Ship, hullColor: stri
   ctx.fillRect(-l * 0.48, -1, 2, 2);
 }
 
+const PLATE_MAX_WIDTH = 150;
+
+/** Half of the hull's vertical (screen-space y) extent at its current heading. */
+function shipVerticalHalfExtent(ship: Ship): number {
+  return Math.abs(Math.sin(ship.heading)) * ship.length * 0.5 + Math.abs(Math.cos(ship.heading)) * ship.width * 0.5;
+}
+
+/** Truncate text with an ellipsis so it fits maxWidth in the current font. */
+function fitText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let lo = 0;
+  let hi = text.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (ctx.measureText(text.slice(0, mid) + '…').width <= maxWidth) lo = mid;
+    else hi = mid - 1;
+  }
+  return text.slice(0, lo).trimEnd() + '…';
+}
+
 function drawShipStatus(rc: RenderContext, ship: Ship, zoom: number = 0.65, isSelected: boolean = false) {
   const ctx = rc.ctx;
   const isPlayer = ship.side === 'player';
@@ -928,10 +859,13 @@ function drawShipStatus(rc: RenderContext, ship: Ship, zoom: number = 0.65, isSe
   const curHcs = ship.hullCrewHealth !== undefined ? ship.hullCrewHealth : ship.health;
   const hcsPct = Math.max(0, Math.min(1, curHcs / maxHcs));
 
+  // Clear the hull whatever its heading: half of its on-screen vertical extent, never less than its beam.
+  const hullClearance = Math.max(ship.width, shipVerticalHalfExtent(ship));
+
   // Strategic Zoom LOD: when zoomed far out, render a clean compact HP bar unless flagship/selected
   if (zoom < 0.34 && !ship.isFlagship && !isSelected) {
     const compactW = 48;
-    const compactY = ship.pos.y - ship.width - 18;
+    const compactY = ship.pos.y - hullClearance - 18;
     const compactX = ship.pos.x - compactW / 2;
     ctx.fillStyle = 'rgba(5, 14, 25, 0.85)';
     ctx.fillRect(compactX - 1, compactY - 1, compactW + 2, 7);
@@ -943,9 +877,13 @@ function drawShipStatus(rc: RenderContext, ship: Ship, zoom: number = 0.65, isSe
   const barWidth = 60;
   const barHeight = 4;
   const barGap = 2.5;
-  const plateWidth = barWidth + 34;
   const plateHeight = barHeight * 2 + barGap + 18;
-  const yOffset = -ship.width - 26;
+  const yOffset = -hullClearance - 26;
+
+  // Plate grows with the label up to a cap; longer labels are ellipsized.
+  ctx.font = 'bold 9px monospace';
+  const label = ship.codeName || ship.name;
+  const plateWidth = Math.min(PLATE_MAX_WIDTH, Math.max(barWidth + 34, ctx.measureText(label).width + 12));
 
   // Tactical HUD backing plate for maximum readability against ocean/islands
   const plateX = ship.pos.x - plateWidth / 2;
@@ -963,7 +901,7 @@ function drawShipStatus(rc: RenderContext, ship: Ship, zoom: number = 0.65, isSe
   ctx.font = 'bold 9px monospace';
   ctx.textAlign = 'center';
   ctx.fillStyle = isPlayer ? '#E0F7FA' : isAllied ? '#A7FFEB' : '#FFCDD2';
-  ctx.fillText(ship.codeName || ship.name, ship.pos.x, ship.pos.y + yOffset - 1);
+  ctx.fillText(fitText(ctx, label, plateWidth - 8), ship.pos.x, ship.pos.y + yOffset - 1);
 
   if (isSubmarineShip(ship) && (ship.isSubmerged ?? true)) {
     ctx.font = 'bold 7.5px monospace';
