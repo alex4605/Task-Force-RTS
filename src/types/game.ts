@@ -1575,8 +1575,6 @@ export type InstallationType =
   | 'glcm_site'          // BGM-109G 陸基戰斧巡弋飛彈陣地 (遠程外科手術打擊敵要塞基地)
   | 'scud_site';         // 華約 9K72 飛毛腿-B 戰術彈道飛彈發射營 (Scud-B SSM 重型戰術地對地彈道打擊)
 
-export type ActiveDockFacility = 'carrier' | 'airbase' | 'engineer_construction' | 'battalion_cp';
-
 export interface Installation {
   id: string;
   type: InstallationType;
@@ -1660,12 +1658,6 @@ export interface Island {
   roads?: { points: Vector2D[]; type: 'road' | 'trail' }[];
   hills?: { x: number; y: number; radius: number }[];
   rivers?: { points: Vector2D[]; width: number }[];
-}
-
-export interface FriendlyAirbasePool {
-  ready: Record<string, number>;
-  replenishTimer: number;
-  replenishMax: number;
 }
 
 export type ProjectileType =

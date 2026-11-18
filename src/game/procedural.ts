@@ -20,12 +20,6 @@ export function dist(a: Vector2D, b: Vector2D): number {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-export function distSq(a: Vector2D, b: Vector2D): number {
-  const dx = a.x - b.x;
-  const dy = a.y - b.y;
-  return dx * dx + dy * dy;
-}
-
 // Distance from point to ship's full elongated hull line segment
 export function distToShipHull(p: Vector2D, ship: Ship): number {
   const halfL = ship.length * 0.46;
@@ -2808,44 +2802,6 @@ export function createLSMR(id: string, name: string, pos: Vector2D, era: Era): S
       { name: '5吋38倍徑單裝高平砲', count: '1門', type: 'secondary', desc: '直接砲擊' },
       { name: '40mm 博福斯雙聯高射砲', count: '2門', type: 'aa', desc: '自衛防空' },
     ],
-    flakCooldown: 0,
-    flakRange: 750,
-  });
-}
-
-export function createCVE(id: string, name: string, pos: Vector2D, era: Era): Ship {
-  return createShip({
-    id,
-    name,
-    codeName: 'Jeep Carrier',
-    type: 'cve',
-    side: 'player',
-    era,
-    pos: { ...pos },
-    heading: -Math.PI / 4,
-    speed: 12,
-    maxSpeed: 19,
-    length: 98,
-    width: 22,
-    health: 2700,
-    maxHealth: 2700,
-    armor: 0.28,
-    detectionRange: 2900,
-    turrets: [
-      createTurret(-32, 0, '5-inch/38 Mk 12 (艦艉自衛高平砲)', 1050, 2.5, 1, -Math.PI / 4, 120),
-      createTurret(15, -9, '40mm Bofors Twin (右舷防空砲)', 850, 1.2, 2, -Math.PI / 4, 140),
-      createTurret(15, 9, '40mm Bofors Twin (左舷防空砲)', 850, 1.2, 2, -Math.PI / 4, 140),
-    ],
-    detailedArmaments: [
-      { name: '近距空中支援 (CAS) 機隊', count: '28架', type: 'main', desc: 'FM-2 野貓與 TBM 復仇者' },
-      { name: '40mm 博福斯雙聯高射砲', count: '8門', type: 'aa', desc: '防空彈幕' },
-      { name: '20mm 厄利孔高平快砲', count: '12門', type: 'aa', desc: '近迫自衛' },
-    ],
-    carrierPlanes: {
-      ready: era === 'era1' ? { f4f: 6, tbd: 6 } : { f6f: 6, tbf: 6 },
-      hangar: era === 'era1' ? { f4f: 8, tbd: 8 } : { f6f: 8, tbf: 8 },
-      maxPerType: era === 'era1' ? { f4f: 8, tbd: 8 } : { f6f: 8, tbf: 8 },
-    },
     flakCooldown: 0,
     flakRange: 750,
   });

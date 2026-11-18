@@ -1869,6 +1869,3 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
 
   return [...ships, ...aircraft, ...ground, ...installations];
 }
-
-// Backwards-compatible export for default era 1
-export const REQUISITION_CATALOG: RequisitionItem[] = getRequisitionCatalog('era1');
