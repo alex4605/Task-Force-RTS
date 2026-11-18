@@ -1,6 +1,6 @@
 import { Ship } from '../../../types/game';
 import { RenderContext } from '../context';
-import { drawShipTurrets } from './index';
+import { drawShipTurrets } from './mounts';
 
 // CV-63 Kitty Hawk Supercarrier Line Art (Angled flight deck, 4 catapults, modern island)
 export function drawCV63(rc: RenderContext, ship: Ship, hullColor: string, detailColor: string) {
@@ -771,11 +771,13 @@ export function drawRigaFFG(rc: RenderContext, ship: Ship, hullColor: string, de
   ctx.lineTo(gun1X + 11, 0);
   ctx.stroke();
 
-  // RBU-2500 ASW rocket launcher forward of bridge
+  // Twin RBU-2500 ASW rocket launchers abreast the bridge front
   ctx.strokeStyle = '#FFD54F';
   ctx.lineWidth = 1.2;
   ctx.beginPath();
-  ctx.arc(l * 0.22, 0, 3, 0, Math.PI * 2);
+  ctx.arc(l * 0.12, -w * 0.36, 2.2, 0, Math.PI * 2);
+  ctx.moveTo(l * 0.12 + 2.2, w * 0.36);
+  ctx.arc(l * 0.12, w * 0.36, 2.2, 0, Math.PI * 2);
   ctx.stroke();
 
   // Midships Bridge & Single Raked Funnel
@@ -787,8 +789,8 @@ export function drawRigaFFG(rc: RenderContext, ship: Ship, hullColor: string, de
   ctx.fillStyle = '#37474F';
   ctx.fillRect(-l * 0.06, -3, 8, 6);
 
-  // Midships 100mm B-34 Gun Turret ('B' Mount between funnel and torpedo tubes)
-  const gun2X = -l * 0.14;
+  // Superfiring 100mm B-34 Gun Turret ('B' Mount ahead of the bridge)
+  const gun2X = l * 0.22;
   ctx.fillStyle = '#263238';
   ctx.strokeStyle = '#FF8A80';
   ctx.beginPath();

@@ -563,59 +563,7 @@ function drawWake(rc: RenderContext, ship: Ship) {
   ctx.stroke();
 }
 
-export function drawShipTurrets(rc: RenderContext, ship: Ship, color: string) {
-  const ctx = rc.ctx;
-  for (const turret of ship.turrets) {
-    ctx.save();
-    ctx.translate(turret.relX, turret.relY);
-    ctx.rotate(turret.angle - ship.heading);
-
-    const r = turret.barrelCount > 2 ? 6.5 : 4.8;
-    // Beveled armored gun house (trapezoid/octagonal barbette profile)
-    ctx.fillStyle = '#0D2235';
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(r * 0.95, -r * 0.58);
-    ctx.lineTo(r * 0.25, -r * 0.92);
-    ctx.lineTo(-r * 0.92, -r * 0.80);
-    ctx.lineTo(-r * 0.92, r * 0.80);
-    ctx.lineTo(r * 0.25, r * 0.92);
-    ctx.lineTo(r * 0.95, r * 0.58);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    // Top armored roof hatch & rangefinder highlight
-    ctx.fillStyle = '#1E3F5E';
-    ctx.fillRect(-r * 0.55, -r * 0.46, r * 0.9, r * 0.92);
-
-    // Recoil barrel jackets + gun barrels
-    const bLen = turret.barrelCount > 2 ? 16 : 12;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    const drawBarrel = (by: number) => {
-      ctx.fillStyle = '#546E7A';
-      ctx.fillRect(r * 0.65, by - 1.3, 3.2, 2.6);
-      ctx.beginPath();
-      ctx.moveTo(r * 0.7, by);
-      ctx.lineTo(bLen, by);
-      ctx.stroke();
-    };
-    if (turret.barrelCount === 1) {
-      drawBarrel(0);
-    } else if (turret.barrelCount === 2) {
-      drawBarrel(-2.3);
-      drawBarrel(2.3);
-    } else if (turret.barrelCount >= 3) {
-      drawBarrel(-3.3);
-      drawBarrel(0);
-      drawBarrel(3.3);
-    }
-
-    ctx.restore();
-  }
-}
+export { drawShipTurrets } from './mounts';
 
 // ══════════════════════════════════════════════════════════
 // 盟軍水面打擊群 (Allied SAG) 專屬考證艦艇外觀與動態軍艦旗

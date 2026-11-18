@@ -1,6 +1,6 @@
 import { Ship } from '../../../types/game';
 import { RenderContext } from '../context';
-import { drawShipTurrets } from './index';
+import { drawShipTurrets } from './mounts';
 
 // Ticonderoga CG (Aegis Cruiser with SPY-1 phased array deckhouses)
 export function drawTiconderogaCG(rc: RenderContext, ship: Ship, hullColor: string, _detailColor: string) {

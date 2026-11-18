@@ -1,6 +1,6 @@
 import { Ship } from '../../../types/game';
 import { RenderContext } from '../context';
-import { drawShipTurrets } from './index';
+import { drawShipTurrets } from './mounts';
 
 // Carrier Line Art (Yorktown CV-6 / Essex CV-9)
 export function drawCarrier(rc: RenderContext, ship: Ship, hullColor: string, detailColor: string) {

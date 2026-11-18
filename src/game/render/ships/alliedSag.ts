@@ -1,6 +1,7 @@
 import { Ship } from '../../../types/game';
 import { RenderContext } from '../context';
-import { drawNavalEnsign, drawShipTurrets } from './index';
+import { drawNavalEnsign } from './index';
+import { drawShipTurrets } from './mounts';
 
 // 專屬盟軍艦艇外觀分流分發器
 export function drawAlliedSAGShip(rc: RenderContext, ship: Ship, hullColor: string, _detailColor: string) {
