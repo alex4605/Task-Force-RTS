@@ -34,6 +34,7 @@ import {
   AshmFlightProfile,
   FleetUpgrades,
 } from '../types/game';
+import { getAircraftBaseHealth, getAircraftBaseSpeed, getAircraftGunRounds } from './aircraftStats';
 
 type CombatTargetEntity = Ship | Aircraft | GroundUnit | Installation;
 type RadarTargetEntity = Installation | Ship | GroundUnit;
@@ -1663,161 +1664,14 @@ export class GameEngine {
     }
 
     // High-performance naval and land-based aviation speeds (Supersonic Mach 1.8~2.5+ in Era 5)
-    const rawSpeed =
-      model === 'f15a' ? 230 :
-      model === 'su27' ? 225 :
-      model === 'f14a' ? 220 :
-      model === 'mig29a' ? 218 :
-      model === 'f111' ? 215 :
-      model === 'f16a' ? 210 :
-      model === 'tu22m3' ? 205 :
-      model === 'fa18a' ? 198 :
-      model === 'f104g' ? 185 :
-      model === 'mig21' ? 175 :
-      model === 'av8b' ? 170 :
-      model === 'mig19' ? 168 :
-      model === 'f4b' || model === 'f4j' || model === 'f4e' ? 165 :
-      model === 'yak38' ? 165 :
-      model === 'mig15' ? 160 :
-      model === 'f5a' ? 160 :
-      model === 'su7' ? 158 :
-      model === 'f8' ? 155 :
-      model === 'f105' ? 155 :
-      model === 'a6e' ? 155 :
-      model === 'ea6b' ? 152 :
-      model === 'f9f' ? 150 :
-      model === 's3a' ? 148 :
-      model === 'f2h' ? 145 :
-      model === 'mig17' ? 145 :
-      model === 'su25' ? 145 :
-      model === 'tu16' ? 142 :
-      model === 'a10a' ? 140 :
-      model === 'a7' ? 140 :
-      model === 'f86' ? 138 :
-      model === 'a4' ? 135 :
-      model === 'e3a' || model === 'a50' ? 135 :
-      model === 'b52' ? 135 :
-      model === 'yak9' ? 132 :
-      model === 'a6a' || model === 'a6b_weasel' ? 130 :
-      model === 'a37b' ? 130 :
-      model === 'tu14' ? 130 :
-      model === 'tu95' ? 130 :
-      model === 'il28' ? 128 :
-      model === 'e2c' || model === 'c2a' || model === 'c130' ? 125 :
-      model === 'p51' || model === 'f82' ? 124 :
-      model === 'mi24' ? 120 :
-      model === 'a26' ? 120 :
-      model === 'f8f' ? 118 :
-      model === 'il10' ? 116 :
-      model === 'p38' ? 116 :
-      model === 'f4u4' ? 115 :
-      model === 'ad1' || model === 'p3' || model === 'a1h' ? 115 :
-      model === 'ah64a' || model === 'ah1w' ? 115 :
-      model === 'p47' ? 114 :
-      model === 'f4u' ? 112 :
-      model === 'b29' ? 108 :
-      model === 'b25' ? 108 :
-      model === 'a20' ? 108 :
-      model === 'f6f' ? 105 :
-      model === 'ka27' || model === 'sh3f' || model === 'ch53' ? 105 :
-      model === 'p40' ? 104 :
-      model === 'c1' || model === 's2' || model === 'e1' ? 100 :
-      model === 'p36a' ? 100 :
-      model === 'f4f' ? 98 :
-      model === 'p39d' ? 98 :
-      model === 'b24' ? 96 :
-      model === 'ov10' || model === 'ah1' ? 95 :
-      model === 'sh2' ? 92 :
-      model === 'sb2c' || model === 'uh1' ? 90 :
-      model === 'af_guardian' ? 90 :
-      model === 'b17' || model === 'b17_late' ? 88 :
-      model === 'tbf' ? 86 :
-      model === 'ad3w' || model === 'uh2' ? 85 :
-      model === 'sbd' ? 84 :
-      model === 'tbd' ? 76 :
-      model === 'ho3s1' ? 65 : 120;
+    const rawSpeed = getAircraftBaseSpeed(model, 'carrier');
 
     const catalogItem = PAYLOAD_CATALOG[payloadType];
     const speedModifier = catalogItem ? catalogItem.speedModifier : 1.0;
     const baseSpeed = Math.round(rawSpeed * speedModifier);
 
     // Resilient, battle-hardened health pools for carrier and land-based air groups
-    const baseHealth =
-      model === 'b52' ? 3200 :
-      model === 'tu95' ? 2200 :
-      model === 'tu22m3' ? 1800 :
-      model === 'c130' ? 1600 :
-      model === 'e3a' || model === 'a50' ? 1500 :
-      model === 'a10a' ? 1400 :
-      model === 'b29' ? 1350 :
-      model === 'f111' ? 1350 :
-      model === 'tu16' ? 1350 :
-      model === 'su25' ? 1350 :
-      model === 'ch53' ? 980 :
-      model === 'a6e' ? 950 :
-      model === 'il28' ? 950 :
-      model === 'b24' ? 920 :
-      model === 'ea6b' ? 920 :
-      model === 's3a' ? 900 :
-      model === 'su27' ? 880 :
-      model === 'mi24' ? 880 :
-      model === 'c2a' ? 880 :
-      model === 'f14a' ? 860 :
-      model === 'f15a' ? 850 :
-      model === 'b17_late' ? 850 :
-      model === 'e2c' ? 850 :
-      model === 'sh3f' ? 820 :
-      model === 'b17' ? 820 :
-      model === 'fa18a' ? 800 :
-      model === 'ka27' ? 800 :
-      model === 'a6a' || model === 'a6b_weasel' ? 780 :
-      model === 'mig29a' ? 780 :
-      model === 'f16a' ? 760 :
-      model === 'ah64a' ? 750 :
-      model === 'f4b' || model === 'f4j' || model === 'f4e' ? 740 :
-      model === 'c1' ? 720 :
-      model === 'f105' ? 720 :
-      model === 'av8b' ? 720 :
-      model === 'b25' ? 720 :
-      model === 'su7' ? 700 :
-      model === 'yak38' ? 700 :
-      model === 'ah1w' ? 680 :
-      model === 'tu14' ? 680 :
-      model === 'ad1' || model === 'a1h' ? 680 :
-      model === 'a26' ? 660 :
-      model === 's2' ? 650 :
-      model === 'a7' ? 640 :
-      model === 'il10' ? 620 :
-      model === 'e1' ? 620 :
-      model === 'p47' ? 620 :
-      model === 'f8' ? 600 :
-      model === 'f2h' ? 580 :
-      model === 'a4' ? 580 :
-      model === 'f9f' ? 560 :
-      model === 'mig19' ? 560 :
-      model === 'f5a' ? 560 :
-      model === 'f104g' ? 550 :
-      model === 'af_guardian' ? 540 :
-      model === 'mig15' ? 540 :
-      model === 'mig21' ? 520 :
-      model === 'ad3w' ? 520 :
-      model === 'f8f' ? 520 :
-      model === 'uh2' ? 500 :
-      model === 'f4u4' ? 500 :
-      model === 'sb2c' ? 500 :
-      model === 'a37b' ? 500 :
-      model === 'f4u' ? 480 :
-      model === 'p39d' ? 480 :
-      model === 'f82' ? 480 :
-      model === 'tbf' ? 460 :
-      model === 'mig17' ? 450 :
-      model === 'yak9' ? 440 :
-      model === 'f6f' ? 440 :
-      model === 'sbd' ? 420 :
-      model === 'ho3s1' ? 420 :
-      model === 'p36a' ? 400 :
-      model === 'f4f' ? 360 :
-      model === 'tbd' ? 360 : 500;
+    const baseHealth = getAircraftBaseHealth(model, 'carrier');
 
     const hasPayload =
       payloadType === 'hvar_rockets' ||
@@ -1875,36 +1729,7 @@ export class GameEngine {
     const flightName = `${callsign} Flight (${actualCount}x ${model.toUpperCase()})`;
 
     // 戰鬥機機槍彈殘彈數量
-    let gunRounds = 1440;
-    if (model === 'f8') gunRounds = 840; // 4x 20mm Colt Mk 12
-    else if (model === 'f4b' || model === 'f4j') gunRounds = 0; // Pure missile interceptors
-    else if (model === 'a4') gunRounds = 400; // 2x 20mm Colt Mk 12
-    else if (model === 'a6a' || model === 'a6b_weasel') gunRounds = 0;
-    else if (model === 'mig21') gunRounds = 200;
-    else if (model === 'mig19') gunRounds = 210; // 3x 30mm NR-30
-    else if (model === 'tu16') gunRounds = 600; // 2x 23mm AM-23 tail turret
-    else if (model === 'su7') gunRounds = 320; // 2x 30mm NR-30
-    else if (model === 'mig17') gunRounds = 240;
-    else if (model === 'f4f') gunRounds = 1440;
-    else if (model === 'f6f' || model === 'f4u') gunRounds = 2400;
-    else if (model === 'f4u4') gunRounds = 1800;
-    else if (model === 'f8f') gunRounds = 800;
-    else if (model === 'f9f' || model === 'f2h') gunRounds = 800;
-    else if (model === 'mig15') gunRounds = 300;
-    else if (model === 'yak9') gunRounds = 340;
-    else if (model === 'il10') gunRounds = 600;
-    else if (model === 'ad1') gunRounds = 800;
-    else if (model === 'af_guardian') gunRounds = 600;
-    else if (model === 'ad3w' || model === 'ho3s1' || model === 'uh2' || model === 'e1') gunRounds = 0;
-    else if (model === 'sbd' || model === 'sb2c') gunRounds = 720;
-    else if (model === 'tbd' || model === 'tbf') gunRounds = 600;
-    else if (model === 'os2u') gunRounds = 500;
-    else if (model === 'zero') gunRounds = 1000;
-    else if (model === 'george') gunRounds = 900;
-    else if (model === 'val' || model === 'judy') gunRounds = 600;
-    else if (model === 'kate' || model === 'jill') gunRounds = 500;
-    else if (model === 'tu14') gunRounds = 400;
-    else if (model === 's2' || model === 'c1') gunRounds = 0;
+    const gunRounds = getAircraftGunRounds(model, 'carrier');
 
     let initialAmmo = 0;
     if (payloadType === 'clean_guns') initialAmmo = gunRounds;
@@ -8780,169 +8605,9 @@ export class GameEngine {
         ? 'transport'
         : 'torpedo_bomber';
 
-    const rawSpeed =
-      model === 'f15a' ? 230 :
-      model === 'su27' ? 225 :
-      model === 'f14a' ? 220 :
-      model === 'mig29a' ? 218 :
-      model === 'f111' ? 215 :
-      model === 'f16a' ? 210 :
-      model === 'mirage2000' ? 205 :
-      model === 'tu22m3' ? 205 :
-      model === 'fa18a' ? 198 :
-      model === 'tornado_adv' ? 195 :
-      model === 'viggen_ja37' ? 190 :
-      model === 'f104g' ? 185 :
-      model === 'tornado_gr1' || model === 'tornado_ids' ? 175 :
-      model === 'av8b' ? 170 :
-      model === 'mirage3' ? 168 :
-      model === 'f4b' || model === 'f4j' || model === 'f4e' ? 165 :
-      model === 'f5a' ? 160 :
-      model === 'f105' ? 155 :
-      model === 'a6e' ? 155 :
-      model === 'jaguar_gr1' ? 155 :
-      model === 'ea6b' ? 152 :
-      model === 'f8' ? 150 :
-      model === 's3a' ? 148 :
-      model === 'a10a' ? 140 :
-      model === 'a7' ? 140 :
-      model === 'hunter_fga9' ? 140 :
-      model === 'f86' ? 138 :
-      model === 'meteor' ? 138 :
-      model === 'e3a' || model === 'a50' ? 135 :
-      model === 'b52' ? 135 :
-      model === 'a4' ? 132 :
-      model === 'a6a' || model === 'a6b_weasel' ? 130 :
-      model === 'a37b' ? 130 :
-      model === 'tu95' ? 130 :
-      model === 'f9f' ? 128 :
-      model === 'tempest' ? 128 :
-      model === 'f2h' ? 126 :
-      model === 'spitfire_xiv' ? 126 :
-      model === 'e2c' || model === 'c2a' || model === 'c130' ? 125 :
-      model === 'mosquito' ? 125 :
-      model === 'p51' || model === 'f82' ? 124 :
-      model === 'rokaf_p51' ? 122 :
-      model === 'mi24' ? 120 :
-      model === 'a26' ? 120 :
-      model === 'sea_fury' ? 120 :
-      model === 'f8f' ? 118 :
-      model === 'p38' ? 116 :
-      model === 'ad1' || model === 'p3' || model === 'a1h' ? 115 :
-      model === 'ah64a' || model === 'ah1w' ? 115 :
-      model === 'p47' ? 114 :
-      model === 'spitfire_v' ? 112 :
-      model === 'f4u' || model === 'f4u4' ? 112 :
-      model === 'b29' ? 108 :
-      model === 'b25' ? 108 :
-      model === 'a20' ? 108 :
-      model === 'beaufighter' ? 106 :
-      model === 'f6f' ? 105 :
-      model === 'ka27' || model === 'sh3f' || model === 'ch53' ? 105 :
-      model === 'p40' ? 104 :
-      model === 'firefly_as5' ? 104 :
-      model === 'hurricane' ? 102 :
-      model === 'c1' || model === 's2' || model === 'e1' ? 100 :
-      model === 'p36a' ? 100 :
-      model === 'f4f_phantom' ? 165 :
-      model === 'f4f' ? 98 :
-      model === 'p39d' ? 98 :
-      model === 'c47' ? 98 :
-      model === 'b24' ? 96 :
-      model === 'lancaster' ? 96 :
-      model === 'ov10' || model === 'ah1' ? 95 :
-      model === 'sh2' ? 92 :
-      model === 'uh1' || model === 'uh2' ? 90 :
-      model === 'sb2c' ? 90 :
-      model === 'b17' || model === 'b17_late' ? 88 :
-      model === 'tbf' || model === 'af_guardian' ? 86 :
-      model === 'sbd' ? 84 :
-      model === 'tbd' ? 76 :
-      model === 'swordfish' ? 74 : 120;
+    const rawSpeed = getAircraftBaseSpeed(model, 'airbase');
 
-    const baseHealth =
-      model === 'b52' ? 3200 :
-      model === 'tu95' ? 2200 :
-      model === 'tu22m3' ? 1800 :
-      model === 'c130' ? 1600 :
-      model === 'e3a' || model === 'a50' ? 1500 :
-      model === 'a10a' ? 1400 :
-      model === 'b29' ? 1350 :
-      model === 'f111' ? 1350 :
-      model === 'lancaster' ? 980 :
-      model === 'a6e' ? 950 :
-      model === 'b24' ? 920 :
-      model === 'ea6b' ? 920 :
-      model === 's3a' ? 900 :
-      model === 'ch53' ? 980 :
-      model === 'c2a' ? 880 :
-      model === 'f14a' ? 860 :
-      model === 'f15a' ? 850 :
-      model === 'b17_late' ? 850 :
-      model === 'e2c' ? 850 :
-      model === 'b17' ? 820 :
-      model === 'sh3f' ? 820 :
-      model === 'fa18a' ? 800 :
-      model === 'viggen_ja37' ? 780 :
-      model === 'mig29a' ? 780 :
-      model === 'f16a' ? 760 :
-      model === 'tornado_gr1' || model === 'tornado_ids' ? 760 :
-      model === 'ah64a' ? 750 :
-      model === 'tornado_adv' ? 750 :
-      model === 'f105' ? 720 :
-      model === 'av8b' ? 720 :
-      model === 'b25' ? 720 :
-      model === 'mirage2000' ? 720 :
-      model === 'a6a' || model === 'a6b_weasel' ? 700 :
-      model === 'f4b' || model === 'f4j' || model === 'f4e' ? 680 :
-      model === 'a1h' ? 680 :
-      model === 'ah1w' ? 680 :
-      model === 'ad1' ? 680 :
-      model === 'a26' ? 660 :
-      model === 'jaguar_gr1' ? 650 :
-      model === 'a7' ? 640 :
-      model === 'p47' ? 620 :
-      model === 'beaufighter' ? 620 :
-      model === 'c47' ? 760 :
-      model === 's2' || model === 'c1' || model === 'e1' ? 580 :
-      model === 'mosquito' ? 580 :
-      model === 'hunter_fga9' ? 580 :
-      model === 'mirage3' ? 580 :
-      model === 'f5a' ? 560 :
-      model === 'a4' ? 560 :
-      model === 'f8' ? 560 :
-      model === 'f104g' ? 550 :
-      model === 'f2h' ? 540 :
-      model === 'a20' ? 520 :
-      model === 'f8f' ? 520 :
-      model === 'meteor' ? 520 :
-      model === 'tempest' ? 520 :
-      model === 'f9f' ? 500 :
-      model === 'sb2c' ? 500 :
-      model === 'sea_fury' ? 500 :
-      model === 'a37b' ? 500 :
-      model === 'ah1' ? 490 :
-      model === 'firefly_as5' ? 490 :
-      model === 'p38' ? 480 :
-      model === 'p39d' ? 480 :
-      model === 'f82' ? 480 :
-      model === 'f86' ? 480 :
-      model === 'spitfire_xiv' ? 460 :
-      model === 'rokaf_p51' ? 460 :
-      model === 'uh1' || model === 'uh2' ? 460 :
-      model === 'f4u' || model === 'f4u4' ? 480 :
-      model === 'tbf' || model === 'af_guardian' ? 460 :
-      model === 'p51' ? 450 :
-      model === 'ov10' ? 440 :
-      model === 'f6f' ? 440 :
-      model === 'hurricane' ? 420 :
-      model === 'spitfire_v' ? 420 :
-      model === 'p40' ? 420 :
-      model === 'sbd' ? 420 :
-      model === 'p36a' ? 400 :
-      model === 'f4f_phantom' ? 680 :
-      model === 'f4f' ? 360 :
-      model === 'swordfish' ? 340 : 500;
+    const baseHealth = getAircraftBaseHealth(model, 'airbase');
 
     const pType: AircraftPayloadType =
       payload ||
@@ -9142,25 +8807,7 @@ export class GameEngine {
 
     const flightName = `AFB 出擊機隊 (${count}x ${model.toUpperCase()} ${roleZh})`;
 
-    let gunRounds = 1440;
-    if (model === 'b52') gunRounds = 4000;
-    else if (model === 'b29') gunRounds = 4400;
-    else if (model === 'b17' || model === 'b24') gunRounds = 3200;
-    else if (model === 'a10a') gunRounds = 1174;
-    else if (model === 'ah64a') gunRounds = 1200;
-    else if (model === 'ah1w') gunRounds = 750;
-    else if (model === 'av8b') gunRounds = 300;
-    else if (model === 'f14a' || model === 'fa18a' || model === 'f15a' || model === 'f16a' || model === 'f111') gunRounds = 940;
-    else if (model === 'f4e' || model === 'f4f_phantom' || model === 'f105' || model === 'a7') gunRounds = 1000;
-    else if (model === 'ov10' || model === 'ah1') gunRounds = 1500;
-    else if (model === 'uh1') gunRounds = 1200;
-    else if (model === 'c47' || model === 'c1' || model === 'c2a' || model === 'c130' || model === 'ch53' || model === 'e2c' || model === 'e3a') gunRounds = 0;
-    else if (model === 'p47') gunRounds = 3400;
-    else if (model === 'a26') gunRounds = 2400;
-    else if (model === 'a20') gunRounds = 2000;
-    else if (model === 'p51') gunRounds = 1880;
-    else if (model === 'p38' || model === 'f86') gunRounds = 1800;
-    else if (model === 'p40') gunRounds = 1440;
+    const gunRounds = getAircraftGunRounds(model, 'airbase');
 
     const afbHasPayload = pType !== 'clean_guns' && pType !== 'scout_fuel';
     const afbInitialAmmo =
