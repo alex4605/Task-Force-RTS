@@ -13,6 +13,7 @@ import {
   MountainRidge,
   LagoonWater,
 } from '../types/game';
+import { getNavalGunPerformance } from './navalGuns';
 
 export function dist(a: Vector2D, b: Vector2D): number {
   const dx = a.x - b.x;
@@ -10945,6 +10946,14 @@ export function createTurret(
   initialAngle: number,
   damage: number
 ): Turret {
+  // Guns take historical range / rate of fire / shell weight (see navalGuns.ts); missiles, CIWS and
+  // anything unrecognised keep the authored values.
+  const gun = getNavalGunPerformance(caliber);
+  if (gun) {
+    range = gun.range;
+    reloadTime = gun.reloadTime;
+    if (gun.damage !== undefined) damage = gun.damage;
+  }
   return {
     relX,
     relY,

@@ -35,6 +35,7 @@ import {
   FleetUpgrades,
 } from '../types/game';
 import { getAlliedSagFleet } from './alliedSagFleets';
+import { getNavalGunPerformance } from './navalGuns';
 import { getCatalogRole } from './airWingCatalog';
 import { getAircraftBaseHealth, getAircraftBaseSpeed, getAircraftGunRounds } from './aircraftStats';
 
@@ -14915,22 +14916,26 @@ export class GameEngine {
         maxWeaponControlHealth: def.maxHealth,
         isSunk: false,
         sinkProgress: 0,
-        turrets: def.turrets.map((t) => ({
+        turrets: def.turrets.map((t) => {
+          const gun = getNavalGunPerformance(t.caliber);
+          const reload = gun?.reloadTime ?? t.reloadTime ?? t.maxCooldown ?? 4.0;
+          return {
           relX: t.relX ?? t.pos?.x ?? 0,
           relY: t.relY ?? t.pos?.y ?? 0,
           pos: t.pos,
           caliber: t.caliber,
-          range: t.range,
+          range: gun?.range ?? t.range,
           cooldown: t.cooldown,
-          reloadTime: t.reloadTime ?? t.maxCooldown ?? 4.0,
-          maxCooldown: t.maxCooldown ?? t.reloadTime ?? 4.0,
+          reloadTime: reload,
+          maxCooldown: gun ? reload : t.maxCooldown ?? t.reloadTime ?? 4.0,
           barrelCount: t.barrelCount ?? 2,
           angle: t.angle,
           arcMin: -Math.PI * 0.85,
           arcMax: Math.PI * 0.85,
-          damage: t.damage,
+          damage: gun?.damage ?? t.damage,
           id: t.id,
-        })),
+          };
+        }),
         flakRange: def.flakRange,
         flakCooldown: 0,
         hasHarpoon: def.hasHarpoon,
