@@ -9133,778 +9133,798 @@ export class GameEngine {
     const fleetPos = flagship ? { x: flagship.pos.x - 220, y: flagship.pos.y + 220 } : spawnBase;
 
     if (item.category === 'ships') {
-      soundEngine.playPlaneSortie();
-      let newShip: Ship | null = null;
-      const shipId = `player-req-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
-      // 海軍艦艇單位固定自地圖西南邊緣海疆增援航向戰區
-      const mapBound = this.worldSize || 14000;
-      const edgeSpawnX = 800 + Math.random() * 1400;
-      const edgeSpawnY = mapBound - 350 - Math.random() * 400;
-      const warshipSpawnPos: Vector2D = { x: edgeSpawnX, y: edgeSpawnY };
-
-      if (item.typeTag === 'ohio_ssbn' || item.id === 'req-support-ohio-ssbn') {
-        const targetPos = customPos || (this.enemyShips.find(s => !s.isSunk)?.pos) || { x: 9500, y: 4500 };
-        this.fireOhioSSBNTridentStrike(targetPos);
-        return true;
-      } else if (item.typeTag === 'bb' || item.typeTag === 'bb_missouri') {
-        const isMo = item.typeTag === 'bb_missouri' || this.era === 'era3';
-        newShip = createPlayerBattleship(
-          shipId,
-          isMo
-            ? 'USS Missouri (BB-63 密蘇里號主力戰艦)'
-            : this.era === 'era1'
-            ? 'USS North Carolina (BB-55)'
-            : 'USS Iowa (BB-61)',
-          warshipSpawnPos,
-          this.era
-        );
-      } else if (item.typeTag === 'ca' || item.typeTag === 'ca_desmoines') {
-        newShip = createConvoyEscortShip(shipId, 'ca', warshipSpawnPos, this.era);
-        if (item.typeTag === 'ca_desmoines' || this.era === 'era3') {
-          newShip.name = 'USS Des Moines (CA-134 得梅因號自動裝填重巡)';
-          newShip.health = 3600;
-          newShip.maxHealth = 3600;
-        }
-      } else if (item.typeTag === 'cl') {
-        newShip = createConvoyEscortShip(shipId, 'cl', warshipSpawnPos, this.era);
-      } else if (item.typeTag === 'dd' || item.typeTag === 'dd_gearing' || item.typeTag === 'dd_sherman') {
-        if (this.era === 'era4' || item.typeTag === 'dd_sherman') {
-          newShip = createForrestShermanDD(shipId, 'USS Forrest Sherman (DD-931 驅逐艦)', warshipSpawnPos);
-        } else {
-          newShip = createConvoyEscortShip(shipId, 'dd', warshipSpawnPos, this.era);
-          if (item.typeTag === 'dd_gearing' || this.era === 'era3') {
-            newShip.name = 'USS Gearing (DD-710 基靈級雷達糾察驅逐艦)';
-            newShip.health = 1850;
-            newShip.maxHealth = 1850;
-          }
-        }
-      } else if (item.typeTag === 'ffg') {
-        newShip = createKnoxFFG(shipId, 'USS Knox (FFG-1052 巡防艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'ss') {
-        newShip = createConvoyEscortShip(shipId, 'ss', warshipSpawnPos, this.era);
-      } else if (item.typeTag === 'lst') {
-        newShip = (this.era === 'era4' || this.era === 'era5')
-          ? createNewportLST(shipId, this.era === 'era5' ? 'USS Newport (LST-1179 紐波特戰車登陸艦 現代化改型)' : 'USS Newport (LST-1179 紐波特級戰車登陸艦)', warshipSpawnPos, this.era)
-          : createLST(shipId, 'USS LST-491 戰車登陸艦', warshipSpawnPos, this.era);
-      } else if (item.typeTag === 'lcvp') {
-        newShip = this.era === 'era5'
-          ? createLCAC(shipId, 'LCAC-01 氣墊登陸艇', warshipSpawnPos)
-          : this.era === 'era4'
-          ? createLCM8(shipId, 'LCM-8 機械化登陸艇', warshipSpawnPos)
-          : createLCVP(shipId, 'LCVP 突擊登陸艇', warshipSpawnPos, this.era);
-      } else if (item.typeTag === 'cv63') {
-        newShip = createCV63(shipId, 'USS Kitty Hawk (CV-63 超級航空母艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'cg') {
-        newShip = createBelknapCG(shipId, 'USS Belknap (CG-26 導彈巡洋艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'ddg') {
-        newShip = createAdamsDDG(shipId, 'USS Charles F. Adams (DDG-2 導彈驅逐艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'lph') {
-        newShip = createLPHIwoJima(shipId, 'USS Iwo Jima (LPH-2 兩棲突擊艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'lcm8') {
-        newShip = createLCM8(shipId, 'LCM-8 機械化登陸艇', warshipSpawnPos);
-      } else if (item.typeTag === 'cvn') {
-        newShip = createCVNNimitz(shipId, 'USS Nimitz (CVN-68 超級核動力航空母艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'cg_tico') {
-        newShip = createTiconderogaCG(shipId, 'USS Ticonderoga (CG-47 神盾巡洋艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'cg_virginia') {
-        newShip = createVirginiaCGN(shipId, 'USS Virginia (CGN-38 核動力巡洋艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'bb_iowa_mod') {
-        newShip = createIowaModernizedBB(shipId, 'USS Iowa (BB-61 近代化改裝主力戰艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'dd_spruance') {
-        newShip = createSpruanceDD(shipId, 'USS Spruance (DD-963 反潛驅逐艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'ddg_kidd') {
-        newShip = createKiddDDG(shipId, 'USS Kidd (DDG-993 飛彈驅逐艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'ffg_ohp') {
-        newShip = createPerryFFG(shipId, 'USS Oliver Hazard Perry (FFG-7 巡防艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'ssn_la') {
-        newShip = createLosAngelesSSN(shipId, 'USS Los Angeles (SSN-688 攻擊核潛艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'lpd') {
-        newShip = createAustinLPD(shipId, 'USS Austin (LPD-4 兩棲船塢運輸艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'lcac') {
-        newShip = createLCAC(shipId, 'LCAC-01 氣墊登陸艇', warshipSpawnPos);
-      }
-
-      if (newShip) {
-        newShip.heading = -Math.PI / 4; // 朝向東北戰區航進
-        this.playerShips.push(newShip);
-        this.applyUpgradesToShip(newShip);
-        this.addBannerAlert(`⚓【艦隊邊界增援】「${newShip.name}」自地圖邊緣駛入戰區！`, 'player', 'capture', 6.0);
-        this.addCombatLog({
-          category: 'naval',
-          sourceSide: 'player',
-          sourceName: '後勤調遣司令部',
-          targetName: newShip.name,
-          actionType: 'recon_spotted',
-          text: `⚓【海軍調遣就緒】${freeSandbox ? '【免CP沙盒建造】' : `耗費 ${item.cost} CP`} 調派「${newShip.name}」自地圖西南邊疆外海駛入戰區！火砲裝備、航向與戰術編隊已就緒！`,
-        });
-        return true;
-      }
+      return this.purchaseShipRequisition(item, customPos, freeSandbox);
     } else if (item.category === 'aircraft') {
-      soundEngine.playPlaneSortie();
-      // 飛機(陸海基)增援固定剛開始都是在起始機場 pool 中
-      if (item.typeTag === 'fighter_pool') {
-        const fighterModel = this.era === 'era1' ? 'f4f' : this.era === 'era2' ? 'f6f' : this.era === 'era3' ? 'f9f' : 'f4b';
-        const landFighter = this.era === 'era1' ? 'p40' : this.era === 'era2' ? 'p51' : this.era === 'era3' ? 'f86' : 'f4e';
-        this.airbasePlanes[fighterModel] = (this.airbasePlanes[fighterModel] || 0) + 4;
-        this.airbasePlanes[landFighter] = (this.airbasePlanes[landFighter] || 0) + 4;
-      } else if (item.typeTag === 'air_f4j') {
-        this.airbasePlanes.f4j = (this.airbasePlanes.f4j || 0) + 4;
-      } else if (item.typeTag === 'air_f8') {
-        this.airbasePlanes.f8 = (this.airbasePlanes.f8 || 0) + 4;
-      } else if (item.typeTag === 'air_a6a') {
-        this.airbasePlanes.a6a = (this.airbasePlanes.a6a || 0) + 4;
-      } else if (item.typeTag === 'air_a4') {
-        this.airbasePlanes.a4 = (this.airbasePlanes.a4 || 0) + 4;
-      } else if (item.typeTag === 'air_b52') {
-        this.airbasePlanes.b52 = (this.airbasePlanes.b52 || 0) + 2;
-      } else if (item.typeTag === 'air_f105') {
-        this.airbasePlanes.f105 = (this.airbasePlanes.f105 || 0) + 4;
-      } else if (item.typeTag === 'air_a7') {
-        this.airbasePlanes.a7 = (this.airbasePlanes.a7 || 0) + 4;
-      } else if (item.typeTag === 'air_ov10') {
-        this.airbasePlanes.ov10 = (this.airbasePlanes.ov10 || 0) + 4;
-      } else if (item.typeTag === 'air_uh1') {
-        this.airbasePlanes.uh1 = (this.airbasePlanes.uh1 || 0) + 4;
-      } else if (item.typeTag === 'air_ah1') {
-        this.airbasePlanes.ah1 = (this.airbasePlanes.ah1 || 0) + 4;
-      } else if (item.typeTag === 'air_c1') {
-        this.airbasePlanes.c1 = (this.airbasePlanes.c1 || 0) + 2;
-      } else if (item.typeTag === 'air_c47') {
-        this.airbasePlanes.c47 = (this.airbasePlanes.c47 || 0) + 2;
-      } else if (item.typeTag === 'air_sh2') {
-        this.airbasePlanes.sh2 = (this.airbasePlanes.sh2 || 0) + 2;
-      } else if (item.typeTag === 'air_p3') {
-        this.airbasePlanes.p3 = (this.airbasePlanes.p3 || 0) + 2;
-      } else if (item.typeTag === 'fighter_jet_f9f') {
-        this.airbasePlanes.f9f = (this.airbasePlanes.f9f || 0) + 4;
-      } else if (item.typeTag === 'fighter_jet_f2h') {
-        this.airbasePlanes.f2h = (this.airbasePlanes.f2h || 0) + 4;
-      } else if (item.typeTag === 'attacker_skyraider') {
-        this.airbasePlanes.ad1 = (this.airbasePlanes.ad1 || 0) + 4;
-      } else if (item.typeTag === 'aew_ad3w') {
-        this.airbasePlanes.ad3w = (this.airbasePlanes.ad3w || 0) + 1;
-      } else if (item.typeTag === 'sar_ho3s1') {
-        this.airbasePlanes.ho3s1 = (this.airbasePlanes.ho3s1 || 0) + 1;
-      } else if (item.typeTag === 'dive_bomber_pool') {
-        const diveModel = this.era === 'era1' ? 'sbd' : this.era === 'era2' ? 'sb2c' : this.era === 'era3' ? 'ad1' : 'a4';
-        this.airbasePlanes[diveModel] = (this.airbasePlanes[diveModel] || 0) + 4;
-      } else if (item.typeTag === 'torpedo_bomber_pool') {
-        const torpModel = this.era === 'era1' ? 'tbd' : this.era === 'era2' ? 'tbf' : this.era === 'era3' ? 'af_guardian' : 'a6a';
-        this.airbasePlanes[torpModel] = (this.airbasePlanes[torpModel] || 0) + 4;
-      } else if (item.typeTag === 'heavy_bomber_pool') {
-        const heavyModel = this.era === 'era1' ? 'b17' : this.era === 'era2' ? 'b24' : this.era === 'era3' ? 'b29' : 'b52';
-        this.airbasePlanes[heavyModel] = (this.airbasePlanes[heavyModel] || 0) + 2;
-      } else if (item.typeTag === 'attacker_pool') {
-        const attModel = this.era === 'era1' ? 'a20' : this.era === 'era2' ? 'p47' : this.era === 'era3' ? 'a26' : 'a7';
-        this.airbasePlanes[attModel] = (this.airbasePlanes[attModel] || 0) + 4;
-      } else if (item.typeTag === 'air_sh2') {
-        this.airbasePlanes['sh2'] = (this.airbasePlanes['sh2'] || 0) + 4;
-        if (flagship && flagship.carrierPlanes) {
-          flagship.carrierPlanes.ready.sh2 = (flagship.carrierPlanes.ready.sh2 || 0) + 2;
-        }
-      } else if (item.typeTag === 'air_p3') {
-        this.airbasePlanes['p3'] = (this.airbasePlanes['p3'] || 0) + 2;
-        if (flagship && flagship.carrierPlanes) {
-          flagship.carrierPlanes.ready.p3 = (flagship.carrierPlanes.ready.p3 || 0) + 1;
-        }
-      } else if (item.typeTag === 'air_f14a') {
-        this.airbasePlanes.f14a = (this.airbasePlanes.f14a || 0) + 4;
-        if (flagship && flagship.carrierPlanes) {
-          flagship.carrierPlanes.ready.f14a = (flagship.carrierPlanes.ready.f14a || 0) + 2;
-        }
-      } else if (item.typeTag === 'air_fa18a') {
-        this.airbasePlanes.fa18a = (this.airbasePlanes.fa18a || 0) + 4;
-        if (flagship && flagship.carrierPlanes) {
-          flagship.carrierPlanes.ready.fa18a = (flagship.carrierPlanes.ready.fa18a || 0) + 2;
-        }
-      } else if (item.typeTag === 'air_s3a') {
-        this.airbasePlanes.s3a = (this.airbasePlanes.s3a || 0) + 4;
-        if (flagship && flagship.carrierPlanes) {
-          flagship.carrierPlanes.ready.s3a = (flagship.carrierPlanes.ready.s3a || 0) + 2;
-        }
-      } else if (item.typeTag === 'air_a6e') {
-        this.airbasePlanes.a6e = (this.airbasePlanes.a6e || 0) + 4;
-        if (flagship && flagship.carrierPlanes) {
-          flagship.carrierPlanes.ready.a6e = (flagship.carrierPlanes.ready.a6e || 0) + 2;
-        }
-      } else if (item.typeTag === 'air_e2c') {
-        this.airbasePlanes.e2c = (this.airbasePlanes.e2c || 0) + 2;
-        if (flagship && flagship.carrierPlanes) {
-          flagship.carrierPlanes.ready.e2c = (flagship.carrierPlanes.ready.e2c || 0) + 1;
-        }
-      } else if (item.typeTag === 'air_ea6b') {
-        this.airbasePlanes.ea6b = (this.airbasePlanes.ea6b || 0) + 2;
-        if (flagship && flagship.carrierPlanes) {
-          flagship.carrierPlanes.ready.ea6b = (flagship.carrierPlanes.ready.ea6b || 0) + 1;
-        }
-      } else if (item.typeTag === 'air_c2a') {
-        this.airbasePlanes.c2a = (this.airbasePlanes.c2a || 0) + 2;
-      } else if (item.typeTag === 'air_sh3f') {
-        this.airbasePlanes.sh3f = (this.airbasePlanes.sh3f || 0) + 4;
-        if (flagship && flagship.carrierPlanes) {
-          flagship.carrierPlanes.ready.sh3f = (flagship.carrierPlanes.ready.sh3f || 0) + 2;
-        }
-      } else if (item.typeTag === 'air_av8b') {
-        this.airbasePlanes.av8b = (this.airbasePlanes.av8b || 0) + 4;
-      } else if (item.typeTag === 'air_ch53') {
-        this.airbasePlanes.ch53 = (this.airbasePlanes.ch53 || 0) + 4;
-      } else if (item.typeTag === 'air_a10a') {
-        this.airbasePlanes.a10a = (this.airbasePlanes.a10a || 0) + 4;
-      } else if (item.typeTag === 'air_ah64a') {
-        this.airbasePlanes.ah64a = (this.airbasePlanes.ah64a || 0) + 4;
-      } else if (item.typeTag === 'air_ah1w') {
-        this.airbasePlanes.ah1w = (this.airbasePlanes.ah1w || 0) + 4;
-      } else if (item.typeTag === 'air_f15a') {
-        this.airbasePlanes.f15a = (this.airbasePlanes.f15a || 0) + 4;
-      } else if (item.typeTag === 'air_f16a') {
-        this.airbasePlanes.f16a = (this.airbasePlanes.f16a || 0) + 4;
-      } else if (item.typeTag === 'air_e3a') {
-        this.airbasePlanes.e3a = (this.airbasePlanes.e3a || 0) + 1;
-      } else if (item.typeTag === 'air_f111') {
-        this.airbasePlanes.f111 = (this.airbasePlanes.f111 || 0) + 4;
-      } else if (item.typeTag === 'air_c130') {
-        this.airbasePlanes.c130 = (this.airbasePlanes.c130 || 0) + 2;
-      }
-
-      this.addBannerAlert(`✈️【機隊補充】「${item.name}」已進駐起始前進基地航空庫存！`, 'player', 'capture', 5.0);
-      this.addCombatLog({
-        category: 'air',
-        sourceSide: 'player',
-        sourceName: '海軍航空兵部 (BuAer)',
-        targetName: item.name,
-        actionType: 'recon_spotted',
-        text: `✈️【航空戰力充實】${freeSandbox ? '【免CP沙盒配置】' : `耗費 ${item.cost} CP`}！${item.name} 戰機群已進駐起始前進基地機庫，可隨時自基地起飛或轉場！`,
-      });
-      return true;
+      return this.purchaseAircraftRequisition(item, freeSandbox, flagship);
     } else if (item.category === 'ground') {
-      soundEngine.playPlaneSortie();
-      // 尋找可用的友軍營指揮所 (Battalion CP)
-      let activeBattalionCp: Installation | null = null;
-      for (const isl of this.islands) {
-        const found = isl.installations.find(
-          (inst) => (inst.type === 'battalion_cp' || inst.type === 'command_post') && !inst.isDestroyed && inst.side === 'player'
-        );
-        if (found) {
-          if (!activeBattalionCp || (targetIslandId && isl.id === targetIslandId)) {
-            activeBattalionCp = found;
-          }
-        }
-      }
-
-      let spawnPos: Vector2D;
-      let spawnLabel: string;
-      if (customPos) {
-        spawnPos = { x: customPos.x + (Math.random() - 0.5) * 35, y: customPos.y + (Math.random() - 0.5) * 35 };
-        spawnLabel = '指定營指揮所前線';
-      } else if (activeBattalionCp) {
-        // 在該營指揮所旁邊 Spawn 陸地單位！
-        spawnPos = {
-          x: activeBattalionCp.pos.x + 40 + (Math.random() - 0.5) * 30,
-          y: activeBattalionCp.pos.y + 40 + (Math.random() - 0.5) * 30,
-        };
-        spawnLabel = `${activeBattalionCp.name} 旁集結點`;
-      } else {
-        const targetIsland = targetIslandId
-          ? this.islands.find((i) => i.id === targetIslandId)
-          : this.islands.find((i) => i.isFriendlyBase) || this.islands[0];
-        spawnPos = targetIsland
-          ? { x: targetIsland.center.x + (Math.random() - 0.5) * 120, y: targetIsland.center.y + (Math.random() - 0.5) * 120 }
-          : fleetPos;
-        spawnLabel = targetIsland?.name || '戰略基地';
-      }
-
-      const gId = `usmc-req-${Date.now()}`;
-      let gUnit: GroundUnit | null = null;
-      if (item.typeTag === 'infantry') {
-        gUnit = createGroundUnit(
-          gId,
-          this.era === 'era1' ? 'usmc_rifle_42' : this.era === 'era2' ? 'usmc_rifle_45' : this.era === 'era3' ? 'usmc_korea_rifle' : 'usmc_air_assault_65',
-          this.era === 'era1' ? 'USMC 陸戰步兵排 (1942)' : this.era === 'era2' ? 'USMC 陸戰突擊步兵排 (1945)' : this.era === 'era3' ? 'USMC 陸戰突擊步兵排 (1950)' : 'USMC 空中突擊/直升機機降排 (1965)',
-          'player',
-          this.era,
-          spawnPos
-        );
-      } else if (item.typeTag === 'army_rifle_65') {
-        gUnit = createGroundUnit(gId, 'us_army_rifle_platoon_65', '美軍 1965 年型前線常規步槍排', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'm113_mech') {
-        gUnit = createGroundUnit(gId, 'us_army_m113_mech', 'M113 裝甲運兵機械化步兵排', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'chaparral_sam') {
-        gUnit = createGroundUnit(gId, 'us_army_chaparral_sam', 'MIM-72 榭樹野戰履帶防空飛彈排', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'air_assault') {
-        gUnit = createGroundUnit(gId, 'usmc_air_assault_65', 'USMC 空中突擊/直升機機降突擊排 (1965)', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'armor_m48') {
-        gUnit = createGroundUnit(gId, 'usmc_armor_m48', 'USMC M48A3 巴頓主力戰車排', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'ontos_m50') {
-        gUnit = createGroundUnit(gId, 'usmc_ontos_m50', 'USMC M50 昂圖斯六聯無後座力砲戰車', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'artillery') {
-        gUnit = createGroundUnit(
-          gId,
-          this.era === 'era3' || this.era === 'era4' ? 'usmc_howitzer_155' : 'usmc_artillery_105',
-          this.era === 'era3' || this.era === 'era4' ? 'USMC M114 155mm 重榴彈砲排' : 'USMC M2A1 105mm 砲兵支援排',
-          'player',
-          this.era,
-          spawnPos
-        );
-      } else if (item.typeTag === 'tank') {
-        gUnit = createGroundUnit(
-          gId,
-          this.era === 'era1' ? 'usmc_armor_m3' : this.era === 'era2' ? 'usmc_armor_m4' : this.era === 'era3' ? 'usmc_patton_m46' : 'usmc_armor_m48',
-          this.era === 'era1' ? 'USMC M3 斯圖亞特戰車排' : this.era === 'era2' ? 'USMC M4A2 薛曼中戰車排' : this.era === 'era3' ? 'USMC M46 巴頓主力戰車排' : 'USMC M48A3 巴頓中戰車排',
-          'player',
-          this.era,
-          spawnPos
-        );
-      } else if (item.typeTag === 'lvt') {
-        gUnit = createGroundUnit(
-          gId,
-          this.era === 'era1' ? 'usmc_lvt_42' : 'usmc_lvt_45',
-          this.era === 'era1'
-            ? 'USMC LVT-1 水牛兩棲機步排'
-            : this.era === 'era2'
-            ? 'USMC LVT-4 水牛兩棲突擊排'
-            : 'USMC LVT-P5 兩棲重裝步戰排',
-          'player',
-          this.era,
-          spawnPos
-        );
-      } else if (item.typeTag === 'engineer') {
-        gUnit = createGroundUnit(gId, 'usmc_engineer', 'USN Seabees 戰鬥工兵排', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'usmc_lvtp5a1') {
-        gUnit = createGroundUnit(gId, 'usmc_lvtp5a1', 'USMC LVTP-5A1 兩棲重裝登陸裝甲車', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'army_rifle_83') {
-        gUnit = createGroundUnit(gId, 'us_army_rifle_83', '美陸軍步槍班 (1983)', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'usmc_rifle_83') {
-        gUnit = createGroundUnit(gId, 'usmc_rifle_83', '陸戰步槍班 (1983)', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'dragon_atgm') {
-        gUnit = createGroundUnit(gId, 'us_dragon_atgm', 'M47 巨龍反戰車飛彈班', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'usmc_aav7a1') {
-        gUnit = createGroundUnit(gId, 'usmc_aav7a1', 'AAV-7A1 兩棲突擊載具', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'usmc_lav25') {
-        gUnit = createGroundUnit(gId, 'usmc_lav25', 'LAV-25 輪型裝甲偵搜車', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'm60a1_rise') {
-        gUnit = createGroundUnit(gId, 'us_m60a1_rise', 'M60A1 RISE (PASSIVE) ERA 戰車', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'm1ip_abrams') {
-        gUnit = createGroundUnit(gId, 'us_m1ip_abrams', 'M1IP 艾布蘭主戰戰車', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'm198_155') {
-        gUnit = createGroundUnit(gId, 'us_m198_155', 'M198 155mm 牽引榴彈砲排', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'lav_ad') {
-        gUnit = createGroundUnit(gId, 'usmc_lav_ad', 'LAV-AD 25mm防空裝甲車', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'm163_vads') {
-        gUnit = createGroundUnit(gId, 'us_m163_vads', 'M163 火神 20mm 防空裝甲車', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'm2_bradley') {
-        gUnit = createGroundUnit(gId, 'us_m2_bradley', 'M2 布雷德利裝甲機步戰車 (TOW-2飛彈+25mm鏈砲)', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'us_m270_mlrs') {
-        gUnit = createGroundUnit(gId, 'us_m270_mlrs', 'M270 MLRS 多管火箭系統 (12x M39鋼鐵之雨)', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'us_m270_atacms') {
-        gUnit = createGroundUnit(gId, 'us_m270_atacms', 'MGM-140 ATACMS 戰術飛彈車 (M57碉堡剋星)', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'us_m4_calliope') {
-        gUnit = createGroundUnit(gId, 'us_m4_calliope', 'M4A3 薛曼「管風琴」60聯裝火箭車', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'us_m7_priest') {
-        gUnit = createGroundUnit(gId, 'us_m7_priest', 'M7 牧師 105mm 自走榴彈砲 (反砲兵急速射擊)', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'us_m44_spg') {
-        gUnit = createGroundUnit(gId, 'us_m44_spg', 'M44 155mm 自走榴彈砲 (反砲兵急速射擊)', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'us_m109_spg') {
-        gUnit = createGroundUnit(gId, 'us_m109_spg', 'M109 155mm 自走榴彈砲 (長程反砲兵壓制)', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'us_m109a6_paladin') {
-        gUnit = createGroundUnit(gId, 'us_m109a6_paladin', 'M109A6 帕拉丁 155mm 數位自走砲', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'us_atacms_nuclear') {
-        gUnit = createGroundUnit(gId, 'us_atacms_nuclear', 'MGM-140B 核武裝 ATACMS 戰術飛彈車 (W70/W85熱核彈頭)', 'player', this.era, spawnPos);
-      }
-
-      if (gUnit) {
-        this.groundUnits.push(gUnit);
-        this.addBannerAlert(`🪖【陸軍戰備就位】「${gUnit.name}」已於 ${spawnLabel} 就地集結！`, 'player', 'capture', 5.0);
-        this.addCombatLog({
-          category: 'naval',
-          sourceSide: 'player',
-          sourceName: '陸戰隊司令部',
-          targetName: gUnit.name,
-          actionType: 'recon_spotted',
-          text: `🪖【陸戰戰力進駐】耗費 ${item.cost} CP！「${gUnit.name}」於 ${spawnLabel} 完成戰備集結，隨時準備發動突擊或加固防衛！`,
-        });
-        return true;
-      }
+      return this.purchaseGroundRequisition(item, targetIslandId, customPos, fleetPos);
     } else if (item.category === 'installations') {
-      soundEngine.playPlaneSortie();
-      let targetIsland = targetIslandId
-        ? this.islands.find((i) => i.id === targetIslandId)
-        : null;
+      return this.purchaseInstallationRequisition(item, targetIslandId, customPos, freeSandbox);
+    }
 
-      // If customPos is supplied, locate the nearest island
-      if (customPos && !targetIsland) {
-        let bestDist = 999999;
-        for (const isl of this.islands) {
-          const d = dist(customPos, isl.center);
-          if (d < bestDist) {
-            bestDist = d;
-            targetIsland = isl;
-          }
+    return false;
+  }
+
+  private purchaseInstallationRequisition(item: RequisitionItem, targetIslandId: string | undefined, customPos: Vector2D | undefined, freeSandbox: boolean): boolean {
+    soundEngine.playPlaneSortie();
+    let targetIsland = targetIslandId
+      ? this.islands.find((i) => i.id === targetIslandId)
+      : null;
+
+    // If customPos is supplied, locate the nearest island
+    if (customPos && !targetIsland) {
+      let bestDist = 999999;
+      for (const isl of this.islands) {
+        const d = dist(customPos, isl.center);
+        if (d < bestDist) {
+          bestDist = d;
+          targetIsland = isl;
         }
       }
+    }
 
-      if (!targetIsland) {
-        targetIsland = this.islands.find((i) => i.isFullyCaptured || i.isFriendlyBase) || this.islands[0];
+    if (!targetIsland) {
+      targetIsland = this.islands.find((i) => i.isFullyCaptured || i.isFriendlyBase) || this.islands[0];
+    }
+
+    if (!targetIsland) return false;
+
+    const isMaritimeFacility =
+      item.typeTag === 'dockyard' || item.typeTag === 'pontoon_pier' || item.typeTag === 'major_naval_port';
+
+    let instPos: Vector2D;
+    let instAngle = 0;
+
+    if (customPos) {
+      instPos = { x: customPos.x, y: customPos.y };
+      instAngle = Math.atan2(customPos.y - targetIsland.center.y, customPos.x - targetIsland.center.x);
+    } else if (isMaritimeFacility) {
+      // Place maritime pier/dock on the shoreline / coastal water edge of the island facing open sea
+      const angle = targetIsland.isFriendlyBase ? -Math.PI / 4 : (Math.PI * 3) / 4;
+      instPos = {
+        x: targetIsland.center.x + Math.cos(angle) * (targetIsland.radius * 1.03),
+        y: targetIsland.center.y + Math.sin(angle) * (targetIsland.radius * 1.03),
+      };
+      instAngle = angle;
+    } else {
+      const offsetAngle = Math.random() * Math.PI * 2;
+      const rFactor = item.typeTag === 'coastal_gun' || item.typeTag === 'm1_240mm' ? 0.85 : 0.45;
+      instPos = {
+        x: targetIsland.center.x + Math.cos(offsetAngle) * (targetIsland.radius * rFactor),
+        y: targetIsland.center.y + Math.sin(offsetAngle) * (targetIsland.radius * rFactor),
+      };
+      instAngle = offsetAngle;
+    }
+
+    const instId = `inst-built-${Date.now()}`;
+    if (item.typeTag === 'heavy_aa') {
+      targetIsland.installations.push({
+        id: instId,
+        type: 'flak_battery',
+        name: '127mm 雙聯重型防空砲堡',
+        side: 'player',
+        pos: instPos,
+        health: 1200,
+        maxHealth: 1200,
+        angle: instAngle,
+        range: 1200,
+        reloadTime: 1.6,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'm1_240mm') {
+      const heavyRange =
+        this.era === 'era5' ? 3800 : this.era === 'era4' ? 3600 : this.era === 'era3' ? 3400 : this.era === 'era2' ? 3200 : 2800;
+      const heavyDamage =
+        this.era === 'era5' ? 1050 : this.era === 'era4' ? 920 : this.era === 'era3' ? 850 : this.era === 'era2' ? 780 : 640;
+      targetIsland.installations.push({
+        id: `${instId}-240`,
+        type: 'coastal_gun',
+        name:
+          this.era === 'era1'
+            ? 'M1918 240mm 固定式重型榴彈砲台'
+            : this.era === 'era5'
+            ? 'M1 240mm「黑龍」強化要塞重砲台 (RAP)'
+            : 'M1 240mm「黑龍」固定式重型榴彈砲台',
+        weaponDesc:
+          '固定式混凝土八角砲座 M1 240mm「黑龍」· 遠程砲擊封鎖海峽水道，轟擊敵艦、地面部隊與鄰島要塞',
+        side: 'player',
+        pos: instPos,
+        health: 2600,
+        maxHealth: 2600,
+        armor: 0.55,
+        damage: heavyDamage,
+        blastRadius: 52,
+        angle: instAngle,
+        range: heavyRange,
+        reloadTime: 6.2,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'coastal_gun') {
+      const coastalRange = this.era === 'era3' ? 2200 : this.era === 'era2' ? 1900 : 1650;
+      const coastalDmg = this.era === 'era3' ? 520 : this.era === 'era2' ? 420 : 340;
+      targetIsland.installations.push({
+        id: instId,
+        type: 'coastal_gun',
+        name: this.era === 'era3' ? '152mm 雙聯長管岸防砲台' : this.era === 'era2' ? '203mm 雙聯岸防重砲台' : '140mm 海岸加農砲台',
+        side: 'player',
+        pos: instPos,
+        health: 1800,
+        maxHealth: 1800,
+        armor: 0.45,
+        damage: coastalDmg,
+        blastRadius: 36,
+        angle: instAngle,
+        range: coastalRange,
+        reloadTime: 4.0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'radar') {
+      targetIsland.installations.push({
+        id: instId,
+        type: 'radar_station',
+        name: '早期對空預警雷達台',
+        side: 'player',
+        pos: instPos,
+        health: 800,
+        maxHealth: 800,
+        angle: instAngle,
+        range: 4500,
+        reloadTime: 1.0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'dockyard') {
+      targetIsland.installations.push({
+        id: instId,
+        type: 'ship_repair_dock',
+        name: `前線應急修護浮塢碼頭 (${targetIsland.name})`,
+        side: 'player',
+        pos: instPos,
+        health: 1800,
+        maxHealth: 1800,
+        angle: instAngle,
+        range: 650,
+        reloadTime: 1.0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'pontoon_pier') {
+      // 浮式人工棧橋港 (急造港口)
+      targetIsland.installations.push({
+        id: instId,
+        type: 'pontoon_pier',
+        name: `浮式人工棧橋港碼頭 (${targetIsland.name})`,
+        weaponDesc: '工兵快速架設急造棧橋港 · 打通全島陸軍補給線 · 工兵駐守35秒自動升級正規深水軍港',
+        side: 'player',
+        pos: instPos,
+        health: 2200,
+        maxHealth: 2200,
+        armor: 0.35,
+        angle: instAngle,
+        range: 550,
+        reloadTime: 1.0,
+        cooldown: 0,
+        isDestroyed: false,
+        upgradeTimer: 0,
+      });
+    } else if (item.typeTag === 'major_naval_port') {
+      // 正規深水軍港
+      targetIsland.installations.push({
+        id: instId,
+        type: 'major_naval_port',
+        name: `正規深水軍港突堤 (${targetIsland.name})`,
+        weaponDesc: '大型深水突堤起重港埠 · 穩定建立全島補給線 · 產出補給點 (+1.5 CP/s)',
+        side: 'player',
+        pos: instPos,
+        health: 4200,
+        maxHealth: 4200,
+        armor: 0.5,
+        angle: instAngle,
+        range: 850,
+        reloadTime: 1.0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'supply_depot') {
+      // 戰地輜重補給樞紐
+      targetIsland.installations.push({
+        id: instId,
+        type: 'supply_depot',
+        name: '戰地輜重補給樞紐',
+        weaponDesc: '地下彈藥儲備與重裝備修造處 · 大幅加快全島地面部隊建制度修整 (+2.0%/s)',
+        side: 'player',
+        pos: instPos,
+        health: 2000,
+        maxHealth: 2000,
+        armor: 0.4,
+        angle: instAngle,
+        range: 0,
+        reloadTime: 0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'field_hospital') {
+      // 戰地野戰醫院
+      targetIsland.installations.push({
+        id: instId,
+        type: 'field_hospital',
+        name: '戰地野戰醫院',
+        weaponDesc: '救護整編中心 · 救治前線負傷官兵快速歸隊 · 穩定部隊組織度 (+2.5%/s)',
+        side: 'player',
+        pos: instPos,
+        health: 1600,
+        maxHealth: 1600,
+        armor: 0.3,
+        angle: instAngle,
+        range: 0,
+        reloadTime: 0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'airfield') {
+      // 前進野戰機場
+      targetIsland.installations.push({
+        id: instId,
+        type: 'airfield',
+        name: `前進野戰機場跑道 (${targetIsland.name})`,
+        weaponDesc: 'PSP鋼板珊瑚礁平整跑道 · 前線戰鬥機與重轟炸機起降補給點',
+        side: 'player',
+        pos: instPos,
+        health: 3500,
+        maxHealth: 3500,
+        armor: 0.4,
+        angle: instAngle,
+        range: 0,
+        reloadTime: 0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+      targetIsland.isFriendlyBase = true;
+    } else if (item.typeTag === 'command_post') {
+      // 堅固防衛坑道指揮所
+      targetIsland.installations.push({
+        id: instId,
+        type: 'command_post',
+        name: `地下坑道指揮所 (${targetIsland.name})`,
+        weaponDesc: '深層防空花崗岩掩體 · 守備組織度抵抗 +50% · 擴展雷達視野 1000m',
+        side: 'player',
+        pos: instPos,
+        health: 3600,
+        maxHealth: 3600,
+        armor: 0.55,
+        angle: instAngle,
+        range: 1000,
+        reloadTime: 2.0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'ammo_depot') {
+      // 重型戰備油彈庫
+      targetIsland.installations.push({
+        id: instId,
+        type: 'ammo_depot',
+        name: `重型戰備油彈庫 (${targetIsland.name})`,
+        weaponDesc: '儲備巨型航空航彈與火箭 · 重砲裝填加速 35% · 砲擊冷卻縮短',
+        side: 'player',
+        pos: instPos,
+        health: 2600,
+        maxHealth: 2600,
+        armor: 0.45,
+        angle: instAngle,
+        range: 0,
+        reloadTime: 0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'battalion_cp') {
+      // 營級前進作戰指揮所 (Battalion CP)
+      targetIsland.installations.push({
+        id: instId,
+        type: 'battalion_cp',
+        name: `營前進作戰指揮所 (${targetIsland.name})`,
+        weaponDesc: '營級前進戰術指揮所 · 專屬解鎖地面部隊呼叫支援 · 新增援陸軍單位在此就地集結出生',
+        side: 'player',
+        pos: instPos,
+        health: 3800,
+        maxHealth: 3800,
+        armor: 0.50,
+        angle: instAngle,
+        range: 1200,
+        reloadTime: 1.0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'sam_patriot') {
+      // MIM-104 愛國者長程防空/反飛彈營
+      targetIsland.installations.push({
+        id: instId,
+        type: 'flak_battery',
+        name: `MIM-104 愛國者長程防空飛彈營 (${targetIsland.name})`,
+        weaponDesc: 'AN/MPQ-53 相位陣列雷達導引 · 射程 2600m · 高空反戰機與掠海反艦/彈道飛彈截擊',
+        side: 'player',
+        pos: instPos,
+        health: 2600,
+        maxHealth: 2600,
+        armor: 0.55,
+        angle: instAngle,
+        range: 2600,
+        reloadTime: 1.8,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'sam_hawk') {
+      // MIM-23 霍克防空飛彈陣地
+      targetIsland.installations.push({
+        id: instId,
+        type: 'flak_battery',
+        name: `MIM-23 霍克防空飛彈連 (${targetIsland.name})`,
+        weaponDesc: '半主動雷達導引防空飛彈 · 射程 1800m · 攔截高空高速噴射機與巡航飛彈',
+        side: 'player',
+        pos: instPos,
+        health: 1800,
+        maxHealth: 1800,
+        armor: 0.45,
+        angle: instAngle,
+        range: 1800,
+        reloadTime: 2.2,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'fob') {
+      // 前進作戰基地 (FOB)
+      targetIsland.installations.push({
+        id: instId,
+        type: 'command_post',
+        name: `前進作戰基地 FOB (${targetIsland.name})`,
+        weaponDesc: '直升機停機坪與全天候作戰指揮中心 · 支援垂直包圍部隊登陸集結 · 擴展雷達視野 1600m',
+        side: 'player',
+        pos: instPos,
+        health: 4500,
+        maxHealth: 4500,
+        armor: 0.60,
+        angle: instAngle,
+        range: 1600,
+        reloadTime: 1.0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    }
+
+    this.islandsVersion++;
+
+    // Spawn tactical construction sparkles & ring effect
+    for (let i = 0; i < 22; i++) {
+      const pAngle = Math.random() * Math.PI * 2;
+      const pSpd = 35 + Math.random() * 80;
+      this.particles.push({
+        id: `inst-p-${Date.now()}-${i}`,
+        x: instPos.x,
+        y: instPos.y,
+        vx: Math.cos(pAngle) * pSpd,
+        vy: Math.sin(pAngle) * pSpd,
+        life: 1.0,
+        maxLife: 1.0,
+        color: '#00E5FF',
+        radius: 2.5 + Math.random() * 2.5,
+        type: 'spark',
+      });
+    }
+
+    const locationLabel = customPos ? '指定海圖座標' : targetIsland.name;
+    this.addBannerAlert(`🏗️【碼頭/設施落成】已在 ${locationLabel} 構築「${item.name}」！`, 'player', 'capture', 4.5);
+    this.addCombatLog({
+      category: 'naval',
+      sourceSide: 'player',
+      sourceName: '海軍工兵團 (Seabees)',
+      targetName: item.name,
+      actionType: 'recon_spotted',
+      text: `🏗️【設施工事落成】${freeSandbox ? '【免CP沙盒建造】' : `耗費 ${item.cost} CP`}！「${item.name}」已在 ${targetIsland.name} (${locationLabel}) 構築完成並即刻投入戰備！`,
+    });
+    return true;
+    return false;
+  }
+
+  private purchaseGroundRequisition(item: RequisitionItem, targetIslandId: string | undefined, customPos: Vector2D | undefined, fleetPos: Vector2D): boolean {
+    soundEngine.playPlaneSortie();
+    // 尋找可用的友軍營指揮所 (Battalion CP)
+    let activeBattalionCp: Installation | null = null;
+    for (const isl of this.islands) {
+      const found = isl.installations.find(
+        (inst) => (inst.type === 'battalion_cp' || inst.type === 'command_post') && !inst.isDestroyed && inst.side === 'player'
+      );
+      if (found) {
+        if (!activeBattalionCp || (targetIslandId && isl.id === targetIslandId)) {
+          activeBattalionCp = found;
+        }
       }
+    }
 
-      if (!targetIsland) return false;
+    let spawnPos: Vector2D;
+    let spawnLabel: string;
+    if (customPos) {
+      spawnPos = { x: customPos.x + (Math.random() - 0.5) * 35, y: customPos.y + (Math.random() - 0.5) * 35 };
+      spawnLabel = '指定營指揮所前線';
+    } else if (activeBattalionCp) {
+      // 在該營指揮所旁邊 Spawn 陸地單位！
+      spawnPos = {
+        x: activeBattalionCp.pos.x + 40 + (Math.random() - 0.5) * 30,
+        y: activeBattalionCp.pos.y + 40 + (Math.random() - 0.5) * 30,
+      };
+      spawnLabel = `${activeBattalionCp.name} 旁集結點`;
+    } else {
+      const targetIsland = targetIslandId
+        ? this.islands.find((i) => i.id === targetIslandId)
+        : this.islands.find((i) => i.isFriendlyBase) || this.islands[0];
+      spawnPos = targetIsland
+        ? { x: targetIsland.center.x + (Math.random() - 0.5) * 120, y: targetIsland.center.y + (Math.random() - 0.5) * 120 }
+        : fleetPos;
+      spawnLabel = targetIsland?.name || '戰略基地';
+    }
 
-      const isMaritimeFacility =
-        item.typeTag === 'dockyard' || item.typeTag === 'pontoon_pier' || item.typeTag === 'major_naval_port';
+    const gId = `usmc-req-${Date.now()}`;
+    let gUnit: GroundUnit | null = null;
+    if (item.typeTag === 'infantry') {
+      gUnit = createGroundUnit(
+        gId,
+        this.era === 'era1' ? 'usmc_rifle_42' : this.era === 'era2' ? 'usmc_rifle_45' : this.era === 'era3' ? 'usmc_korea_rifle' : 'usmc_air_assault_65',
+        this.era === 'era1' ? 'USMC 陸戰步兵排 (1942)' : this.era === 'era2' ? 'USMC 陸戰突擊步兵排 (1945)' : this.era === 'era3' ? 'USMC 陸戰突擊步兵排 (1950)' : 'USMC 空中突擊/直升機機降排 (1965)',
+        'player',
+        this.era,
+        spawnPos
+      );
+    } else if (item.typeTag === 'army_rifle_65') {
+      gUnit = createGroundUnit(gId, 'us_army_rifle_platoon_65', '美軍 1965 年型前線常規步槍排', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'm113_mech') {
+      gUnit = createGroundUnit(gId, 'us_army_m113_mech', 'M113 裝甲運兵機械化步兵排', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'chaparral_sam') {
+      gUnit = createGroundUnit(gId, 'us_army_chaparral_sam', 'MIM-72 榭樹野戰履帶防空飛彈排', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'air_assault') {
+      gUnit = createGroundUnit(gId, 'usmc_air_assault_65', 'USMC 空中突擊/直升機機降突擊排 (1965)', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'armor_m48') {
+      gUnit = createGroundUnit(gId, 'usmc_armor_m48', 'USMC M48A3 巴頓主力戰車排', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'ontos_m50') {
+      gUnit = createGroundUnit(gId, 'usmc_ontos_m50', 'USMC M50 昂圖斯六聯無後座力砲戰車', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'artillery') {
+      gUnit = createGroundUnit(
+        gId,
+        this.era === 'era3' || this.era === 'era4' ? 'usmc_howitzer_155' : 'usmc_artillery_105',
+        this.era === 'era3' || this.era === 'era4' ? 'USMC M114 155mm 重榴彈砲排' : 'USMC M2A1 105mm 砲兵支援排',
+        'player',
+        this.era,
+        spawnPos
+      );
+    } else if (item.typeTag === 'tank') {
+      gUnit = createGroundUnit(
+        gId,
+        this.era === 'era1' ? 'usmc_armor_m3' : this.era === 'era2' ? 'usmc_armor_m4' : this.era === 'era3' ? 'usmc_patton_m46' : 'usmc_armor_m48',
+        this.era === 'era1' ? 'USMC M3 斯圖亞特戰車排' : this.era === 'era2' ? 'USMC M4A2 薛曼中戰車排' : this.era === 'era3' ? 'USMC M46 巴頓主力戰車排' : 'USMC M48A3 巴頓中戰車排',
+        'player',
+        this.era,
+        spawnPos
+      );
+    } else if (item.typeTag === 'lvt') {
+      gUnit = createGroundUnit(
+        gId,
+        this.era === 'era1' ? 'usmc_lvt_42' : 'usmc_lvt_45',
+        this.era === 'era1'
+          ? 'USMC LVT-1 水牛兩棲機步排'
+          : this.era === 'era2'
+          ? 'USMC LVT-4 水牛兩棲突擊排'
+          : 'USMC LVT-P5 兩棲重裝步戰排',
+        'player',
+        this.era,
+        spawnPos
+      );
+    } else if (item.typeTag === 'engineer') {
+      gUnit = createGroundUnit(gId, 'usmc_engineer', 'USN Seabees 戰鬥工兵排', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'usmc_lvtp5a1') {
+      gUnit = createGroundUnit(gId, 'usmc_lvtp5a1', 'USMC LVTP-5A1 兩棲重裝登陸裝甲車', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'army_rifle_83') {
+      gUnit = createGroundUnit(gId, 'us_army_rifle_83', '美陸軍步槍班 (1983)', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'usmc_rifle_83') {
+      gUnit = createGroundUnit(gId, 'usmc_rifle_83', '陸戰步槍班 (1983)', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'dragon_atgm') {
+      gUnit = createGroundUnit(gId, 'us_dragon_atgm', 'M47 巨龍反戰車飛彈班', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'usmc_aav7a1') {
+      gUnit = createGroundUnit(gId, 'usmc_aav7a1', 'AAV-7A1 兩棲突擊載具', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'usmc_lav25') {
+      gUnit = createGroundUnit(gId, 'usmc_lav25', 'LAV-25 輪型裝甲偵搜車', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'm60a1_rise') {
+      gUnit = createGroundUnit(gId, 'us_m60a1_rise', 'M60A1 RISE (PASSIVE) ERA 戰車', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'm1ip_abrams') {
+      gUnit = createGroundUnit(gId, 'us_m1ip_abrams', 'M1IP 艾布蘭主戰戰車', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'm198_155') {
+      gUnit = createGroundUnit(gId, 'us_m198_155', 'M198 155mm 牽引榴彈砲排', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'lav_ad') {
+      gUnit = createGroundUnit(gId, 'usmc_lav_ad', 'LAV-AD 25mm防空裝甲車', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'm163_vads') {
+      gUnit = createGroundUnit(gId, 'us_m163_vads', 'M163 火神 20mm 防空裝甲車', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'm2_bradley') {
+      gUnit = createGroundUnit(gId, 'us_m2_bradley', 'M2 布雷德利裝甲機步戰車 (TOW-2飛彈+25mm鏈砲)', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'us_m270_mlrs') {
+      gUnit = createGroundUnit(gId, 'us_m270_mlrs', 'M270 MLRS 多管火箭系統 (12x M39鋼鐵之雨)', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'us_m270_atacms') {
+      gUnit = createGroundUnit(gId, 'us_m270_atacms', 'MGM-140 ATACMS 戰術飛彈車 (M57碉堡剋星)', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'us_m4_calliope') {
+      gUnit = createGroundUnit(gId, 'us_m4_calliope', 'M4A3 薛曼「管風琴」60聯裝火箭車', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'us_m7_priest') {
+      gUnit = createGroundUnit(gId, 'us_m7_priest', 'M7 牧師 105mm 自走榴彈砲 (反砲兵急速射擊)', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'us_m44_spg') {
+      gUnit = createGroundUnit(gId, 'us_m44_spg', 'M44 155mm 自走榴彈砲 (反砲兵急速射擊)', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'us_m109_spg') {
+      gUnit = createGroundUnit(gId, 'us_m109_spg', 'M109 155mm 自走榴彈砲 (長程反砲兵壓制)', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'us_m109a6_paladin') {
+      gUnit = createGroundUnit(gId, 'us_m109a6_paladin', 'M109A6 帕拉丁 155mm 數位自走砲', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'us_atacms_nuclear') {
+      gUnit = createGroundUnit(gId, 'us_atacms_nuclear', 'MGM-140B 核武裝 ATACMS 戰術飛彈車 (W70/W85熱核彈頭)', 'player', this.era, spawnPos);
+    }
 
-      let instPos: Vector2D;
-      let instAngle = 0;
-
-      if (customPos) {
-        instPos = { x: customPos.x, y: customPos.y };
-        instAngle = Math.atan2(customPos.y - targetIsland.center.y, customPos.x - targetIsland.center.x);
-      } else if (isMaritimeFacility) {
-        // Place maritime pier/dock on the shoreline / coastal water edge of the island facing open sea
-        const angle = targetIsland.isFriendlyBase ? -Math.PI / 4 : (Math.PI * 3) / 4;
-        instPos = {
-          x: targetIsland.center.x + Math.cos(angle) * (targetIsland.radius * 1.03),
-          y: targetIsland.center.y + Math.sin(angle) * (targetIsland.radius * 1.03),
-        };
-        instAngle = angle;
-      } else {
-        const offsetAngle = Math.random() * Math.PI * 2;
-        const rFactor = item.typeTag === 'coastal_gun' || item.typeTag === 'm1_240mm' ? 0.85 : 0.45;
-        instPos = {
-          x: targetIsland.center.x + Math.cos(offsetAngle) * (targetIsland.radius * rFactor),
-          y: targetIsland.center.y + Math.sin(offsetAngle) * (targetIsland.radius * rFactor),
-        };
-        instAngle = offsetAngle;
-      }
-
-      const instId = `inst-built-${Date.now()}`;
-      if (item.typeTag === 'heavy_aa') {
-        targetIsland.installations.push({
-          id: instId,
-          type: 'flak_battery',
-          name: '127mm 雙聯重型防空砲堡',
-          side: 'player',
-          pos: instPos,
-          health: 1200,
-          maxHealth: 1200,
-          angle: instAngle,
-          range: 1200,
-          reloadTime: 1.6,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'm1_240mm') {
-        const heavyRange =
-          this.era === 'era5' ? 3800 : this.era === 'era4' ? 3600 : this.era === 'era3' ? 3400 : this.era === 'era2' ? 3200 : 2800;
-        const heavyDamage =
-          this.era === 'era5' ? 1050 : this.era === 'era4' ? 920 : this.era === 'era3' ? 850 : this.era === 'era2' ? 780 : 640;
-        targetIsland.installations.push({
-          id: `${instId}-240`,
-          type: 'coastal_gun',
-          name:
-            this.era === 'era1'
-              ? 'M1918 240mm 固定式重型榴彈砲台'
-              : this.era === 'era5'
-              ? 'M1 240mm「黑龍」強化要塞重砲台 (RAP)'
-              : 'M1 240mm「黑龍」固定式重型榴彈砲台',
-          weaponDesc:
-            '固定式混凝土八角砲座 M1 240mm「黑龍」· 遠程砲擊封鎖海峽水道，轟擊敵艦、地面部隊與鄰島要塞',
-          side: 'player',
-          pos: instPos,
-          health: 2600,
-          maxHealth: 2600,
-          armor: 0.55,
-          damage: heavyDamage,
-          blastRadius: 52,
-          angle: instAngle,
-          range: heavyRange,
-          reloadTime: 6.2,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'coastal_gun') {
-        const coastalRange = this.era === 'era3' ? 2200 : this.era === 'era2' ? 1900 : 1650;
-        const coastalDmg = this.era === 'era3' ? 520 : this.era === 'era2' ? 420 : 340;
-        targetIsland.installations.push({
-          id: instId,
-          type: 'coastal_gun',
-          name: this.era === 'era3' ? '152mm 雙聯長管岸防砲台' : this.era === 'era2' ? '203mm 雙聯岸防重砲台' : '140mm 海岸加農砲台',
-          side: 'player',
-          pos: instPos,
-          health: 1800,
-          maxHealth: 1800,
-          armor: 0.45,
-          damage: coastalDmg,
-          blastRadius: 36,
-          angle: instAngle,
-          range: coastalRange,
-          reloadTime: 4.0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'radar') {
-        targetIsland.installations.push({
-          id: instId,
-          type: 'radar_station',
-          name: '早期對空預警雷達台',
-          side: 'player',
-          pos: instPos,
-          health: 800,
-          maxHealth: 800,
-          angle: instAngle,
-          range: 4500,
-          reloadTime: 1.0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'dockyard') {
-        targetIsland.installations.push({
-          id: instId,
-          type: 'ship_repair_dock',
-          name: `前線應急修護浮塢碼頭 (${targetIsland.name})`,
-          side: 'player',
-          pos: instPos,
-          health: 1800,
-          maxHealth: 1800,
-          angle: instAngle,
-          range: 650,
-          reloadTime: 1.0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'pontoon_pier') {
-        // 浮式人工棧橋港 (急造港口)
-        targetIsland.installations.push({
-          id: instId,
-          type: 'pontoon_pier',
-          name: `浮式人工棧橋港碼頭 (${targetIsland.name})`,
-          weaponDesc: '工兵快速架設急造棧橋港 · 打通全島陸軍補給線 · 工兵駐守35秒自動升級正規深水軍港',
-          side: 'player',
-          pos: instPos,
-          health: 2200,
-          maxHealth: 2200,
-          armor: 0.35,
-          angle: instAngle,
-          range: 550,
-          reloadTime: 1.0,
-          cooldown: 0,
-          isDestroyed: false,
-          upgradeTimer: 0,
-        });
-      } else if (item.typeTag === 'major_naval_port') {
-        // 正規深水軍港
-        targetIsland.installations.push({
-          id: instId,
-          type: 'major_naval_port',
-          name: `正規深水軍港突堤 (${targetIsland.name})`,
-          weaponDesc: '大型深水突堤起重港埠 · 穩定建立全島補給線 · 產出補給點 (+1.5 CP/s)',
-          side: 'player',
-          pos: instPos,
-          health: 4200,
-          maxHealth: 4200,
-          armor: 0.5,
-          angle: instAngle,
-          range: 850,
-          reloadTime: 1.0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'supply_depot') {
-        // 戰地輜重補給樞紐
-        targetIsland.installations.push({
-          id: instId,
-          type: 'supply_depot',
-          name: '戰地輜重補給樞紐',
-          weaponDesc: '地下彈藥儲備與重裝備修造處 · 大幅加快全島地面部隊建制度修整 (+2.0%/s)',
-          side: 'player',
-          pos: instPos,
-          health: 2000,
-          maxHealth: 2000,
-          armor: 0.4,
-          angle: instAngle,
-          range: 0,
-          reloadTime: 0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'field_hospital') {
-        // 戰地野戰醫院
-        targetIsland.installations.push({
-          id: instId,
-          type: 'field_hospital',
-          name: '戰地野戰醫院',
-          weaponDesc: '救護整編中心 · 救治前線負傷官兵快速歸隊 · 穩定部隊組織度 (+2.5%/s)',
-          side: 'player',
-          pos: instPos,
-          health: 1600,
-          maxHealth: 1600,
-          armor: 0.3,
-          angle: instAngle,
-          range: 0,
-          reloadTime: 0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'airfield') {
-        // 前進野戰機場
-        targetIsland.installations.push({
-          id: instId,
-          type: 'airfield',
-          name: `前進野戰機場跑道 (${targetIsland.name})`,
-          weaponDesc: 'PSP鋼板珊瑚礁平整跑道 · 前線戰鬥機與重轟炸機起降補給點',
-          side: 'player',
-          pos: instPos,
-          health: 3500,
-          maxHealth: 3500,
-          armor: 0.4,
-          angle: instAngle,
-          range: 0,
-          reloadTime: 0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-        targetIsland.isFriendlyBase = true;
-      } else if (item.typeTag === 'command_post') {
-        // 堅固防衛坑道指揮所
-        targetIsland.installations.push({
-          id: instId,
-          type: 'command_post',
-          name: `地下坑道指揮所 (${targetIsland.name})`,
-          weaponDesc: '深層防空花崗岩掩體 · 守備組織度抵抗 +50% · 擴展雷達視野 1000m',
-          side: 'player',
-          pos: instPos,
-          health: 3600,
-          maxHealth: 3600,
-          armor: 0.55,
-          angle: instAngle,
-          range: 1000,
-          reloadTime: 2.0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'ammo_depot') {
-        // 重型戰備油彈庫
-        targetIsland.installations.push({
-          id: instId,
-          type: 'ammo_depot',
-          name: `重型戰備油彈庫 (${targetIsland.name})`,
-          weaponDesc: '儲備巨型航空航彈與火箭 · 重砲裝填加速 35% · 砲擊冷卻縮短',
-          side: 'player',
-          pos: instPos,
-          health: 2600,
-          maxHealth: 2600,
-          armor: 0.45,
-          angle: instAngle,
-          range: 0,
-          reloadTime: 0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'battalion_cp') {
-        // 營級前進作戰指揮所 (Battalion CP)
-        targetIsland.installations.push({
-          id: instId,
-          type: 'battalion_cp',
-          name: `營前進作戰指揮所 (${targetIsland.name})`,
-          weaponDesc: '營級前進戰術指揮所 · 專屬解鎖地面部隊呼叫支援 · 新增援陸軍單位在此就地集結出生',
-          side: 'player',
-          pos: instPos,
-          health: 3800,
-          maxHealth: 3800,
-          armor: 0.50,
-          angle: instAngle,
-          range: 1200,
-          reloadTime: 1.0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'sam_patriot') {
-        // MIM-104 愛國者長程防空/反飛彈營
-        targetIsland.installations.push({
-          id: instId,
-          type: 'flak_battery',
-          name: `MIM-104 愛國者長程防空飛彈營 (${targetIsland.name})`,
-          weaponDesc: 'AN/MPQ-53 相位陣列雷達導引 · 射程 2600m · 高空反戰機與掠海反艦/彈道飛彈截擊',
-          side: 'player',
-          pos: instPos,
-          health: 2600,
-          maxHealth: 2600,
-          armor: 0.55,
-          angle: instAngle,
-          range: 2600,
-          reloadTime: 1.8,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'sam_hawk') {
-        // MIM-23 霍克防空飛彈陣地
-        targetIsland.installations.push({
-          id: instId,
-          type: 'flak_battery',
-          name: `MIM-23 霍克防空飛彈連 (${targetIsland.name})`,
-          weaponDesc: '半主動雷達導引防空飛彈 · 射程 1800m · 攔截高空高速噴射機與巡航飛彈',
-          side: 'player',
-          pos: instPos,
-          health: 1800,
-          maxHealth: 1800,
-          armor: 0.45,
-          angle: instAngle,
-          range: 1800,
-          reloadTime: 2.2,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'fob') {
-        // 前進作戰基地 (FOB)
-        targetIsland.installations.push({
-          id: instId,
-          type: 'command_post',
-          name: `前進作戰基地 FOB (${targetIsland.name})`,
-          weaponDesc: '直升機停機坪與全天候作戰指揮中心 · 支援垂直包圍部隊登陸集結 · 擴展雷達視野 1600m',
-          side: 'player',
-          pos: instPos,
-          health: 4500,
-          maxHealth: 4500,
-          armor: 0.60,
-          angle: instAngle,
-          range: 1600,
-          reloadTime: 1.0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      }
-
-      this.islandsVersion++;
-
-      // Spawn tactical construction sparkles & ring effect
-      for (let i = 0; i < 22; i++) {
-        const pAngle = Math.random() * Math.PI * 2;
-        const pSpd = 35 + Math.random() * 80;
-        this.particles.push({
-          id: `inst-p-${Date.now()}-${i}`,
-          x: instPos.x,
-          y: instPos.y,
-          vx: Math.cos(pAngle) * pSpd,
-          vy: Math.sin(pAngle) * pSpd,
-          life: 1.0,
-          maxLife: 1.0,
-          color: '#00E5FF',
-          radius: 2.5 + Math.random() * 2.5,
-          type: 'spark',
-        });
-      }
-
-      const locationLabel = customPos ? '指定海圖座標' : targetIsland.name;
-      this.addBannerAlert(`🏗️【碼頭/設施落成】已在 ${locationLabel} 構築「${item.name}」！`, 'player', 'capture', 4.5);
+    if (gUnit) {
+      this.groundUnits.push(gUnit);
+      this.addBannerAlert(`🪖【陸軍戰備就位】「${gUnit.name}」已於 ${spawnLabel} 就地集結！`, 'player', 'capture', 5.0);
       this.addCombatLog({
         category: 'naval',
         sourceSide: 'player',
-        sourceName: '海軍工兵團 (Seabees)',
-        targetName: item.name,
+        sourceName: '陸戰隊司令部',
+        targetName: gUnit.name,
         actionType: 'recon_spotted',
-        text: `🏗️【設施工事落成】${freeSandbox ? '【免CP沙盒建造】' : `耗費 ${item.cost} CP`}！「${item.name}」已在 ${targetIsland.name} (${locationLabel}) 構築完成並即刻投入戰備！`,
+        text: `🪖【陸戰戰力進駐】耗費 ${item.cost} CP！「${gUnit.name}」於 ${spawnLabel} 完成戰備集結，隨時準備發動突擊或加固防衛！`,
       });
       return true;
     }
+    return false;
+  }
 
+  private purchaseAircraftRequisition(item: RequisitionItem, freeSandbox: boolean, flagship: Ship | undefined): boolean {
+    soundEngine.playPlaneSortie();
+    // 飛機(陸海基)增援固定剛開始都是在起始機場 pool 中
+    if (item.typeTag === 'fighter_pool') {
+      const fighterModel = this.era === 'era1' ? 'f4f' : this.era === 'era2' ? 'f6f' : this.era === 'era3' ? 'f9f' : 'f4b';
+      const landFighter = this.era === 'era1' ? 'p40' : this.era === 'era2' ? 'p51' : this.era === 'era3' ? 'f86' : 'f4e';
+      this.airbasePlanes[fighterModel] = (this.airbasePlanes[fighterModel] || 0) + 4;
+      this.airbasePlanes[landFighter] = (this.airbasePlanes[landFighter] || 0) + 4;
+    } else if (item.typeTag === 'air_f4j') {
+      this.airbasePlanes.f4j = (this.airbasePlanes.f4j || 0) + 4;
+    } else if (item.typeTag === 'air_f8') {
+      this.airbasePlanes.f8 = (this.airbasePlanes.f8 || 0) + 4;
+    } else if (item.typeTag === 'air_a6a') {
+      this.airbasePlanes.a6a = (this.airbasePlanes.a6a || 0) + 4;
+    } else if (item.typeTag === 'air_a4') {
+      this.airbasePlanes.a4 = (this.airbasePlanes.a4 || 0) + 4;
+    } else if (item.typeTag === 'air_b52') {
+      this.airbasePlanes.b52 = (this.airbasePlanes.b52 || 0) + 2;
+    } else if (item.typeTag === 'air_f105') {
+      this.airbasePlanes.f105 = (this.airbasePlanes.f105 || 0) + 4;
+    } else if (item.typeTag === 'air_a7') {
+      this.airbasePlanes.a7 = (this.airbasePlanes.a7 || 0) + 4;
+    } else if (item.typeTag === 'air_ov10') {
+      this.airbasePlanes.ov10 = (this.airbasePlanes.ov10 || 0) + 4;
+    } else if (item.typeTag === 'air_uh1') {
+      this.airbasePlanes.uh1 = (this.airbasePlanes.uh1 || 0) + 4;
+    } else if (item.typeTag === 'air_ah1') {
+      this.airbasePlanes.ah1 = (this.airbasePlanes.ah1 || 0) + 4;
+    } else if (item.typeTag === 'air_c1') {
+      this.airbasePlanes.c1 = (this.airbasePlanes.c1 || 0) + 2;
+    } else if (item.typeTag === 'air_c47') {
+      this.airbasePlanes.c47 = (this.airbasePlanes.c47 || 0) + 2;
+    } else if (item.typeTag === 'air_sh2') {
+      this.airbasePlanes.sh2 = (this.airbasePlanes.sh2 || 0) + 2;
+    } else if (item.typeTag === 'air_p3') {
+      this.airbasePlanes.p3 = (this.airbasePlanes.p3 || 0) + 2;
+    } else if (item.typeTag === 'fighter_jet_f9f') {
+      this.airbasePlanes.f9f = (this.airbasePlanes.f9f || 0) + 4;
+    } else if (item.typeTag === 'fighter_jet_f2h') {
+      this.airbasePlanes.f2h = (this.airbasePlanes.f2h || 0) + 4;
+    } else if (item.typeTag === 'attacker_skyraider') {
+      this.airbasePlanes.ad1 = (this.airbasePlanes.ad1 || 0) + 4;
+    } else if (item.typeTag === 'aew_ad3w') {
+      this.airbasePlanes.ad3w = (this.airbasePlanes.ad3w || 0) + 1;
+    } else if (item.typeTag === 'sar_ho3s1') {
+      this.airbasePlanes.ho3s1 = (this.airbasePlanes.ho3s1 || 0) + 1;
+    } else if (item.typeTag === 'dive_bomber_pool') {
+      const diveModel = this.era === 'era1' ? 'sbd' : this.era === 'era2' ? 'sb2c' : this.era === 'era3' ? 'ad1' : 'a4';
+      this.airbasePlanes[diveModel] = (this.airbasePlanes[diveModel] || 0) + 4;
+    } else if (item.typeTag === 'torpedo_bomber_pool') {
+      const torpModel = this.era === 'era1' ? 'tbd' : this.era === 'era2' ? 'tbf' : this.era === 'era3' ? 'af_guardian' : 'a6a';
+      this.airbasePlanes[torpModel] = (this.airbasePlanes[torpModel] || 0) + 4;
+    } else if (item.typeTag === 'heavy_bomber_pool') {
+      const heavyModel = this.era === 'era1' ? 'b17' : this.era === 'era2' ? 'b24' : this.era === 'era3' ? 'b29' : 'b52';
+      this.airbasePlanes[heavyModel] = (this.airbasePlanes[heavyModel] || 0) + 2;
+    } else if (item.typeTag === 'attacker_pool') {
+      const attModel = this.era === 'era1' ? 'a20' : this.era === 'era2' ? 'p47' : this.era === 'era3' ? 'a26' : 'a7';
+      this.airbasePlanes[attModel] = (this.airbasePlanes[attModel] || 0) + 4;
+    } else if (item.typeTag === 'air_sh2') {
+      this.airbasePlanes['sh2'] = (this.airbasePlanes['sh2'] || 0) + 4;
+      if (flagship && flagship.carrierPlanes) {
+        flagship.carrierPlanes.ready.sh2 = (flagship.carrierPlanes.ready.sh2 || 0) + 2;
+      }
+    } else if (item.typeTag === 'air_p3') {
+      this.airbasePlanes['p3'] = (this.airbasePlanes['p3'] || 0) + 2;
+      if (flagship && flagship.carrierPlanes) {
+        flagship.carrierPlanes.ready.p3 = (flagship.carrierPlanes.ready.p3 || 0) + 1;
+      }
+    } else if (item.typeTag === 'air_f14a') {
+      this.airbasePlanes.f14a = (this.airbasePlanes.f14a || 0) + 4;
+      if (flagship && flagship.carrierPlanes) {
+        flagship.carrierPlanes.ready.f14a = (flagship.carrierPlanes.ready.f14a || 0) + 2;
+      }
+    } else if (item.typeTag === 'air_fa18a') {
+      this.airbasePlanes.fa18a = (this.airbasePlanes.fa18a || 0) + 4;
+      if (flagship && flagship.carrierPlanes) {
+        flagship.carrierPlanes.ready.fa18a = (flagship.carrierPlanes.ready.fa18a || 0) + 2;
+      }
+    } else if (item.typeTag === 'air_s3a') {
+      this.airbasePlanes.s3a = (this.airbasePlanes.s3a || 0) + 4;
+      if (flagship && flagship.carrierPlanes) {
+        flagship.carrierPlanes.ready.s3a = (flagship.carrierPlanes.ready.s3a || 0) + 2;
+      }
+    } else if (item.typeTag === 'air_a6e') {
+      this.airbasePlanes.a6e = (this.airbasePlanes.a6e || 0) + 4;
+      if (flagship && flagship.carrierPlanes) {
+        flagship.carrierPlanes.ready.a6e = (flagship.carrierPlanes.ready.a6e || 0) + 2;
+      }
+    } else if (item.typeTag === 'air_e2c') {
+      this.airbasePlanes.e2c = (this.airbasePlanes.e2c || 0) + 2;
+      if (flagship && flagship.carrierPlanes) {
+        flagship.carrierPlanes.ready.e2c = (flagship.carrierPlanes.ready.e2c || 0) + 1;
+      }
+    } else if (item.typeTag === 'air_ea6b') {
+      this.airbasePlanes.ea6b = (this.airbasePlanes.ea6b || 0) + 2;
+      if (flagship && flagship.carrierPlanes) {
+        flagship.carrierPlanes.ready.ea6b = (flagship.carrierPlanes.ready.ea6b || 0) + 1;
+      }
+    } else if (item.typeTag === 'air_c2a') {
+      this.airbasePlanes.c2a = (this.airbasePlanes.c2a || 0) + 2;
+    } else if (item.typeTag === 'air_sh3f') {
+      this.airbasePlanes.sh3f = (this.airbasePlanes.sh3f || 0) + 4;
+      if (flagship && flagship.carrierPlanes) {
+        flagship.carrierPlanes.ready.sh3f = (flagship.carrierPlanes.ready.sh3f || 0) + 2;
+      }
+    } else if (item.typeTag === 'air_av8b') {
+      this.airbasePlanes.av8b = (this.airbasePlanes.av8b || 0) + 4;
+    } else if (item.typeTag === 'air_ch53') {
+      this.airbasePlanes.ch53 = (this.airbasePlanes.ch53 || 0) + 4;
+    } else if (item.typeTag === 'air_a10a') {
+      this.airbasePlanes.a10a = (this.airbasePlanes.a10a || 0) + 4;
+    } else if (item.typeTag === 'air_ah64a') {
+      this.airbasePlanes.ah64a = (this.airbasePlanes.ah64a || 0) + 4;
+    } else if (item.typeTag === 'air_ah1w') {
+      this.airbasePlanes.ah1w = (this.airbasePlanes.ah1w || 0) + 4;
+    } else if (item.typeTag === 'air_f15a') {
+      this.airbasePlanes.f15a = (this.airbasePlanes.f15a || 0) + 4;
+    } else if (item.typeTag === 'air_f16a') {
+      this.airbasePlanes.f16a = (this.airbasePlanes.f16a || 0) + 4;
+    } else if (item.typeTag === 'air_e3a') {
+      this.airbasePlanes.e3a = (this.airbasePlanes.e3a || 0) + 1;
+    } else if (item.typeTag === 'air_f111') {
+      this.airbasePlanes.f111 = (this.airbasePlanes.f111 || 0) + 4;
+    } else if (item.typeTag === 'air_c130') {
+      this.airbasePlanes.c130 = (this.airbasePlanes.c130 || 0) + 2;
+    }
+
+    this.addBannerAlert(`✈️【機隊補充】「${item.name}」已進駐起始前進基地航空庫存！`, 'player', 'capture', 5.0);
+    this.addCombatLog({
+      category: 'air',
+      sourceSide: 'player',
+      sourceName: '海軍航空兵部 (BuAer)',
+      targetName: item.name,
+      actionType: 'recon_spotted',
+      text: `✈️【航空戰力充實】${freeSandbox ? '【免CP沙盒配置】' : `耗費 ${item.cost} CP`}！${item.name} 戰機群已進駐起始前進基地機庫，可隨時自基地起飛或轉場！`,
+    });
+    return true;
+    return false;
+  }
+
+  private purchaseShipRequisition(item: RequisitionItem, customPos: Vector2D | undefined, freeSandbox: boolean): boolean {
+    soundEngine.playPlaneSortie();
+    let newShip: Ship | null = null;
+    const shipId = `player-req-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+    // 海軍艦艇單位固定自地圖西南邊緣海疆增援航向戰區
+    const mapBound = this.worldSize || 14000;
+    const edgeSpawnX = 800 + Math.random() * 1400;
+    const edgeSpawnY = mapBound - 350 - Math.random() * 400;
+    const warshipSpawnPos: Vector2D = { x: edgeSpawnX, y: edgeSpawnY };
+
+    if (item.typeTag === 'ohio_ssbn' || item.id === 'req-support-ohio-ssbn') {
+      const targetPos = customPos || (this.enemyShips.find(s => !s.isSunk)?.pos) || { x: 9500, y: 4500 };
+      this.fireOhioSSBNTridentStrike(targetPos);
+      return true;
+    } else if (item.typeTag === 'bb' || item.typeTag === 'bb_missouri') {
+      const isMo = item.typeTag === 'bb_missouri' || this.era === 'era3';
+      newShip = createPlayerBattleship(
+        shipId,
+        isMo
+          ? 'USS Missouri (BB-63 密蘇里號主力戰艦)'
+          : this.era === 'era1'
+          ? 'USS North Carolina (BB-55)'
+          : 'USS Iowa (BB-61)',
+        warshipSpawnPos,
+        this.era
+      );
+    } else if (item.typeTag === 'ca' || item.typeTag === 'ca_desmoines') {
+      newShip = createConvoyEscortShip(shipId, 'ca', warshipSpawnPos, this.era);
+      if (item.typeTag === 'ca_desmoines' || this.era === 'era3') {
+        newShip.name = 'USS Des Moines (CA-134 得梅因號自動裝填重巡)';
+        newShip.health = 3600;
+        newShip.maxHealth = 3600;
+      }
+    } else if (item.typeTag === 'cl') {
+      newShip = createConvoyEscortShip(shipId, 'cl', warshipSpawnPos, this.era);
+    } else if (item.typeTag === 'dd' || item.typeTag === 'dd_gearing' || item.typeTag === 'dd_sherman') {
+      if (this.era === 'era4' || item.typeTag === 'dd_sherman') {
+        newShip = createForrestShermanDD(shipId, 'USS Forrest Sherman (DD-931 驅逐艦)', warshipSpawnPos);
+      } else {
+        newShip = createConvoyEscortShip(shipId, 'dd', warshipSpawnPos, this.era);
+        if (item.typeTag === 'dd_gearing' || this.era === 'era3') {
+          newShip.name = 'USS Gearing (DD-710 基靈級雷達糾察驅逐艦)';
+          newShip.health = 1850;
+          newShip.maxHealth = 1850;
+        }
+      }
+    } else if (item.typeTag === 'ffg') {
+      newShip = createKnoxFFG(shipId, 'USS Knox (FFG-1052 巡防艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'ss') {
+      newShip = createConvoyEscortShip(shipId, 'ss', warshipSpawnPos, this.era);
+    } else if (item.typeTag === 'lst') {
+      newShip = (this.era === 'era4' || this.era === 'era5')
+        ? createNewportLST(shipId, this.era === 'era5' ? 'USS Newport (LST-1179 紐波特戰車登陸艦 現代化改型)' : 'USS Newport (LST-1179 紐波特級戰車登陸艦)', warshipSpawnPos, this.era)
+        : createLST(shipId, 'USS LST-491 戰車登陸艦', warshipSpawnPos, this.era);
+    } else if (item.typeTag === 'lcvp') {
+      newShip = this.era === 'era5'
+        ? createLCAC(shipId, 'LCAC-01 氣墊登陸艇', warshipSpawnPos)
+        : this.era === 'era4'
+        ? createLCM8(shipId, 'LCM-8 機械化登陸艇', warshipSpawnPos)
+        : createLCVP(shipId, 'LCVP 突擊登陸艇', warshipSpawnPos, this.era);
+    } else if (item.typeTag === 'cv63') {
+      newShip = createCV63(shipId, 'USS Kitty Hawk (CV-63 超級航空母艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'cg') {
+      newShip = createBelknapCG(shipId, 'USS Belknap (CG-26 導彈巡洋艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'ddg') {
+      newShip = createAdamsDDG(shipId, 'USS Charles F. Adams (DDG-2 導彈驅逐艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'lph') {
+      newShip = createLPHIwoJima(shipId, 'USS Iwo Jima (LPH-2 兩棲突擊艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'lcm8') {
+      newShip = createLCM8(shipId, 'LCM-8 機械化登陸艇', warshipSpawnPos);
+    } else if (item.typeTag === 'cvn') {
+      newShip = createCVNNimitz(shipId, 'USS Nimitz (CVN-68 超級核動力航空母艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'cg_tico') {
+      newShip = createTiconderogaCG(shipId, 'USS Ticonderoga (CG-47 神盾巡洋艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'cg_virginia') {
+      newShip = createVirginiaCGN(shipId, 'USS Virginia (CGN-38 核動力巡洋艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'bb_iowa_mod') {
+      newShip = createIowaModernizedBB(shipId, 'USS Iowa (BB-61 近代化改裝主力戰艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'dd_spruance') {
+      newShip = createSpruanceDD(shipId, 'USS Spruance (DD-963 反潛驅逐艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'ddg_kidd') {
+      newShip = createKiddDDG(shipId, 'USS Kidd (DDG-993 飛彈驅逐艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'ffg_ohp') {
+      newShip = createPerryFFG(shipId, 'USS Oliver Hazard Perry (FFG-7 巡防艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'ssn_la') {
+      newShip = createLosAngelesSSN(shipId, 'USS Los Angeles (SSN-688 攻擊核潛艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'lpd') {
+      newShip = createAustinLPD(shipId, 'USS Austin (LPD-4 兩棲船塢運輸艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'lcac') {
+      newShip = createLCAC(shipId, 'LCAC-01 氣墊登陸艇', warshipSpawnPos);
+    }
+
+    if (newShip) {
+      newShip.heading = -Math.PI / 4; // 朝向東北戰區航進
+      this.playerShips.push(newShip);
+      this.applyUpgradesToShip(newShip);
+      this.addBannerAlert(`⚓【艦隊邊界增援】「${newShip.name}」自地圖邊緣駛入戰區！`, 'player', 'capture', 6.0);
+      this.addCombatLog({
+        category: 'naval',
+        sourceSide: 'player',
+        sourceName: '後勤調遣司令部',
+        targetName: newShip.name,
+        actionType: 'recon_spotted',
+        text: `⚓【海軍調遣就緒】${freeSandbox ? '【免CP沙盒建造】' : `耗費 ${item.cost} CP`} 調派「${newShip.name}」自地圖西南邊疆外海駛入戰區！火砲裝備、航向與戰術編隊已就緒！`,
+      });
+      return true;
+    }
     return false;
   }
 
