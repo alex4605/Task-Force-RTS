@@ -627,3 +627,33 @@ export function getAfbCompatiblePayloads(
   }
   return getCompatiblePayloads(role, currentEra);
 }
+
+export type LaunchOrigin = 'carrier' | 'airbase';
+
+const ALL_ERAS: Era[] = ['era1', 'era2', 'era3', 'era4', 'era5'];
+const roleCache = new Map<string, AircraftRole>();
+
+function findCatalogRole(model: AircraftModel, origin: LaunchOrigin, era: Era): AircraftRole | undefined {
+  const fromCarrier = (e: Era) => getCarrierModelsForEra(e).find((d) => d.model === model)?.role;
+  const fromAirbase = (e: Era) => getAfbModelsForEra(e).find((d) => d.id === model)?.role;
+  const primary = origin === 'carrier' ? fromCarrier : fromAirbase;
+  const secondary = origin === 'carrier' ? fromAirbase : fromCarrier;
+  // Same origin in the current era, then the same origin in any era, then the other origin
+  return primary(era) ?? ALL_ERAS.map(primary).find(Boolean) ?? secondary(era) ?? ALL_ERAS.map(secondary).find(Boolean);
+}
+
+/**
+ * The aircraft's role exactly as the air-wing catalog shows it to the player, which is the single
+ * source of truth the engine uses for payload selection and AI behaviour. Carrier and land-based
+ * catalogs may list the same airframe in different roles (e.g. F4U-4 fighter afloat, attacker
+ * ashore), so the launch origin is part of the lookup. Models that appear in no catalog are scouts.
+ */
+export function getCatalogRole(model: AircraftModel, origin: LaunchOrigin, era: Era): AircraftRole {
+  const key = `${model}|${origin}|${era}`;
+  let role = roleCache.get(key);
+  if (!role) {
+    role = findCatalogRole(model, origin, era) ?? 'scout';
+    roleCache.set(key, role);
+  }
+  return role;
+}

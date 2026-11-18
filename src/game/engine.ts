@@ -35,6 +35,7 @@ import {
   FleetUpgrades,
 } from '../types/game';
 import { getAlliedSagFleet } from './alliedSagFleets';
+import { getCatalogRole } from './airWingCatalog';
 import { getAircraftBaseHealth, getAircraftBaseSpeed, getAircraftGunRounds } from './aircraftStats';
 
 /** Piston and early-jet fighters that count as fighters even when flagged with another role. */
@@ -1625,26 +1626,7 @@ export class GameEngine {
     flagship.carrierPlanes.ready[model] -= actualCount;
 
     const sqId = `sq-${model}-${Date.now()}`;
-    const role: AircraftRole =
-      model === 'ad3w' || model === 'e1'
-        ? 'aew'
-        : model === 'ho3s1' || model === 'uh2'
-        ? 'rescue'
-        : model === 'ad1' || model === 'a4' || model === 'a6a' || model === 'a6b_weasel' || model === 'a1h' || model === 'a37b' || model === 'p39d'
-        ? 'attacker'
-        : model === 'b17_late' || model === 'b25'
-        ? 'level_bomber'
-        : model === 'af_guardian' || model === 's2'
-        ? 'torpedo_bomber'
-        : model === 'c1' || model === 'c2a' || model === 'c130' || model === 'c47'
-        ? 'transport'
-        : model === 'f4f' || model === 'f6f' || model === 'f4u' || model === 'f8f' || model === 'f9f' || model === 'f2h' || model === 'f4u4' || model === 'mig15' || model === 'f8' || model === 'f4b' || model === 'f4j' || model === 'mig21' || model === 'mig17' || model === 'p36a' || model === 'f82' || model === 'f5a' || model === 'f104g'
-        ? 'fighter'
-        : model === 'sbd' || model === 'sb2c'
-        ? 'dive_bomber'
-        : model === 'tbd' || model === 'tbf' || model === 'tu14' || model === 'il28'
-        ? 'torpedo_bomber'
-        : 'scout';
+    const role: AircraftRole = getCatalogRole(model, 'carrier', this.era);
 
     // Allow overriding payload on sortie, and persist as current active payload for role
     const payloadType = specificPayload || this.activePayloads[role];
@@ -8722,22 +8704,7 @@ export class GameEngine {
     const heading = -Math.PI / 4;
     soundEngine.playPlaneSortie();
 
-    const role: AircraftRole =
-      model === 'b17' || model === 'b17_late' || model === 'b25' || model === 'b24' || model === 'b29' || model === 'b52' || model === 'f111' || model === 'lancaster'
-        ? 'level_bomber'
-        : model === 'p40' || model === 'p36a' || model === 'p38' || model === 'p51' || model === 'f82' || model === 'f86' || model === 'f4f' || model === 'f4f_phantom' || model === 'f6f' || model === 'f4u' || model === 'f8f' || model === 'f9f' || model === 'f2h' || model === 'f8' || model === 'f4b' || model === 'f4j' || model === 'f4e' || model === 'f14a' || model === 'f15a' || model === 'f16a' || model === 'fa18a' || model === 'f5a' || model === 'f104g' || model === 'hurricane' || model === 'spitfire_v' || model === 'spitfire_xiv' || model === 'tempest' || model === 'meteor' || model === 'rokaf_p51' || model === 'mirage3' || model === 'tornado_adv' || model === 'mirage2000'
-        ? 'fighter'
-        : model === 'a20' || model === 'p39d' || model === 'p47' || model === 'a26' || model === 'ad1' || model === 'f4u4' || model === 'a4' || model === 'a6a' || model === 'a6b_weasel' || model === 'f105' || model === 'a7' || model === 'a1h' || model === 'a37b' || model === 'ah1' || model === 'a10a' || model === 'a6e' || model === 'av8b' || model === 'ea6b' || model === 'ah64a' || model === 'ah1w' || model === 'beaufighter' || model === 'mosquito' || model === 'sea_fury' || model === 'firefly_as5' || model === 'hunter_fga9' || model === 'tornado_gr1' || model === 'tornado_ids' || model === 'jaguar_gr1' || model === 'viggen_ja37'
-        ? 'attacker'
-        : model === 'sbd' || model === 'sb2c'
-        ? 'dive_bomber'
-        : model === 'os2u' || model === 'sc1' || model === 'ad3w' || model === 'e1' || model === 'ov10' || model === 's2' || model === 'p3' || model === 'e2c' || model === 'e3a' || model === 's3a'
-        ? 'scout'
-        : model === 'ho3s1' || model === 'uh2' || model === 'sh2' || model === 'sh3f'
-        ? 'rescue'
-        : model === 'uh1' || model === 'c1' || model === 'c2a' || model === 'c130' || model === 'c47' || model === 'ch53'
-        ? 'transport'
-        : 'torpedo_bomber';
+    const role: AircraftRole = getCatalogRole(model, 'airbase', this.era);
 
     const rawSpeed = getAircraftBaseSpeed(model);
 
