@@ -35,412 +35,20 @@ export function drawShips(rc: RenderContext, ships: Ship[], camera: Camera, sele
 
     drawWake(rc, ship);
 
-    // Submarine Sonar Contact / Stealth Bubble Ring
-    if (isSub && !ship.isSunk) {
-      const pulse = (Math.sin(rc.time * 5.2) + 1) * 0.5;
-      if (ship.side === 'enemy' && ship.isSpotted) {
-        ctx.strokeStyle = `rgba(255, 171, 64, ${0.45 + pulse * 0.4})`;
-        ctx.lineWidth = 1.6;
-        ctx.setLineDash([4, 3]);
-        ctx.beginPath();
-        ctx.arc(ship.pos.x, ship.pos.y, ship.length * 0.52 + pulse * 8, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      } else if (ship.side !== 'enemy') {
-        if (ship.isSpottedByEnemy) {
-          ctx.strokeStyle = `rgba(255, 82, 82, ${0.5 + pulse * 0.45})`;
-          ctx.lineWidth = 1.6;
-          ctx.setLineDash([4, 3]);
-          ctx.beginPath();
-          ctx.arc(ship.pos.x, ship.pos.y, ship.length * 0.52 + pulse * 8, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.setLineDash([]);
-        } else {
-          ctx.strokeStyle = 'rgba(77, 208, 225, 0.25)';
-          ctx.lineWidth = 1;
-          ctx.setLineDash([3, 4]);
-          ctx.beginPath();
-          ctx.arc(ship.pos.x, ship.pos.y, ship.length * 0.48, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.setLineDash([]);
-        }
-      }
-    }
+    drawSubmarineContactRing(rc, ship, isSub);
 
-    // RTS A* Sea-Lane Waypoint Path Line
-    if (isSelected && ship.order.targetPos && (ship.order.type === 'move' || ship.order.type === 'attack')) {
-      const wps = ship.order.waypoints;
-      const startIdx = ship.order.activeWaypointIndex ?? 0;
-      const hasWaypoints = Array.isArray(wps) && wps.length > startIdx;
-      if (ship.order.type === 'move' || hasWaypoints) {
-        ctx.strokeStyle = ship.order.type === 'attack' ? 'rgba(255, 138, 128, 0.65)' : 'rgba(0, 230, 118, 0.65)';
-        ctx.lineWidth = 1.6;
-        ctx.setLineDash([6, 6]);
-        ctx.beginPath();
-        ctx.moveTo(ship.pos.x, ship.pos.y);
-        if (hasWaypoints) {
-          for (let wi = startIdx; wi < wps.length; wi++) {
-            ctx.lineTo(wps[wi].x, wps[wi].y);
-          }
-        } else {
-          ctx.lineTo(ship.order.targetPos.x, ship.order.targetPos.y);
-        }
-        ctx.stroke();
-
-        ctx.setLineDash([]);
-        if (hasWaypoints) {
-          ctx.fillStyle = 'rgba(0, 230, 118, 0.6)';
-          for (let wi = startIdx; wi < wps.length - 1; wi++) {
-            ctx.beginPath();
-            ctx.arc(wps[wi].x, wps[wi].y, 2.5, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-        ctx.fillStyle = ship.order.type === 'attack' ? '#FF5252' : '#00E676';
-        ctx.beginPath();
-        ctx.arc(ship.order.targetPos.x, ship.order.targetPos.y, 4, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
+    drawWaypointPath(rc, ship, isSelected);
 
     const isPlayer = ship.side === 'player';
     const isAllied = ship.side === 'allied';
     const hullColor = isPlayer ? '#E0F7FA' : isAllied ? '#B9F6CA' : '#FFCDD2';
     const detailColor = isPlayer ? '#80DEEA' : isAllied ? '#00E676' : '#EF9A9A';
 
-    if (ship.isSunk && ship.isBrokenInTwo) {
-      // ══════════════════════════════════════════════════════════
-      // 艦體應力斷裂兩截沉沒 (Ship Sinking Split in Two Segments)
-      // ══════════════════════════════════════════════════════════
-      const breakX = ship.length * (ship.breakLineOffset || 0);
-      const l = ship.length;
-      const w = ship.width;
-      const alpha = Math.max(0, 1 - ship.sinkProgress);
-      const breakProg = ship.breakProgress || 1;
+    drawHull(rc, ship, hullColor, detailColor);
 
-      // 1. 艦尾節 (Stern Section): 斷裂後向後傾側沉降
-      ctx.save();
-      ctx.translate(ship.pos.x, ship.pos.y);
-      ctx.globalAlpha = alpha;
-      ctx.rotate(ship.heading + (ship.sternAngleOffset || -0.25) * breakProg);
-      ctx.beginPath();
-      ctx.rect(-l, -w * 2, breakX + l, w * 4);
-      ctx.clip();
-      renderShipHullByType(rc, ship, hullColor, detailColor);
-      ctx.restore();
+    drawBattleDamage(rc, ship);
 
-      // 2. 艦首節 (Bow Section): 斷裂後艦首下插前傾
-      ctx.save();
-      ctx.translate(ship.pos.x, ship.pos.y);
-      ctx.globalAlpha = alpha;
-      ctx.rotate(ship.heading + (ship.bowAngleOffset || 0.18) * breakProg);
-      ctx.beginPath();
-      ctx.rect(breakX, -w * 2, l * 2, w * 4);
-      ctx.clip();
-      renderShipHullByType(rc, ship, hullColor, detailColor);
-      ctx.restore();
-
-      // 3. 斷裂接縫處 (Jagged Steel Fracture Line & Raging Internal Flame)
-      ctx.save();
-      ctx.translate(ship.pos.x, ship.pos.y);
-      ctx.rotate(ship.heading);
-
-      // 撕裂鋼板輪廓
-      ctx.strokeStyle = '#FF3D00';
-      ctx.lineWidth = 3.0;
-      ctx.beginPath();
-      ctx.moveTo(breakX, -w * 0.52);
-      ctx.lineTo(breakX + 4, -w * 0.2);
-      ctx.lineTo(breakX - 4, w * 0.2);
-      ctx.lineTo(breakX, w * 0.52);
-      ctx.stroke();
-
-      // 斷裂處高熱燃燒火光與融鐵核心
-      ctx.fillStyle = '#FFA000';
-      ctx.beginPath();
-      ctx.arc(breakX, 0, Math.min(8, w * 0.45), 0, Math.PI * 2);
-      ctx.fill();
-
-      // 4. 彈藥庫劇烈殉爆瞬態高光光球 (Catastrophic Magazine Detonation Flash)
-      if (ship.magazineFlashTimer && ship.magazineFlashTimer > 0) {
-        const flashAlpha = Math.min(1, ship.magazineFlashTimer / 0.5);
-        const flashR = (1 - flashAlpha) * (ship.length * 1.6) + 35;
-        const flashGrad = ctx.createRadialGradient(breakX, 0, 2, breakX, 0, flashR);
-        flashGrad.addColorStop(0, `rgba(255, 255, 255, ${flashAlpha})`);
-        flashGrad.addColorStop(0.25, `rgba(255, 238, 88, ${flashAlpha * 0.95})`);
-        flashGrad.addColorStop(0.65, `rgba(255, 87, 34, ${flashAlpha * 0.75})`);
-        flashGrad.addColorStop(1, 'rgba(216, 27, 96, 0)');
-        ctx.fillStyle = flashGrad;
-        ctx.beginPath();
-        ctx.arc(breakX, 0, flashR, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-    } else {
-      // 標準艦體姿態繪製
-      ctx.save();
-      ctx.translate(ship.pos.x, ship.pos.y);
-      if (ship.isSunk) {
-        ctx.globalAlpha = Math.max(0, 1 - ship.sinkProgress);
-        ctx.rotate(ship.heading + ship.sinkProgress * 0.4);
-      } else {
-        ctx.rotate(ship.heading);
-        // Subsurface ocean drop shadow & waterline cushion for surfaced ships
-        if (!(isSubmarineShip(ship) && (ship.isSubmerged ?? true))) {
-          ctx.fillStyle = 'rgba(2, 7, 15, 0.48)';
-          ctx.beginPath();
-          ctx.ellipse(2, 3, ship.length * 0.51, ship.width * 0.48, 0, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-      renderShipHullByType(rc, ship, hullColor, detailColor);
-      if (!ship.isSunk) {
-        drawShipUniversalDetails(rc, ship, hullColor, detailColor);
-      }
-      ctx.restore();
-    }
-
-    // ══════════════════════════════════════════════════════════
-    // 戰損燃燒與沉沒特效 (Battle Damage Fire, Black Smoke & Oil Slicks)
-    // ══════════════════════════════════════════════════════════
-    if (ship.isSunk) {
-      // Sinking Ship: Expanding Iridescent Oil Slick on Water Surface
-      const slickRadius = (ship.length * 0.5) + ship.sinkProgress * 32;
-      const oilGrad = ctx.createRadialGradient(
-        ship.pos.x, ship.pos.y, 4,
-        ship.pos.x, ship.pos.y, slickRadius
-      );
-      oilGrad.addColorStop(0, 'rgba(10, 25, 45, 0.6)');
-      oilGrad.addColorStop(0.6, 'rgba(21, 52, 85, 0.35)');
-      oilGrad.addColorStop(0.85, 'rgba(41, 121, 150, 0.18)');
-      oilGrad.addColorStop(1, 'rgba(41, 121, 150, 0)');
-
-      ctx.fillStyle = oilGrad;
-      ctx.beginPath();
-      ctx.ellipse(ship.pos.x, ship.pos.y, slickRadius, slickRadius * 0.65, ship.heading, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Water boil, foam and boiler room steam bubbles
-      ctx.strokeStyle = 'rgba(224, 247, 250, 0.45)';
-      ctx.lineWidth = 1.2;
-      for (let b = 0; b < 4; b++) {
-        const bAngle = (rc.time * 3 + b * 1.5) % (Math.PI * 2);
-        const bDist = (b * 9 + rc.time * 12) % (ship.length * 0.4);
-        const bx = ship.pos.x + Math.cos(ship.heading + bAngle) * bDist;
-        const by = ship.pos.y + Math.sin(ship.heading + bAngle) * bDist;
-        ctx.beginPath();
-        ctx.arc(bx, by, 3 + (b % 3), 0, Math.PI * 2);
-        ctx.stroke();
-      }
-    } else if (ship.health < ship.maxHealth * 0.55) {
-      // Heavy Battle Damage: Multi-stage Billowing Black Smoke & Internal Fiery Core
-      const isCritical = ship.health < ship.maxHealth * 0.3;
-      const plumeCount = isCritical ? 4 : 2;
-
-      for (let pIdx = 0; pIdx < plumeCount; pIdx++) {
-        const offsetAlongHull = (pIdx - (plumeCount - 1) / 2) * (ship.length * 0.22);
-        const originX = ship.pos.x + Math.cos(ship.heading) * offsetAlongHull;
-        const originY = ship.pos.y + Math.sin(ship.heading) * offsetAlongHull;
-
-        // 1. Billowing dense black smoke clouds drifting astern
-        for (let s = 0; s < 3; s++) {
-          const puffCycle = (rc.time * 1.8 + pIdx * 0.4 + s * 0.32) % 1;
-          const r = 6 + puffCycle * 22;
-          const alpha = (1 - puffCycle) * 0.6;
-          // Drift opposite to ship heading + wind drift
-          const driftDist = puffCycle * 28;
-          const driftX = originX - Math.cos(ship.heading) * driftDist + Math.sin(rc.time * 2 + s) * 5;
-          const driftY = originY - Math.sin(ship.heading) * driftDist - puffCycle * 22;
-
-          // Gradient smoke puff: dark charcoal edges
-          ctx.fillStyle = `rgba(18, 24, 32, ${alpha})`;
-          ctx.beginPath();
-          ctx.arc(driftX, driftY, r, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        // 2. Active raging internal fire combustion core on deck
-        if (isCritical) {
-          const fireFlicker = (Math.sin(rc.time * 16 + pIdx * 3) + 1) * 0.5;
-          const flameRadius = 4 + fireFlicker * 5;
-
-          // Intense orange/yellow fireball
-          const fireGrad = ctx.createRadialGradient(
-            originX, originY, 1,
-            originX, originY, flameRadius
-          );
-          fireGrad.addColorStop(0, '#FFF59D');
-          fireGrad.addColorStop(0.4, '#FFA726');
-          fireGrad.addColorStop(0.8, '#FF5722');
-          fireGrad.addColorStop(1, 'rgba(216, 27, 96, 0)');
-
-          ctx.fillStyle = fireGrad;
-          ctx.beginPath();
-          ctx.arc(originX, originY, flameRadius, 0, Math.PI * 2);
-          ctx.fill();
-
-          // Flying burning embers / sparks
-          const sparkCycle = (rc.time * 5 + pIdx * 2) % 1;
-          const sparkX = originX + (Math.sin(rc.time * 10 + pIdx) - 0.5) * 12 - Math.cos(ship.heading) * (sparkCycle * 20);
-          const sparkY = originY - sparkCycle * 24;
-          ctx.fillStyle = '#FFE082';
-          ctx.beginPath();
-          ctx.arc(sparkX, sparkY, 1.2, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-    }
-
-    // ══════════════════════════════════════════════════════════
-    // 戰術線條與軍事圖例 (Tactical Vectors & NATO Symbology)
-    // ══════════════════════════════════════════════════════════
-    if (isSelected && !ship.isSunk) {
-      drawUnitSelectionRing(rc, ship.pos, Math.max(ship.length, ship.width) * 0.65);
-
-      // 1. Heading Vector with 30s & 60s Navigation Time Ticks
-      const cosH = Math.cos(ship.heading);
-      const sinH = Math.sin(ship.heading);
-      const vectorLen = Math.max(80, ship.speed * 2.2);
-      const tick30X = ship.pos.x + cosH * (vectorLen * 0.5);
-      const tick30Y = ship.pos.y + sinH * (vectorLen * 0.5);
-      const tick60X = ship.pos.x + cosH * vectorLen;
-      const tick60Y = ship.pos.y + sinH * vectorLen;
-
-      ctx.strokeStyle = 'rgba(0, 230, 118, 0.7)';
-      ctx.lineWidth = 1.4;
-      ctx.setLineDash([6, 4]);
-      ctx.beginPath();
-      ctx.moveTo(ship.pos.x, ship.pos.y);
-      ctx.lineTo(tick60X, tick60Y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // 30s Tick
-      ctx.strokeStyle = '#00E676';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(tick30X - sinH * 6, tick30Y + cosH * 6);
-      ctx.lineTo(tick30X + sinH * 6, tick30Y - cosH * 6);
-      ctx.stroke();
-
-      // 60s Tick with Arrowhead
-      ctx.beginPath();
-      ctx.moveTo(tick60X - sinH * 7, tick60Y + cosH * 7);
-      ctx.lineTo(tick60X + sinH * 7, tick60Y - cosH * 7);
-      ctx.stroke();
-
-      ctx.fillStyle = '#00E676';
-      ctx.font = 'bold 8px monospace';
-      ctx.fillText('30s', tick30X + 8, tick30Y + 3);
-      ctx.fillText('60s', tick60X + 8, tick60Y + 3);
-
-      // 2. NATO APP-6 Naval Tactical Frame (Blue / Green Rectangle / Red Diamond)
-      const frameW = 32;
-      const frameH = 18;
-      const frameY = ship.pos.y - ship.width - 32;
-      const isPl = ship.side === 'player';
-      const isAl = ship.side === 'allied';
-      ctx.strokeStyle = isPl ? '#42A5F5' : isAl ? '#00E676' : '#FF5252';
-      ctx.fillStyle = isPl ? 'rgba(13, 71, 161, 0.75)' : isAl ? 'rgba(27, 94, 32, 0.75)' : 'rgba(183, 28, 28, 0.75)';
-      ctx.lineWidth = 1.6;
-
-      if (!isPl && !isAl) {
-        // NATO APP-6 敵軍菱形邊框 (Hostile Diamond Frame)
-        ctx.beginPath();
-        ctx.moveTo(ship.pos.x, frameY);
-        ctx.lineTo(ship.pos.x + frameW * 0.55, frameY + frameH / 2);
-        ctx.lineTo(ship.pos.x, frameY + frameH);
-        ctx.lineTo(ship.pos.x - frameW * 0.55, frameY + frameH / 2);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-      } else {
-        // NATO APP-6 友軍長方形邊框 (Friendly Rectangle Frame - Blue for US, Green for Allied)
-        ctx.fillRect(ship.pos.x - frameW / 2, frameY, frameW, frameH);
-        ctx.strokeRect(ship.pos.x - frameW / 2, frameY, frameW, frameH);
-      }
-
-      // NATO APP-6 艦艇兵種專用圖例符號
-      ctx.strokeStyle = '#FFFFFF';
-      ctx.lineWidth = 1.3;
-      const cy = frameY + frameH / 2;
-      const cx = ship.pos.x;
-
-      if (ship.type === 'carrier' || ship.type === 'cve' || ship.type === 'cv63' || ship.type === 'cvn' || ship.type === 'cvhg_kiev' || ship.type === 'lph') {
-        // 航空母艦 (Aircraft Carrier): 水平水線 + 上方雙翼飛翼折角 (Aviation Chevron)
-        ctx.beginPath();
-        ctx.moveTo(cx - 9, cy + 3);
-        ctx.lineTo(cx + 9, cy + 3);
-        ctx.moveTo(cx - 7, cy - 2);
-        ctx.lineTo(cx, cy - 6);
-        ctx.lineTo(cx + 7, cy - 2);
-        ctx.stroke();
-      } else if (ship.type === 'submarine' || ship.type === 'foxtrot' || ship.type === 'ssn_la' || ship.type === 'ssgn_oscar') {
-        // 潛艦 (Submarine): 水線 + 下潛水下圓弧 (Submerged Arc)
-        ctx.beginPath();
-        ctx.moveTo(cx - 8, cy - 1);
-        ctx.lineTo(cx + 8, cy - 1);
-        ctx.arc(cx, cy - 1, 5.5, 0, Math.PI);
-        ctx.stroke();
-      } else if (ship.type === 'lcvp' || ship.type === 'lst' || ship.type === 'lsm_r' || ship.type === 'lcm8' || ship.type === 'lcac' || ship.type === 'lpd') {
-        // 兩棲登陸艇/登陸艦 (Amphibious Craft): 水線 + 登陸跳板導引箭頭 (Landing Ramp Arrow)
-        ctx.beginPath();
-        ctx.moveTo(cx - 8, cy + 3);
-        ctx.lineTo(cx + 8, cy + 3);
-        ctx.moveTo(cx - 4, cy + 3);
-        ctx.lineTo(cx, cy - 4);
-        ctx.lineTo(cx + 4, cy - 4);
-        ctx.stroke();
-      } else if (ship.type === 'battleship' || ship.type === 'kongo' || ship.type === 'bb_iowa_mod') {
-        // 主力戰艦 (Battleship): 重型水面作戰艦 (水線 + 雙重戰鬥桅檣主砲)
-        ctx.beginPath();
-        ctx.moveTo(cx - 9, cy + 3);
-        ctx.lineTo(cx + 9, cy + 3);
-        ctx.moveTo(cx, cy - 5);
-        ctx.lineTo(cx, cy + 3);
-        ctx.moveTo(cx - 4, cy - 1);
-        ctx.lineTo(cx + 4, cy - 1);
-        ctx.stroke();
-      } else {
-        // 水面作戰艦巡洋艦/驅逐艦/巡防艦 (Cruiser / Destroyer / Frigate): 水線 + 射控主桅
-        ctx.beginPath();
-        ctx.moveTo(cx - 8, cy + 3);
-        ctx.lineTo(cx + 8, cy + 3);
-        ctx.moveTo(cx, cy - 4);
-        ctx.lineTo(cx, cy + 3);
-        ctx.stroke();
-      }
-
-      // Hull code & Speed tag (e.g. "BB · 28KT")
-      ctx.fillStyle = '#E0F7FA';
-      ctx.font = 'bold 7.5px monospace';
-      ctx.textAlign = 'center';
-      const typeCode = ship.type.toUpperCase();
-      ctx.fillText(`${typeCode} · ${Math.round(ship.speed)}KT`, ship.pos.x, frameY + frameH + 9);
-
-      // Naval Main Battery Gun Range
-      const maxGunRange = ship.turrets.reduce((m, t) => Math.max(m, t.range), 0);
-      if (maxGunRange > 0) {
-        ctx.strokeStyle = 'rgba(255, 183, 77, 0.28)';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([6, 8]);
-        ctx.beginPath();
-        ctx.arc(ship.pos.x, ship.pos.y, maxGunRange, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-
-      // Anti-Aircraft Flak Envelope
-      if (ship.flakRange > 0) {
-        ctx.strokeStyle = 'rgba(128, 222, 234, 0.24)';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 6]);
-        ctx.beginPath();
-        ctx.arc(ship.pos.x, ship.pos.y, ship.flakRange, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-    }
+    drawSelectionOverlay(rc, ship, isSelected);
 
     if (!ship.isSunk) {
       drawShipStatus(rc, ship, camera.zoom, isSelected);
@@ -448,6 +56,429 @@ export function drawShips(rc: RenderContext, ships: Ship[], camera: Camera, sele
   }
 
   ctx.restore();
+}
+
+// Submarine Sonar Contact / Stealth Bubble Ring
+function drawSubmarineContactRing(rc: RenderContext, ship: Ship, isSub: boolean): void {
+  const ctx = rc.ctx;
+
+  if (isSub && !ship.isSunk) {
+    const pulse = (Math.sin(rc.time * 5.2) + 1) * 0.5;
+    if (ship.side === 'enemy' && ship.isSpotted) {
+      ctx.strokeStyle = `rgba(255, 171, 64, ${0.45 + pulse * 0.4})`;
+      ctx.lineWidth = 1.6;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.arc(ship.pos.x, ship.pos.y, ship.length * 0.52 + pulse * 8, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    } else if (ship.side !== 'enemy') {
+      if (ship.isSpottedByEnemy) {
+        ctx.strokeStyle = `rgba(255, 82, 82, ${0.5 + pulse * 0.45})`;
+        ctx.lineWidth = 1.6;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.arc(ship.pos.x, ship.pos.y, ship.length * 0.52 + pulse * 8, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else {
+        ctx.strokeStyle = 'rgba(77, 208, 225, 0.25)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 4]);
+        ctx.beginPath();
+        ctx.arc(ship.pos.x, ship.pos.y, ship.length * 0.48, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+  }
+}
+
+// RTS A* Sea-Lane Waypoint Path Line
+function drawWaypointPath(rc: RenderContext, ship: Ship, isSelected: boolean): void {
+  const ctx = rc.ctx;
+
+  if (isSelected && ship.order.targetPos && (ship.order.type === 'move' || ship.order.type === 'attack')) {
+    const wps = ship.order.waypoints;
+    const startIdx = ship.order.activeWaypointIndex ?? 0;
+    const hasWaypoints = Array.isArray(wps) && wps.length > startIdx;
+    if (ship.order.type === 'move' || hasWaypoints) {
+      ctx.strokeStyle = ship.order.type === 'attack' ? 'rgba(255, 138, 128, 0.65)' : 'rgba(0, 230, 118, 0.65)';
+      ctx.lineWidth = 1.6;
+      ctx.setLineDash([6, 6]);
+      ctx.beginPath();
+      ctx.moveTo(ship.pos.x, ship.pos.y);
+      if (hasWaypoints) {
+        for (let wi = startIdx; wi < wps.length; wi++) {
+          ctx.lineTo(wps[wi].x, wps[wi].y);
+        }
+      } else {
+        ctx.lineTo(ship.order.targetPos.x, ship.order.targetPos.y);
+      }
+      ctx.stroke();
+
+      ctx.setLineDash([]);
+      if (hasWaypoints) {
+        ctx.fillStyle = 'rgba(0, 230, 118, 0.6)';
+        for (let wi = startIdx; wi < wps.length - 1; wi++) {
+          ctx.beginPath();
+          ctx.arc(wps[wi].x, wps[wi].y, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.fillStyle = ship.order.type === 'attack' ? '#FF5252' : '#00E676';
+      ctx.beginPath();
+      ctx.arc(ship.order.targetPos.x, ship.order.targetPos.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+/** Hull silhouette (or the two sinking halves of a broken-back wreck). */
+function drawHull(rc: RenderContext, ship: Ship, hullColor: string, detailColor: string): void {
+  const ctx = rc.ctx;
+
+  if (ship.isSunk && ship.isBrokenInTwo) {
+    // ══════════════════════════════════════════════════════════
+    // 艦體應力斷裂兩截沉沒 (Ship Sinking Split in Two Segments)
+    // ══════════════════════════════════════════════════════════
+    const breakX = ship.length * (ship.breakLineOffset || 0);
+    const l = ship.length;
+    const w = ship.width;
+    const alpha = Math.max(0, 1 - ship.sinkProgress);
+    const breakProg = ship.breakProgress || 1;
+
+    // 1. 艦尾節 (Stern Section): 斷裂後向後傾側沉降
+    ctx.save();
+    ctx.translate(ship.pos.x, ship.pos.y);
+    ctx.globalAlpha = alpha;
+    ctx.rotate(ship.heading + (ship.sternAngleOffset || -0.25) * breakProg);
+    ctx.beginPath();
+    ctx.rect(-l, -w * 2, breakX + l, w * 4);
+    ctx.clip();
+    renderShipHullByType(rc, ship, hullColor, detailColor);
+    ctx.restore();
+
+    // 2. 艦首節 (Bow Section): 斷裂後艦首下插前傾
+    ctx.save();
+    ctx.translate(ship.pos.x, ship.pos.y);
+    ctx.globalAlpha = alpha;
+    ctx.rotate(ship.heading + (ship.bowAngleOffset || 0.18) * breakProg);
+    ctx.beginPath();
+    ctx.rect(breakX, -w * 2, l * 2, w * 4);
+    ctx.clip();
+    renderShipHullByType(rc, ship, hullColor, detailColor);
+    ctx.restore();
+
+    // 3. 斷裂接縫處 (Jagged Steel Fracture Line & Raging Internal Flame)
+    ctx.save();
+    ctx.translate(ship.pos.x, ship.pos.y);
+    ctx.rotate(ship.heading);
+
+    // 撕裂鋼板輪廓
+    ctx.strokeStyle = '#FF3D00';
+    ctx.lineWidth = 3.0;
+    ctx.beginPath();
+    ctx.moveTo(breakX, -w * 0.52);
+    ctx.lineTo(breakX + 4, -w * 0.2);
+    ctx.lineTo(breakX - 4, w * 0.2);
+    ctx.lineTo(breakX, w * 0.52);
+    ctx.stroke();
+
+    // 斷裂處高熱燃燒火光與融鐵核心
+    ctx.fillStyle = '#FFA000';
+    ctx.beginPath();
+    ctx.arc(breakX, 0, Math.min(8, w * 0.45), 0, Math.PI * 2);
+    ctx.fill();
+
+    // 4. 彈藥庫劇烈殉爆瞬態高光光球 (Catastrophic Magazine Detonation Flash)
+    if (ship.magazineFlashTimer && ship.magazineFlashTimer > 0) {
+      const flashAlpha = Math.min(1, ship.magazineFlashTimer / 0.5);
+      const flashR = (1 - flashAlpha) * (ship.length * 1.6) + 35;
+      const flashGrad = ctx.createRadialGradient(breakX, 0, 2, breakX, 0, flashR);
+      flashGrad.addColorStop(0, `rgba(255, 255, 255, ${flashAlpha})`);
+      flashGrad.addColorStop(0.25, `rgba(255, 238, 88, ${flashAlpha * 0.95})`);
+      flashGrad.addColorStop(0.65, `rgba(255, 87, 34, ${flashAlpha * 0.75})`);
+      flashGrad.addColorStop(1, 'rgba(216, 27, 96, 0)');
+      ctx.fillStyle = flashGrad;
+      ctx.beginPath();
+      ctx.arc(breakX, 0, flashR, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  } else {
+    // 標準艦體姿態繪製
+    ctx.save();
+    ctx.translate(ship.pos.x, ship.pos.y);
+    if (ship.isSunk) {
+      ctx.globalAlpha = Math.max(0, 1 - ship.sinkProgress);
+      ctx.rotate(ship.heading + ship.sinkProgress * 0.4);
+    } else {
+      ctx.rotate(ship.heading);
+      // Subsurface ocean drop shadow & waterline cushion for surfaced ships
+      if (!(isSubmarineShip(ship) && (ship.isSubmerged ?? true))) {
+        ctx.fillStyle = 'rgba(2, 7, 15, 0.48)';
+        ctx.beginPath();
+        ctx.ellipse(2, 3, ship.length * 0.51, ship.width * 0.48, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    renderShipHullByType(rc, ship, hullColor, detailColor);
+    if (!ship.isSunk) {
+      drawShipUniversalDetails(rc, ship, hullColor, detailColor);
+    }
+    ctx.restore();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// 戰損燃燒與沉沒特效 (Battle Damage Fire, Black Smoke & Oil Slicks)
+// ══════════════════════════════════════════════════════════
+function drawBattleDamage(rc: RenderContext, ship: Ship): void {
+  const ctx = rc.ctx;
+
+  if (ship.isSunk) {
+    // Sinking Ship: Expanding Iridescent Oil Slick on Water Surface
+    const slickRadius = (ship.length * 0.5) + ship.sinkProgress * 32;
+    const oilGrad = ctx.createRadialGradient(
+      ship.pos.x, ship.pos.y, 4,
+      ship.pos.x, ship.pos.y, slickRadius
+    );
+    oilGrad.addColorStop(0, 'rgba(10, 25, 45, 0.6)');
+    oilGrad.addColorStop(0.6, 'rgba(21, 52, 85, 0.35)');
+    oilGrad.addColorStop(0.85, 'rgba(41, 121, 150, 0.18)');
+    oilGrad.addColorStop(1, 'rgba(41, 121, 150, 0)');
+
+    ctx.fillStyle = oilGrad;
+    ctx.beginPath();
+    ctx.ellipse(ship.pos.x, ship.pos.y, slickRadius, slickRadius * 0.65, ship.heading, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Water boil, foam and boiler room steam bubbles
+    ctx.strokeStyle = 'rgba(224, 247, 250, 0.45)';
+    ctx.lineWidth = 1.2;
+    for (let b = 0; b < 4; b++) {
+      const bAngle = (rc.time * 3 + b * 1.5) % (Math.PI * 2);
+      const bDist = (b * 9 + rc.time * 12) % (ship.length * 0.4);
+      const bx = ship.pos.x + Math.cos(ship.heading + bAngle) * bDist;
+      const by = ship.pos.y + Math.sin(ship.heading + bAngle) * bDist;
+      ctx.beginPath();
+      ctx.arc(bx, by, 3 + (b % 3), 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  } else if (ship.health < ship.maxHealth * 0.55) {
+    // Heavy Battle Damage: Multi-stage Billowing Black Smoke & Internal Fiery Core
+    const isCritical = ship.health < ship.maxHealth * 0.3;
+    const plumeCount = isCritical ? 4 : 2;
+
+    for (let pIdx = 0; pIdx < plumeCount; pIdx++) {
+      const offsetAlongHull = (pIdx - (plumeCount - 1) / 2) * (ship.length * 0.22);
+      const originX = ship.pos.x + Math.cos(ship.heading) * offsetAlongHull;
+      const originY = ship.pos.y + Math.sin(ship.heading) * offsetAlongHull;
+
+      // 1. Billowing dense black smoke clouds drifting astern
+      for (let s = 0; s < 3; s++) {
+        const puffCycle = (rc.time * 1.8 + pIdx * 0.4 + s * 0.32) % 1;
+        const r = 6 + puffCycle * 22;
+        const alpha = (1 - puffCycle) * 0.6;
+        // Drift opposite to ship heading + wind drift
+        const driftDist = puffCycle * 28;
+        const driftX = originX - Math.cos(ship.heading) * driftDist + Math.sin(rc.time * 2 + s) * 5;
+        const driftY = originY - Math.sin(ship.heading) * driftDist - puffCycle * 22;
+
+        // Gradient smoke puff: dark charcoal edges
+        ctx.fillStyle = `rgba(18, 24, 32, ${alpha})`;
+        ctx.beginPath();
+        ctx.arc(driftX, driftY, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 2. Active raging internal fire combustion core on deck
+      if (isCritical) {
+        const fireFlicker = (Math.sin(rc.time * 16 + pIdx * 3) + 1) * 0.5;
+        const flameRadius = 4 + fireFlicker * 5;
+
+        // Intense orange/yellow fireball
+        const fireGrad = ctx.createRadialGradient(
+          originX, originY, 1,
+          originX, originY, flameRadius
+        );
+        fireGrad.addColorStop(0, '#FFF59D');
+        fireGrad.addColorStop(0.4, '#FFA726');
+        fireGrad.addColorStop(0.8, '#FF5722');
+        fireGrad.addColorStop(1, 'rgba(216, 27, 96, 0)');
+
+        ctx.fillStyle = fireGrad;
+        ctx.beginPath();
+        ctx.arc(originX, originY, flameRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Flying burning embers / sparks
+        const sparkCycle = (rc.time * 5 + pIdx * 2) % 1;
+        const sparkX = originX + (Math.sin(rc.time * 10 + pIdx) - 0.5) * 12 - Math.cos(ship.heading) * (sparkCycle * 20);
+        const sparkY = originY - sparkCycle * 24;
+        ctx.fillStyle = '#FFE082';
+        ctx.beginPath();
+        ctx.arc(sparkX, sparkY, 1.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// 戰術線條與軍事圖例 (Tactical Vectors & NATO Symbology)
+// ══════════════════════════════════════════════════════════
+function drawSelectionOverlay(rc: RenderContext, ship: Ship, isSelected: boolean): void {
+  const ctx = rc.ctx;
+
+  if (isSelected && !ship.isSunk) {
+    drawUnitSelectionRing(rc, ship.pos, Math.max(ship.length, ship.width) * 0.65);
+
+    // 1. Heading Vector with 30s & 60s Navigation Time Ticks
+    const cosH = Math.cos(ship.heading);
+    const sinH = Math.sin(ship.heading);
+    const vectorLen = Math.max(80, ship.speed * 2.2);
+    const tick30X = ship.pos.x + cosH * (vectorLen * 0.5);
+    const tick30Y = ship.pos.y + sinH * (vectorLen * 0.5);
+    const tick60X = ship.pos.x + cosH * vectorLen;
+    const tick60Y = ship.pos.y + sinH * vectorLen;
+
+    ctx.strokeStyle = 'rgba(0, 230, 118, 0.7)';
+    ctx.lineWidth = 1.4;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.moveTo(ship.pos.x, ship.pos.y);
+    ctx.lineTo(tick60X, tick60Y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 30s Tick
+    ctx.strokeStyle = '#00E676';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(tick30X - sinH * 6, tick30Y + cosH * 6);
+    ctx.lineTo(tick30X + sinH * 6, tick30Y - cosH * 6);
+    ctx.stroke();
+
+    // 60s Tick with Arrowhead
+    ctx.beginPath();
+    ctx.moveTo(tick60X - sinH * 7, tick60Y + cosH * 7);
+    ctx.lineTo(tick60X + sinH * 7, tick60Y - cosH * 7);
+    ctx.stroke();
+
+    ctx.fillStyle = '#00E676';
+    ctx.font = 'bold 8px monospace';
+    ctx.fillText('30s', tick30X + 8, tick30Y + 3);
+    ctx.fillText('60s', tick60X + 8, tick60Y + 3);
+
+    // 2. NATO APP-6 Naval Tactical Frame (Blue / Green Rectangle / Red Diamond)
+    const frameW = 32;
+    const frameH = 18;
+    const frameY = ship.pos.y - ship.width - 32;
+    const isPl = ship.side === 'player';
+    const isAl = ship.side === 'allied';
+    ctx.strokeStyle = isPl ? '#42A5F5' : isAl ? '#00E676' : '#FF5252';
+    ctx.fillStyle = isPl ? 'rgba(13, 71, 161, 0.75)' : isAl ? 'rgba(27, 94, 32, 0.75)' : 'rgba(183, 28, 28, 0.75)';
+    ctx.lineWidth = 1.6;
+
+    if (!isPl && !isAl) {
+      // NATO APP-6 敵軍菱形邊框 (Hostile Diamond Frame)
+      ctx.beginPath();
+      ctx.moveTo(ship.pos.x, frameY);
+      ctx.lineTo(ship.pos.x + frameW * 0.55, frameY + frameH / 2);
+      ctx.lineTo(ship.pos.x, frameY + frameH);
+      ctx.lineTo(ship.pos.x - frameW * 0.55, frameY + frameH / 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      // NATO APP-6 友軍長方形邊框 (Friendly Rectangle Frame - Blue for US, Green for Allied)
+      ctx.fillRect(ship.pos.x - frameW / 2, frameY, frameW, frameH);
+      ctx.strokeRect(ship.pos.x - frameW / 2, frameY, frameW, frameH);
+    }
+
+    // NATO APP-6 艦艇兵種專用圖例符號
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1.3;
+    const cy = frameY + frameH / 2;
+    const cx = ship.pos.x;
+
+    if (ship.type === 'carrier' || ship.type === 'cve' || ship.type === 'cv63' || ship.type === 'cvn' || ship.type === 'cvhg_kiev' || ship.type === 'lph') {
+      // 航空母艦 (Aircraft Carrier): 水平水線 + 上方雙翼飛翼折角 (Aviation Chevron)
+      ctx.beginPath();
+      ctx.moveTo(cx - 9, cy + 3);
+      ctx.lineTo(cx + 9, cy + 3);
+      ctx.moveTo(cx - 7, cy - 2);
+      ctx.lineTo(cx, cy - 6);
+      ctx.lineTo(cx + 7, cy - 2);
+      ctx.stroke();
+    } else if (ship.type === 'submarine' || ship.type === 'foxtrot' || ship.type === 'ssn_la' || ship.type === 'ssgn_oscar') {
+      // 潛艦 (Submarine): 水線 + 下潛水下圓弧 (Submerged Arc)
+      ctx.beginPath();
+      ctx.moveTo(cx - 8, cy - 1);
+      ctx.lineTo(cx + 8, cy - 1);
+      ctx.arc(cx, cy - 1, 5.5, 0, Math.PI);
+      ctx.stroke();
+    } else if (ship.type === 'lcvp' || ship.type === 'lst' || ship.type === 'lsm_r' || ship.type === 'lcm8' || ship.type === 'lcac' || ship.type === 'lpd') {
+      // 兩棲登陸艇/登陸艦 (Amphibious Craft): 水線 + 登陸跳板導引箭頭 (Landing Ramp Arrow)
+      ctx.beginPath();
+      ctx.moveTo(cx - 8, cy + 3);
+      ctx.lineTo(cx + 8, cy + 3);
+      ctx.moveTo(cx - 4, cy + 3);
+      ctx.lineTo(cx, cy - 4);
+      ctx.lineTo(cx + 4, cy - 4);
+      ctx.stroke();
+    } else if (ship.type === 'battleship' || ship.type === 'kongo' || ship.type === 'bb_iowa_mod') {
+      // 主力戰艦 (Battleship): 重型水面作戰艦 (水線 + 雙重戰鬥桅檣主砲)
+      ctx.beginPath();
+      ctx.moveTo(cx - 9, cy + 3);
+      ctx.lineTo(cx + 9, cy + 3);
+      ctx.moveTo(cx, cy - 5);
+      ctx.lineTo(cx, cy + 3);
+      ctx.moveTo(cx - 4, cy - 1);
+      ctx.lineTo(cx + 4, cy - 1);
+      ctx.stroke();
+    } else {
+      // 水面作戰艦巡洋艦/驅逐艦/巡防艦 (Cruiser / Destroyer / Frigate): 水線 + 射控主桅
+      ctx.beginPath();
+      ctx.moveTo(cx - 8, cy + 3);
+      ctx.lineTo(cx + 8, cy + 3);
+      ctx.moveTo(cx, cy - 4);
+      ctx.lineTo(cx, cy + 3);
+      ctx.stroke();
+    }
+
+    // Hull code & Speed tag (e.g. "BB · 28KT")
+    ctx.fillStyle = '#E0F7FA';
+    ctx.font = 'bold 7.5px monospace';
+    ctx.textAlign = 'center';
+    const typeCode = ship.type.toUpperCase();
+    ctx.fillText(`${typeCode} · ${Math.round(ship.speed)}KT`, ship.pos.x, frameY + frameH + 9);
+
+    // Naval Main Battery Gun Range
+    const maxGunRange = ship.turrets.reduce((m, t) => Math.max(m, t.range), 0);
+    if (maxGunRange > 0) {
+      ctx.strokeStyle = 'rgba(255, 183, 77, 0.28)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([6, 8]);
+      ctx.beginPath();
+      ctx.arc(ship.pos.x, ship.pos.y, maxGunRange, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Anti-Aircraft Flak Envelope
+    if (ship.flakRange > 0) {
+      ctx.strokeStyle = 'rgba(128, 222, 234, 0.24)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 6]);
+      ctx.beginPath();
+      ctx.arc(ship.pos.x, ship.pos.y, ship.flakRange, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
 }
 
 // Draw RTS Selection Ring with CIC corner lock-on brackets

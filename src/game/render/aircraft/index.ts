@@ -1,4 +1,4 @@
-import { Aircraft } from '../../../types/game';
+import { Aircraft, AircraftModel } from '../../../types/game';
 import { RenderContext, Camera, isWorldCircleVisible } from '../context';
 import { drawUnitSelectionRing } from '../ships';
 import { drawJapaneseIFFLeadingEdge } from './insignia';
@@ -24,139 +24,11 @@ export function drawAircraft(rc: RenderContext, aircraftList: Aircraft[], camera
     const cosH = Math.cos(plane.heading);
     const sinH = Math.sin(plane.heading);
 
-    // ══════════════════════════════════════════════════════════
-    // 1. 動態高度陰影 (Scale-accurate Altitude Ocean Drop Shadow)
-    // ══════════════════════════════════════════════════════════
-    if (plane.altitude > 0.08) {
-      const altOffset = plane.altitude * 32;
-      const shadowScale = 0.85 + plane.altitude * 0.25;
-      const shadowAlpha = 0.34 * Math.min(1, plane.altitude * 1.6);
-      const isHeloShadow =
-        plane.model === 'ho3s1' ||
-        plane.model === 'uh2' ||
-        plane.model === 'uh1' ||
-        plane.model === 'ah1' ||
-        plane.model === 'sh2' ||
-        plane.model === 'sh3f' ||
-        plane.model === 'ch53' ||
-        plane.model === 'ah64a' ||
-        plane.model === 'ah1w' ||
-        plane.model === 'ka27' ||
-        plane.model === 'mi24';
-      const isSweptWing =
-        plane.model === 'f14a' ||
-        plane.model === 'fa18a' ||
-        plane.model === 'f15a' ||
-        plane.model === 'f16a' ||
-        plane.model === 'f111' ||
-        plane.model === 'f4b' ||
-        plane.model === 'f4j' ||
-        plane.model === 'f4e' ||
-        plane.model === 'b52' ||
-        plane.model === 'tu22m3' ||
-        plane.model === 'tu95' ||
-        plane.model === 'mig29a' ||
-        plane.model === 'su27' ||
-        plane.model === 'mirage3' ||
-        plane.model === 'mirage2000';
-      const isHeavySpan = plane.role === 'level_bomber' || plane.model === 'tu95' || plane.model === 'e3a' || plane.model === 'c130';
+    drawAltitudeShadow(rc, plane);
 
-      ctx.save();
-      ctx.translate(plane.pos.x + altOffset * 0.72, plane.pos.y + altOffset * 0.72);
-      ctx.rotate(plane.heading);
-      ctx.scale(shadowScale, shadowScale);
-      ctx.fillStyle = `rgba(3, 9, 18, ${shadowAlpha})`;
+    drawWingtipContrails(rc, plane, cosH, sinH);
 
-      if (isHeloShadow) {
-        ctx.beginPath();
-        ctx.ellipse(-2, 0, 14, 3.2, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(0, 0, 13, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(3, 9, 18, ${shadowAlpha * 0.45})`;
-        ctx.fill();
-      } else if (isSweptWing) {
-        const spanMul = isHeavySpan ? 1.55 : 1.0;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 15 * spanMul, 3.4, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(6 * spanMul, 0);
-        ctx.lineTo(-7 * spanMul, -18 * spanMul);
-        ctx.lineTo(-12 * spanMul, -18 * spanMul);
-        ctx.lineTo(-4 * spanMul, 0);
-        ctx.lineTo(-12 * spanMul, 18 * spanMul);
-        ctx.lineTo(-7 * spanMul, 18 * spanMul);
-        ctx.closePath();
-        ctx.fill();
-      } else {
-        const spanMul = isHeavySpan ? 1.5 : 1.0;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 11 * spanMul, 3.6, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.ellipse(1, 0, 4.2 * spanMul, 17 * spanMul, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.ellipse(-9 * spanMul, 0, 2.5, 7 * spanMul, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      ctx.restore();
-    }
-
-    // ══════════════════════════════════════════════════════════
-    // 2. 高空翼尖水氣凝結尾跡 (Aerodynamic Wingtip Contrails)
-    // ══════════════════════════════════════════════════════════
-    if (plane.altitude > 0.65 || plane.speed > 130 || plane.state === 'diving' || plane.state === 'pullout') {
-      const isPullout = plane.state === 'pullout' || plane.state === 'diving';
-      const wingSpan = plane.role === 'level_bomber' ? 28 : 16;
-      const trailLen = isPullout ? 55 + plane.speed * 0.35 : 35 + plane.speed * 0.2;
-      const leftTipX = plane.pos.x - sinH * wingSpan;
-      const leftTipY = plane.pos.y + cosH * wingSpan;
-      const rightTipX = plane.pos.x + sinH * wingSpan;
-      const rightTipY = plane.pos.y - cosH * wingSpan;
-
-      ctx.strokeStyle = isPullout ? 'rgba(255, 255, 255, 0.75)' : 'rgba(255, 255, 255, 0.3)';
-      ctx.lineWidth = isPullout ? 2.4 : 1.2;
-      ctx.beginPath();
-      ctx.moveTo(leftTipX, leftTipY);
-      ctx.lineTo(leftTipX - cosH * trailLen, leftTipY - sinH * trailLen);
-      ctx.moveTo(rightTipX, rightTipY);
-      ctx.lineTo(rightTipX - cosH * trailLen, rightTipY - sinH * trailLen);
-      ctx.stroke();
-    }
-
-    // ══════════════════════════════════════════════════════════
-    // 3. 戰損發動機燃燒黑煙與烈焰 (Battle Damage Engine Smoke & Fire)
-    // ══════════════════════════════════════════════════════════
-    if (plane.health < plane.maxHealth * 0.55 || plane.state === 'shot_down') {
-      const isCritical = plane.health < plane.maxHealth * 0.25 || plane.state === 'shot_down';
-      const puffCount = isCritical ? 4 : 2;
-
-      for (let s = 0; s < puffCount; s++) {
-        const puffProg = (rc.time * 3 + s * 0.28) % 1;
-        const puffR = 4 + puffProg * 16;
-        const puffAlpha = (1 - puffProg) * 0.65;
-        const driftX = plane.pos.x - cosH * (puffProg * 38) + (Math.sin(rc.time * 6 + s) - 0.5) * 4;
-        const driftY = plane.pos.y - sinH * (puffProg * 38) + (Math.cos(rc.time * 6 + s) - 0.5) * 4;
-
-        // Billowing charcoal black smoke
-        ctx.fillStyle = `rgba(20, 26, 34, ${puffAlpha})`;
-        ctx.beginPath();
-        ctx.arc(driftX, driftY, puffR, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Internal fire combustion flame
-        if (isCritical && puffProg < 0.45) {
-          const flameR = 2.5 + (1 - puffProg * 2) * 4.5;
-          ctx.fillStyle = puffProg < 0.2 ? '#FFF59D' : '#FF6D00';
-          ctx.beginPath();
-          ctx.arc(driftX, driftY, flameR, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      }
-    }
+    drawDamageSmoke(rc, plane, cosH, sinH);
 
     // ══════════════════════════════════════════════════════════
     // 4. 戰機本體向量繪製與多元墜毀模式 (Aircraft Vector & Crash Modes)
@@ -164,753 +36,950 @@ export function drawAircraft(rc: RenderContext, aircraftList: Aircraft[], camera
     const isAllied = plane.side === 'allied';
     const color = isPlayer ? '#80D8FF' : isAllied ? '#00E676' : '#FF8A80';
 
-    if (plane.state === 'shot_down') {
-      const mode = plane.crashMode || 'smoke';
-      ctx.save();
-      ctx.translate(plane.pos.x, plane.pos.y);
-      ctx.rotate(plane.heading);
+    drawPlaneBody(rc, plane, isPlayer, color);
 
-      if (mode === 'spin') {
-        // 螺旋失速自旋 (Flat Spin & Ocean Plunge): 快速自旋伴隨失速氣流環
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 16, 16, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        drawSpecificAircraftModel(rc, plane, '#FF8A80');
-      } else if (mode === 'breakup') {
-        // 空中斷翼解體 (Structural Wing Disintegration): 單側主翼折斷，殘翼噴射火花
-        ctx.save();
-        ctx.beginPath();
-        // 裁切斷右翼 (右翼打斷)
-        ctx.rect(-30, -35, 60, 38);
-        ctx.clip();
-        drawSpecificAircraftModel(rc, plane, '#FF5252');
-        ctx.restore();
+    drawThreatBanner(rc, plane, isPlayer);
 
-        // 斷翼斷裂處鋼構撕裂噴濺電弧與火花
-        ctx.strokeStyle = '#FF3D00';
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.moveTo(2, 3);
-        ctx.lineTo(5, 7);
-        ctx.lineTo(1, 10);
-        ctx.stroke();
+    drawSelectionOverlay(rc, plane, isSelected, isPlayer, cosH, sinH);
 
-        ctx.fillStyle = '#FFE082';
-        ctx.beginPath();
-        ctx.arc(3, 5, 2, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (mode === 'burn') {
-        // 機翼發動機烈焰翻滾 (Wing Engine Blaze): 烈火包覆機身
-        drawSpecificAircraftModel(rc, plane, '#FF3D00');
-        const firePulse = (Math.sin(rc.time * 24) + 1) * 0.5;
-        const fireGrad = ctx.createRadialGradient(0, 0, 2, 0, 0, 14 + firePulse * 6);
-        fireGrad.addColorStop(0, 'rgba(255, 245, 157, 0.9)');
-        fireGrad.addColorStop(0.35, 'rgba(255, 109, 0, 0.7)');
-        fireGrad.addColorStop(0.75, 'rgba(216, 27, 96, 0.4)');
-        fireGrad.addColorStop(1, 'rgba(216, 27, 96, 0)');
-        ctx.fillStyle = fireGrad;
-        ctx.beginPath();
-        ctx.arc(0, 0, 14 + firePulse * 6, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        // 冒煙滑翔偏航 (Engine Failure & Yaw Glide)
-        drawSpecificAircraftModel(rc, plane, color);
-      }
+    drawEvasionBadge(rc, plane);
 
-      ctx.restore();
-
-      // 繪製脫離機身在空中翻滾旋轉的解體零件 (Tumbling Disintegrated Wing & Tail Debris)
-      if (mode === 'breakup' && plane.crashDebris) {
-        for (const deb of plane.crashDebris) {
-          ctx.save();
-          ctx.translate(deb.x, deb.y);
-          ctx.rotate(deb.rot);
-          ctx.strokeStyle = '#FF8A80';
-          ctx.fillStyle = isPlayer ? '#0D2235' : '#2D1B1B';
-          ctx.lineWidth = 1.4;
-
-          if (deb.type === 'wing') {
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(4, 15);
-            ctx.lineTo(-4, 15);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-
-            // 斷翼末端拖曳淡淡黑煙
-            ctx.fillStyle = 'rgba(25, 25, 25, 0.6)';
-            ctx.beginPath();
-            ctx.arc(-2, 8, 3, 0, Math.PI * 2);
-            ctx.fill();
-          } else {
-            // 機尾翼面
-            ctx.beginPath();
-            ctx.moveTo(-5, -6);
-            ctx.lineTo(3, 0);
-            ctx.lineTo(-5, 6);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-          }
-          ctx.restore();
-        }
-      }
-    } else {
-      ctx.save();
-      ctx.translate(plane.pos.x, plane.pos.y);
-      ctx.rotate(plane.heading);
-
-      ctx.strokeStyle = color;
-      ctx.fillStyle = '#06101E';
-      ctx.lineWidth = 1.5;
-
-      drawSpecificAircraftModel(rc, plane, color);
-
-      // Crisp Wingtip Navigation Strobes (Port Red / Starboard Green) on airborne aircraft
-      if (plane.altitude > 0.15) {
-        const tipSpan =
-          plane.role === 'level_bomber' || plane.model === 'e3a' || plane.model === 'c130' || plane.model === 'tu95'
-            ? 30
-            : plane.model === 'e2c' || plane.model === 'a10a' || plane.model === 's3a'
-            ? 24
-            : 16;
-        const tipX = -4;
-        ctx.fillStyle = 'rgba(255, 82, 82, 0.85)';
-        ctx.beginPath();
-        ctx.arc(tipX, -tipSpan, 1.3, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = 'rgba(0, 230, 118, 0.85)';
-        ctx.beginPath();
-        ctx.arc(tipX, tipSpan, 1.3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // ══════════════════════════════════════════════════════════
-      // 現代噴射機尾焰與直升機旋翼動效 (Jet Flame & Helicopter Rotor)
-      // ══════════════════════════════════════════════════════════
-      const isJet =
-        plane.model === 'f9f' ||
-        plane.model === 'f2h' ||
-        plane.model === 'f86' ||
-        plane.model === 'mig15' ||
-        plane.model === 'tu14' ||
-        plane.model === 'f4b' ||
-        plane.model === 'f4j' ||
-        plane.model === 'f4e' ||
-        plane.model === 'f8' ||
-        plane.model === 'a4' ||
-        plane.model === 'a6a' ||
-        plane.model === 'a6b_weasel' ||
-        plane.model === 'b52' ||
-        plane.model === 'f105' ||
-        plane.model === 'a7' ||
-        plane.model === 'mig21' ||
-        plane.model === 'mig19' ||
-        plane.model === 'mig17' ||
-        plane.model === 'su7' ||
-        plane.model === 'il28' ||
-        plane.model === 'tu16' ||
-        // Era 5 Jets (時代五全噴射戰機)
-        plane.model === 'f14a' ||
-        plane.model === 'fa18a' ||
-        plane.model === 'f15a' ||
-        plane.model === 'f16a' ||
-        plane.model === 'a10a' ||
-        plane.model === 'a6e' ||
-        plane.model === 'ea6b' ||
-        plane.model === 'av8b' ||
-        plane.model === 's3a' ||
-        plane.model === 'e3a' ||
-        plane.model === 'f111' ||
-        plane.model === 'tu22m3' ||
-        plane.model === 'yak38' ||
-        plane.model === 'mig29a' ||
-        plane.model === 'su27' ||
-        plane.model === 'a50' ||
-        plane.model === 'su25' ||
-        // Expanded Player & Allied Jets (時代三/四/五盟軍與美軍噴射機)
-        plane.model === 'meteor' ||
-        plane.model === 'a37b' ||
-        plane.model === 'f5a' ||
-        plane.model === 'f104g' ||
-        plane.model === 'mirage3' ||
-        plane.model === 'hunter_fga9' ||
-        plane.model === 'tornado_gr1' ||
-        plane.model === 'tornado_ids' ||
-        plane.model === 'tornado_adv' ||
-        plane.model === 'mirage2000' ||
-        plane.model === 'jaguar_gr1' ||
-        plane.model === 'viggen_ja37';
-
-      if (isJet && plane.state !== 'landing') {
-        const flamePulse = (Math.sin(rc.time * 30 + (plane.id.charCodeAt(0) || 0)) + 1) * 0.5;
-        const flameLen = 12 + flamePulse * 10;
-        const isTwinExhaust =
-          plane.model === 'f4b' ||
-          plane.model === 'f4j' ||
-          plane.model === 'f4e' ||
-          plane.model === 'a6a' ||
-          plane.model === 'a6b_weasel' ||
-          plane.model === 'f2h' ||
-          plane.model === 'tu14' ||
-          plane.model === 'il28' ||
-          // Era 5 Twin Jets:
-          plane.model === 'f14a' ||
-          plane.model === 'fa18a' ||
-          plane.model === 'f15a' ||
-          plane.model === 's3a' ||
-          plane.model === 'a6e' ||
-          plane.model === 'ea6b' ||
-          plane.model === 'f111' ||
-          plane.model === 'tu22m3' ||
-          plane.model === 'mig29a' ||
-          plane.model === 'su27' ||
-          plane.model === 'su25' ||
-          plane.model === 'tornado_gr1' ||
-          plane.model === 'tornado_ids' ||
-          plane.model === 'tornado_adv' ||
-          plane.model === 'jaguar_gr1' ||
-          plane.model === 'a37b';
-        const exhaustX = -16;
-
-        if (isTwinExhaust) {
-          for (const ey of [-2.5, 2.5]) {
-            const flameGrad = ctx.createLinearGradient(exhaustX, ey, exhaustX - flameLen, ey);
-            flameGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
-            flameGrad.addColorStop(0.2, 'rgba(255, 171, 64, 0.9)');
-            flameGrad.addColorStop(0.5, 'rgba(255, 87, 34, 0.6)');
-            flameGrad.addColorStop(1, 'rgba(216, 27, 96, 0)');
-            ctx.fillStyle = flameGrad;
-            ctx.beginPath();
-            ctx.moveTo(exhaustX, ey - 2);
-            ctx.lineTo(exhaustX - flameLen, ey);
-            ctx.lineTo(exhaustX, ey + 2);
-            ctx.closePath();
-            ctx.fill();
-          }
-        } else if (plane.model === 'b52') {
-          for (const podY of [-16, -9, 9, 16]) {
-            const flameGrad = ctx.createLinearGradient(0, podY, -10, podY);
-            flameGrad.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
-            flameGrad.addColorStop(0.4, 'rgba(255, 152, 0, 0.6)');
-            flameGrad.addColorStop(1, 'rgba(244, 67, 54, 0)');
-            ctx.fillStyle = flameGrad;
-            ctx.beginPath();
-            ctx.moveTo(-1, podY - 1.5);
-            ctx.lineTo(-10, podY);
-            ctx.lineTo(-1, podY + 1.5);
-            ctx.closePath();
-            ctx.fill();
-          }
-        } else {
-          const flameGrad = ctx.createLinearGradient(exhaustX, 0, exhaustX - flameLen, 0);
-          flameGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
-          flameGrad.addColorStop(0.25, 'rgba(0, 229, 255, 0.85)');
-          flameGrad.addColorStop(0.7, 'rgba(41, 121, 255, 0.45)');
-          flameGrad.addColorStop(1, 'rgba(41, 121, 255, 0)');
-          ctx.fillStyle = flameGrad;
-          ctx.beginPath();
-          ctx.moveTo(exhaustX, -2.5);
-          ctx.lineTo(exhaustX - flameLen, 0);
-          ctx.lineTo(exhaustX, 2.5);
-          ctx.closePath();
-          ctx.fill();
-        }
-      }
-
-      // ══════════════════════════════════════════════════════════
-      // 蘇聯/北越「一擊脫離 (Hit & Run)」超音速掠殺與馬赫震波動效
-      // ══════════════════════════════════════════════════════════
-      if (plane.isHitAndRunActive) {
-        const abLen = 32 + (Math.sin(rc.time * 40) + 1) * 8;
-        const abGrad = ctx.createLinearGradient(-16, 0, -16 - abLen, 0);
-        abGrad.addColorStop(0, '#FFFFFF');
-        abGrad.addColorStop(0.25, '#00E5FF');
-        abGrad.addColorStop(0.65, '#2979FF');
-        abGrad.addColorStop(1, 'rgba(41, 121, 255, 0)');
-        ctx.fillStyle = abGrad;
-        ctx.beginPath();
-        ctx.moveTo(-16, -3.5);
-        ctx.lineTo(-16 - abLen, 0);
-        ctx.lineTo(-16, 3.5);
-        ctx.closePath();
-        ctx.fill();
-
-        // Mach shock diamonds
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = 1.2;
-        for (let d = 1; d <= 3; d++) {
-          const dx = -16 - d * 7;
-          ctx.beginPath();
-          ctx.moveTo(dx, -2.5);
-          ctx.lineTo(dx - 3.5, 0);
-          ctx.lineTo(dx, 2.5);
-          ctx.lineTo(dx + 3.5, 0);
-          ctx.closePath();
-          ctx.stroke();
-        }
-
-        // Tactical HUD label
-        ctx.font = 'bold 9px monospace';
-        ctx.fillStyle = '#00E5FF';
-        ctx.textAlign = 'center';
-        ctx.fillText('⚡ MACH 1.8+ BUG-OUT', 0, -18);
-      }
-
-      const isHelo =
-        plane.model === 'ho3s1' ||
-        plane.model === 'uh2' ||
-        plane.model === 'uh1' ||
-        plane.model === 'ah1' ||
-        plane.model === 'sh2' ||
-        plane.model === 'sh3f' ||
-        plane.model === 'ch53' ||
-        plane.model === 'ah64a' ||
-        plane.model === 'ah1w' ||
-        plane.model === 'ka27' ||
-        plane.model === 'mi24';
-      if (isHelo) {
-        const rotorAngle = rc.time * 42;
-        const rRadius = plane.model === 'ah1' || plane.model === 'ah1w' ? 18 : plane.model === 'ch53' ? 28 : plane.model === 'ka27' ? 21 : 22;
-        ctx.strokeStyle = 'rgba(128, 222, 234, 0.4)';
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.arc(0, 0, rRadius, 0, Math.PI * 2);
-        ctx.stroke();
-
-        if (plane.model === 'ka27') {
-          // ════ Ka-27 Helix: Soviet Coaxial Contra-Rotating Dual Rotors (NO TAIL ROTOR) ════
-          // Upper rotor spinning clockwise, lower rotor spinning counter-clockwise
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-          ctx.lineWidth = 2;
-          for (let b = 0; b < 3; b++) {
-            const radUpper = rotorAngle + (b * Math.PI * 2) / 3;
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(Math.cos(radUpper) * rRadius, Math.sin(radUpper) * rRadius);
-            ctx.stroke();
-          }
-          ctx.strokeStyle = 'rgba(179, 229, 252, 0.85)';
-          ctx.lineWidth = 1.8;
-          for (let b = 0; b < 3; b++) {
-            const radLower = -rotorAngle + (b * Math.PI * 2) / 3;
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(Math.cos(radLower) * (rRadius * 0.95), Math.sin(radLower) * (rRadius * 0.95));
-            ctx.stroke();
-          }
-          // Mast hub
-          ctx.fillStyle = '#CFD8DC';
-          ctx.beginPath();
-          ctx.arc(0, 0, 3, 0, Math.PI * 2);
-          ctx.fill();
-          // Note: Ka-27 has NO tail rotor because contra-rotating torque cancels out!
-        } else {
-          // Main rotor blade counts: CH-53 (6 blades), Mi-24 / SH-3F (5 blades), AH-64A / UH-2 / SH-2 (4 blades), HO3S-1 (3 blades), AH-1 / AH-1W / UH-1 (2 blades)
-          const blades =
-            plane.model === 'ch53'
-              ? 6
-              : plane.model === 'mi24' || plane.model === 'sh3f'
-              ? 5
-              : plane.model === 'ah64a' || plane.model === 'sh2' || plane.model === 'uh2'
-              ? 4
-              : plane.model === 'ho3s1'
-              ? 3
-              : 2;
-
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-          ctx.lineWidth = 2;
-          for (let b = 0; b < blades; b++) {
-            const rad = rotorAngle + (b * Math.PI * 2) / blades;
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(Math.cos(rad) * rRadius, Math.sin(rad) * rRadius);
-            ctx.stroke();
-          }
-
-          // Tail rotor
-          const tailDistance = plane.model === 'ch53' ? -22 : plane.model === 'mi24' ? -19 : -16;
-          ctx.strokeStyle = '#FFD54F';
-          ctx.lineWidth = 1.4;
-          ctx.beginPath();
-          ctx.arc(tailDistance, 2, 4.5, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-      }
-
-      // ══════════════════════════════════════════════════════════
-      // 5. 雙方二戰史實敵我識別特徵 (Historical Combat IFF Markings - No Civilian Nav Lights)
-      // ══════════════════════════════════════════════════════════
-      if (!isPlayer) {
-        const isWw2Japanese =
-          plane.model === 'zero' ||
-          plane.model === 'zero_a6m2' ||
-          plane.model === 'zero_a6m5' ||
-          plane.model === 'kamikaze_zero' ||
-          plane.model === 'ki61' ||
-          plane.model === 'george' ||
-          plane.model === 'val' ||
-          plane.model === 'judy' ||
-          plane.model === 'kamikaze_judy' ||
-          plane.model === 'kate' ||
-          plane.model === 'jill' ||
-          plane.model === 'g4m' ||
-          plane.model === 'ohka';
-
-        if (isWw2Japanese) {
-          // 日軍特徵: 主翼前緣黃色敵我識別帶 (Yellow Leading Edge Band) + 胴體識別標帶
-          const m = plane.model;
-          const span = m === 'g4m' ? 32 : (m === 'kate' || m === 'jill' || m === 'val' || m === 'judy') ? 17 : 14;
-          drawJapaneseIFFLeadingEdge(rc, span, 3.5, 3.5);
-
-          // 機尾識別白胴帶 (Hachimaki identification stripe across fuselage)
-          ctx.fillStyle = '#FFFFFF';
-          ctx.fillRect(-6, -2.5, 2.5, 5);
-        } else {
-          // 冷戰/現代蘇軍與華約戰機: 機尾紅星識別與紅星翼徽 (Red Star OPFOR Combat Markings)
-          ctx.fillStyle = '#D50000';
-          ctx.strokeStyle = '#FFFFFF';
-          ctx.lineWidth = 0.8;
-          ctx.beginPath();
-          ctx.arc(-11, 0, 2.6, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-        }
-      } else {
-        // 美軍海航 vs 陸航識別特徵
-        const isArmy =
-          plane.model === 'b17' ||
-          plane.model === 'b24' ||
-          plane.model === 'b29' ||
-          plane.model === 'p40' ||
-          plane.model === 'p38' ||
-          plane.model === 'p51' ||
-          plane.model === 'p47' ||
-          plane.model === 'f86' ||
-          plane.model === 'a20' ||
-          plane.model === 'a26';
-
-        if (isArmy) {
-          // 陸航 (USAAF) 特徵: 垂直尾翼黃色編號標帶 / 翼尖識別帶
-          ctx.strokeStyle = '#FFD54F';
-          ctx.lineWidth = 1.6;
-          ctx.beginPath();
-          ctx.moveTo(-14, -1.8);
-          ctx.lineTo(-14, 1.8);
-          ctx.stroke();
-        } else {
-          // 海航 (US Navy) 特徵: 機尾白色幾何空母識別隊徽 (Carrier Air Group Triangle)
-          ctx.fillStyle = '#FFFFFF';
-          ctx.beginPath();
-          ctx.moveTo(-11, -3);
-          ctx.lineTo(-7, 0);
-          ctx.lineTo(-11, 3);
-          ctx.closePath();
-          ctx.fill();
-        }
-      }
-
-      ctx.restore();
-    }
-
-    // Tactical Overhead Warning Banners for Special Kamikaze & Rocket Threats
-    if (!isPlayer && plane.state !== 'shot_down') {
-      if (plane.model === 'ohka') {
-        ctx.fillStyle = '#FF1744';
-        ctx.font = 'bold 10px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('🚨【櫻花火箭反艦飛彈 OHKA】', plane.pos.x, plane.pos.y - 18);
-      } else if (plane.model === 'g4m' && plane.hasOhkaAttached) {
-        ctx.fillStyle = '#FF9100';
-        ctx.font = 'bold 9.5px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('⚠️【一式陸攻 (載彈: 櫻花特攻火箭)】', plane.pos.x, plane.pos.y - 22);
-      } else if (plane.isKamikaze || plane.state === 'kamikaze_dive' || plane.model === 'kamikaze_zero' || plane.model === 'kamikaze_judy') {
-        ctx.fillStyle = '#FF5252';
-        ctx.font = 'bold 9.5px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('⚠️【神風特攻機 KAMIKAZE】', plane.pos.x, plane.pos.y - 18);
-      }
-    }
-
-    // ══════════════════════════════════════════════════════════
-    // 6. RTS 戰術線條、時間刻度與 NATO 軍事圖例 (Tactical Vectors & NATO APP-6)
-    // ══════════════════════════════════════════════════════════
-    if (isSelected && plane.state !== 'shot_down') {
-      drawUnitSelectionRing(rc, plane.pos, 20);
-
-      // 6a. 航向向量線與 30s / 60s 預測時間刻度 (Heading Vector & Time Ticks)
-      const vecLen = Math.max(90, plane.speed * 1.5);
-      const tick30 = { x: plane.pos.x + cosH * (vecLen * 0.5), y: plane.pos.y + sinH * (vecLen * 0.5) };
-      const tick60 = { x: plane.pos.x + cosH * vecLen, y: plane.pos.y + sinH * vecLen };
-
-      ctx.strokeStyle = 'rgba(0, 230, 118, 0.75)';
-      ctx.lineWidth = 1.4;
-      ctx.setLineDash([5, 4]);
-      ctx.beginPath();
-      ctx.moveTo(plane.pos.x, plane.pos.y);
-      ctx.lineTo(tick60.x, tick60.y);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // 30s Tick
-      ctx.strokeStyle = '#00E676';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(tick30.x - sinH * 5, tick30.y + cosH * 5);
-      ctx.lineTo(tick30.x + sinH * 5, tick30.y - cosH * 5);
-      ctx.stroke();
-
-      // 60s Tick with Arrowhead
-      ctx.beginPath();
-      ctx.moveTo(tick60.x - sinH * 6, tick60.y + cosH * 6);
-      ctx.lineTo(tick60.x + sinH * 6, tick60.y - cosH * 6);
-      ctx.stroke();
-
-      ctx.fillStyle = '#00E676';
-      ctx.font = 'bold 8px monospace';
-      ctx.fillText('30s', tick30.x + 7, tick30.y + 3);
-      ctx.fillText('60s', tick60.x + 7, tick60.y + 3);
-
-      // 6b. 攻擊目標鎖定線 (Attack Engagement Vector)
-      if (plane.order.type === 'attack' && plane.order.targetPos) {
-        ctx.strokeStyle = 'rgba(255, 82, 82, 0.75)';
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(plane.pos.x, plane.pos.y);
-        ctx.lineTo(plane.order.targetPos.x, plane.order.targetPos.y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // Target reticle crosshair
-        const tx = plane.order.targetPos.x;
-        const ty = plane.order.targetPos.y;
-        ctx.strokeStyle = '#FF5252';
-        ctx.lineWidth = 1.5;
-        ctx.strokeRect(tx - 7, ty - 7, 14, 14);
-        ctx.beginPath();
-        ctx.moveTo(tx - 11, ty);
-        ctx.lineTo(tx + 11, ty);
-        ctx.moveTo(tx, ty - 11);
-        ctx.lineTo(tx, ty + 11);
-        ctx.stroke();
-      }
-
-      // 6b2. CAP 戰鬥空巡盤旋軌道線 (Combat Air Patrol Orbit Visualizer)
-      if (plane.order.type === 'patrol' && plane.order.patrolOrigin) {
-        const po = plane.order.patrolOrigin;
-        const orbitR = 250;
-        ctx.strokeStyle = 'rgba(0, 229, 255, 0.75)';
-        ctx.lineWidth = 1.6;
-        ctx.setLineDash([6, 5]);
-        ctx.beginPath();
-        ctx.arc(po.x, po.y, orbitR, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // Center anchor & slow rotating radar sweep
-        ctx.fillStyle = 'rgba(0, 229, 255, 0.85)';
-        ctx.beginPath();
-        ctx.arc(po.x, po.y, 4, 0, Math.PI * 2);
-        ctx.fill();
-
-        const sweepAngle = (rc.time * 1.5) % (Math.PI * 2);
-        ctx.strokeStyle = 'rgba(0, 229, 255, 0.35)';
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.moveTo(po.x, po.y);
-        ctx.lineTo(po.x + Math.cos(sweepAngle) * orbitR, po.y + Math.sin(sweepAngle) * orbitR);
-        ctx.stroke();
-
-        // Flight path connecting line
-        ctx.strokeStyle = 'rgba(0, 229, 255, 0.35)';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 4]);
-        ctx.beginPath();
-        ctx.moveTo(plane.pos.x, plane.pos.y);
-        ctx.lineTo(po.x, po.y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // Radar perimeter tag
-        ctx.fillStyle = '#80DEEA';
-        ctx.font = 'bold 9px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText(`🛡️ CAP 空中戰鬥巡邏區 (R: 250m)`, po.x, po.y - orbitR - 7);
-      }
-
-      // 6c. NATO APP-6 航空軍事圖例 (Military Aviation Symbol Tag)
-      const frameW = 34;
-      const frameH = 17;
-      const tagY = plane.pos.y - 28;
-      const isPl = isPlayer;
-      const isAl = plane.side === 'allied';
-      ctx.strokeStyle = isPl ? '#42A5F5' : isAl ? '#00E676' : '#FF5252';
-      ctx.fillStyle = isPl ? 'rgba(13, 71, 161, 0.75)' : isAl ? 'rgba(27, 94, 32, 0.75)' : 'rgba(183, 28, 28, 0.75)';
-      ctx.lineWidth = 1.6;
-
-      if (!isPl && !isAl) {
-        // NATO APP-6 敵軍菱形邊框 (Hostile Diamond Frame)
-        ctx.beginPath();
-        ctx.moveTo(plane.pos.x, tagY);
-        ctx.lineTo(plane.pos.x + frameW * 0.55, tagY + frameH / 2);
-        ctx.lineTo(plane.pos.x, tagY + frameH);
-        ctx.lineTo(plane.pos.x - frameW * 0.55, tagY + frameH / 2);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-      } else {
-        // NATO APP-6 友軍長方形邊框 (Friendly Rectangle Frame - Blue for US, Green for Allied)
-        ctx.fillRect(plane.pos.x - frameW / 2, tagY, frameW, frameH);
-        ctx.strokeRect(plane.pos.x - frameW / 2, tagY, frameW, frameH);
-      }
-
-      // Aviation Role Symbol: Rotary-wing vs Fixed-wing
-      ctx.strokeStyle = '#FFFFFF';
-      ctx.lineWidth = 1.4;
-      const isRotary =
-        plane.model === 'ho3s1' ||
-        plane.model === 'uh2' ||
-        plane.model === 'uh1' ||
-        plane.model === 'ah1' ||
-        plane.model === 'sh2' ||
-        plane.model === 'sh3f' ||
-        plane.model === 'ch53' ||
-        plane.model === 'ah64a' ||
-        plane.model === 'ah1w' ||
-        plane.model === 'ka27' ||
-        plane.model === 'mi24';
-
-      if (isRotary) {
-        // 旋翼機/直升機 (Rotary-wing / Helicopter): 旋翼十字節點 (Rotor Hub with Blades)
-        const cy = tagY + frameH * 0.5;
-        ctx.beginPath();
-        ctx.moveTo(plane.pos.x - 7.5, cy - 3.5);
-        ctx.lineTo(plane.pos.x + 7.5, cy + 3.5);
-        ctx.moveTo(plane.pos.x - 7.5, cy + 3.5);
-        ctx.lineTo(plane.pos.x + 7.5, cy - 3.5);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(plane.pos.x, cy, 2, 0, Math.PI * 2);
-        ctx.stroke();
-      } else {
-        // 定翼機 (Fixed-wing Aircraft): 雙弧形海鷗飛翼 (Double Arched Wings)
-        ctx.beginPath();
-        ctx.moveTo(plane.pos.x - 11, tagY + frameH * 0.5);
-        ctx.quadraticCurveTo(plane.pos.x - 5, tagY + frameH * 0.2, plane.pos.x, tagY + frameH * 0.5);
-        ctx.quadraticCurveTo(plane.pos.x + 5, tagY + frameH * 0.2, plane.pos.x + 11, tagY + frameH * 0.5);
-        ctx.stroke();
-      }
-
-      // Altitude & Speed Label (e.g. "FL08 · 140KT")
-      const fl = Math.round(plane.altitude * 10);
-      const spd = Math.round(plane.speed);
-      ctx.fillStyle = '#E0F7FA';
-      ctx.font = 'bold 8px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(`FL0${fl} · ${spd}KT`, plane.pos.x, tagY + frameH + 9);
-
-      // Plane Model and individual flight callsign
-      ctx.fillStyle = '#00E676';
-      ctx.font = 'bold 9px monospace';
-      ctx.fillText(plane.name, plane.pos.x, tagY - 4);
-
-      // Machine gun & payload ammo indicator over selected plane
-      if (plane.gunAmmo !== undefined) {
-        ctx.font = '8px monospace';
-        ctx.fillStyle = '#FFE082';
-        const ammoLabel =
-          plane.hasPayload && plane.ammoRemaining
-            ? `[${plane.payloadName || 'ORD'}] · MG: ${plane.gunAmmo}`
-            : `MG: ${plane.gunAmmo} 發`;
-        ctx.fillText(ammoLabel, plane.pos.x, tagY - 14);
-      }
-    }
-
-    // 6d. 飛彈威脅對策規避戰術指示 (Threat-Matched Evasion HUD Badges: Notching & Breaking)
-    if (plane.isEvading && plane.evasionTactic && plane.state !== 'shot_down') {
-      ctx.save();
-      const pulse = (Math.sin(rc.time * 20) + 1) * 0.5;
-      const bY = plane.pos.y - 30;
-      if (plane.evasionTactic === 'notching') {
-        // Cyan Notching Badge: 90° Beam Aspect to defeat radar
-        ctx.font = 'bold 9px monospace';
-        ctx.fillStyle = '#00E5FF';
-        ctx.textAlign = 'center';
-        ctx.fillText(`📡 NOTCHING 90° [都卜勒盲區]`, plane.pos.x, bY);
-
-        // Perpendicular Beam Aspect Guide
-        ctx.strokeStyle = `rgba(0, 229, 255, ${0.45 + pulse * 0.4})`;
-        ctx.lineWidth = 1.6;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(plane.pos.x - Math.cos(plane.heading) * 32, plane.pos.y - Math.sin(plane.heading) * 32);
-        ctx.lineTo(plane.pos.x + Math.cos(plane.heading) * 32, plane.pos.y + Math.sin(plane.heading) * 32);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      } else if (plane.evasionTactic === 'breaking') {
-        // Orange/Amber Breaking Badge: High-G Hard Slice + Flares
-        ctx.font = 'bold 9px monospace';
-        ctx.fillStyle = '#FF9100';
-        ctx.textAlign = 'center';
-        ctx.fillText(`⚡ HIGH-G BREAK [大G破轉]`, plane.pos.x, bY);
-
-        // High-G turn vortex arc
-        ctx.strokeStyle = `rgba(255, 145, 0, ${0.4 + pulse * 0.5})`;
-        ctx.lineWidth = 2.0;
-        ctx.beginPath();
-        ctx.arc(plane.pos.x, plane.pos.y, 22, plane.heading - 1.2, plane.heading + 1.2);
-        ctx.stroke();
-      }
-      ctx.restore();
-    }
-
-    // 7. AIM-7 Semi-Active Radar Homing (SARH) Nose Pencil Illumination Beam
-    if (plane.sarhIlluminatingTargetId && (plane.sarhHoldTimer || 0) > 0) {
-      const targetPlane = aircraftList.find((a: Aircraft) => a.id === plane.sarhIlluminatingTargetId && a.state !== 'shot_down');
-      if (targetPlane) {
-        const tPos = targetPlane.pos;
-        const beamPulse = (Math.sin(rc.time * 25) + 1) * 0.5;
-
-        // Outer radar illumination cone
-        ctx.strokeStyle = `rgba(0, 229, 255, ${0.15 + beamPulse * 0.15})`;
-        ctx.lineWidth = 3.5;
-        ctx.beginPath();
-        ctx.moveTo(plane.pos.x, plane.pos.y);
-        ctx.lineTo(tPos.x, tPos.y);
-        ctx.stroke();
-
-        // High-frequency CW radar illumination core beam
-        ctx.strokeStyle = `rgba(128, 222, 234, ${0.6 + beamPulse * 0.4})`;
-        ctx.lineWidth = 1.4;
-        ctx.setLineDash([6, 3]);
-        ctx.beginPath();
-        ctx.moveTo(plane.pos.x, plane.pos.y);
-        ctx.lineTo(tPos.x, tPos.y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // Radar lock target reticle
-        ctx.strokeStyle = '#00E5FF';
-        ctx.lineWidth = 1.6;
-        ctx.beginPath();
-        ctx.arc(tPos.x, tPos.y, 14 + beamPulse * 4, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.fillStyle = '#00E5FF';
-        ctx.font = 'bold 8px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('📡 SARH 雷達照射鎖定 (AIM-7)', tPos.x, tPos.y - 18);
-      }
-    }
+    drawSarhBeam(rc, aircraftList, plane);
   }
 
   ctx.restore();
 }
+
+// ══════════════════════════════════════════════════════════
+// 1. 動態高度陰影 (Scale-accurate Altitude Ocean Drop Shadow)
+// ══════════════════════════════════════════════════════════
+function drawAltitudeShadow(rc: RenderContext, plane: Aircraft): void {
+  const ctx = rc.ctx;
+
+  if (plane.altitude > 0.08) {
+    const altOffset = plane.altitude * 32;
+    const shadowScale = 0.85 + plane.altitude * 0.25;
+    const shadowAlpha = 0.34 * Math.min(1, plane.altitude * 1.6);
+    const isHeloShadow =
+      plane.model === 'ho3s1' ||
+      plane.model === 'uh2' ||
+      plane.model === 'uh1' ||
+      plane.model === 'ah1' ||
+      plane.model === 'sh2' ||
+      plane.model === 'sh3f' ||
+      plane.model === 'ch53' ||
+      plane.model === 'ah64a' ||
+      plane.model === 'ah1w' ||
+      plane.model === 'ka27' ||
+      plane.model === 'mi24';
+    const isSweptWing =
+      plane.model === 'f14a' ||
+      plane.model === 'fa18a' ||
+      plane.model === 'f15a' ||
+      plane.model === 'f16a' ||
+      plane.model === 'f111' ||
+      plane.model === 'f4b' ||
+      plane.model === 'f4j' ||
+      plane.model === 'f4e' ||
+      plane.model === 'b52' ||
+      plane.model === 'tu22m3' ||
+      plane.model === 'tu95' ||
+      plane.model === 'mig29a' ||
+      plane.model === 'su27' ||
+      plane.model === 'mirage3' ||
+      plane.model === 'mirage2000';
+    const isHeavySpan = plane.role === 'level_bomber' || plane.model === 'tu95' || plane.model === 'e3a' || plane.model === 'c130';
+
+    ctx.save();
+    ctx.translate(plane.pos.x + altOffset * 0.72, plane.pos.y + altOffset * 0.72);
+    ctx.rotate(plane.heading);
+    ctx.scale(shadowScale, shadowScale);
+    ctx.fillStyle = `rgba(3, 9, 18, ${shadowAlpha})`;
+
+    if (isHeloShadow) {
+      ctx.beginPath();
+      ctx.ellipse(-2, 0, 14, 3.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, 0, 13, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(3, 9, 18, ${shadowAlpha * 0.45})`;
+      ctx.fill();
+    } else if (isSweptWing) {
+      const spanMul = isHeavySpan ? 1.55 : 1.0;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 15 * spanMul, 3.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(6 * spanMul, 0);
+      ctx.lineTo(-7 * spanMul, -18 * spanMul);
+      ctx.lineTo(-12 * spanMul, -18 * spanMul);
+      ctx.lineTo(-4 * spanMul, 0);
+      ctx.lineTo(-12 * spanMul, 18 * spanMul);
+      ctx.lineTo(-7 * spanMul, 18 * spanMul);
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      const spanMul = isHeavySpan ? 1.5 : 1.0;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 11 * spanMul, 3.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(1, 0, 4.2 * spanMul, 17 * spanMul, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(-9 * spanMul, 0, 2.5, 7 * spanMul, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// 2. 高空翼尖水氣凝結尾跡 (Aerodynamic Wingtip Contrails)
+// ══════════════════════════════════════════════════════════
+function drawWingtipContrails(rc: RenderContext, plane: Aircraft, cosH: number, sinH: number): void {
+  const ctx = rc.ctx;
+
+  if (plane.altitude > 0.65 || plane.speed > 130 || plane.state === 'diving' || plane.state === 'pullout') {
+    const isPullout = plane.state === 'pullout' || plane.state === 'diving';
+    const wingSpan = plane.role === 'level_bomber' ? 28 : 16;
+    const trailLen = isPullout ? 55 + plane.speed * 0.35 : 35 + plane.speed * 0.2;
+    const leftTipX = plane.pos.x - sinH * wingSpan;
+    const leftTipY = plane.pos.y + cosH * wingSpan;
+    const rightTipX = plane.pos.x + sinH * wingSpan;
+    const rightTipY = plane.pos.y - cosH * wingSpan;
+
+    ctx.strokeStyle = isPullout ? 'rgba(255, 255, 255, 0.75)' : 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = isPullout ? 2.4 : 1.2;
+    ctx.beginPath();
+    ctx.moveTo(leftTipX, leftTipY);
+    ctx.lineTo(leftTipX - cosH * trailLen, leftTipY - sinH * trailLen);
+    ctx.moveTo(rightTipX, rightTipY);
+    ctx.lineTo(rightTipX - cosH * trailLen, rightTipY - sinH * trailLen);
+    ctx.stroke();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// 3. 戰損發動機燃燒黑煙與烈焰 (Battle Damage Engine Smoke & Fire)
+// ══════════════════════════════════════════════════════════
+function drawDamageSmoke(rc: RenderContext, plane: Aircraft, cosH: number, sinH: number): void {
+  const ctx = rc.ctx;
+
+  if (plane.health < plane.maxHealth * 0.55 || plane.state === 'shot_down') {
+    const isCritical = plane.health < plane.maxHealth * 0.25 || plane.state === 'shot_down';
+    const puffCount = isCritical ? 4 : 2;
+
+    for (let s = 0; s < puffCount; s++) {
+      const puffProg = (rc.time * 3 + s * 0.28) % 1;
+      const puffR = 4 + puffProg * 16;
+      const puffAlpha = (1 - puffProg) * 0.65;
+      const driftX = plane.pos.x - cosH * (puffProg * 38) + (Math.sin(rc.time * 6 + s) - 0.5) * 4;
+      const driftY = plane.pos.y - sinH * (puffProg * 38) + (Math.cos(rc.time * 6 + s) - 0.5) * 4;
+
+      // Billowing charcoal black smoke
+      ctx.fillStyle = `rgba(20, 26, 34, ${puffAlpha})`;
+      ctx.beginPath();
+      ctx.arc(driftX, driftY, puffR, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Internal fire combustion flame
+      if (isCritical && puffProg < 0.45) {
+        const flameR = 2.5 + (1 - puffProg * 2) * 4.5;
+        ctx.fillStyle = puffProg < 0.2 ? '#FFF59D' : '#FF6D00';
+        ctx.beginPath();
+        ctx.arc(driftX, driftY, flameR, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+}
+
+/** Airframe (or tumbling wreck when shot down) in the plane's local frame. */
+function drawPlaneBody(rc: RenderContext, plane: Aircraft, isPlayer: boolean, color: string): void {
+  const ctx = rc.ctx;
+
+  if (plane.state === 'shot_down') {
+    const mode = plane.crashMode || 'smoke';
+    ctx.save();
+    ctx.translate(plane.pos.x, plane.pos.y);
+    ctx.rotate(plane.heading);
+
+    if (mode === 'spin') {
+      // 螺旋失速自旋 (Flat Spin & Ocean Plunge): 快速自旋伴隨失速氣流環
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 16, 16, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      drawSpecificAircraftModel(rc, plane, '#FF8A80');
+    } else if (mode === 'breakup') {
+      // 空中斷翼解體 (Structural Wing Disintegration): 單側主翼折斷，殘翼噴射火花
+      ctx.save();
+      ctx.beginPath();
+      // 裁切斷右翼 (右翼打斷)
+      ctx.rect(-30, -35, 60, 38);
+      ctx.clip();
+      drawSpecificAircraftModel(rc, plane, '#FF5252');
+      ctx.restore();
+
+      // 斷翼斷裂處鋼構撕裂噴濺電弧與火花
+      ctx.strokeStyle = '#FF3D00';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(2, 3);
+      ctx.lineTo(5, 7);
+      ctx.lineTo(1, 10);
+      ctx.stroke();
+
+      ctx.fillStyle = '#FFE082';
+      ctx.beginPath();
+      ctx.arc(3, 5, 2, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (mode === 'burn') {
+      // 機翼發動機烈焰翻滾 (Wing Engine Blaze): 烈火包覆機身
+      drawSpecificAircraftModel(rc, plane, '#FF3D00');
+      const firePulse = (Math.sin(rc.time * 24) + 1) * 0.5;
+      const fireGrad = ctx.createRadialGradient(0, 0, 2, 0, 0, 14 + firePulse * 6);
+      fireGrad.addColorStop(0, 'rgba(255, 245, 157, 0.9)');
+      fireGrad.addColorStop(0.35, 'rgba(255, 109, 0, 0.7)');
+      fireGrad.addColorStop(0.75, 'rgba(216, 27, 96, 0.4)');
+      fireGrad.addColorStop(1, 'rgba(216, 27, 96, 0)');
+      ctx.fillStyle = fireGrad;
+      ctx.beginPath();
+      ctx.arc(0, 0, 14 + firePulse * 6, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // 冒煙滑翔偏航 (Engine Failure & Yaw Glide)
+      drawSpecificAircraftModel(rc, plane, color);
+    }
+
+    ctx.restore();
+
+    // 繪製脫離機身在空中翻滾旋轉的解體零件 (Tumbling Disintegrated Wing & Tail Debris)
+    if (mode === 'breakup' && plane.crashDebris) {
+      for (const deb of plane.crashDebris) {
+        ctx.save();
+        ctx.translate(deb.x, deb.y);
+        ctx.rotate(deb.rot);
+        ctx.strokeStyle = '#FF8A80';
+        ctx.fillStyle = isPlayer ? '#0D2235' : '#2D1B1B';
+        ctx.lineWidth = 1.4;
+
+        if (deb.type === 'wing') {
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(4, 15);
+          ctx.lineTo(-4, 15);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          // 斷翼末端拖曳淡淡黑煙
+          ctx.fillStyle = 'rgba(25, 25, 25, 0.6)';
+          ctx.beginPath();
+          ctx.arc(-2, 8, 3, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          // 機尾翼面
+          ctx.beginPath();
+          ctx.moveTo(-5, -6);
+          ctx.lineTo(3, 0);
+          ctx.lineTo(-5, 6);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+  } else {
+    ctx.save();
+    ctx.translate(plane.pos.x, plane.pos.y);
+    ctx.rotate(plane.heading);
+
+    ctx.strokeStyle = color;
+    ctx.fillStyle = '#06101E';
+    ctx.lineWidth = 1.5;
+
+    drawSpecificAircraftModel(rc, plane, color);
+
+    // Crisp Wingtip Navigation Strobes (Port Red / Starboard Green) on airborne aircraft
+    if (plane.altitude > 0.15) {
+      const tipSpan =
+        plane.role === 'level_bomber' || plane.model === 'e3a' || plane.model === 'c130' || plane.model === 'tu95'
+          ? 30
+          : plane.model === 'e2c' || plane.model === 'a10a' || plane.model === 's3a'
+          ? 24
+          : 16;
+      const tipX = -4;
+      ctx.fillStyle = 'rgba(255, 82, 82, 0.85)';
+      ctx.beginPath();
+      ctx.arc(tipX, -tipSpan, 1.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(0, 230, 118, 0.85)';
+      ctx.beginPath();
+      ctx.arc(tipX, tipSpan, 1.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // 現代噴射機尾焰與直升機旋翼動效 (Jet Flame & Helicopter Rotor)
+    // ══════════════════════════════════════════════════════════
+    const isJet =
+      plane.model === 'f9f' ||
+      plane.model === 'f2h' ||
+      plane.model === 'f86' ||
+      plane.model === 'mig15' ||
+      plane.model === 'tu14' ||
+      plane.model === 'f4b' ||
+      plane.model === 'f4j' ||
+      plane.model === 'f4e' ||
+      plane.model === 'f8' ||
+      plane.model === 'a4' ||
+      plane.model === 'a6a' ||
+      plane.model === 'a6b_weasel' ||
+      plane.model === 'b52' ||
+      plane.model === 'f105' ||
+      plane.model === 'a7' ||
+      plane.model === 'mig21' ||
+      plane.model === 'mig19' ||
+      plane.model === 'mig17' ||
+      plane.model === 'su7' ||
+      plane.model === 'il28' ||
+      plane.model === 'tu16' ||
+      // Era 5 Jets (時代五全噴射戰機)
+      plane.model === 'f14a' ||
+      plane.model === 'fa18a' ||
+      plane.model === 'f15a' ||
+      plane.model === 'f16a' ||
+      plane.model === 'a10a' ||
+      plane.model === 'a6e' ||
+      plane.model === 'ea6b' ||
+      plane.model === 'av8b' ||
+      plane.model === 's3a' ||
+      plane.model === 'e3a' ||
+      plane.model === 'f111' ||
+      plane.model === 'tu22m3' ||
+      plane.model === 'yak38' ||
+      plane.model === 'mig29a' ||
+      plane.model === 'su27' ||
+      plane.model === 'a50' ||
+      plane.model === 'su25' ||
+      // Expanded Player & Allied Jets (時代三/四/五盟軍與美軍噴射機)
+      plane.model === 'meteor' ||
+      plane.model === 'a37b' ||
+      plane.model === 'f5a' ||
+      plane.model === 'f104g' ||
+      plane.model === 'mirage3' ||
+      plane.model === 'hunter_fga9' ||
+      plane.model === 'tornado_gr1' ||
+      plane.model === 'tornado_ids' ||
+      plane.model === 'tornado_adv' ||
+      plane.model === 'mirage2000' ||
+      plane.model === 'jaguar_gr1' ||
+      plane.model === 'viggen_ja37';
+
+    if (isJet && plane.state !== 'landing') {
+      const flamePulse = (Math.sin(rc.time * 30 + (plane.id.charCodeAt(0) || 0)) + 1) * 0.5;
+      const flameLen = 12 + flamePulse * 10;
+      const isTwinExhaust =
+        plane.model === 'f4b' ||
+        plane.model === 'f4j' ||
+        plane.model === 'f4e' ||
+        plane.model === 'a6a' ||
+        plane.model === 'a6b_weasel' ||
+        plane.model === 'f2h' ||
+        plane.model === 'tu14' ||
+        plane.model === 'il28' ||
+        // Era 5 Twin Jets:
+        plane.model === 'f14a' ||
+        plane.model === 'fa18a' ||
+        plane.model === 'f15a' ||
+        plane.model === 's3a' ||
+        plane.model === 'a6e' ||
+        plane.model === 'ea6b' ||
+        plane.model === 'f111' ||
+        plane.model === 'tu22m3' ||
+        plane.model === 'mig29a' ||
+        plane.model === 'su27' ||
+        plane.model === 'su25' ||
+        plane.model === 'tornado_gr1' ||
+        plane.model === 'tornado_ids' ||
+        plane.model === 'tornado_adv' ||
+        plane.model === 'jaguar_gr1' ||
+        plane.model === 'a37b';
+      const exhaustX = -16;
+
+      if (isTwinExhaust) {
+        for (const ey of [-2.5, 2.5]) {
+          const flameGrad = ctx.createLinearGradient(exhaustX, ey, exhaustX - flameLen, ey);
+          flameGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+          flameGrad.addColorStop(0.2, 'rgba(255, 171, 64, 0.9)');
+          flameGrad.addColorStop(0.5, 'rgba(255, 87, 34, 0.6)');
+          flameGrad.addColorStop(1, 'rgba(216, 27, 96, 0)');
+          ctx.fillStyle = flameGrad;
+          ctx.beginPath();
+          ctx.moveTo(exhaustX, ey - 2);
+          ctx.lineTo(exhaustX - flameLen, ey);
+          ctx.lineTo(exhaustX, ey + 2);
+          ctx.closePath();
+          ctx.fill();
+        }
+      } else if (plane.model === 'b52') {
+        for (const podY of [-16, -9, 9, 16]) {
+          const flameGrad = ctx.createLinearGradient(0, podY, -10, podY);
+          flameGrad.addColorStop(0, 'rgba(255, 255, 255, 0.9)');
+          flameGrad.addColorStop(0.4, 'rgba(255, 152, 0, 0.6)');
+          flameGrad.addColorStop(1, 'rgba(244, 67, 54, 0)');
+          ctx.fillStyle = flameGrad;
+          ctx.beginPath();
+          ctx.moveTo(-1, podY - 1.5);
+          ctx.lineTo(-10, podY);
+          ctx.lineTo(-1, podY + 1.5);
+          ctx.closePath();
+          ctx.fill();
+        }
+      } else {
+        const flameGrad = ctx.createLinearGradient(exhaustX, 0, exhaustX - flameLen, 0);
+        flameGrad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
+        flameGrad.addColorStop(0.25, 'rgba(0, 229, 255, 0.85)');
+        flameGrad.addColorStop(0.7, 'rgba(41, 121, 255, 0.45)');
+        flameGrad.addColorStop(1, 'rgba(41, 121, 255, 0)');
+        ctx.fillStyle = flameGrad;
+        ctx.beginPath();
+        ctx.moveTo(exhaustX, -2.5);
+        ctx.lineTo(exhaustX - flameLen, 0);
+        ctx.lineTo(exhaustX, 2.5);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // 蘇聯/北越「一擊脫離 (Hit & Run)」超音速掠殺與馬赫震波動效
+    // ══════════════════════════════════════════════════════════
+    if (plane.isHitAndRunActive) {
+      const abLen = 32 + (Math.sin(rc.time * 40) + 1) * 8;
+      const abGrad = ctx.createLinearGradient(-16, 0, -16 - abLen, 0);
+      abGrad.addColorStop(0, '#FFFFFF');
+      abGrad.addColorStop(0.25, '#00E5FF');
+      abGrad.addColorStop(0.65, '#2979FF');
+      abGrad.addColorStop(1, 'rgba(41, 121, 255, 0)');
+      ctx.fillStyle = abGrad;
+      ctx.beginPath();
+      ctx.moveTo(-16, -3.5);
+      ctx.lineTo(-16 - abLen, 0);
+      ctx.lineTo(-16, 3.5);
+      ctx.closePath();
+      ctx.fill();
+
+      // Mach shock diamonds
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 1.2;
+      for (let d = 1; d <= 3; d++) {
+        const dx = -16 - d * 7;
+        ctx.beginPath();
+        ctx.moveTo(dx, -2.5);
+        ctx.lineTo(dx - 3.5, 0);
+        ctx.lineTo(dx, 2.5);
+        ctx.lineTo(dx + 3.5, 0);
+        ctx.closePath();
+        ctx.stroke();
+      }
+
+      // Tactical HUD label
+      ctx.font = 'bold 9px monospace';
+      ctx.fillStyle = '#00E5FF';
+      ctx.textAlign = 'center';
+      ctx.fillText('⚡ MACH 1.8+ BUG-OUT', 0, -18);
+    }
+
+    const isHelo =
+      plane.model === 'ho3s1' ||
+      plane.model === 'uh2' ||
+      plane.model === 'uh1' ||
+      plane.model === 'ah1' ||
+      plane.model === 'sh2' ||
+      plane.model === 'sh3f' ||
+      plane.model === 'ch53' ||
+      plane.model === 'ah64a' ||
+      plane.model === 'ah1w' ||
+      plane.model === 'ka27' ||
+      plane.model === 'mi24';
+    if (isHelo) {
+      const rotorAngle = rc.time * 42;
+      const rRadius = plane.model === 'ah1' || plane.model === 'ah1w' ? 18 : plane.model === 'ch53' ? 28 : plane.model === 'ka27' ? 21 : 22;
+      ctx.strokeStyle = 'rgba(128, 222, 234, 0.4)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(0, 0, rRadius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      if (plane.model === 'ka27') {
+        // ════ Ka-27 Helix: Soviet Coaxial Contra-Rotating Dual Rotors (NO TAIL ROTOR) ════
+        // Upper rotor spinning clockwise, lower rotor spinning counter-clockwise
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.lineWidth = 2;
+        for (let b = 0; b < 3; b++) {
+          const radUpper = rotorAngle + (b * Math.PI * 2) / 3;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(Math.cos(radUpper) * rRadius, Math.sin(radUpper) * rRadius);
+          ctx.stroke();
+        }
+        ctx.strokeStyle = 'rgba(179, 229, 252, 0.85)';
+        ctx.lineWidth = 1.8;
+        for (let b = 0; b < 3; b++) {
+          const radLower = -rotorAngle + (b * Math.PI * 2) / 3;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(Math.cos(radLower) * (rRadius * 0.95), Math.sin(radLower) * (rRadius * 0.95));
+          ctx.stroke();
+        }
+        // Mast hub
+        ctx.fillStyle = '#CFD8DC';
+        ctx.beginPath();
+        ctx.arc(0, 0, 3, 0, Math.PI * 2);
+        ctx.fill();
+        // Note: Ka-27 has NO tail rotor because contra-rotating torque cancels out!
+      } else {
+        // Main rotor blade counts: CH-53 (6 blades), Mi-24 / SH-3F (5 blades), AH-64A / UH-2 / SH-2 (4 blades), HO3S-1 (3 blades), AH-1 / AH-1W / UH-1 (2 blades)
+        const blades =
+          plane.model === 'ch53'
+            ? 6
+            : plane.model === 'mi24' || plane.model === 'sh3f'
+            ? 5
+            : plane.model === 'ah64a' || plane.model === 'sh2' || plane.model === 'uh2'
+            ? 4
+            : plane.model === 'ho3s1'
+            ? 3
+            : 2;
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.lineWidth = 2;
+        for (let b = 0; b < blades; b++) {
+          const rad = rotorAngle + (b * Math.PI * 2) / blades;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(Math.cos(rad) * rRadius, Math.sin(rad) * rRadius);
+          ctx.stroke();
+        }
+
+        // Tail rotor
+        const tailDistance = plane.model === 'ch53' ? -22 : plane.model === 'mi24' ? -19 : -16;
+        ctx.strokeStyle = '#FFD54F';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(tailDistance, 2, 4.5, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // 5. 雙方二戰史實敵我識別特徵 (Historical Combat IFF Markings - No Civilian Nav Lights)
+    // ══════════════════════════════════════════════════════════
+    if (!isPlayer) {
+      const isWw2Japanese =
+        plane.model === 'zero' ||
+        plane.model === 'zero_a6m2' ||
+        plane.model === 'zero_a6m5' ||
+        plane.model === 'kamikaze_zero' ||
+        plane.model === 'ki61' ||
+        plane.model === 'george' ||
+        plane.model === 'val' ||
+        plane.model === 'judy' ||
+        plane.model === 'kamikaze_judy' ||
+        plane.model === 'kate' ||
+        plane.model === 'jill' ||
+        plane.model === 'g4m' ||
+        plane.model === 'ohka';
+
+      if (isWw2Japanese) {
+        // 日軍特徵: 主翼前緣黃色敵我識別帶 (Yellow Leading Edge Band) + 胴體識別標帶
+        const m = plane.model;
+        const span = m === 'g4m' ? 32 : (m === 'kate' || m === 'jill' || m === 'val' || m === 'judy') ? 17 : 14;
+        drawJapaneseIFFLeadingEdge(rc, span, 3.5, 3.5);
+
+        // 機尾識別白胴帶 (Hachimaki identification stripe across fuselage)
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(-6, -2.5, 2.5, 5);
+      } else {
+        // 冷戰/現代蘇軍與華約戰機: 機尾紅星識別與紅星翼徽 (Red Star OPFOR Combat Markings)
+        ctx.fillStyle = '#D50000';
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.arc(-11, 0, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+    } else {
+      // 美軍海航 vs 陸航識別特徵
+      const isArmy =
+        plane.model === 'b17' ||
+        plane.model === 'b24' ||
+        plane.model === 'b29' ||
+        plane.model === 'p40' ||
+        plane.model === 'p38' ||
+        plane.model === 'p51' ||
+        plane.model === 'p47' ||
+        plane.model === 'f86' ||
+        plane.model === 'a20' ||
+        plane.model === 'a26';
+
+      if (isArmy) {
+        // 陸航 (USAAF) 特徵: 垂直尾翼黃色編號標帶 / 翼尖識別帶
+        ctx.strokeStyle = '#FFD54F';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(-14, -1.8);
+        ctx.lineTo(-14, 1.8);
+        ctx.stroke();
+      } else {
+        // 海航 (US Navy) 特徵: 機尾白色幾何空母識別隊徽 (Carrier Air Group Triangle)
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.moveTo(-11, -3);
+        ctx.lineTo(-7, 0);
+        ctx.lineTo(-11, 3);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    ctx.restore();
+  }
+}
+
+// Tactical Overhead Warning Banners for Special Kamikaze & Rocket Threats
+function drawThreatBanner(rc: RenderContext, plane: Aircraft, isPlayer: boolean): void {
+  const ctx = rc.ctx;
+
+  if (!isPlayer && plane.state !== 'shot_down') {
+    if (plane.model === 'ohka') {
+      ctx.fillStyle = '#FF1744';
+      ctx.font = 'bold 10px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('🚨【櫻花火箭反艦飛彈 OHKA】', plane.pos.x, plane.pos.y - 18);
+    } else if (plane.model === 'g4m' && plane.hasOhkaAttached) {
+      ctx.fillStyle = '#FF9100';
+      ctx.font = 'bold 9.5px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('⚠️【一式陸攻 (載彈: 櫻花特攻火箭)】', plane.pos.x, plane.pos.y - 22);
+    } else if (plane.isKamikaze || plane.state === 'kamikaze_dive' || plane.model === 'kamikaze_zero' || plane.model === 'kamikaze_judy') {
+      ctx.fillStyle = '#FF5252';
+      ctx.font = 'bold 9.5px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('⚠️【神風特攻機 KAMIKAZE】', plane.pos.x, plane.pos.y - 18);
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// 6. RTS 戰術線條、時間刻度與 NATO 軍事圖例 (Tactical Vectors & NATO APP-6)
+// ══════════════════════════════════════════════════════════
+function drawSelectionOverlay(rc: RenderContext, plane: Aircraft, isSelected: boolean, isPlayer: boolean, cosH: number, sinH: number): void {
+  const ctx = rc.ctx;
+
+  if (isSelected && plane.state !== 'shot_down') {
+    drawUnitSelectionRing(rc, plane.pos, 20);
+
+    // 6a. 航向向量線與 30s / 60s 預測時間刻度 (Heading Vector & Time Ticks)
+    const vecLen = Math.max(90, plane.speed * 1.5);
+    const tick30 = { x: plane.pos.x + cosH * (vecLen * 0.5), y: plane.pos.y + sinH * (vecLen * 0.5) };
+    const tick60 = { x: plane.pos.x + cosH * vecLen, y: plane.pos.y + sinH * vecLen };
+
+    ctx.strokeStyle = 'rgba(0, 230, 118, 0.75)';
+    ctx.lineWidth = 1.4;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.moveTo(plane.pos.x, plane.pos.y);
+    ctx.lineTo(tick60.x, tick60.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 30s Tick
+    ctx.strokeStyle = '#00E676';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(tick30.x - sinH * 5, tick30.y + cosH * 5);
+    ctx.lineTo(tick30.x + sinH * 5, tick30.y - cosH * 5);
+    ctx.stroke();
+
+    // 60s Tick with Arrowhead
+    ctx.beginPath();
+    ctx.moveTo(tick60.x - sinH * 6, tick60.y + cosH * 6);
+    ctx.lineTo(tick60.x + sinH * 6, tick60.y - cosH * 6);
+    ctx.stroke();
+
+    ctx.fillStyle = '#00E676';
+    ctx.font = 'bold 8px monospace';
+    ctx.fillText('30s', tick30.x + 7, tick30.y + 3);
+    ctx.fillText('60s', tick60.x + 7, tick60.y + 3);
+
+    // 6b. 攻擊目標鎖定線 (Attack Engagement Vector)
+    if (plane.order.type === 'attack' && plane.order.targetPos) {
+      ctx.strokeStyle = 'rgba(255, 82, 82, 0.75)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(plane.pos.x, plane.pos.y);
+      ctx.lineTo(plane.order.targetPos.x, plane.order.targetPos.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Target reticle crosshair
+      const tx = plane.order.targetPos.x;
+      const ty = plane.order.targetPos.y;
+      ctx.strokeStyle = '#FF5252';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(tx - 7, ty - 7, 14, 14);
+      ctx.beginPath();
+      ctx.moveTo(tx - 11, ty);
+      ctx.lineTo(tx + 11, ty);
+      ctx.moveTo(tx, ty - 11);
+      ctx.lineTo(tx, ty + 11);
+      ctx.stroke();
+    }
+
+    // 6b2. CAP 戰鬥空巡盤旋軌道線 (Combat Air Patrol Orbit Visualizer)
+    if (plane.order.type === 'patrol' && plane.order.patrolOrigin) {
+      const po = plane.order.patrolOrigin;
+      const orbitR = 250;
+      ctx.strokeStyle = 'rgba(0, 229, 255, 0.75)';
+      ctx.lineWidth = 1.6;
+      ctx.setLineDash([6, 5]);
+      ctx.beginPath();
+      ctx.arc(po.x, po.y, orbitR, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Center anchor & slow rotating radar sweep
+      ctx.fillStyle = 'rgba(0, 229, 255, 0.85)';
+      ctx.beginPath();
+      ctx.arc(po.x, po.y, 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      const sweepAngle = (rc.time * 1.5) % (Math.PI * 2);
+      ctx.strokeStyle = 'rgba(0, 229, 255, 0.35)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(po.x, po.y);
+      ctx.lineTo(po.x + Math.cos(sweepAngle) * orbitR, po.y + Math.sin(sweepAngle) * orbitR);
+      ctx.stroke();
+
+      // Flight path connecting line
+      ctx.strokeStyle = 'rgba(0, 229, 255, 0.35)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 4]);
+      ctx.beginPath();
+      ctx.moveTo(plane.pos.x, plane.pos.y);
+      ctx.lineTo(po.x, po.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Radar perimeter tag
+      ctx.fillStyle = '#80DEEA';
+      ctx.font = 'bold 9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`🛡️ CAP 空中戰鬥巡邏區 (R: 250m)`, po.x, po.y - orbitR - 7);
+    }
+
+    // 6c. NATO APP-6 航空軍事圖例 (Military Aviation Symbol Tag)
+    const frameW = 34;
+    const frameH = 17;
+    const tagY = plane.pos.y - 28;
+    const isPl = isPlayer;
+    const isAl = plane.side === 'allied';
+    ctx.strokeStyle = isPl ? '#42A5F5' : isAl ? '#00E676' : '#FF5252';
+    ctx.fillStyle = isPl ? 'rgba(13, 71, 161, 0.75)' : isAl ? 'rgba(27, 94, 32, 0.75)' : 'rgba(183, 28, 28, 0.75)';
+    ctx.lineWidth = 1.6;
+
+    if (!isPl && !isAl) {
+      // NATO APP-6 敵軍菱形邊框 (Hostile Diamond Frame)
+      ctx.beginPath();
+      ctx.moveTo(plane.pos.x, tagY);
+      ctx.lineTo(plane.pos.x + frameW * 0.55, tagY + frameH / 2);
+      ctx.lineTo(plane.pos.x, tagY + frameH);
+      ctx.lineTo(plane.pos.x - frameW * 0.55, tagY + frameH / 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      // NATO APP-6 友軍長方形邊框 (Friendly Rectangle Frame - Blue for US, Green for Allied)
+      ctx.fillRect(plane.pos.x - frameW / 2, tagY, frameW, frameH);
+      ctx.strokeRect(plane.pos.x - frameW / 2, tagY, frameW, frameH);
+    }
+
+    // Aviation Role Symbol: Rotary-wing vs Fixed-wing
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1.4;
+    const isRotary =
+      plane.model === 'ho3s1' ||
+      plane.model === 'uh2' ||
+      plane.model === 'uh1' ||
+      plane.model === 'ah1' ||
+      plane.model === 'sh2' ||
+      plane.model === 'sh3f' ||
+      plane.model === 'ch53' ||
+      plane.model === 'ah64a' ||
+      plane.model === 'ah1w' ||
+      plane.model === 'ka27' ||
+      plane.model === 'mi24';
+
+    if (isRotary) {
+      // 旋翼機/直升機 (Rotary-wing / Helicopter): 旋翼十字節點 (Rotor Hub with Blades)
+      const cy = tagY + frameH * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(plane.pos.x - 7.5, cy - 3.5);
+      ctx.lineTo(plane.pos.x + 7.5, cy + 3.5);
+      ctx.moveTo(plane.pos.x - 7.5, cy + 3.5);
+      ctx.lineTo(plane.pos.x + 7.5, cy - 3.5);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(plane.pos.x, cy, 2, 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      // 定翼機 (Fixed-wing Aircraft): 雙弧形海鷗飛翼 (Double Arched Wings)
+      ctx.beginPath();
+      ctx.moveTo(plane.pos.x - 11, tagY + frameH * 0.5);
+      ctx.quadraticCurveTo(plane.pos.x - 5, tagY + frameH * 0.2, plane.pos.x, tagY + frameH * 0.5);
+      ctx.quadraticCurveTo(plane.pos.x + 5, tagY + frameH * 0.2, plane.pos.x + 11, tagY + frameH * 0.5);
+      ctx.stroke();
+    }
+
+    // Altitude & Speed Label (e.g. "FL08 · 140KT")
+    const fl = Math.round(plane.altitude * 10);
+    const spd = Math.round(plane.speed);
+    ctx.fillStyle = '#E0F7FA';
+    ctx.font = 'bold 8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`FL0${fl} · ${spd}KT`, plane.pos.x, tagY + frameH + 9);
+
+    // Plane Model and individual flight callsign
+    ctx.fillStyle = '#00E676';
+    ctx.font = 'bold 9px monospace';
+    ctx.fillText(plane.name, plane.pos.x, tagY - 4);
+
+    // Machine gun & payload ammo indicator over selected plane
+    if (plane.gunAmmo !== undefined) {
+      ctx.font = '8px monospace';
+      ctx.fillStyle = '#FFE082';
+      const ammoLabel =
+        plane.hasPayload && plane.ammoRemaining
+          ? `[${plane.payloadName || 'ORD'}] · MG: ${plane.gunAmmo}`
+          : `MG: ${plane.gunAmmo} 發`;
+      ctx.fillText(ammoLabel, plane.pos.x, tagY - 14);
+    }
+  }
+}
+
+// 6d. 飛彈威脅對策規避戰術指示 (Threat-Matched Evasion HUD Badges: Notching & Breaking)
+function drawEvasionBadge(rc: RenderContext, plane: Aircraft): void {
+  const ctx = rc.ctx;
+
+  if (plane.isEvading && plane.evasionTactic && plane.state !== 'shot_down') {
+    ctx.save();
+    const pulse = (Math.sin(rc.time * 20) + 1) * 0.5;
+    const bY = plane.pos.y - 30;
+    if (plane.evasionTactic === 'notching') {
+      // Cyan Notching Badge: 90° Beam Aspect to defeat radar
+      ctx.font = 'bold 9px monospace';
+      ctx.fillStyle = '#00E5FF';
+      ctx.textAlign = 'center';
+      ctx.fillText(`📡 NOTCHING 90° [都卜勒盲區]`, plane.pos.x, bY);
+
+      // Perpendicular Beam Aspect Guide
+      ctx.strokeStyle = `rgba(0, 229, 255, ${0.45 + pulse * 0.4})`;
+      ctx.lineWidth = 1.6;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(plane.pos.x - Math.cos(plane.heading) * 32, plane.pos.y - Math.sin(plane.heading) * 32);
+      ctx.lineTo(plane.pos.x + Math.cos(plane.heading) * 32, plane.pos.y + Math.sin(plane.heading) * 32);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    } else if (plane.evasionTactic === 'breaking') {
+      // Orange/Amber Breaking Badge: High-G Hard Slice + Flares
+      ctx.font = 'bold 9px monospace';
+      ctx.fillStyle = '#FF9100';
+      ctx.textAlign = 'center';
+      ctx.fillText(`⚡ HIGH-G BREAK [大G破轉]`, plane.pos.x, bY);
+
+      // High-G turn vortex arc
+      ctx.strokeStyle = `rgba(255, 145, 0, ${0.4 + pulse * 0.5})`;
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      ctx.arc(plane.pos.x, plane.pos.y, 22, plane.heading - 1.2, plane.heading + 1.2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+// 7. AIM-7 Semi-Active Radar Homing (SARH) Nose Pencil Illumination Beam
+function drawSarhBeam(rc: RenderContext, aircraftList: Aircraft[], plane: Aircraft): void {
+  const ctx = rc.ctx;
+
+  if (plane.sarhIlluminatingTargetId && (plane.sarhHoldTimer || 0) > 0) {
+    const targetPlane = aircraftList.find((a: Aircraft) => a.id === plane.sarhIlluminatingTargetId && a.state !== 'shot_down');
+    if (targetPlane) {
+      const tPos = targetPlane.pos;
+      const beamPulse = (Math.sin(rc.time * 25) + 1) * 0.5;
+
+      // Outer radar illumination cone
+      ctx.strokeStyle = `rgba(0, 229, 255, ${0.15 + beamPulse * 0.15})`;
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.moveTo(plane.pos.x, plane.pos.y);
+      ctx.lineTo(tPos.x, tPos.y);
+      ctx.stroke();
+
+      // High-frequency CW radar illumination core beam
+      ctx.strokeStyle = `rgba(128, 222, 234, ${0.6 + beamPulse * 0.4})`;
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([6, 3]);
+      ctx.beginPath();
+      ctx.moveTo(plane.pos.x, plane.pos.y);
+      ctx.lineTo(tPos.x, tPos.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Radar lock target reticle
+      ctx.strokeStyle = '#00E5FF';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(tPos.x, tPos.y, 14 + beamPulse * 4, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = '#00E5FF';
+      ctx.font = 'bold 8px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('📡 SARH 雷達照射鎖定 (AIM-7)', tPos.x, tPos.y - 18);
+    }
+  }
+}
+
+// Propulsion classes used to pick jet exhaust vs. propeller disc (built once, not per frame).
+const JET_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>([
+  'f8', 'f4b', 'f4j', 'f4e', 'a4', 'a6a', 'a6b_weasel', 'f105', 'b52', 'a7',
+  'f9f', 'f2h', 'f86', 'mig15', 'mig17', 'mig19', 'mig21', 'su7', 'il28', 'tu16',
+  'tu14', 'ohka', 'meteor',
+  // Era 5 Cold War Jets (冷戰噴射戰機群，絕無螺旋槳)
+  'f14a', 'fa18a', 's3a', 'a6e', 'ea6b', 'av8b', 'a10a', 'f15a', 'f16a', 'e3a', 'f111',
+  'tu22m3', 'yak38', 'mig29a', 'su27', 'a50', 'su25'
+]);
+const HELO_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>([
+  'uh2', 'uh1', 'ah1', 'ho3s1',
+  // Era 5 Helicopters:
+  'sh3f', 'ch53', 'ah64a', 'ah1w', 'ka27', 'mi24'
+]);
+const MULTI_PROP_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>([
+  'b17', 'b24', 'b25', 'b29', 'g4m', 'p38', 'c47', 'c1', 's2', 'e1', 'ov10', 'a20', 'a26',
+  // Era 4/5 Turboprops / Patrol / Transports (多發渦輪螺旋槳/反潛巡邏機):
+  'e2c', 'c2a', 'c130', 'tu95', 'be12', 'il38'
+]);
 
 // Draw Specific WWII Vector Aircraft Model with Authentic Profiles
 export function drawSpecificAircraftModel(rc: RenderContext, plane: Aircraft, color: string) {
@@ -929,9 +998,64 @@ export function drawSpecificAircraftModel(rc: RenderContext, plane: Aircraft, co
     ctx.stroke();
   }
 
-  // ══════════════════════════════════════════════════════════
-  // VISIBLE MOUNTED ORDNANCE UNDER AIRFRAME
-  // ══════════════════════════════════════════════════════════
+  drawMountedOrdnance(rc, plane);
+
+  // Wingtip aerodynamic condensation trails during turns/dives
+  if (plane.altitude > 0.3) {
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-2, -15);
+    ctx.lineTo(-9, -15);
+    ctx.moveTo(-2, 15);
+    ctx.lineTo(-9, 15);
+    ctx.stroke();
+  }
+
+  // ════ Propulsion Visuals: Jet Supersonic Exhaust vs. Propeller Disc ════
+  const isJet = JET_MODELS.has(m);
+  const isHelo = HELO_MODELS.has(m);
+  const isMultiProp = MULTI_PROP_MODELS.has(m);
+
+  if (isJet) {
+    // ════ Jet Exhaust Heat Shimmer & Supersonic Plume (噴射機無螺旋槳，繪製尾噴熾熱焰錐) ════
+    const jetFlameLen = (plane.speed > (plane.maxSpeed * 0.75) ? 9 : 5) + Math.sin(rc.time * 30) * 2;
+    const jGrad = ctx.createLinearGradient(-13, 0, -13 - jetFlameLen, 0);
+    jGrad.addColorStop(0, 'rgba(128, 222, 234, 0.75)');
+    jGrad.addColorStop(0.35, 'rgba(255, 171, 0, 0.6)');
+    jGrad.addColorStop(1, 'rgba(255, 61, 0, 0)');
+    ctx.strokeStyle = jGrad;
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(-13, 0);
+    ctx.lineTo(-13 - jetFlameLen, 0);
+    ctx.stroke();
+  } else if (!isHelo && !isMultiProp) {
+    // Spinning propeller blur with yellow tip blades (僅限單發螺旋槳機)
+    const propAngle = rc.time * 26;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(13, 0, 5.5, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.strokeStyle = '#FFD54F';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(13 + Math.cos(propAngle) * 4, Math.sin(propAngle) * 4);
+    ctx.lineTo(13 + Math.cos(propAngle) * 5.5, Math.sin(propAngle) * 5.5);
+    ctx.moveTo(13 - Math.cos(propAngle) * 4, -Math.sin(propAngle) * 4);
+    ctx.lineTo(13 - Math.cos(propAngle) * 5.5, -Math.sin(propAngle) * 5.5);
+    ctx.stroke();
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// VISIBLE MOUNTED ORDNANCE UNDER AIRFRAME
+// ══════════════════════════════════════════════════════════
+function drawMountedOrdnance(rc: RenderContext, plane: Aircraft): void {
+  const ctx = rc.ctx;
+
   if (plane.hasPayload) {
     const pType = plane.payloadType;
 
@@ -1231,73 +1355,5 @@ export function drawSpecificAircraftModel(rc: RenderContext, plane: Aircraft, co
         }
       }
     }
-  }
-
-  // Wingtip aerodynamic condensation trails during turns/dives
-  if (plane.altitude > 0.3) {
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(-2, -15);
-    ctx.lineTo(-9, -15);
-    ctx.moveTo(-2, 15);
-    ctx.lineTo(-9, 15);
-    ctx.stroke();
-  }
-
-  // ════ Propulsion Visuals: Jet Supersonic Exhaust vs. Propeller Disc ════
-  const jetModels = new Set([
-    'f8', 'f4b', 'f4j', 'f4e', 'a4', 'a6a', 'a6b_weasel', 'f105', 'b52', 'a7',
-    'f9f', 'f2h', 'f3h', 'f86', 'mig15', 'mig17', 'mig19', 'mig21', 'su7', 'il28', 'tu16',
-    'tu14', 'me262', 'ohka', 'kikka', 'meteor',
-    // Era 5 Cold War Jets (冷戰噴射戰機群，絕無螺旋槳)
-    'f14a', 'fa18a', 's3a', 'a6e', 'ea6b', 'av8b', 'a10a', 'f15a', 'f16a', 'e3a', 'f111',
-    'tu22m3', 'yak38', 'mig29a', 'su27', 'a50', 'su25'
-  ]);
-  const heloModels = new Set([
-    'uh2', 'ch46', 'uh1', 'ah1', 'ho3s1', 'hup', 'hrs',
-    // Era 5 Helicopters:
-    'sh3f', 'ch53', 'ah64a', 'ah1w', 'ka27', 'mi24'
-  ]);
-  const multiPropModels = new Set([
-    'b17', 'b24', 'b25', 'b29', 'g4m', 'p38', 'c47', 'c1', 's2', 'e1', 'ov10', 'a20', 'a26',
-    // Era 4/5 Turboprops / Patrol / Transports (多發渦輪螺旋槳/反潛巡邏機):
-    'e2c', 'c2a', 'c130', 'tu95', 'be12', 'il38'
-  ]);
-
-  const isJet = jetModels.has(m);
-  const isHelo = heloModels.has(m);
-  const isMultiProp = multiPropModels.has(m);
-
-  if (isJet) {
-    // ════ Jet Exhaust Heat Shimmer & Supersonic Plume (噴射機無螺旋槳，繪製尾噴熾熱焰錐) ════
-    const jetFlameLen = (plane.speed > (plane.maxSpeed * 0.75) ? 9 : 5) + Math.sin(rc.time * 30) * 2;
-    const jGrad = ctx.createLinearGradient(-13, 0, -13 - jetFlameLen, 0);
-    jGrad.addColorStop(0, 'rgba(128, 222, 234, 0.75)');
-    jGrad.addColorStop(0.35, 'rgba(255, 171, 0, 0.6)');
-    jGrad.addColorStop(1, 'rgba(255, 61, 0, 0)');
-    ctx.strokeStyle = jGrad;
-    ctx.lineWidth = 2.4;
-    ctx.beginPath();
-    ctx.moveTo(-13, 0);
-    ctx.lineTo(-13 - jetFlameLen, 0);
-    ctx.stroke();
-  } else if (!isHelo && !isMultiProp) {
-    // Spinning propeller blur with yellow tip blades (僅限單發螺旋槳機)
-    const propAngle = rc.time * 26;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(13, 0, 5.5, 0, Math.PI * 2);
-    ctx.stroke();
-
-    ctx.strokeStyle = '#FFD54F';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(13 + Math.cos(propAngle) * 4, Math.sin(propAngle) * 4);
-    ctx.lineTo(13 + Math.cos(propAngle) * 5.5, Math.sin(propAngle) * 5.5);
-    ctx.moveTo(13 - Math.cos(propAngle) * 4, -Math.sin(propAngle) * 4);
-    ctx.lineTo(13 - Math.cos(propAngle) * 5.5, -Math.sin(propAngle) * 5.5);
-    ctx.stroke();
   }
 }
