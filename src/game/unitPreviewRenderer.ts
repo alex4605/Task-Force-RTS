@@ -23,6 +23,55 @@ function normalizeKey(raw: string): string {
  * Shared physical top-down silhouette renderer for Ground Units.
  * Used both on the tactical canvas (`VectorRenderer.drawGroundUnits`) and in build menu preview cards.
  */
+interface TankSpec {
+  match: RegExp;
+  hullL: number;
+  hullW: number;
+  /** Chamfer of the sloped glacis plate in plan view. */
+  glacis?: number;
+  turret: 'round' | 'boxy' | 'needle';
+  turretX: number;
+  /** Lateral turret offset: Type 95 Ha-Go (left), Type 97 Chi-Ha (right). */
+  turretY: number;
+  turretRx: number;
+  turretRy: number;
+  gunLen: number;
+  gunW: number;
+  /** Bore evacuator position as a fraction of the gun length. */
+  evacuatorAt?: number;
+  muzzleBrake?: boolean;
+}
+
+// Plan-view proportions per tank (silhouette units, nose along +x). Matched against the unit type.
+const TANK_SPECS: TankSpec[] = [
+  // M3 Stuart: small riveted hull, small boxy turret, short 37mm
+  { match: /armor_m3/, hullL: 17, hullW: 9.5, glacis: 1.5, turret: 'boxy', turretX: 0.5, turretY: 0, turretRx: 3.2, turretRy: 3, gunLen: 7, gunW: 1.2 },
+  // M4 Sherman: rounded cast turret, 75mm
+  { match: /armor_m4/, hullL: 20, hullW: 10.5, glacis: 2.5, turret: 'round', turretX: 0.5, turretY: 0, turretRx: 4.8, turretRy: 4.2, gunLen: 10, gunW: 1.6 },
+  // Korea: M4A3E8 / M46 mix -> M46 Patton proportions with 90mm and bore evacuator
+  { match: /patton_m46|armor_korea/, hullL: 22, hullW: 11.5, glacis: 2, turret: 'round', turretX: 0, turretY: 0, turretRx: 5.6, turretRy: 4.8, gunLen: 13, gunW: 1.8, evacuatorAt: 0.75, muzzleBrake: true },
+  // M48 Patton: big egg-shaped cast turret
+  { match: /m48/, hullL: 23, hullW: 12, glacis: 2.5, turret: 'round', turretX: -0.5, turretY: 0, turretRx: 6.2, turretRy: 5.2, gunLen: 13.5, gunW: 1.9, evacuatorAt: 0.72, muzzleBrake: true },
+  // M60A1: needle-nose turret, 105mm M68 with bore evacuator
+  { match: /m60/, hullL: 24, hullW: 12, glacis: 3, turret: 'needle', turretX: 0, turretY: 0, turretRx: 7, turretRy: 5, gunLen: 14, gunW: 2, evacuatorAt: 0.6 },
+  // Type 95 Ha-Go: tiny light tank, turret offset to the left
+  { match: /type95/, hullL: 15, hullW: 8, glacis: 1.5, turret: 'boxy', turretX: 0.5, turretY: -1.2, turretRx: 2.8, turretRy: 2.4, gunLen: 6, gunW: 1.1 },
+  // Type 97 Chi-Ha: turret offset to the right, short 57mm / 47mm
+  { match: /type97/, hullL: 17.5, hullW: 9, glacis: 1.5, turret: 'boxy', turretX: 0, turretY: 1.3, turretRx: 3.4, turretRy: 2.8, gunLen: 7.5, gunW: 1.4 },
+  // T-34-85: sloped hull, turret set well forward, 85mm
+  { match: /t34/, hullL: 21, hullW: 11, glacis: 3, turret: 'round', turretX: 2, turretY: 0, turretRx: 5.2, turretRy: 4.6, gunLen: 13, gunW: 1.8 },
+  // T-54/55: hemispherical turret forward, 100mm with bore evacuator near the muzzle
+  { match: /t54|t55/, hullL: 22, hullW: 11.5, glacis: 3, turret: 'round', turretX: 1.5, turretY: 0, turretRx: 5.5, turretRy: 5.5, gunLen: 14, gunW: 1.9, evacuatorAt: 0.85 },
+  // IS-3: flattened dome turret, 122mm D-25T with muzzle brake
+  { match: /is3/, hullL: 21, hullW: 11.5, turret: 'round', turretX: 0, turretY: 0, turretRx: 6, turretRy: 5.4, gunLen: 15, gunW: 2.1, muzzleBrake: true },
+  // PT-76: long boat hull, small turret forward, 76mm with muzzle brake
+  { match: /pt76/, hullL: 21, hullW: 10, turret: 'round', turretX: 3, turretY: 0, turretRx: 4.2, turretRy: 3.8, gunLen: 9, gunW: 1.4, muzzleBrake: true },
+  // T-72 / T-80: low cast dome, long 125mm smoothbore
+  { match: /t72|t80/, hullL: 23, hullW: 11.5, glacis: 3, turret: 'round', turretX: 0.5, turretY: 0, turretRx: 5.4, turretRy: 5, gunLen: 16, gunW: 2, evacuatorAt: 0.45 },
+];
+
+const DEFAULT_TANK: TankSpec = { match: /./, hullL: 22, hullW: 11, glacis: 2, turret: 'round', turretX: -0.5, turretY: 0, turretRx: 5.4, turretRy: 4.4, gunLen: 11, gunW: 2 };
+
 export function drawGroundSilhouette(
   ctx: CanvasRenderingContext2D,
   unitType: string,
@@ -273,10 +322,24 @@ export function drawGroundSilhouette(
     const isOntos = t.includes('ontos');
     const isPatton = t.includes('m60') || t.includes('m48') || t.includes('patton');
 
-    // Tracks
+    const spec = TANK_SPECS.find((sp) => sp.match.test(t));
+    const hl = spec?.hullL ?? 22;
+    const hw = spec?.hullW ?? 11;
+
+    // Tracks with road-wheel / track-link ticks
     ctx.fillStyle = trackColor;
-    ctx.fillRect(-12, -8, 24, 3);
-    ctx.fillRect(-12, 5, 24, 3);
+    ctx.fillRect(-hl / 2 - 1, -hw / 2 - 2.5, hl + 2, 3);
+    ctx.fillRect(-hl / 2 - 1, hw / 2 - 0.5, hl + 2, 3);
+    ctx.strokeStyle = 'rgba(176, 190, 197, 0.35)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    for (let x = -hl / 2; x <= hl / 2; x += 2.4) {
+      ctx.moveTo(x, -hw / 2 - 2.5);
+      ctx.lineTo(x, -hw / 2 + 0.5);
+      ctx.moveTo(x, hw / 2 - 0.5);
+      ctx.lineTo(x, hw / 2 + 2.5);
+    }
+    ctx.stroke();
 
     // Hull geometry
     ctx.fillStyle = hullFill;
@@ -285,20 +348,30 @@ export function drawGroundSilhouette(
     if (isIs3 || isPt76) {
       // Pike-nose IS-3 or pointed boat bow PT-76
       ctx.beginPath();
-      ctx.moveTo(13.5, 0);
-      ctx.lineTo(8.5, -5.4);
-      ctx.lineTo(-11, -5.4);
-      ctx.lineTo(-11, 5.4);
-      ctx.lineTo(8.5, 5.4);
+      ctx.moveTo(hl / 2 + 2.5, 0);
+      ctx.lineTo(hl / 2 - 2.5, -hw / 2);
+      ctx.lineTo(-hl / 2, -hw / 2);
+      ctx.lineTo(-hl / 2, hw / 2);
+      ctx.lineTo(hl / 2 - 2.5, hw / 2);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
     } else {
-      ctx.fillRect(-11, -5.5, 22, 11);
-      ctx.strokeRect(-11, -5.5, 22, 11);
+      // Sloped glacis (T-34 / Sherman / postwar MBTs) shown as a chamfered front
+      const ch = spec?.glacis ?? 0;
+      ctx.beginPath();
+      ctx.moveTo(hl / 2, -hw / 2 + ch);
+      ctx.lineTo(hl / 2 - ch, -hw / 2);
+      ctx.lineTo(-hl / 2, -hw / 2);
+      ctx.lineTo(-hl / 2, hw / 2);
+      ctx.lineTo(hl / 2 - ch, hw / 2);
+      ctx.lineTo(hl / 2, hw / 2 - ch);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
       // Engine deck louver accent
       ctx.fillStyle = hullHighlight;
-      ctx.fillRect(-9.5, -3.6, 5.5, 7.2);
+      ctx.fillRect(-hl / 2 + 1.5, -hw / 2 + 1.9, hl * 0.25, hw - 3.8);
     }
 
     // Soviet external rear fuel drums (T-34 / T-55 / T-72 / T-80)
@@ -368,39 +441,69 @@ export function drawGroundSilhouette(
       ctx.fillStyle = barrelColor;
       ctx.fillRect(10, -1.4, 3, 2.8);
     } else {
-      // Cast dome turret (T-72/T-80 ERA, M60 RISE, T-34, Sherman)
+      // Turret from the historical spec table (shape, position, size, gun)
+      const sp = spec ?? DEFAULT_TANK;
       if (isSovietEra || t.includes('rise')) {
         // Glacis Kontakt-1 / RISE ERA armor bricks
         ctx.fillStyle = turretFill;
-        ctx.fillRect(8.5, -4.5, 2.2, 9);
+        ctx.fillRect(hl / 2 - 2.5, -hw / 2 + 1, 2.2, hw - 2);
       }
       ctx.fillStyle = turretFill;
       ctx.strokeStyle = hullStroke;
+      ctx.lineWidth = 1.1;
       ctx.beginPath();
-      ctx.ellipse(-0.5, 0, isPt76 ? 4.4 : 5.4, isPt76 ? 3.8 : 4.4, 0, 0, Math.PI * 2);
+      if (sp.turret === 'needle') {
+        // M60A1 long needle-nose turret
+        ctx.moveTo(sp.turretX + sp.turretRx, 0);
+        ctx.quadraticCurveTo(sp.turretX + sp.turretRx * 0.4, -sp.turretRy, sp.turretX - sp.turretRx * 0.7, -sp.turretRy);
+        ctx.lineTo(sp.turretX - sp.turretRx, -sp.turretRy * 0.7);
+        ctx.lineTo(sp.turretX - sp.turretRx, sp.turretRy * 0.7);
+        ctx.lineTo(sp.turretX - sp.turretRx * 0.7, sp.turretRy);
+        ctx.quadraticCurveTo(sp.turretX + sp.turretRx * 0.4, sp.turretRy, sp.turretX + sp.turretRx, 0);
+      } else if (sp.turret === 'boxy') {
+        // Riveted / welded box turret (Type 95, Type 97, M3)
+        ctx.rect(sp.turretX - sp.turretRx, sp.turretY - sp.turretRy, sp.turretRx * 2, sp.turretRy * 2);
+      } else {
+        // Cast round / egg / flat-dome turret
+        ctx.ellipse(sp.turretX, sp.turretY, sp.turretRx, sp.turretRy, 0, 0, Math.PI * 2);
+      }
       ctx.fill();
       ctx.stroke();
+      // Commander's cupola
+      ctx.fillStyle = hullHighlight;
+      ctx.beginPath();
+      ctx.arc(sp.turretX - sp.turretRx * 0.35, sp.turretY + (sp.turretY ? 0 : -sp.turretRy * 0.35), Math.max(1, sp.turretRy * 0.32), 0, Math.PI * 2);
+      ctx.fill();
+
       if (isSovietEra) {
         // Turret front ERA wedge blocks
         ctx.strokeStyle = '#FFB300';
         ctx.lineWidth = 1.2;
         ctx.beginPath();
-        ctx.arc(0, 0, 5.2, -0.75, 0.75);
+        ctx.arc(sp.turretX, 0, sp.turretRx * 0.95, -0.75, 0.75);
         ctx.stroke();
       } else if (isPatton) {
-        // M60 / M48 xenon IR searchlight box on mantlet
+        // M48 / M60 xenon IR searchlight box on mantlet
         ctx.fillStyle = '#FFE082';
-        ctx.fillRect(3.2, -3.2, 2.2, 1.8);
+        ctx.fillRect(sp.turretX + sp.turretRx * 0.5, sp.turretY - sp.turretRy * 0.75, 2.2, 1.8);
       }
-      // Cannon barrel + bore evacuator / muzzle brake
+
+      // Gun: length and thickness from caliber; bore evacuator / muzzle brake where fitted
+      const gx = sp.turretX + sp.turretRx * 0.8;
       ctx.strokeStyle = barrelColor;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = sp.gunW;
       ctx.beginPath();
-      ctx.moveTo(4, 0);
-      ctx.lineTo(isSovietEra || isIs3 ? 16.8 : 15.2, 0);
+      ctx.moveTo(gx, sp.turretY);
+      ctx.lineTo(gx + sp.gunLen, sp.turretY);
       ctx.stroke();
-      ctx.fillStyle = isIs3 ? '#FFD54F' : barrelColor;
-      ctx.fillRect(isSovietEra ? 9.5 : 13.8, -1.2, 2.2, 2.4);
+      ctx.fillStyle = barrelColor;
+      if (sp.evacuatorAt !== undefined) {
+        ctx.fillRect(gx + sp.gunLen * sp.evacuatorAt - 1, sp.turretY - sp.gunW * 0.75, 2.2, sp.gunW * 1.5);
+      }
+      if (sp.muzzleBrake) {
+        ctx.fillStyle = isIs3 ? '#FFD54F' : barrelColor;
+        ctx.fillRect(gx + sp.gunLen - 1.2, sp.turretY - sp.gunW * 0.85, 1.8, sp.gunW * 1.7);
+      }
     }
   } else if (isSpg) {
     const isOpenTop = t.includes('priest') || t.includes('hummel');

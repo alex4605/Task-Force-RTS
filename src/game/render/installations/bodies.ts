@@ -1607,7 +1607,244 @@ function drawWatchtower(rc: RenderContext, inst: Installation, style: Installati
   ctx.fillText(`🗼 [${inst.name}]`, 0, -28);
 }
 
-export const INSTALLATION_DRAWERS: Partial<Record<InstallationType, InstallationDrawer>> = {
+// ════ S-75 Dvina (SA-2 Guideline) battery: the "Star of David" layout of six revetted SM-63
+// single-rail launchers around the Fan Song fire-control radar, joined by spoke and ring roads ════
+function drawSa2Site(rc: RenderContext, _inst: Installation, _style: InstallationStyle, _island?: Island): void {
+  const ctx = rc.ctx;
+  const R = 17;
+  const pads = [0, 1, 2, 3, 4, 5].map((i) => (i * Math.PI) / 3 - Math.PI / 2);
+  // Access roads: spokes to each pad and the two interlaced triangles of the ring road
+  ctx.strokeStyle = 'rgba(176, 164, 140, 0.55)';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  for (const a of pads) {
+    ctx.moveTo(0, 0);
+    ctx.lineTo(Math.cos(a) * R, Math.sin(a) * R);
+  }
+  for (const start of [0, 1]) {
+    for (let k = 0; k < 3; k++) {
+      const a = pads[start + k * 2];
+      const b = pads[(start + k * 2 + 2) % 6];
+      ctx.moveTo(Math.cos(a) * R, Math.sin(a) * R);
+      ctx.lineTo(Math.cos(b) * R, Math.sin(b) * R);
+    }
+  }
+  ctx.stroke();
+  // Revetments (horseshoe berms open toward the centre) with launchers pointing outward
+  for (const a of pads) {
+    const x = Math.cos(a) * R;
+    const y = Math.sin(a) * R;
+    ctx.fillStyle = 'rgba(62, 39, 35, 0.85)';
+    ctx.strokeStyle = '#8D6E63';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(x, y, 4.6, a + Math.PI * 0.75 - Math.PI, a - Math.PI * 0.75 + Math.PI);
+    ctx.stroke();
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(a);
+    ctx.strokeStyle = '#B0BEC5';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-2.5, 0);
+    ctx.lineTo(3, 0);
+    ctx.stroke();
+    // V-750 missile: white body, red booster, cruciform wings
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-1, 0);
+    ctx.lineTo(5, 0);
+    ctx.stroke();
+    ctx.strokeStyle = '#FF3D00';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-3, 0);
+    ctx.lineTo(-0.8, 0);
+    ctx.stroke();
+    ctx.restore();
+  }
+  // Central SNR-75 "Fan Song" radar van with its two scanner antennas
+  ctx.fillStyle = '#263238';
+  ctx.strokeStyle = '#FF5252';
+  ctx.lineWidth = 1.2;
+  ctx.fillRect(-3.5, -2.5, 7, 5);
+  ctx.strokeRect(-3.5, -2.5, 7, 5);
+  ctx.strokeStyle = '#FFAB40';
+  ctx.beginPath();
+  ctx.moveTo(-1.5, -4.5);
+  ctx.lineTo(-1.5, 4.5);
+  ctx.moveTo(1.8, -3.5);
+  ctx.lineTo(3.8, 3.5);
+  ctx.stroke();
+  ctx.fillStyle = '#FF5252';
+  ctx.font = 'bold 8.5px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('🚀 [敵軍薩姆-2 防空飛彈營] SA-2 Guideline', 0, -26);
+}
+
+// ════ S-125 Neva (SA-3 Goa) battery: four 5P73 twin-rail launchers around the SNR-125 "Low Blow" ════
+function drawSa3Site(rc: RenderContext, _inst: Installation, _style: InstallationStyle, _island?: Island): void {
+  const ctx = rc.ctx;
+  const R = 13;
+  ctx.strokeStyle = 'rgba(176, 164, 140, 0.5)';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.arc(0, 0, R, 0, Math.PI * 2);
+  ctx.stroke();
+  for (const a of [-0.75, 0.75, Math.PI - 0.75, Math.PI + 0.75].map((v) => v - Math.PI / 2)) {
+    const x = Math.cos(a) * R;
+    const y = Math.sin(a) * R;
+    ctx.fillStyle = 'rgba(62, 39, 35, 0.85)';
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(a);
+    for (const off of [-1.2, 1.2]) {
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(-1, off);
+      ctx.lineTo(4.5, off);
+      ctx.stroke();
+      ctx.strokeStyle = '#FF5722';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(-2.6, off);
+      ctx.lineTo(-0.8, off);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  ctx.fillStyle = '#263238';
+  ctx.strokeStyle = '#FF7043';
+  ctx.lineWidth = 1.2;
+  ctx.fillRect(-3, -3, 6, 6);
+  ctx.strokeRect(-3, -3, 6, 6);
+  ctx.strokeStyle = '#FFAB40';
+  ctx.beginPath();
+  ctx.moveTo(-2.5, -4.5);
+  ctx.lineTo(2.5, -4.5);
+  ctx.moveTo(-4.5, -2.5);
+  ctx.lineTo(-4.5, 2.5);
+  ctx.stroke();
+  ctx.fillStyle = '#FFAB91';
+  ctx.font = 'bold 8.5px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('🚀 [敵軍薩姆-3 飛彈營] S-125 Neva (SA-3 Goa)', 0, -22);
+}
+
+// ════ Battalion command post: sandbagged command bunker, GP tents, radio mast and unit flag ════
+function drawBattalionCp(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
+  const ctx = rc.ctx;
+  const { color, labelColor } = style;
+  // Sandbag berm around the bunker
+  ctx.strokeStyle = '#A1887F';
+  ctx.lineWidth = 2.6;
+  ctx.setLineDash([2.4, 1.2]);
+  ctx.beginPath();
+  ctx.roundRect(-11, -8, 22, 16, 4);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // Bunker roof (timber + earth) with entrance
+  ctx.fillStyle = '#3E4A3D';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.2;
+  ctx.fillRect(-7, -5, 14, 10);
+  ctx.strokeRect(-7, -5, 14, 10);
+  ctx.fillStyle = '#1B1B1B';
+  ctx.fillRect(6, -1.5, 2.5, 3);
+  // Two GP medium tents
+  ctx.fillStyle = '#556B2F';
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+  for (const [tx, ty] of [[-16, -12], [12, 10]]) {
+    ctx.fillRect(tx - 4, ty - 3, 8, 6);
+    ctx.beginPath();
+    ctx.moveTo(tx - 4, ty);
+    ctx.lineTo(tx + 4, ty);
+    ctx.stroke();
+  }
+  // Radio antenna mast with guy wires
+  ctx.strokeStyle = '#CFD8DC';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(-3, -5);
+  ctx.lineTo(-3, -18);
+  ctx.moveTo(-3, -18);
+  ctx.lineTo(-8, -10);
+  ctx.moveTo(-3, -18);
+  ctx.lineTo(2, -10);
+  ctx.stroke();
+  // Unit flag
+  ctx.fillStyle = color;
+  ctx.fillRect(3, -14, 6, 4);
+  ctx.strokeStyle = '#ECEFF1';
+  ctx.beginPath();
+  ctx.moveTo(3, -14);
+  ctx.lineTo(3, -5);
+  ctx.stroke();
+  ctx.fillStyle = labelColor;
+  ctx.font = 'bold 8.5px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('🎖️ [營指揮所 Battalion CP]', 0, -24);
+}
+
+// ════ Forward operating base: HESCO barrier perimeter, helipad, tent rows and parked vehicles ════
+function drawForwardFob(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
+  const ctx = rc.ctx;
+  const { color, labelColor } = style;
+  // HESCO bastion perimeter (filled gabion cells)
+  ctx.fillStyle = '#8D7B5A';
+  for (let x = -20; x < 20; x += 3) {
+    ctx.fillRect(x, -16, 2.6, 2.6);
+    ctx.fillRect(x, 13.4, 2.6, 2.6);
+  }
+  for (let y = -13; y < 13; y += 3) {
+    ctx.fillRect(-20, y, 2.6, 2.6);
+    ctx.fillRect(17.4, y, 2.6, 2.6);
+  }
+  // Gate
+  ctx.fillStyle = '#1B3A2A';
+  ctx.fillRect(17.4, -3, 2.6, 6);
+  // Helipad
+  ctx.fillStyle = '#37474F';
+  ctx.strokeStyle = '#FFD54F';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(-9, -4, 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = '#FFFFFF';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(-11, -7);
+  ctx.lineTo(-11, -1);
+  ctx.moveTo(-7, -7);
+  ctx.lineTo(-7, -1);
+  ctx.moveTo(-11, -4);
+  ctx.lineTo(-7, -4);
+  ctx.stroke();
+  // Tent row
+  ctx.fillStyle = '#556B2F';
+  for (const tx of [2, 8, 14]) ctx.fillRect(tx - 2.5, -11, 5, 7);
+  // Parked vehicles
+  ctx.fillStyle = '#455A64';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 0.8;
+  for (const [vx, vy] of [[0, 6], [7, 6], [-12, 8]]) {
+    ctx.fillRect(vx - 2.5, vy - 1.6, 5, 3.2);
+    ctx.strokeRect(vx - 2.5, vy - 1.6, 5, 3.2);
+  }
+  ctx.fillStyle = labelColor;
+  ctx.font = 'bold 8.5px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('🏕️ [前進作戰基地 FOB]', 0, -22);
+}
+
+/** Exhaustive: an InstallationType without artwork is a compile error (it used to render as nothing). */
+export const INSTALLATION_DRAWERS: Record<InstallationType, InstallationDrawer> = {
   airfield: drawAirfield,
   coastal_gun: drawCoastalGun,
   radar_station: drawRadarStation,
@@ -1632,8 +1869,10 @@ export const INSTALLATION_DRAWERS: Partial<Record<InstallationType, Installation
   bunker_nest: drawBunkerNest,
   sam_hawk: drawSamHawk,
   sam_patriot: drawSamHawk,
-  sa2_sam_site: drawSa2SamSite,
-  sa3_sam_site: drawSa2SamSite,
+  sa2_sam_site: drawSa2Site,
+  sa3_sam_site: drawSa3Site,
+  battalion_cp: drawBattalionCp,
+  forward_fob: drawForwardFob,
   s300_sam_site: drawSa2SamSite,
   coastal_harpoon: drawCoastalHarpoon,
   glcm_site: drawGlcmSite,
