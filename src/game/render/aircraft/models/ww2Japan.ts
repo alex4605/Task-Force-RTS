@@ -1,10 +1,10 @@
 // WWII Imperial Japanese aircraft: vector silhouettes, drawn in the plane's local frame (nose along +x).
 import { Aircraft } from '../../../../types/game';
 import { RenderContext } from '../../context';
-import { drawHinomaru } from '../insignia';
+import { drawNationalInsignia } from '../nation';
 import { AircraftDrawerTable } from './types';
 
-function drawZero(rc: RenderContext, _plane: Aircraft, _color: string): void {
+function drawZero(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
 
   // ════ A6M2 零戰二一型 (Mitsubishi A6M2 Zero Model 21) ════
@@ -48,11 +48,11 @@ function drawZero(rc: RenderContext, _plane: Aircraft, _color: string): void {
   ctx.strokeRect(10, -2.4, 3, 4.8);
 
   // Red Hinomaru roundels
-  drawHinomaru(rc, 0, -8.5, 3.4);
-  drawHinomaru(rc, 0, 8.5, 3.4);
+  drawNationalInsignia(rc, plane, 0, -8.5, 3.4);
+  drawNationalInsignia(rc, plane, 0, 8.5, 3.4);
 }
 
-function drawZeroA6m5(rc: RenderContext, _plane: Aircraft, _color: string): void {
+function drawZeroA6m5(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
 
   // ════ A6M5 零戰五二型 (Mitsubishi A6M5 Zero Model 52) ════
@@ -101,11 +101,11 @@ function drawZeroA6m5(rc: RenderContext, _plane: Aircraft, _color: string): void
   ctx.lineTo(2.5, 13);
   ctx.stroke();
 
-  drawHinomaru(rc, 0, -8.5, 3.6);
-  drawHinomaru(rc, 0, 8.5, 3.6);
+  drawNationalInsignia(rc, plane, 0, -8.5, 3.6);
+  drawNationalInsignia(rc, plane, 0, 8.5, 3.6);
 }
 
-function drawKi61(rc: RenderContext, _plane: Aircraft, color: string): void {
+function drawKi61(rc: RenderContext, plane: Aircraft, color: string): void {
   const ctx = rc.ctx;
 
   // ════ Ki-61 飛燕 (Kawasaki Ki-61 Hien / "Tony") ════
@@ -148,11 +148,11 @@ function drawKi61(rc: RenderContext, _plane: Aircraft, color: string): void {
   ctx.fillRect(-2, -1.5, 5, 3);
   ctx.strokeRect(-2, -1.5, 5, 3);
 
-  drawHinomaru(rc, 0, -9.5, 3.4);
-  drawHinomaru(rc, 0, 9.5, 3.4);
+  drawNationalInsignia(rc, plane, 0, -9.5, 3.4);
+  drawNationalInsignia(rc, plane, 0, 9.5, 3.4);
 }
 
-function drawGeorge(rc: RenderContext, _plane: Aircraft, _color: string): void {
+function drawGeorge(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
 
   // ════ N1K2-J 紫電改 (Kawajima N1K2-J Shiden-Kai / "George") ════
@@ -195,8 +195,8 @@ function drawGeorge(rc: RenderContext, _plane: Aircraft, _color: string): void {
   ctx.strokeStyle = '#37474F';
   ctx.strokeRect(10, -2.8, 4, 5.6);
 
-  drawHinomaru(rc, 0, -10, 3.8);
-  drawHinomaru(rc, 0, 10, 3.8);
+  drawNationalInsignia(rc, plane, 0, -10, 3.8);
+  drawNationalInsignia(rc, plane, 0, 10, 3.8);
 }
 
 function drawVal(rc: RenderContext, plane: Aircraft, _color: string): void {
@@ -229,11 +229,11 @@ function drawVal(rc: RenderContext, plane: Aircraft, _color: string): void {
     ctx.strokeRect(3, 4, 4.5, 3);
   }
 
-  drawHinomaru(rc, 0, -10, 3.6);
-  drawHinomaru(rc, 0, 10, 3.6);
+  drawNationalInsignia(rc, plane, 0, -10, 3.6);
+  drawNationalInsignia(rc, plane, 0, 10, 3.6);
 }
 
-function drawKate(rc: RenderContext, _plane: Aircraft, _color: string): void {
+function drawKate(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
 
   // ════ Enemy B5N Kate / B6N Jill: Torpedo Bomber ════
@@ -261,8 +261,8 @@ function drawKate(rc: RenderContext, _plane: Aircraft, _color: string): void {
   ctx.fillStyle = 'rgba(128, 222, 234, 0.48)';
   ctx.fillRect(-3, -1.6, 8, 3.2);
 
-  drawHinomaru(rc, 0, -11, 3.8);
-  drawHinomaru(rc, 0, 11, 3.8);
+  drawNationalInsignia(rc, plane, 0, -11, 3.8);
+  drawNationalInsignia(rc, plane, 0, 11, 3.8);
 }
 
 function drawG4m(rc: RenderContext, plane: Aircraft, _color: string): void {
@@ -316,8 +316,8 @@ function drawG4m(rc: RenderContext, plane: Aircraft, _color: string): void {
   ctx.stroke();
 
   // Red Hinomaru on both wings
-  drawHinomaru(rc, 1, -19, 4.2);
-  drawHinomaru(rc, 1, 19, 4.2);
+  drawNationalInsignia(rc, plane, 1, -19, 4.2);
+  drawNationalInsignia(rc, plane, 1, 19, 4.2);
 
   // If carrying underslung MXY-7 Ohka Rocket Missile!
   if (plane.hasOhkaAttached) {
@@ -337,7 +337,7 @@ function drawG4m(rc: RenderContext, plane: Aircraft, _color: string): void {
   }
 }
 
-function drawOhka(rc: RenderContext, _plane: Aircraft, _color: string): void {
+function drawOhka(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
 
   // ════ 櫻花特攻機 (MXY-7 Ohka Rocket-Powered Suicide Missile) ════
@@ -382,8 +382,8 @@ function drawOhka(rc: RenderContext, _plane: Aircraft, _color: string): void {
   ctx.fill();
 
   // Hinomaru on tiny wings
-  drawHinomaru(rc, 1, -5.5, 2);
-  drawHinomaru(rc, 1, 5.5, 2);
+  drawNationalInsignia(rc, plane, 1, -5.5, 2);
+  drawNationalInsignia(rc, plane, 1, 5.5, 2);
 
   // Blazing Triple Solid Rocket Booster Exhaust Flame
   const flameLen = 14 + Math.random() * 8;
@@ -437,8 +437,8 @@ function drawKamikazeJudy(rc: RenderContext, plane: Aircraft, _color: string): v
   ctx.fillRect(-2, -3.5, 3, 7);
 
   // Red Hinomaru
-  drawHinomaru(rc, 0, -9, 3.5);
-  drawHinomaru(rc, 0, 9, 3.5);
+  drawNationalInsignia(rc, plane, 0, -9, 3.5);
+  drawNationalInsignia(rc, plane, 0, 9, 3.5);
 
   // Centerline Mounted 250kg/500kg Heavy Suicide Bomb
   ctx.strokeStyle = '#FFA000';

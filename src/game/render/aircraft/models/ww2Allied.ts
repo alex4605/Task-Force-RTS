@@ -1,12 +1,11 @@
 // WWII US / Commonwealth aircraft: vector silhouettes, drawn in the plane's local frame (nose along +x).
 import { Aircraft } from '../../../../types/game';
 import { RenderContext } from '../../context';
-import { drawUSInsignia, drawRAFRoundel } from '../insignia';
+import { drawNationalInsignia } from '../nation';
 import { AircraftDrawerTable } from './types';
 
 function drawF4u(rc: RenderContext, plane: Aircraft, color: string): void {
   const ctx = rc.ctx;
-  const isPlayer = plane.side === 'player';
 
   // ════ F4U Corsair: Inverted Gull Wing ("Bent-Wing Bird") ════
   // Barrel fuselage & Pratt & Whitney R-2800 radial cowling
@@ -58,7 +57,7 @@ function drawF4u(rc: RenderContext, plane: Aircraft, color: string): void {
   ctx.strokeRect(-2, -1.8, 5, 3.6);
 
   // US Star insignia on left wing
-  if (isPlayer) drawUSInsignia(rc, 1, -11, 3.5);
+  drawNationalInsignia(rc, plane, 1, -11, 3.5);
 
   // 4-Blade Propeller Blur with Yellow Tips
   const propA = rc.time * 28;
@@ -78,7 +77,6 @@ function drawF4u(rc: RenderContext, plane: Aircraft, color: string): void {
 
 function drawF8f(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
-  const isPlayer = plane.side === 'player';
 
   // ════ F8F Bearcat: Compact, Stubby Late-War Interceptor ════
   ctx.fillStyle = '#061322';
@@ -108,12 +106,11 @@ function drawF8f(rc: RenderContext, plane: Aircraft, _color: string): void {
   ctx.fill();
   ctx.stroke();
 
-  if (isPlayer) drawUSInsignia(rc, 0, -8, 3);
+  drawNationalInsignia(rc, plane, 0, -8, 3);
 }
 
 function drawF4f(rc: RenderContext, plane: Aircraft, color: string): void {
   const ctx = rc.ctx;
-  const isPlayer = plane.side === 'player';
 
   // ════ F4F Wildcat: Classic Barrel Fuselage & Grumman Ironworks ════
   ctx.fillStyle = '#061322';
@@ -154,12 +151,11 @@ function drawF4f(rc: RenderContext, plane: Aircraft, color: string): void {
   ctx.lineWidth = 1;
   ctx.strokeRect(-1, -2, 5, 4);
 
-  if (isPlayer) drawUSInsignia(rc, 0, -9, 3.2);
+  drawNationalInsignia(rc, plane, 0, -9, 3.2);
 }
 
 function drawF6f(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
-  const isPlayer = plane.side === 'player';
 
   // ════ F6F Hellcat: Rugged Broad-Shouldered Fleet Fighter ════
   ctx.fillStyle = '#061322';
@@ -194,12 +190,11 @@ function drawF6f(rc: RenderContext, plane: Aircraft, _color: string): void {
   ctx.fillStyle = 'rgba(128, 222, 234, 0.52)';
   ctx.fillRect(0, -1.7, 5.2, 3.4);
 
-  if (isPlayer) drawUSInsignia(rc, 1, -10, 3.5);
+  drawNationalInsignia(rc, plane, 1, -10, 3.5);
 }
 
 function drawSbd(rc: RenderContext, plane: Aircraft, color: string): void {
   const ctx = rc.ctx;
-  const isPlayer = plane.side === 'player';
 
   // ════ SBD Dauntless / SB2C Helldiver: Dive Bombers ════
   ctx.fillStyle = '#061322';
@@ -259,12 +254,11 @@ function drawSbd(rc: RenderContext, plane: Aircraft, color: string): void {
   ctx.lineTo(-8, 0);
   ctx.stroke();
 
-  if (isPlayer) drawUSInsignia(rc, 1, -11, 3.5);
+  drawNationalInsignia(rc, plane, 1, -11, 3.5);
 }
 
 function drawTbd(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
-  const isPlayer = plane.side === 'player';
 
   // ════ TBD Devastator / TBF Avenger: Torpedo & Heavy Bombers ════
   ctx.fillStyle = '#061322';
@@ -303,12 +297,11 @@ function drawTbd(rc: RenderContext, plane: Aircraft, _color: string): void {
   ctx.lineTo(-7, 0);
   ctx.stroke();
 
-  if (isPlayer) drawUSInsignia(rc, 0, -12, 3.8);
+  drawNationalInsignia(rc, plane, 0, -12, 3.8);
 }
 
 function drawOs2u(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
-  const isPlayer = plane.side === 'player';
 
   // ════ OS2U Kingfisher: Scout Floatplane with Pontoon Catamaran ════
   ctx.fillStyle = '#061322';
@@ -358,12 +351,11 @@ function drawOs2u(rc: RenderContext, plane: Aircraft, _color: string): void {
   ctx.strokeRect(0, -16.5, 4.5, 2);
   ctx.strokeRect(0, 14.5, 4.5, 2);
 
-  if (isPlayer) drawUSInsignia(rc, 0, -10, 3);
+  drawNationalInsignia(rc, plane, 0, -10, 3);
 }
 
 function drawSc1(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
-  const isPlayer = plane.side === 'player';
 
   // ════ SC-1 Seahawk: Late-War High-Speed Scout Floatplane ════
   ctx.fillStyle = '#061322';
@@ -431,12 +423,11 @@ function drawSc1(rc: RenderContext, plane: Aircraft, _color: string): void {
   ctx.arc(15, 0, 6.5, 0, Math.PI * 2);
   ctx.stroke();
 
-  if (isPlayer) drawUSInsignia(rc, 0, -11, 3.4);
+  drawNationalInsignia(rc, plane, 0, -11, 3.4);
 }
 
 function drawB17(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
-  const isPlayer = plane.side === 'player';
 
   // ════ B-17 Flying Fortress: 4-Engine Heavy Horizontal Bomber ════
   ctx.fillStyle = '#071626';
@@ -488,12 +479,11 @@ function drawB17(rc: RenderContext, plane: Aircraft, _color: string): void {
   ctx.arc(2, 0, 2.5, 0, Math.PI * 2);
   ctx.fill();
 
-  if (isPlayer) drawUSInsignia(rc, 1, -16, 4.2);
+  drawNationalInsignia(rc, plane, 1, -16, 4.2);
 }
 
 function drawB24(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
-  const isPlayer = plane.side === 'player';
 
   // ════ B-24 Liberator / B-29 Superfortress: Heavy Level Bomber with Twin Oval Tailfins ════
   ctx.fillStyle = '#071626';
@@ -542,12 +532,11 @@ function drawB24(rc: RenderContext, plane: Aircraft, _color: string): void {
   ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
   ctx.fillRect(10, -2.4, 6, 4.8);
 
-  if (isPlayer) drawUSInsignia(rc, 1, -18, 4.5);
+  drawNationalInsignia(rc, plane, 1, -18, 4.5);
 }
 
 function drawP40(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
-  const isPlayer = plane.side === 'player';
 
   // ════ P-40 Warhawk: Land-Based Fighter with Iconic Chin Scoop & Shark Mouth ════
   ctx.fillStyle = '#061322';
@@ -604,12 +593,11 @@ function drawP40(rc: RenderContext, plane: Aircraft, _color: string): void {
   ctx.arc(15, 0, 5.5, 0, Math.PI * 2);
   ctx.stroke();
 
-  if (isPlayer) drawUSInsignia(rc, 0, -10, 3.2);
+  drawNationalInsignia(rc, plane, 0, -10, 3.2);
 }
 
 function drawP38(rc: RenderContext, plane: Aircraft, color: string): void {
   const ctx = rc.ctx;
-  const isPlayer = plane.side === 'player';
 
   // ════ P-38 Lightning: Twin-Boom Heavy Land-Based Fighter ("Fork-Tailed Devil") ════
   ctx.fillStyle = '#061322';
@@ -679,12 +667,11 @@ function drawP38(rc: RenderContext, plane: Aircraft, color: string): void {
   ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
   ctx.fillRect(0, -1.6, 5, 3.2);
 
-  if (isPlayer) drawUSInsignia(rc, 0, -15, 3.5);
+  drawNationalInsignia(rc, plane, 0, -15, 3.5);
 }
 
 function drawA20(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
-  const isPlayer = plane.side === 'player';
 
   // ════ A-20 Havoc: Twin-Engine Low-Altitude Attack Bomber ════
   ctx.fillStyle = '#061322';
@@ -737,12 +724,11 @@ function drawA20(rc: RenderContext, plane: Aircraft, _color: string): void {
   ctx.lineTo(-12, 8);
   ctx.stroke();
 
-  if (isPlayer) drawUSInsignia(rc, 0, -14, 3.4);
+  drawNationalInsignia(rc, plane, 0, -14, 3.4);
 }
 
 function drawA26(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
-  const isPlayer = plane.side === 'player';
 
   // ════ A-26 Invader: High-Speed Twin-Engine Heavy Attack Aircraft ════
   ctx.fillStyle = '#061322';
@@ -795,12 +781,11 @@ function drawA26(rc: RenderContext, plane: Aircraft, _color: string): void {
   ctx.lineTo(-13, 9);
   ctx.stroke();
 
-  if (isPlayer) drawUSInsignia(rc, 0, -15, 3.8);
+  drawNationalInsignia(rc, plane, 0, -15, 3.8);
 }
 
 function drawP36a(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
-  const isPlayer = plane.side === 'player';
 
   // ════ Curtiss P-36A Hawk: Classic Radial Fighter, Round Cowl, Olive/Silver ════
   ctx.fillStyle = '#061322';
@@ -838,12 +823,11 @@ function drawP36a(rc: RenderContext, plane: Aircraft, _color: string): void {
   ctx.arc(14, 0, 7, 0, Math.PI * 2);
   ctx.stroke();
 
-  if (isPlayer) drawUSInsignia(rc, 0, -9, 3.2, true);
+  drawNationalInsignia(rc, plane, 0, -9, 3.2);
 }
 
 function drawB25(rc: RenderContext, plane: Aircraft, color: string): void {
   const ctx = rc.ctx;
-  const isPlayer = plane.side === 'player';
 
   // ════ North American B-25 Mitchell: Twin R-2600 Radials & Twin H-Tail ════
   ctx.fillStyle = '#071626';
@@ -905,12 +889,11 @@ function drawB25(rc: RenderContext, plane: Aircraft, color: string): void {
   ctx.fill();
   ctx.stroke();
 
-  if (isPlayer) drawUSInsignia(rc, 2, -15, 3.6, true);
+  drawNationalInsignia(rc, plane, 2, -15, 3.6);
 }
 
 function drawP39d(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
-  const isPlayer = plane.side === 'player';
 
   // ════ Bell P-39D Airacobra: Mid-Engine, 37mm Hub Cannon, Car Doors ════
   ctx.fillStyle = '#061322';
@@ -949,12 +932,11 @@ function drawP39d(rc: RenderContext, plane: Aircraft, _color: string): void {
   ctx.fillStyle = '#37474F';
   ctx.fillRect(-1, -2.5, 4, 5);
 
-  if (isPlayer) drawUSInsignia(rc, 0, -9, 3.2, true);
+  drawNationalInsignia(rc, plane, 0, -9, 3.2);
 }
 
 function drawB17Late(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
-  const isPlayer = plane.side === 'player';
 
   // ════ B-17G Flying Fortress (Late): Bendix Chin Turret + Cheyenne Tail ════
   ctx.fillStyle = '#071626';
@@ -1016,10 +998,10 @@ function drawB17Late(rc: RenderContext, plane: Aircraft, _color: string): void {
   ctx.arc(4, 0, 3, 0, Math.PI * 2);
   ctx.fill();
 
-  if (isPlayer) drawUSInsignia(rc, 3, -19, 4, true);
+  drawNationalInsignia(rc, plane, 3, -19, 4);
 }
 
-function drawHurricane(rc: RenderContext, _plane: Aircraft, _color: string): void {
+function drawHurricane(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
 
   // ════ Hawker Hurricane Mk.II: Thick Wing, Rear Stringers, RAF Roundel ════
@@ -1064,10 +1046,10 @@ function drawHurricane(rc: RenderContext, _plane: Aircraft, _color: string): voi
   ctx.arc(15, 0, 7, 0, Math.PI * 2);
   ctx.stroke();
 
-  drawRAFRoundel(rc, 0, -11, 3.4);
+  drawNationalInsignia(rc, plane, 0, -11, 3.4);
 }
 
-function drawSpitfireV(rc: RenderContext, _plane: Aircraft, _color: string): void {
+function drawSpitfireV(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
 
   // ════ Supermarine Spitfire Mk.V: Iconic Elliptical Wings & Merlin Nose ════
@@ -1109,10 +1091,10 @@ function drawSpitfireV(rc: RenderContext, _plane: Aircraft, _color: string): voi
   ctx.arc(16, 0, 7, 0, Math.PI * 2);
   ctx.stroke();
 
-  drawRAFRoundel(rc, 1, -11, 3.3);
+  drawNationalInsignia(rc, plane, 1, -11, 3.3);
 }
 
-function drawBeaufighter(rc: RenderContext, _plane: Aircraft, _color: string): void {
+function drawBeaufighter(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
 
   // ════ Bristol Beaufighter: Twin Hercules Radials, Blunt Nose, Torpedo ════
@@ -1160,10 +1142,10 @@ function drawBeaufighter(rc: RenderContext, _plane: Aircraft, _color: string): v
   ctx.lineTo(6, 0);
   ctx.stroke();
 
-  drawRAFRoundel(rc, 1, -13, 3.5);
+  drawNationalInsignia(rc, plane, 1, -13, 3.5);
 }
 
-function drawSwordfish(rc: RenderContext, _plane: Aircraft, color: string): void {
+function drawSwordfish(rc: RenderContext, plane: Aircraft, color: string): void {
   const ctx = rc.ctx;
 
   // ════ Fairey Swordfish: Stringbag Biplane, Struts, Slung Torpedo ════
@@ -1201,10 +1183,10 @@ function drawSwordfish(rc: RenderContext, _plane: Aircraft, color: string): void
   ctx.lineTo(5, 0);
   ctx.stroke();
 
-  drawRAFRoundel(rc, 0, -12, 3.2);
+  drawNationalInsignia(rc, plane, 0, -12, 3.2);
 }
 
-function drawSpitfireXiv(rc: RenderContext, _plane: Aircraft, _color: string): void {
+function drawSpitfireXiv(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
 
   // ════ Supermarine Spitfire Mk.XIV: 5-Blade Griffon, Bubble Canopy, Pointed Rudder ════
@@ -1233,10 +1215,10 @@ function drawSpitfireXiv(rc: RenderContext, _plane: Aircraft, _color: string): v
   ctx.arc(17, 0, 7.5, 0, Math.PI * 2);
   ctx.stroke();
 
-  drawRAFRoundel(rc, 1, -11, 3.4);
+  drawNationalInsignia(rc, plane, 1, -11, 3.4);
 }
 
-function drawTempest(rc: RenderContext, _plane: Aircraft, color: string): void {
+function drawTempest(rc: RenderContext, plane: Aircraft, color: string): void {
   const ctx = rc.ctx;
 
   // ════ Hawker Tempest Mk.V: Chin Radiator Beard, Laminar Elliptical Wings ════
@@ -1281,10 +1263,10 @@ function drawTempest(rc: RenderContext, _plane: Aircraft, color: string): void {
     ctx.stroke();
   }
 
-  drawRAFRoundel(rc, 1, -12, 3.4);
+  drawNationalInsignia(rc, plane, 1, -12, 3.4);
 }
 
-function drawMosquito(rc: RenderContext, _plane: Aircraft, _color: string): void {
+function drawMosquito(rc: RenderContext, plane: Aircraft, _color: string): void {
   const ctx = rc.ctx;
 
   // ════ De Havilland Mosquito FB.VI "Wooden Wonder": Twin Merlins, Elegant Swept Fin ════
@@ -1329,10 +1311,10 @@ function drawMosquito(rc: RenderContext, _plane: Aircraft, _color: string): void
     ctx.fillRect(17, g * 1.2 - 0.5, 2, 1);
   }
 
-  drawRAFRoundel(rc, 1, -13, 3.5);
+  drawNationalInsignia(rc, plane, 1, -13, 3.5);
 }
 
-function drawLancaster(rc: RenderContext, _plane: Aircraft, color: string): void {
+function drawLancaster(rc: RenderContext, plane: Aircraft, color: string): void {
   const ctx = rc.ctx;
 
   // ════ Avro Lancaster B.I: 4 Merlins, Twin Endplate Rudders, 33ft Bomb Bay ════
@@ -1383,7 +1365,7 @@ function drawLancaster(rc: RenderContext, _plane: Aircraft, color: string): void
   ctx.fillRect(-20, -13.5, 4, 3);
   ctx.fillRect(-20, 10.5, 4, 3);
 
-  drawRAFRoundel(rc, 2, -20, 4);
+  drawNationalInsignia(rc, plane, 2, -20, 4);
 }
 
 export const WW2_ALLIED_DRAWERS: AircraftDrawerTable = {

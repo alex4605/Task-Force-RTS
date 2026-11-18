@@ -121,3 +121,64 @@ export function drawROKAFRoundel(rc: RenderContext, x: number, y: number, r: num
   ctx.fill();
   ctx.restore();
 }
+
+function starPath(ctx: CanvasRenderingContext2D, outer: number, inner: number) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = (i * Math.PI) / 5 - Math.PI / 2;
+    const rad = i % 2 === 0 ? outer : inner;
+    if (i === 0) ctx.moveTo(Math.cos(a) * rad, Math.sin(a) * rad);
+    else ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+  }
+  ctx.closePath();
+}
+
+// Soviet VVS / AV-MF Red Star (红星) with white and red outline bands
+export function drawRedStar(rc: RenderContext, x: number, y: number, r: number) {
+  const ctx = rc.ctx;
+  const outer = r * 1.25;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.lineJoin = 'miter';
+  // Outer thin red band, then white band, then red star body
+  ctx.fillStyle = '#B71C1C';
+  starPath(ctx, outer + 1.0, (outer + 1.0) * 0.42);
+  ctx.fill();
+  ctx.fillStyle = '#FFFFFF';
+  starPath(ctx, outer + 0.55, (outer + 0.55) * 0.42);
+  ctx.fill();
+  ctx.fillStyle = '#E53935';
+  starPath(ctx, outer, outer * 0.42);
+  ctx.fill();
+  ctx.restore();
+}
+
+// West German Luftwaffe / Marineflieger Balkenkreuz (iron cross with white edges)
+export function drawLuftwaffeCross(rc: RenderContext, x: number, y: number, r: number) {
+  const ctx = rc.ctx;
+  ctx.save();
+  ctx.translate(x, y);
+  const arm = r * 1.05;
+  const w = r * 0.62;
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(-arm - 0.5, -w / 2 - 0.5, (arm + 0.5) * 2, w + 1);
+  ctx.fillRect(-w / 2 - 0.5, -arm - 0.5, w + 1, (arm + 0.5) * 2);
+  ctx.fillStyle = '#111111';
+  ctx.fillRect(-arm, -w / 2, arm * 2, w);
+  ctx.fillRect(-w / 2, -arm, w, arm * 2);
+  ctx.restore();
+}
+
+// French Armée de l'Air cocarde (blue centre, white, red outer ring)
+export function drawFrenchRoundel(rc: RenderContext, x: number, y: number, r: number) {
+  const ctx = rc.ctx;
+  ctx.save();
+  const rings: [number, string][] = [[1, '#D32F2F'], [0.66, '#FFFFFF'], [0.33, '#1565C0']];
+  for (const [scale, fill] of rings) {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.arc(x, y, r * scale, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
