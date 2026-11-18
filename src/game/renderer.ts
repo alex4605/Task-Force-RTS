@@ -12,12 +12,21 @@ import {
   RequisitionItem,
   LifeRaft,
   NuclearDetonation,
+  Sonobuoy,
+  Era,
 } from '../types/game';
 
 export interface Camera {
   x: number;
   y: number;
   zoom: number;
+}
+
+export interface OrderMarker {
+  pos: Vector2D;
+  type: 'move' | 'attack' | 'patrol' | 'rescue';
+  age: number;
+  maxAge: number;
 }
 
 export class VectorRenderer {
@@ -46,10 +55,29 @@ export class VectorRenderer {
     ctx.fillStyle = '#050D18';
     ctx.fillRect(0, 0, this.width, this.height);
 
+    // Subtle deep-sea bathymetric radial vignette
+    const bgGrad = ctx.createRadialGradient(
+      this.width * 0.5,
+      this.height * 0.5,
+      Math.min(this.width, this.height) * 0.15,
+      this.width * 0.5,
+      this.height * 0.5,
+      Math.max(this.width, this.height) * 0.78
+    );
+    bgGrad.addColorStop(0, 'rgba(13, 42, 74, 0.28)');
+    bgGrad.addColorStop(0.65, 'rgba(7, 20, 38, 0.1)');
+    bgGrad.addColorStop(1, 'rgba(2, 6, 14, 0.55)');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, this.width, this.height);
+
     ctx.translate(this.width / 2, this.height / 2);
     ctx.scale(camera.zoom, camera.zoom);
     ctx.translate(-camera.x, -camera.y);
 
+    // Outer theater border glow + crisp perimeter
+    ctx.strokeStyle = 'rgba(0, 229, 255, 0.18)';
+    ctx.lineWidth = 10;
+    ctx.strokeRect(0, 0, worldSize, worldSize);
     ctx.strokeStyle = '#1E3A5F';
     ctx.lineWidth = 3;
     ctx.strokeRect(0, 0, worldSize, worldSize);
@@ -329,6 +357,67 @@ export class VectorRenderer {
       ctx.fill();
       ctx.stroke();
 
+      // 2B. Atoll Central Calm Turquoise Lagoon Water (中央內海深水潟湖水域)
+      if (island.isAtoll && island.lagoons && island.lagoons.length > 0) {
+        ctx.save();
+        for (const lag of island.lagoons) {
+          // Deep turquoise lagoon water radial gradient fill
+          const lagGrad = ctx.createRadialGradient(
+            lag.center.x,
+            lag.center.y,
+            lag.radius * 0.15,
+            lag.center.x,
+            lag.center.y,
+            lag.radius
+          );
+          lagGrad.addColorStop(0, 'rgba(0, 150, 169, 0.75)'); // deeper central lagoon basin
+          lagGrad.addColorStop(0.7, 'rgba(0, 188, 212, 0.55)');
+          lagGrad.addColorStop(1, 'rgba(77, 208, 225, 0.35)'); // shallow sand bar reef rim
+
+          ctx.fillStyle = lagGrad;
+          ctx.strokeStyle = '#26C6DA';
+          ctx.lineWidth = 2.0;
+
+          ctx.beginPath();
+          for (let i = 0; i < lag.points.length; i++) {
+            const lp = lag.points[i];
+            if (i === 0) ctx.moveTo(lp.x, lp.y);
+            else ctx.lineTo(lp.x, lp.y);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          // Lagoon Navigational Marker & Depth Sounding
+          ctx.font = 'bold 9px monospace';
+          ctx.fillStyle = 'rgba(128, 222, 234, 0.85)';
+          ctx.textAlign = 'center';
+          ctx.fillText(`⚓ ${island.name.split(' ')[0]} 內海深水潟湖 (Navigable Lagoon)`, lag.center.x, lag.center.y);
+          ctx.font = '8px monospace';
+          ctx.fillStyle = 'rgba(77, 208, 225, 0.65)';
+          ctx.fillText('水深 26M · 艦船舟艇可安全進出通航', lag.center.x, lag.center.y + 12);
+
+          // Navigable channel breach markers (水門通路)
+          if (lag.channelBreaches) {
+            for (const ch of lag.channelBreaches) {
+              const chDist = island.radius * 0.95;
+              const chX = island.center.x + Math.cos(ch.angle) * chDist;
+              const chY = island.center.y + Math.sin(ch.angle) * chDist;
+              ctx.strokeStyle = 'rgba(0, 229, 255, 0.7)';
+              ctx.setLineDash([4, 4]);
+              ctx.beginPath();
+              ctx.arc(chX, chY, 24, 0, Math.PI * 2);
+              ctx.stroke();
+              ctx.setLineDash([]);
+              ctx.fillStyle = '#80DEEA';
+              ctx.font = '8px monospace';
+              ctx.fillText('通行水門', chX, chY - 28);
+            }
+          }
+        }
+        ctx.restore();
+      }
+
       // 3. Topographical lines
       ctx.strokeStyle = 'rgba(66, 133, 244, 0.35)';
       ctx.lineWidth = 1;
@@ -389,7 +478,64 @@ export class VectorRenderer {
         ctx.restore();
       }
 
-      // 6. Continental Hills & Mountain Ridges
+      // 6. Continuous Mountain Ridge Chains & High Peaks (連續山脈稜線與頂峰)
+      if (island.mountainRidges && island.mountainRidges.length > 0) {
+        ctx.save();
+        for (const ridge of island.mountainRidges) {
+          if (!ridge.spine || ridge.spine.length < 2) continue;
+
+          // 1. Ridge Mountain Base Massif (Elevation shading along the continuous spine)
+          ctx.strokeStyle = 'rgba(45, 55, 72, 0.85)';
+          ctx.lineWidth = ridge.width || 200;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.beginPath();
+          for (let i = 0; i < ridge.spine.length; i++) {
+            const sp = ridge.spine[i];
+            if (i === 0) ctx.moveTo(sp.x, sp.y);
+            else ctx.lineTo(sp.x, sp.y);
+          }
+          ctx.stroke();
+
+          // 2. Secondary upper elevation shelf
+          ctx.strokeStyle = 'rgba(26, 32, 44, 0.9)';
+          ctx.lineWidth = (ridge.width || 200) * 0.55;
+          ctx.stroke();
+
+          // 3. Sharp Ridgeline Crest Spine (山脊尖銳稜線)
+          ctx.strokeStyle = 'rgba(176, 190, 197, 0.65)';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          for (let i = 0; i < ridge.spine.length; i++) {
+            const sp = ridge.spine[i];
+            if (i === 0) ctx.moveTo(sp.x, sp.y);
+            else ctx.lineTo(sp.x, sp.y);
+          }
+          ctx.stroke();
+
+          // 4. Peaks with triangles and elevations
+          if (ridge.peaks && ridge.peaks.length > 0) {
+            for (const pk of ridge.peaks) {
+              // Mountain peak icon
+              ctx.fillStyle = '#CFD8DC';
+              ctx.beginPath();
+              ctx.moveTo(pk.pos.x, pk.pos.y - 12);
+              ctx.lineTo(pk.pos.x + 8, pk.pos.y + 4);
+              ctx.lineTo(pk.pos.x - 8, pk.pos.y + 4);
+              ctx.closePath();
+              ctx.fill();
+
+              ctx.font = 'bold 9px monospace';
+              ctx.fillStyle = '#ECEFF1';
+              ctx.textAlign = 'center';
+              ctx.fillText(`▲ ${pk.label}`, pk.pos.x, pk.pos.y - 16);
+            }
+          }
+        }
+        ctx.restore();
+      }
+
+      // Legacy Continental Hills
       if (island.hills && island.hills.length > 0) {
         ctx.save();
         for (const hill of island.hills) {
@@ -416,7 +562,68 @@ export class VectorRenderer {
         ctx.restore();
       }
 
-      // 7. Dense Tropical Jungle Clusters (Dominant terrain in Era 4)
+      // 7. Continuous Forest & Jungle Belts (連續長條狀有機雨林廊道，非離散圓點)
+      if (island.forestBelts && island.forestBelts.length > 0) {
+        ctx.save();
+        for (const belt of island.forestBelts) {
+          if (!belt.points || belt.points.length < 3) continue;
+
+          // Color scheme depending on biome
+          let fillColor = 'rgba(27, 94, 32, 0.8)';
+          let strokeColor = 'rgba(76, 175, 80, 0.4)';
+          let labelText = '🌲 連續熱帶雨林廊道';
+          if (belt.biome === 'mangrove') {
+            fillColor = 'rgba(19, 42, 19, 0.82)';
+            strokeColor = 'rgba(46, 125, 50, 0.45)';
+            labelText = '🌿 沿海紅樹林潮間沼澤帶';
+          } else if (belt.biome === 'palms') {
+            fillColor = 'rgba(45, 106, 79, 0.8)';
+            strokeColor = 'rgba(82, 183, 136, 0.45)';
+            labelText = '🌴 環礁海防椰林林帶';
+          } else if (belt.biome === 'bamboo') {
+            fillColor = 'rgba(40, 75, 50, 0.82)';
+            strokeColor = 'rgba(100, 180, 100, 0.4)';
+            labelText = '🎋 喀斯特石灰岩深谷密林';
+          }
+
+          // Smooth organic polygon
+          ctx.fillStyle = fillColor;
+          ctx.strokeStyle = strokeColor;
+          ctx.lineWidth = 1.8;
+
+          ctx.beginPath();
+          for (let i = 0; i < belt.points.length; i++) {
+            const p = belt.points[i];
+            if (i === 0) ctx.moveTo(p.x, p.y);
+            else ctx.lineTo(p.x, p.y);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          // Organic canopy texture bumps along the boundary
+          ctx.fillStyle = strokeColor;
+          for (let i = 0; i < belt.points.length; i += 2) {
+            const p = belt.points[i];
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
+            ctx.fill();
+          }
+
+          // Central subtle ribbon label
+          const midIdx = Math.floor(belt.points.length / 2);
+          const midP = belt.points[midIdx];
+          if (midP) {
+            ctx.font = '8.5px monospace';
+            ctx.fillStyle = 'rgba(165, 214, 167, 0.7)';
+            ctx.textAlign = 'center';
+            ctx.fillText(labelText, midP.x, midP.y);
+          }
+        }
+        ctx.restore();
+      }
+
+      // Legacy Jungles (if present)
       if (island.jungles && island.jungles.length > 0) {
         ctx.save();
         for (const j of island.jungles) {
@@ -429,7 +636,6 @@ export class VectorRenderer {
           ctx.arc(j.x, j.y, j.radius, 0, Math.PI * 2);
           ctx.fill();
 
-          // Organic canopy lumps
           const canopyCount = Math.min(8, Math.max(4, Math.floor(j.radius / 18)));
           ctx.fillStyle = 'rgba(46, 125, 50, 0.45)';
           for (let c = 0; c < canopyCount; c++) {
@@ -551,26 +757,73 @@ export class VectorRenderer {
       ctx.textAlign = 'center';
       ctx.fillText(isPlayer ? '✈️ [友軍航空基地 AFB]' : '✈️ [敵軍航空基地 AFB]', 0, -18);
     } else if (inst.type === 'coastal_gun') {
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(0, 0, 12, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillStyle = isPlayer ? 'rgba(21, 101, 192, 0.65)' : 'rgba(78, 52, 46, 0.75)';
-      ctx.fill();
+      const is240mm = inst.name.includes('240mm') || inst.id.includes('240');
+      if (is240mm) {
+        // M1 240mm "Black Dragon" 重型八角混凝土砲座固定重砲
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+          const a = (i * Math.PI) / 4 + Math.PI / 8;
+          const x = Math.cos(a) * 16;
+          const y = Math.sin(a) * 16;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = isPlayer ? 'rgba(13, 71, 161, 0.78)' : 'rgba(78, 52, 46, 0.8)';
+        ctx.fill();
+        ctx.stroke();
 
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = isPlayer ? '#80DEEA' : '#FF8A80';
-      ctx.beginPath();
-      ctx.moveTo(4, -3);
-      ctx.lineTo(24, -3);
-      ctx.moveTo(4, 3);
-      ctx.lineTo(24, 3);
-      ctx.stroke();
+        // Gun carriage & dual hydraulic recuperator cylinders
+        ctx.fillStyle = isPlayer ? '#546E7A' : '#5D4037';
+        ctx.fillRect(-10, -7, 16, 14);
+        ctx.strokeRect(-10, -7, 16, 14);
 
-      ctx.fillStyle = labelColor;
-      ctx.font = 'bold 8.5px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText(isPlayer ? '[NATO 友軍岸防砲連] 155mm' : '[NATO 敵軍岸防重砲] 140mm', 0, -20);
+        // Long heavy 240mm barrel + recoil cylinders
+        ctx.lineWidth = 4.2;
+        ctx.strokeStyle = isPlayer ? '#80DEEA' : '#FF8A80';
+        ctx.beginPath();
+        ctx.moveTo(2, 0);
+        ctx.lineTo(34, 0);
+        ctx.stroke();
+
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = isPlayer ? '#B2EBF2' : '#FFCDD2';
+        ctx.beginPath();
+        ctx.moveTo(2, -4.5);
+        ctx.lineTo(15, -4.5);
+        ctx.moveTo(2, 4.5);
+        ctx.lineTo(15, 4.5);
+        ctx.stroke();
+
+        ctx.fillStyle = labelColor;
+        ctx.font = 'bold 8.5px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(isPlayer ? '[友軍重砲] M1 240mm 黑龍' : '[敵軍要塞重砲] 240mm', 0, -24);
+      } else {
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, 12, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = isPlayer ? 'rgba(21, 101, 192, 0.65)' : 'rgba(78, 52, 46, 0.75)';
+        ctx.fill();
+
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = isPlayer ? '#80DEEA' : '#FF8A80';
+        ctx.beginPath();
+        ctx.moveTo(4, -3);
+        ctx.lineTo(24, -3);
+        ctx.moveTo(4, 3);
+        ctx.lineTo(24, 3);
+        ctx.stroke();
+
+        const caliberMatch = inst.name.match(/\d{3}mm/);
+        const calText = caliberMatch ? caliberMatch[0] : (isPlayer ? '155mm' : '140mm');
+        ctx.fillStyle = labelColor;
+        ctx.font = 'bold 8.5px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(isPlayer ? `[友軍岸防砲連] ${calText}` : `[敵軍岸防重砲] ${calText}`, 0, -20);
+      }
     } else if (inst.type === 'radar_station') {
       ctx.lineWidth = 2;
       ctx.strokeRect(-10, -10, 20, 20);
@@ -1392,8 +1645,8 @@ export class VectorRenderer {
       ctx.font = 'bold 8.5px monospace';
       ctx.textAlign = 'center';
       ctx.fillText(isPlayer ? '🛡️ [NATO 友軍加固暗堡] 重機槍/無後座力砲' : '🛡️ [敵軍加固防禦暗堡] 重機槍/穿甲砲', 0, -24);
-    } else if (inst.type === 'sam_hawk') {
-      // ════ 美軍陸戰隊 MIM-23 鷹式防空飛彈排 (MIM-23 Hawk Mobile SAM Battery) ════
+    } else if (inst.type === 'sam_hawk' || inst.type === 'sam_patriot') {
+      // ════ 美軍陸戰隊 MIM-23 鷹式 / MIM-104 愛國者防空飛彈營 ════
       // 1. NATO APP-6 防空飛彈長方框標記
       ctx.fillStyle = 'rgba(21, 101, 192, 0.65)';
       ctx.strokeStyle = '#42A5F5';
@@ -1424,10 +1677,10 @@ export class VectorRenderer {
       ctx.fill();
       ctx.stroke();
 
-      // 3. 三聯裝鷹式飛彈導軌與 3 枚白色羽翼飛彈
+      // 3. 三聯裝鷹式飛彈導軌與 3 枚白色羽翼飛彈 (或愛國者四聯裝箱式發射架)
       const hawkRot = this.time * 0.4;
-      for (let m = 0; m < 3; m++) {
-        const mAngle = hawkRot + (m * Math.PI * 2) / 3;
+      for (let m = 0; m < (inst.type === 'sam_patriot' ? 4 : 3); m++) {
+        const mAngle = hawkRot + (m * Math.PI * 2) / (inst.type === 'sam_patriot' ? 4 : 3);
         const mx = Math.cos(mAngle) * 8;
         const my = 6 + Math.sin(mAngle) * 8;
 
@@ -1438,7 +1691,7 @@ export class VectorRenderer {
         ctx.lineTo(mx + Math.cos(mAngle) * 14, my + Math.sin(mAngle) * 14);
         ctx.stroke();
 
-        // 鷹式標誌性梯形大翼
+        // 標誌性梯形翼
         ctx.strokeStyle = '#80DEEA';
         ctx.lineWidth = 1.4;
         ctx.beginPath();
@@ -1453,11 +1706,11 @@ export class VectorRenderer {
       ctx.fillStyle = '#80DEEA';
       ctx.font = 'bold 8.5px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('🚀 [NATO 友軍霍克防空飛彈 SAM] MIM-23 Hawk (自動攔截)', 0, -36);
-    } else if (inst.type === 'sa2_sam_site') {
-      // ════ 敵軍 S-75 德維納 / SA-2 導針防空飛彈營 (S-75 Dvina SA-2 Guideline Site) ════
+      ctx.fillText(inst.type === 'sam_patriot' ? '🚀 [NATO 愛國者防空飛彈營] MIM-104 Patriot (相列雷達多通道攔截)' : '🚀 [NATO 友軍霍克防空飛彈 SAM] MIM-23 Hawk (自動攔截)', 0, -36);
+    } else if (inst.type === 'sa2_sam_site' || inst.type === 'sa3_sam_site' || inst.type === 's300_sam_site') {
+      // ════ 敵軍 S-75 德維納 SA-2 / S-125 涅瓦河 SA-3 / S-300PMU SA-10 區域防空飛彈營 ════
       // 1. 環形防護土堤碉堡
-      ctx.strokeStyle = '#FF5252';
+      ctx.strokeStyle = inst.type === 'sa3_sam_site' ? '#FF7043' : '#FF5252';
       ctx.fillStyle = 'rgba(62, 39, 35, 0.75)';
       ctx.lineWidth = 2.2;
       ctx.beginPath();
@@ -1465,43 +1718,157 @@ export class VectorRenderer {
       ctx.fill();
       ctx.stroke();
 
-      // 2. 六邊形發射架滑軌
-      ctx.strokeStyle = '#B0BEC5';
-      ctx.lineWidth = 2.0;
-      ctx.beginPath();
-      ctx.moveTo(-10, 4);
-      ctx.lineTo(14, 4);
-      ctx.stroke();
+      if (inst.type === 'sa3_sam_site') {
+        // 雙聯裝 SA-3 固定旋轉傾斜發射架
+        ctx.strokeStyle = '#B0BEC5';
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        ctx.moveTo(-11, 0);
+        ctx.lineTo(13, 0);
+        ctx.moveTo(-11, 8);
+        ctx.lineTo(13, 8);
+        ctx.stroke();
 
-      // 3. 巨大的 SA-2 兩級防空飛彈 (銀白彈體 + 紅色助推段)
-      ctx.strokeStyle = '#FFFFFF';
-      ctx.lineWidth = 2.8;
-      ctx.beginPath();
-      ctx.moveTo(-6, 4);
-      ctx.lineTo(16, 4);
-      ctx.stroke();
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(-6, 0);
+        ctx.lineTo(15, 0);
+        ctx.moveTo(-6, 8);
+        ctx.lineTo(15, 8);
+        ctx.stroke();
 
-      // 尾部固體助推火箭
-      ctx.strokeStyle = '#FF3D00';
-      ctx.lineWidth = 3.6;
-      ctx.beginPath();
-      ctx.moveTo(-10, 4);
-      ctx.lineTo(-4, 4);
-      ctx.stroke();
+        ctx.strokeStyle = '#FF5722';
+        ctx.lineWidth = 3.2;
+        ctx.beginPath();
+        ctx.moveTo(-11, 0);
+        ctx.lineTo(-5, 0);
+        ctx.moveTo(-11, 8);
+        ctx.lineTo(-5, 8);
+        ctx.stroke();
+      } else {
+        // 2. 六邊形發射架滑軌
+        ctx.strokeStyle = '#B0BEC5';
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        ctx.moveTo(-10, 4);
+        ctx.lineTo(14, 4);
+        ctx.stroke();
 
-      // 十字大型三角翼
-      ctx.strokeStyle = '#90A4AE';
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.moveTo(4, -2);
-      ctx.lineTo(4, 10);
-      ctx.stroke();
+        // 3. 防空飛彈 (銀白彈體 + 紅色助推段)
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 2.8;
+        ctx.beginPath();
+        ctx.moveTo(-6, 4);
+        ctx.lineTo(16, 4);
+        ctx.stroke();
+
+        // 尾部固體助推火箭
+        ctx.strokeStyle = '#FF3D00';
+        ctx.lineWidth = 3.6;
+        ctx.beginPath();
+        ctx.moveTo(-10, 4);
+        ctx.lineTo(-4, 4);
+        ctx.stroke();
+
+        // 十字大型三角翼
+        ctx.strokeStyle = '#90A4AE';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(4, -2);
+        ctx.lineTo(4, 10);
+        ctx.stroke();
+      }
 
       // 標籤
-      ctx.fillStyle = '#FF5252';
+      ctx.fillStyle = inst.type === 'sa3_sam_site' ? '#FFAB91' : '#FF5252';
       ctx.font = 'bold 8.5px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText('🚀 [敵軍薩姆-2 防空飛彈營] SA-2 Guideline', 0, -22);
+      ctx.fillText(
+        inst.type === 's300_sam_site'
+          ? '🚀 [S-300PMU 長程區域防空營] SA-10 Grumble (垂直發射)'
+          : inst.type === 'sa3_sam_site'
+          ? '🚀 [敵軍薩姆-3 飛彈營] S-125 Neva (SA-3 Goa 雙聯低中空攔截)'
+          : '🚀 [敵軍薩姆-2 防空飛彈營] SA-2 Guideline',
+        0,
+        -22
+      );
+    } else if (inst.type === 'coastal_harpoon') {
+      // ════ 友軍岸置魚叉反艦飛彈連 (Coastal Harpoon Battery) ════
+      ctx.fillStyle = '#1565C0';
+      ctx.strokeStyle = '#42A5F5';
+      ctx.lineWidth = 2.0;
+      ctx.strokeRect(-16, -10, 32, 20);
+      ctx.fillRect(-16, -10, 32, 20);
+      ctx.strokeStyle = '#ECEFF1';
+      ctx.lineWidth = 2;
+      for (let i = -10; i <= 10; i += 6) {
+        ctx.beginPath();
+        ctx.moveTo(i, -8);
+        ctx.lineTo(i + 4, 8);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#80DEEA';
+      ctx.font = 'bold 8.5px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('🚀 [NATO 岸置魚叉反艦飛彈連] RGM-84 Harpoon (掠海突防 4500m)', 0, -24);
+    } else if (inst.type === 'glcm_site') {
+      // ════ 友軍陸基戰斧巡弋飛彈連 (GLCM Site) ════
+      ctx.fillStyle = '#1E3A8A';
+      ctx.strokeStyle = '#60A5FA';
+      ctx.lineWidth = 2.0;
+      ctx.strokeRect(-18, -12, 36, 24);
+      ctx.fillRect(-18, -12, 36, 24);
+      ctx.fillStyle = '#374151';
+      ctx.fillRect(-12, -8, 24, 16);
+      ctx.fillStyle = '#93C5FD';
+      ctx.font = 'bold 8.5px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('🎯 [NATO 陸基戰斧巡弋飛彈連] BGM-109G GLCM (TERCOM 6000m)', 0, -24);
+    } else if (inst.type === 'coastal_rubezh') {
+      // ════ 敵軍 4K51 邊界岸置反艦飛彈連 (Coastal Rubezh) ════
+      ctx.fillStyle = '#7F1D1D';
+      ctx.strokeStyle = '#EF4444';
+      ctx.lineWidth = 2.0;
+      ctx.strokeRect(-18, -12, 36, 24);
+      ctx.fillRect(-18, -12, 36, 24);
+      ctx.fillStyle = '#1F2937';
+      ctx.fillRect(-14, -8, 28, 16);
+      ctx.fillStyle = '#FCA5A5';
+      ctx.font = 'bold 8.5px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('🚀 [華約 4K51 邊界岸防飛彈連] Rubezh (超重型反艦 4800m)', 0, -24);
+    } else if (inst.type === 'scud_site') {
+      // ════ 華約 9K72 飛毛腿-B 戰術彈道飛彈發射營 (Scud-B Site) ════
+      ctx.fillStyle = '#450A0A';
+      ctx.strokeStyle = '#DC2626';
+      ctx.lineWidth = 2.2;
+      ctx.strokeRect(-20, -14, 40, 28);
+      ctx.fillRect(-20, -14, 40, 28);
+      // MAZ-543 重型 8x8 底盤輪胎
+      ctx.fillStyle = '#111827';
+      for (let w = -16; w <= 16; w += 10) {
+        ctx.fillRect(w - 3, -17, 6, 4);
+        ctx.fillRect(w - 3, 13, 6, 4);
+      }
+      // 豎起之 9M21 重型高爆彈道飛彈
+      ctx.strokeStyle = '#F87171';
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.moveTo(-10, 0);
+      ctx.lineTo(12, 0);
+      ctx.stroke();
+      ctx.strokeStyle = '#FEF2F2';
+      ctx.lineWidth = 2.0;
+      ctx.beginPath();
+      ctx.moveTo(8, -3);
+      ctx.lineTo(14, 0);
+      ctx.lineTo(8, 3);
+      ctx.stroke();
+      ctx.fillStyle = '#F87171';
+      ctx.font = 'bold 8.5px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('🚀 [華約 9K72 飛毛腿-B 戰術飛彈營] Scud-B SSM (6500m)', 0, -24);
     } else if (inst.type === 'fan_song_radar') {
       // ════ 敵軍扇歌射控火控雷達 (Fan Song Fire Control Radar) ════
       ctx.fillStyle = '#263238';
@@ -1730,7 +2097,16 @@ export class VectorRenderer {
     ctx.restore();
   }
 
-  // Draw Ships with RTS Selection Indicators
+  private isSubmarineShip(ship: Ship): boolean {
+    return (
+      ship.type === 'submarine' ||
+      ship.type === 'foxtrot' ||
+      ship.type === 'ssn_la' ||
+      ship.type === 'ssgn_oscar'
+    );
+  }
+
+  // Draw Ships with RTS Selection Indicators & Submarine Fog of War
   public drawShips(ships: Ship[], camera: Camera, selectedUnitIds: string[]) {
     const ctx = this.ctx;
     ctx.save();
@@ -1739,30 +2115,87 @@ export class VectorRenderer {
     ctx.translate(-camera.x, -camera.y);
 
     for (const ship of ships) {
+      const isSub = this.isSubmarineShip(ship);
+      if (ship.side === 'enemy' && isSub && !ship.isSunk && !ship.isSpotted) {
+        continue; // Undetected enemy submarine stays hidden under Fog of War
+      }
+
       this.drawWake(ship);
+
+      // Submarine Sonar Contact / Stealth Bubble Ring
+      if (isSub && !ship.isSunk) {
+        const pulse = (Math.sin(this.time * 5.2) + 1) * 0.5;
+        if (ship.side === 'enemy' && ship.isSpotted) {
+          ctx.strokeStyle = `rgba(255, 171, 64, ${0.45 + pulse * 0.4})`;
+          ctx.lineWidth = 1.6;
+          ctx.setLineDash([4, 3]);
+          ctx.beginPath();
+          ctx.arc(ship.pos.x, ship.pos.y, ship.length * 0.52 + pulse * 8, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        } else if (ship.side !== 'enemy') {
+          if (ship.isSpottedByEnemy) {
+            ctx.strokeStyle = `rgba(255, 82, 82, ${0.5 + pulse * 0.45})`;
+            ctx.lineWidth = 1.6;
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath();
+            ctx.arc(ship.pos.x, ship.pos.y, ship.length * 0.52 + pulse * 8, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          } else {
+            ctx.strokeStyle = 'rgba(77, 208, 225, 0.25)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([3, 4]);
+            ctx.beginPath();
+            ctx.arc(ship.pos.x, ship.pos.y, ship.length * 0.48, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+        }
+      }
 
       const isSelected = selectedUnitIds.includes(ship.id);
 
-      // RTS Waypoint vector line
-      if (isSelected && ship.order.targetPos && ship.order.type === 'move') {
-        ctx.strokeStyle = 'rgba(0, 230, 118, 0.6)';
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([6, 6]);
-        ctx.beginPath();
-        ctx.moveTo(ship.pos.x, ship.pos.y);
-        ctx.lineTo(ship.order.targetPos.x, ship.order.targetPos.y);
-        ctx.stroke();
+      // RTS A* Sea-Lane Waypoint Path Line
+      if (isSelected && ship.order.targetPos && (ship.order.type === 'move' || ship.order.type === 'attack')) {
+        const wps = ship.order.waypoints;
+        const startIdx = ship.order.activeWaypointIndex ?? 0;
+        const hasWaypoints = Array.isArray(wps) && wps.length > startIdx;
+        if (ship.order.type === 'move' || hasWaypoints) {
+          ctx.strokeStyle = ship.order.type === 'attack' ? 'rgba(255, 138, 128, 0.65)' : 'rgba(0, 230, 118, 0.65)';
+          ctx.lineWidth = 1.6;
+          ctx.setLineDash([6, 6]);
+          ctx.beginPath();
+          ctx.moveTo(ship.pos.x, ship.pos.y);
+          if (hasWaypoints) {
+            for (let wi = startIdx; wi < wps.length; wi++) {
+              ctx.lineTo(wps[wi].x, wps[wi].y);
+            }
+          } else {
+            ctx.lineTo(ship.order.targetPos.x, ship.order.targetPos.y);
+          }
+          ctx.stroke();
 
-        ctx.setLineDash([]);
-        ctx.fillStyle = '#00E676';
-        ctx.beginPath();
-        ctx.arc(ship.order.targetPos.x, ship.order.targetPos.y, 4, 0, Math.PI * 2);
-        ctx.fill();
+          ctx.setLineDash([]);
+          if (hasWaypoints) {
+            ctx.fillStyle = 'rgba(0, 230, 118, 0.6)';
+            for (let wi = startIdx; wi < wps.length - 1; wi++) {
+              ctx.beginPath();
+              ctx.arc(wps[wi].x, wps[wi].y, 2.5, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+          ctx.fillStyle = ship.order.type === 'attack' ? '#FF5252' : '#00E676';
+          ctx.beginPath();
+          ctx.arc(ship.order.targetPos.x, ship.order.targetPos.y, 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
       const isPlayer = ship.side === 'player';
-      const hullColor = isPlayer ? '#E0F7FA' : '#FFCDD2';
-      const detailColor = isPlayer ? '#80DEEA' : '#EF9A9A';
+      const isAllied = ship.side === 'allied';
+      const hullColor = isPlayer ? '#E0F7FA' : isAllied ? '#B9F6CA' : '#FFCDD2';
+      const detailColor = isPlayer ? '#80DEEA' : isAllied ? '#00E676' : '#EF9A9A';
 
       if (ship.isSunk && ship.isBrokenInTwo) {
         // ══════════════════════════════════════════════════════════
@@ -1980,27 +2413,82 @@ export class VectorRenderer {
         ctx.fillText('30s', tick30X + 8, tick30Y + 3);
         ctx.fillText('60s', tick60X + 8, tick60Y + 3);
 
-        // 2. NATO APP-6 Naval Tactical Frame (Blue Rectangle / Red Diamond)
+        // 2. NATO APP-6 Naval Tactical Frame (Blue / Green Rectangle / Red Diamond)
         const frameW = 32;
         const frameH = 18;
         const frameY = ship.pos.y - ship.width - 32;
         const isPl = ship.side === 'player';
-        ctx.strokeStyle = isPl ? '#42A5F5' : '#FF5252';
-        ctx.fillStyle = isPl ? 'rgba(13, 71, 161, 0.75)' : 'rgba(183, 28, 28, 0.75)';
+        const isAl = ship.side === 'allied';
+        ctx.strokeStyle = isPl ? '#42A5F5' : isAl ? '#00E676' : '#FF5252';
+        ctx.fillStyle = isPl ? 'rgba(13, 71, 161, 0.75)' : isAl ? 'rgba(27, 94, 32, 0.75)' : 'rgba(183, 28, 28, 0.75)';
         ctx.lineWidth = 1.6;
 
-        ctx.strokeRect(ship.pos.x - frameW / 2, frameY, frameW, frameH);
-        ctx.fillRect(ship.pos.x - frameW / 2, frameY, frameW, frameH);
+        if (!isPl && !isAl) {
+          // NATO APP-6 敵軍菱形邊框 (Hostile Diamond Frame)
+          ctx.beginPath();
+          ctx.moveTo(ship.pos.x, frameY);
+          ctx.lineTo(ship.pos.x + frameW * 0.55, frameY + frameH / 2);
+          ctx.lineTo(ship.pos.x, frameY + frameH);
+          ctx.lineTo(ship.pos.x - frameW * 0.55, frameY + frameH / 2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          // NATO APP-6 友軍長方形邊框 (Friendly Rectangle Frame - Blue for US, Green for Allied)
+          ctx.fillRect(ship.pos.x - frameW / 2, frameY, frameW, frameH);
+          ctx.strokeRect(ship.pos.x - frameW / 2, frameY, frameW, frameH);
+        }
 
-        // Naval Surface Symbol: Water Line with Anchor/Mast
+        // NATO APP-6 艦艇兵種專用圖例符號
         ctx.strokeStyle = '#FFFFFF';
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.moveTo(ship.pos.x - 9, frameY + frameH * 0.7);
-        ctx.lineTo(ship.pos.x + 9, frameY + frameH * 0.7);
-        ctx.moveTo(ship.pos.x, frameY + frameH * 0.25);
-        ctx.lineTo(ship.pos.x, frameY + frameH * 0.7);
-        ctx.stroke();
+        ctx.lineWidth = 1.3;
+        const cy = frameY + frameH / 2;
+        const cx = ship.pos.x;
+
+        if (ship.type === 'carrier' || ship.type === 'cve' || ship.type === 'cv63' || ship.type === 'cvn' || ship.type === 'cvhg_kiev' || ship.type === 'lph') {
+          // 航空母艦 (Aircraft Carrier): 水平水線 + 上方雙翼飛翼折角 (Aviation Chevron)
+          ctx.beginPath();
+          ctx.moveTo(cx - 9, cy + 3);
+          ctx.lineTo(cx + 9, cy + 3);
+          ctx.moveTo(cx - 7, cy - 2);
+          ctx.lineTo(cx, cy - 6);
+          ctx.lineTo(cx + 7, cy - 2);
+          ctx.stroke();
+        } else if (ship.type === 'submarine' || ship.type === 'foxtrot' || ship.type === 'ssn_la' || ship.type === 'ssgn_oscar') {
+          // 潛艦 (Submarine): 水線 + 下潛水下圓弧 (Submerged Arc)
+          ctx.beginPath();
+          ctx.moveTo(cx - 8, cy - 1);
+          ctx.lineTo(cx + 8, cy - 1);
+          ctx.arc(cx, cy - 1, 5.5, 0, Math.PI);
+          ctx.stroke();
+        } else if (ship.type === 'lcvp' || ship.type === 'lst' || ship.type === 'lsm_r' || ship.type === 'lcm8' || ship.type === 'lcac' || ship.type === 'lpd') {
+          // 兩棲登陸艇/登陸艦 (Amphibious Craft): 水線 + 登陸跳板導引箭頭 (Landing Ramp Arrow)
+          ctx.beginPath();
+          ctx.moveTo(cx - 8, cy + 3);
+          ctx.lineTo(cx + 8, cy + 3);
+          ctx.moveTo(cx - 4, cy + 3);
+          ctx.lineTo(cx, cy - 4);
+          ctx.lineTo(cx + 4, cy - 4);
+          ctx.stroke();
+        } else if (ship.type === 'battleship' || ship.type === 'kongo' || ship.type === 'bb_iowa_mod') {
+          // 主力戰艦 (Battleship): 重型水面作戰艦 (水線 + 雙重戰鬥桅檣主砲)
+          ctx.beginPath();
+          ctx.moveTo(cx - 9, cy + 3);
+          ctx.lineTo(cx + 9, cy + 3);
+          ctx.moveTo(cx, cy - 5);
+          ctx.lineTo(cx, cy + 3);
+          ctx.moveTo(cx - 4, cy - 1);
+          ctx.lineTo(cx + 4, cy - 1);
+          ctx.stroke();
+        } else {
+          // 水面作戰艦巡洋艦/驅逐艦/巡防艦 (Cruiser / Destroyer / Frigate): 水線 + 射控主桅
+          ctx.beginPath();
+          ctx.moveTo(cx - 8, cy + 3);
+          ctx.lineTo(cx + 8, cy + 3);
+          ctx.moveTo(cx, cy - 4);
+          ctx.lineTo(cx, cy + 3);
+          ctx.stroke();
+        }
 
         // Hull code & Speed tag (e.g. "BB · 28KT")
         ctx.fillStyle = '#E0F7FA';
@@ -2034,7 +2522,7 @@ export class VectorRenderer {
       }
 
       if (!ship.isSunk) {
-        this.drawShipStatus(ship);
+        this.drawShipStatus(ship, camera.zoom, isSelected);
       }
     }
 
@@ -2055,35 +2543,48 @@ export class VectorRenderer {
     ctx.restore();
   }
 
-  // Ship Wake Lines
+  // Ship Wake Lines (Graded Kelvin wake ribbon + bow V-spray)
   private drawWake(ship: Ship) {
     if (ship.speed < 0.5 || ship.wakePoints.length < 2) return;
     const ctx = this.ctx;
-    ctx.strokeStyle = ship.side === 'player' ? 'rgba(128, 222, 234, 0.28)' : 'rgba(239, 154, 154, 0.22)';
-    ctx.lineWidth = 1.5;
+    const pts = ship.wakePoints;
+    const baseRgb = ship.side === 'player' ? '128, 222, 234' : ship.side === 'allied' ? '105, 240, 174' : '239, 154, 154';
 
+    // Outer soft foam glow
+    ctx.strokeStyle = `rgba(${baseRgb}, 0.08)`;
+    ctx.lineWidth = 4;
     ctx.beginPath();
-    for (let i = 0; i < ship.wakePoints.length; i++) {
-      const p = ship.wakePoints[i];
-      if (i === 0) ctx.moveTo(p.x, p.y);
-      else ctx.lineTo(p.x, p.y);
+    for (let i = 0; i < pts.length; i++) {
+      if (i === 0) ctx.moveTo(pts[i].x, pts[i].y);
+      else ctx.lineTo(pts[i].x, pts[i].y);
     }
     ctx.stroke();
+
+    // Graded fading wake core from tail to stern
+    ctx.lineWidth = 1.6;
+    for (let i = 1; i < pts.length; i++) {
+      const t = i / (pts.length - 1);
+      ctx.strokeStyle = `rgba(${baseRgb}, ${(0.05 + t * 0.32).toFixed(2)})`;
+      ctx.beginPath();
+      ctx.moveTo(pts[i - 1].x, pts[i - 1].y);
+      ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.stroke();
+    }
 
     // Bow wave V-spray lines
     const cosH = Math.cos(ship.heading);
     const sinH = Math.sin(ship.heading);
     const bowX = ship.pos.x + cosH * (ship.length * 0.48);
     const bowY = ship.pos.y + sinH * (ship.length * 0.48);
-    const sprayLen = Math.min(20, ship.speed * 1.1);
+    const sprayLen = Math.min(22, ship.speed * 1.15);
 
-    ctx.strokeStyle = 'rgba(224, 247, 250, 0.4)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(224, 247, 250, 0.45)';
+    ctx.lineWidth = 1.1;
     ctx.beginPath();
     ctx.moveTo(bowX, bowY);
-    ctx.lineTo(bowX - cosH * sprayLen + sinH * (sprayLen * 0.6), bowY - sinH * sprayLen - cosH * (sprayLen * 0.6));
+    ctx.lineTo(bowX - cosH * sprayLen + sinH * (sprayLen * 0.58), bowY - sinH * sprayLen - cosH * (sprayLen * 0.58));
     ctx.moveTo(bowX, bowY);
-    ctx.lineTo(bowX - cosH * sprayLen - sinH * (sprayLen * 0.6), bowY - sinH * sprayLen + cosH * (sprayLen * 0.6));
+    ctx.lineTo(bowX - cosH * sprayLen - sinH * (sprayLen * 0.58), bowY - sinH * sprayLen + cosH * (sprayLen * 0.58));
     ctx.stroke();
   }
 
@@ -2208,48 +2709,107 @@ export class VectorRenderer {
     const ctx = this.ctx;
     const l = ship.length;
     const w = ship.width;
+    const isYamato = ship.name.includes('大和') || ship.name.includes('Yamato');
 
     ctx.fillStyle = '#081726';
     ctx.strokeStyle = hullColor;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.2;
 
-    // Armored Hull with Raked Bow and Torpedo Bulge
-    ctx.beginPath();
-    ctx.moveTo(l * 0.52, 0); // Clipper bow
-    ctx.lineTo(l * 0.38, -w * 0.45);
-    ctx.lineTo(-l * 0.36, -w * 0.48); // Armor belt bulge
-    ctx.lineTo(-l * 0.5, -w * 0.2);
-    ctx.lineTo(-l * 0.52, 0);
-    ctx.lineTo(-l * 0.5, w * 0.2);
-    ctx.lineTo(-l * 0.36, w * 0.48);
-    ctx.lineTo(l * 0.38, w * 0.45);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
+    if (isYamato) {
+      // ════ IJN Yamato (72,800 ton Super-Battleship) ════
+      // Massive flared clipper bow with bulbous bow outline and torpedo armor bulge
+      ctx.beginPath();
+      ctx.moveTo(l * 0.54, 0); // Bulbous bow
+      ctx.lineTo(l * 0.40, -w * 0.46);
+      ctx.lineTo(-l * 0.36, -w * 0.50); // Massive midship armor bulge (38.9m beam)
+      ctx.lineTo(-l * 0.50, -w * 0.24);
+      ctx.lineTo(-l * 0.52, 0);
+      ctx.lineTo(-l * 0.50, w * 0.24);
+      ctx.lineTo(-l * 0.36, w * 0.50);
+      ctx.lineTo(l * 0.40, w * 0.46);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
 
-    // Inner Deck Teak Line
-    ctx.strokeStyle = detailColor;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(-l * 0.38, -w * 0.32, l * 0.76, w * 0.64);
+      // Armored Citadel & Pagoda Command Tower
+      ctx.fillStyle = '#050E18';
+      ctx.strokeStyle = detailColor;
+      ctx.lineWidth = 1.6;
+      ctx.fillRect(-l * 0.16, -w * 0.30, l * 0.34, w * 0.60);
+      ctx.strokeRect(-l * 0.16, -w * 0.30, l * 0.34, w * 0.60);
 
-    // Armored Citadel Superstructure
-    ctx.fillStyle = '#050E18';
-    ctx.strokeRect(-l * 0.16, -w * 0.28, l * 0.32, w * 0.56);
-    ctx.fillRect(-l * 0.16, -w * 0.28, l * 0.32, w * 0.56);
+      // 15-meter Optical Rangefinder atop bridge
+      ctx.strokeStyle = '#FFE082';
+      ctx.beginPath();
+      ctx.moveTo(l * 0.05, -w * 0.25);
+      ctx.lineTo(l * 0.05, w * 0.25);
+      ctx.stroke();
 
-    // Conning Tower & Bridge levels
-    ctx.strokeRect(-l * 0.05, -w * 0.2, l * 0.14, w * 0.4);
+      // Single Massive Curved Funnel with Black Raked Cap
+      ctx.fillStyle = '#212121';
+      ctx.beginPath();
+      ctx.ellipse(-l * 0.04, 0, 7, 10, -0.15, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
 
-    // Twin Funnels / Smokestacks with grates
-    ctx.strokeRect(-l * 0.12, -w * 0.12, l * 0.06, w * 0.24);
-    ctx.strokeRect(-l * 0.02, -w * 0.12, l * 0.06, w * 0.24);
+      // Two Triple 15.5cm Secondary Turrets (one fwd of bridge, one aft of mainmast)
+      ctx.fillStyle = '#37474F';
+      ctx.strokeStyle = '#80DEEA';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(l * 0.12, 0, 4.5, 0, Math.PI * 2);
+      ctx.arc(-l * 0.18, 0, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
 
-    // Stern Aircraft Catapult
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(-l * 0.36, 0);
-    ctx.lineTo(-l * 0.48, 0);
-    ctx.stroke();
+      // Stern Dual Catapults and Aircraft Handling Turntable Deck
+      ctx.strokeStyle = '#FFE082';
+      ctx.beginPath();
+      ctx.moveTo(-l * 0.38, -w * 0.18);
+      ctx.lineTo(-l * 0.49, -w * 0.22);
+      ctx.moveTo(-l * 0.38, w * 0.18);
+      ctx.lineTo(-l * 0.49, w * 0.22);
+      ctx.stroke();
+    } else {
+      // ════ US Battleship (Iowa / Colorado) ════
+      // Armored Hull with Raked Bow and Torpedo Bulge
+      ctx.beginPath();
+      ctx.moveTo(l * 0.52, 0); // Clipper bow
+      ctx.lineTo(l * 0.38, -w * 0.45);
+      ctx.lineTo(-l * 0.36, -w * 0.48); // Armor belt bulge
+      ctx.lineTo(-l * 0.5, -w * 0.2);
+      ctx.lineTo(-l * 0.52, 0);
+      ctx.lineTo(-l * 0.5, w * 0.2);
+      ctx.lineTo(-l * 0.36, w * 0.48);
+      ctx.lineTo(l * 0.38, w * 0.45);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Inner Deck Teak Line
+      ctx.strokeStyle = detailColor;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-l * 0.38, -w * 0.32, l * 0.76, w * 0.64);
+
+      // Armored Citadel Superstructure
+      ctx.fillStyle = '#050E18';
+      ctx.strokeRect(-l * 0.16, -w * 0.28, l * 0.32, w * 0.56);
+      ctx.fillRect(-l * 0.16, -w * 0.28, l * 0.32, w * 0.56);
+
+      // Conning Tower & Bridge levels
+      ctx.strokeRect(-l * 0.05, -w * 0.2, l * 0.14, w * 0.4);
+
+      // Twin Funnels / Smokestacks with grates
+      ctx.strokeRect(-l * 0.12, -w * 0.12, l * 0.06, w * 0.24);
+      ctx.strokeRect(-l * 0.02, -w * 0.12, l * 0.06, w * 0.24);
+
+      // Stern Aircraft Catapult
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-l * 0.36, 0);
+      ctx.lineTo(-l * 0.48, 0);
+      ctx.stroke();
+    }
 
     this.drawShipTurrets(ship, hullColor);
   }
@@ -2366,50 +2926,110 @@ export class VectorRenderer {
     this.drawShipTurrets(ship, hullColor);
   }
 
-  // Submarine Line Art (I-19 / I-400)
+  // Submarine Line Art (IJN 伊號 / Kriegsmarine Monsun U-Boat / Soviet Whiskey-Zulu)
   private drawSubmarine(ship: Ship, hullColor: string, detailColor: string) {
     const ctx = this.ctx;
     const l = ship.length;
     const w = ship.width;
+    const variant = ship.subVariant;
 
     if (ship.isSubmerged) {
       ctx.setLineDash([4, 4]);
-      ctx.strokeStyle = 'rgba(128, 222, 234, 0.4)';
+      ctx.strokeStyle =
+        ship.side === 'enemy' ? 'rgba(255, 171, 64, 0.72)' : 'rgba(128, 222, 234, 0.55)';
     } else {
       ctx.strokeStyle = hullColor;
     }
 
-    ctx.fillStyle = '#06101A';
+    ctx.fillStyle = variant === 'uboat' ? '#0C141D' : variant === 'whiskey' || variant === 'zulu' ? '#120C12' : '#06101A';
     ctx.lineWidth = 2;
 
-    // Streamlined fish hull with bow & stern dive planes
-    ctx.beginPath();
-    ctx.ellipse(0, 0, l * 0.5, w * 0.42, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    // Free-flooding casing limber hole slits
-    ctx.strokeStyle = detailColor;
-    ctx.lineWidth = 1;
-    for (let s = -3; s <= 3; s++) {
-      const sx = s * (l * 0.08);
+    if (variant === 'uboat') {
+      // Kriegsmarine Type VII/IX U-Boat: narrow pointed bow, external saddle-tank bulge amidships
       ctx.beginPath();
-      ctx.moveTo(sx, -w * 0.22);
-      ctx.lineTo(sx + 4, -w * 0.22);
-      ctx.moveTo(sx, w * 0.22);
-      ctx.lineTo(sx + 4, w * 0.22);
+      ctx.moveTo(l * 0.52, 0);
+      ctx.lineTo(l * 0.25, -w * 0.34);
+      ctx.lineTo(l * 0.14, -w * 0.48); // Saddle tanks
+      ctx.lineTo(-l * 0.16, -w * 0.48);
+      ctx.lineTo(-l * 0.26, -w * 0.32);
+      ctx.lineTo(-l * 0.50, 0);
+      ctx.lineTo(-l * 0.26, w * 0.32);
+      ctx.lineTo(-l * 0.16, w * 0.48);
+      ctx.lineTo(l * 0.14, w * 0.48);
+      ctx.lineTo(l * 0.25, w * 0.34);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Wintergarten dual-tier AA gun platform aft of conning tower
+      ctx.strokeStyle = detailColor;
+      ctx.lineWidth = 1.4;
+      ctx.strokeRect(-l * 0.04, -w * 0.22, l * 0.14, w * 0.44);
+      ctx.strokeRect(-l * 0.13, -w * 0.16, l * 0.09, w * 0.32);
+      // Bow net-cutter & forward deck gun
+      ctx.beginPath();
+      ctx.moveTo(l * 0.16, 0);
+      ctx.lineTo(l * 0.27, 0);
+      ctx.stroke();
+    } else if (variant === 'whiskey' || variant === 'zulu') {
+      // Soviet Project 613 Whiskey / 611 Zulu streamlined post-war casing without deck gun
+      ctx.beginPath();
+      ctx.moveTo(l * 0.50, 0);
+      ctx.bezierCurveTo(l * 0.38, -w * 0.42, l * 0.12, -w * 0.42, -l * 0.2, -w * 0.38);
+      ctx.lineTo(-l * 0.50, 0);
+      ctx.lineTo(-l * 0.2, w * 0.38);
+      ctx.bezierCurveTo(l * 0.12, w * 0.42, l * 0.38, w * 0.42, l * 0.50, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Stepped snorkel fairing sail + Soviet red star mark
+      ctx.strokeStyle = detailColor;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.roundRect(-l * 0.08, -w * 0.22, l * 0.18, w * 0.44, 2);
+      ctx.stroke();
+      ctx.fillStyle = '#D50000';
+      ctx.beginPath();
+      ctx.arc(0, 0, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      // IJN 伊號 Type B1/B3 Cruiser Submarine (forward watertight aircraft hangar + aft deck gun)
+      ctx.beginPath();
+      ctx.ellipse(0, 0, l * 0.5, w * 0.42, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Free-flooding casing limber hole slits
+      ctx.strokeStyle = detailColor;
+      ctx.lineWidth = 1;
+      for (let s = -3; s <= 3; s++) {
+        const sx = s * (l * 0.08);
+        ctx.beginPath();
+        ctx.moveTo(sx, -w * 0.22);
+        ctx.lineTo(sx + 4, -w * 0.22);
+        ctx.moveTo(sx, w * 0.22);
+        ctx.lineTo(sx + 4, w * 0.22);
+        ctx.stroke();
+      }
+
+      if (variant === 'ijn_sub') {
+        // Cylindrical aircraft hangar forward of sail
+        ctx.fillStyle = '#14202C';
+        ctx.fillRect(l * 0.08, -w * 0.16, l * 0.15, w * 0.32);
+        ctx.strokeRect(l * 0.08, -w * 0.16, l * 0.15, w * 0.32);
+      }
+
+      // Conning Tower with periscope & deck gun
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(-l * 0.08, -w * 0.22, l * 0.16, w * 0.44);
+
+      // Deck gun
+      ctx.beginPath();
+      ctx.moveTo(variant === 'ijn_sub' ? -l * 0.14 : l * 0.14, 0);
+      ctx.lineTo(variant === 'ijn_sub' ? -l * 0.24 : l * 0.24, 0);
       ctx.stroke();
     }
-
-    // Conning Tower with periscope & deck gun
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(-l * 0.08, -w * 0.22, l * 0.16, w * 0.44);
-
-    // Deck gun forward
-    ctx.beginPath();
-    ctx.moveTo(l * 0.14, 0);
-    ctx.lineTo(l * 0.24, 0);
-    ctx.stroke();
 
     ctx.setLineDash([]);
   }
@@ -2489,6 +3109,121 @@ export class VectorRenderer {
     const ctx = this.ctx;
     const l = ship.length;
     const w = ship.width;
+
+    const isNewport = ship.name.includes('Newport') || ship.name.includes('1179') || ship.era === 'era4' || ship.era === 'era5';
+
+    if (isNewport) {
+      // ════ Newport-Class Tank Landing Ship (LST-1179) ════
+      // 20-knot clipper bow with two giant fixed horn gantries extending over the bow for deploying the 112ft aluminum ramp
+      ctx.fillStyle = '#081726';
+      ctx.strokeStyle = hullColor;
+      ctx.lineWidth = 2;
+
+      ctx.beginPath();
+      ctx.moveTo(l * 0.44, -w * 0.28);
+      ctx.lineTo(l * 0.52, 0); // Sharp 20-knot clipper bow
+      ctx.lineTo(l * 0.44, w * 0.28);
+      ctx.lineTo(-l * 0.48, w * 0.38);
+      ctx.lineTo(-l * 0.5, w * 0.25);
+      ctx.lineTo(-l * 0.5, -w * 0.25); // Stern gate for launching AAVs/LVTPs
+      ctx.lineTo(-l * 0.48, -w * 0.38);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Twin Bow Horn Derrick Gantries (Iconic Newport-class feature extending over the bow)
+      ctx.strokeStyle = '#90CAF9';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      // Port gantry horn
+      ctx.moveTo(l * 0.32, -w * 0.22);
+      ctx.lineTo(l * 0.56, -w * 0.16);
+      ctx.lineTo(l * 0.58, -w * 0.12);
+      // Starboard gantry horn
+      ctx.moveTo(l * 0.32, w * 0.22);
+      ctx.lineTo(l * 0.56, w * 0.16);
+      ctx.lineTo(l * 0.58, w * 0.12);
+      ctx.stroke();
+
+      // Aluminum ramp stowed between horns
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(l * 0.36, -w * 0.1, l * 0.18, w * 0.2);
+      ctx.strokeStyle = '#B0BEC5';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(l * 0.36, -w * 0.1, l * 0.18, w * 0.2);
+
+      // Forward Twin 3"/50 Mk 33 Gun Turret
+      ctx.fillStyle = '#263238';
+      ctx.strokeStyle = '#80DEEA';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(l * 0.26, 0, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      // Twin barrels
+      ctx.beginPath();
+      ctx.moveTo(l * 0.26, -1.5);
+      ctx.lineTo(l * 0.34, -1.5);
+      ctx.moveTo(l * 0.26, 1.5);
+      ctx.lineTo(l * 0.34, 1.5);
+      ctx.stroke();
+
+      // Phalanx CIWS in Era 5
+      if (ship.era === 'era5') {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.strokeStyle = '#FFD54F';
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(l * 0.18, -w * 0.24, 4, 3);
+        ctx.strokeRect(l * 0.18, w * 0.24 - 3, 4, 3);
+      }
+
+      // Large Bridge Superstructure & Combined Exhaust Funnel-Mast (Mack)
+      ctx.fillStyle = '#102A43';
+      ctx.strokeStyle = detailColor;
+      ctx.lineWidth = 1.4;
+      ctx.fillRect(-l * 0.08, -w * 0.24, l * 0.22, w * 0.48);
+      ctx.strokeRect(-l * 0.08, -w * 0.24, l * 0.22, w * 0.48);
+
+      // Radar Mast
+      ctx.beginPath();
+      ctx.arc(l * 0.02, 0, 3, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Aft Flight Deck & Vehicle Parking Deck (CH-46/CH-53 Helo Spot & Tank Parking)
+      ctx.strokeStyle = '#78909C';
+      ctx.lineWidth = 1.2;
+      ctx.strokeRect(-l * 0.45, -w * 0.32, l * 0.34, w * 0.64);
+
+      // Helo Landing Spot "H"
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(-l * 0.32, 0, w * 0.22, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-l * 0.35, -w * 0.12);
+      ctx.lineTo(-l * 0.35, w * 0.12);
+      ctx.moveTo(-l * 0.29, -w * 0.12);
+      ctx.lineTo(-l * 0.29, w * 0.12);
+      ctx.moveTo(-l * 0.35, 0);
+      ctx.lineTo(-l * 0.29, 0);
+      ctx.stroke();
+
+      // Stowed M60 / M1 Abrams Tank on vehicle deck
+      ctx.fillStyle = '#33691E';
+      ctx.strokeStyle = '#AED581';
+      ctx.lineWidth = 1;
+      ctx.fillRect(-l * 0.18, -w * 0.18, l * 0.08, w * 0.36);
+      ctx.strokeRect(-l * 0.18, -w * 0.18, l * 0.08, w * 0.36);
+      ctx.beginPath();
+      ctx.arc(-l * 0.14, 0, 3, 0, Math.PI * 2);
+      ctx.moveTo(-l * 0.14, 0);
+      ctx.lineTo(-l * 0.06, 0);
+      ctx.stroke();
+
+      this.drawShipTurrets(ship, hullColor);
+      return;
+    }
 
     ctx.fillStyle = '#081726';
     ctx.strokeStyle = hullColor;
@@ -3610,23 +4345,62 @@ export class VectorRenderer {
     this.drawShipTurrets(ship, hullColor);
   }
 
-  // Soviet Project 641 Foxtrot Class Ocean Patrol Submarine Line Art (SS)
+  // Soviet Project 641 Foxtrot / Project 671RTM Victor III / Project 971 Akula Submarine Line Art
   private drawFoxtrotSS(ship: Ship, hullColor: string, detailColor: string) {
     const ctx = this.ctx;
     const l = ship.length;
     const w = ship.width;
+    const isNuclearSSN = ship.subVariant === 'victor3' || ship.subVariant === 'akula';
 
     if (ship.isSubmerged) {
       ctx.setLineDash([4, 4]);
-      ctx.strokeStyle = 'rgba(255, 82, 82, 0.45)';
+      ctx.strokeStyle = 'rgba(255, 138, 128, 0.72)';
     } else {
       ctx.strokeStyle = hullColor;
     }
 
-    ctx.fillStyle = '#120B10';
+    ctx.fillStyle = isNuclearSSN ? '#0E0912' : '#120B10';
     ctx.lineWidth = 1.8;
 
-    // Streamlined hull with sharp bow and bulbous sonar chin
+    if (isNuclearSSN) {
+      // Teardrop nuclear attack submarine hull (Victor III / Akula)
+      ctx.beginPath();
+      ctx.moveTo(l * 0.52, 0);
+      ctx.bezierCurveTo(l * 0.46, -w * 0.48, l * 0.20, -w * 0.48, -l * 0.10, -w * 0.42);
+      ctx.bezierCurveTo(-l * 0.32, -w * 0.34, -l * 0.46, -w * 0.16, -l * 0.52, 0);
+      ctx.bezierCurveTo(-l * 0.46, w * 0.16, -l * 0.32, w * 0.34, -l * 0.10, w * 0.42);
+      ctx.bezierCurveTo(l * 0.20, w * 0.48, l * 0.46, w * 0.48, l * 0.52, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Long streamlined sail with forward dive planes
+      ctx.fillStyle = '#1E1424';
+      ctx.strokeStyle = detailColor;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.roundRect(l * 0.04, -w * 0.22, l * 0.22, w * 0.44, 3);
+      ctx.fill();
+      ctx.stroke();
+
+      // Characteristic Soviet Victor III / Akula Towed-Array Sonar Pod atop stern fin
+      ctx.fillStyle = '#37474F';
+      ctx.strokeStyle = '#FFAB40';
+      ctx.beginPath();
+      ctx.ellipse(-l * 0.48, 0, 7, 2.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Red Star insignia
+      ctx.fillStyle = '#D50000';
+      ctx.beginPath();
+      ctx.arc(l * 0.14, 0, 2.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.setLineDash([]);
+      return;
+    }
+
+    // Streamlined Foxtrot hull with sharp bow and bulbous sonar chin
     ctx.beginPath();
     ctx.moveTo(l * 0.5, 0);
     ctx.lineTo(l * 0.36, -w * 0.38);
@@ -3692,14 +4466,1748 @@ export class VectorRenderer {
     ctx.setLineDash([]);
   }
 
+  // Ticonderoga CG (Aegis Cruiser with SPY-1 phased array deckhouses)
+  private drawTiconderogaCG(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#081726';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 2;
+
+    // Spruance-derived hull with knifelike bow and broad stern
+    ctx.beginPath();
+    ctx.moveTo(l * 0.5, 0);
+    ctx.lineTo(l * 0.35, -w * 0.44);
+    ctx.lineTo(-l * 0.45, -w * 0.44);
+    ctx.lineTo(-l * 0.5, 0);
+    ctx.lineTo(-l * 0.45, w * 0.44);
+    ctx.lineTo(l * 0.35, w * 0.44);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Prominent Blocky Aegis Deckhouse with Octagonal AN/SPY-1A Radar Plates
+    ctx.fillStyle = '#0E2A47';
+    ctx.strokeStyle = '#00E5FF';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(l * 0.08, -w * 0.34, l * 0.16, w * 0.68);
+    ctx.fillRect(l * 0.08, -w * 0.34, l * 0.16, w * 0.68);
+
+    // SPY-1 Phased Array Octagonal Face (Fwd Starboard & Port)
+    ctx.strokeStyle = '#80DEEA';
+    ctx.strokeRect(l * 0.18, -w * 0.34, 6, 8);
+    ctx.strokeRect(l * 0.18, w * 0.34 - 8, 6, 8);
+
+    // Mk 26 / Mk 41 VLS & Mk 45 5"/54 Lightweight Gun
+    ctx.fillStyle = '#FFD54F';
+    ctx.fillRect(l * 0.28, -w * 0.15, 10, w * 0.3);
+    ctx.fillRect(-l * 0.28, -w * 0.15, 10, w * 0.3);
+
+    // Mk 15 Phalanx CIWS (Port & Starboard)
+    ctx.fillStyle = '#ECEFF1';
+    ctx.fillRect(l * 0.02, -w * 0.42, 4, 4);
+    ctx.fillRect(l * 0.02, w * 0.42 - 4, 4, 4);
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // Iowa Modernized (1980s refit: 3x 16" turrets, 4x Phalanx CIWS, 8x ABL Tomahawk, 4x Harpoon)
+  private drawIowaModernized(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#0A1828';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 2.2;
+
+    // Heavily armored Iowa battleship clipper hull
+    ctx.beginPath();
+    ctx.moveTo(l * 0.52, 0);
+    ctx.lineTo(l * 0.36, -w * 0.46);
+    ctx.lineTo(-l * 0.42, -w * 0.46);
+    ctx.lineTo(-l * 0.5, 0);
+    ctx.lineTo(-l * 0.42, w * 0.46);
+    ctx.lineTo(l * 0.36, w * 0.46);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Central Citadel & Modern Armored Box Launchers (Tomahawk)
+    ctx.fillStyle = '#142A3E';
+    ctx.strokeStyle = detailColor;
+    ctx.strokeRect(-l * 0.15, -w * 0.28, l * 0.3, w * 0.56);
+    ctx.fillRect(-l * 0.15, -w * 0.28, l * 0.3, w * 0.56);
+
+    // 4x Mk 15 Phalanx CIWS white domes
+    ctx.fillStyle = '#FFFFFF';
+    ctx.strokeStyle = '#FFE082';
+    for (const pos of [
+      { x: l * 0.06, y: -w * 0.4 },
+      { x: l * 0.06, y: w * 0.4 },
+      { x: -l * 0.18, y: -w * 0.38 },
+      { x: -l * 0.18, y: w * 0.38 },
+    ]) {
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Harpoon Quad Launchers midships
+    ctx.fillStyle = '#00E5FF';
+    ctx.fillRect(-l * 0.02, -w * 0.34, 6, 3);
+    ctx.fillRect(-l * 0.02, w * 0.34 - 3, 6, 3);
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // Oliver Hazard Perry FFG (Single Mk 13 launcher on foredeck, LAMPS helo hangar aft)
+  private drawPerryFFG(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#071624';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 1.8;
+
+    ctx.beginPath();
+    ctx.moveTo(l * 0.5, 0);
+    ctx.lineTo(l * 0.32, -w * 0.44);
+    ctx.lineTo(-l * 0.46, -w * 0.44);
+    ctx.lineTo(-l * 0.49, 0);
+    ctx.lineTo(-l * 0.46, w * 0.44);
+    ctx.lineTo(l * 0.32, w * 0.44);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Mk 13 Single Arm Missile Launcher (SM-1MR & Harpoon)
+    ctx.fillStyle = '#FFD54F';
+    ctx.beginPath();
+    ctx.arc(l * 0.28, 0, 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Superstructure & Mk 75 76mm OTO Melara Gun on top of deckhouse
+    ctx.fillStyle = '#0E243A';
+    ctx.strokeStyle = detailColor;
+    ctx.strokeRect(-l * 0.05, -w * 0.3, l * 0.22, w * 0.6);
+    ctx.fillRect(-l * 0.05, -w * 0.3, l * 0.22, w * 0.6);
+
+    // Twin Helo Hangar & Flight Deck Aft
+    ctx.strokeStyle = '#4FC3F7';
+    ctx.strokeRect(-l * 0.36, -w * 0.36, l * 0.26, w * 0.72);
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // LCAC Air Cushion Landing Craft
+  private drawLCAC(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    // Inflatable black rubber skirt outline
+    ctx.fillStyle = '#1A1D20';
+    ctx.strokeStyle = '#78909C';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.roundRect(-l * 0.48, -w * 0.48, l * 0.96, w * 0.96, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    // Open center vehicle cargo well deck
+    ctx.fillStyle = '#37474F';
+    ctx.strokeStyle = '#CFD8DC';
+    ctx.strokeRect(-l * 0.36, -w * 0.26, l * 0.72, w * 0.52);
+    ctx.fillRect(-l * 0.36, -w * 0.26, l * 0.72, w * 0.52);
+
+    // Two huge aft shrouded ducted propulsion air fans
+    ctx.strokeStyle = '#00E5FF';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(-l * 0.38, -w * 0.35, 7, 0, Math.PI * 2);
+    ctx.arc(-l * 0.38, w * 0.35, 7, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Control cabin on starboard bow
+    ctx.fillStyle = '#80DEEA';
+    ctx.fillRect(l * 0.22, -w * 0.44, 10, 6);
+  }
+
+  // Soviet Kiev Class Aircraft Carrier / Heavy Aviation Cruiser (CVHG)
+  private drawKievCVHG(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#1C1217';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 2;
+
+    // Angled flight deck on port side, heavy missile battery on forecastle
+    ctx.beginPath();
+    ctx.moveTo(l * 0.5, 0);
+    ctx.lineTo(l * 0.36, -w * 0.44);
+    ctx.lineTo(-l * 0.48, -w * 0.48);
+    ctx.lineTo(-l * 0.5, 0);
+    ctx.lineTo(-l * 0.48, w * 0.48);
+    ctx.lineTo(l * 0.36, w * 0.44);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Huge island on starboard side
+    ctx.fillStyle = '#2D1B22';
+    ctx.strokeStyle = '#FF8A80';
+    ctx.strokeRect(-l * 0.1, w * 0.12, l * 0.28, w * 0.3);
+    ctx.fillRect(-l * 0.1, w * 0.12, l * 0.28, w * 0.3);
+
+    // Port Angled Runway Line
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1.4;
+    ctx.setLineDash([6, 5]);
+    ctx.beginPath();
+    ctx.moveTo(-l * 0.44, -w * 0.12);
+    ctx.lineTo(l * 0.25, -w * 0.22);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Forecastle 4x Twin P-500 Bazalt / Granit Heavy Missile Launch Tubes
+    ctx.fillStyle = '#D50000';
+    for (let i = 0; i < 4; i++) {
+      ctx.fillRect(l * 0.28 + (i % 2) * 8, -w * 0.28 + Math.floor(i / 2) * 12, 12, 4);
+    }
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // Soviet Kirov Class Battlecruiser (CGN Project 1144 Orlan)
+  private drawKirovCGN(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#1E1217';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 2.2;
+
+    // Massive nuclear-powered battlecruiser hull with wave-piercing bow
+    ctx.beginPath();
+    ctx.moveTo(l * 0.52, 0);
+    ctx.lineTo(l * 0.36, -w * 0.46);
+    ctx.lineTo(-l * 0.46, -w * 0.46);
+    ctx.lineTo(-l * 0.5, 0);
+    ctx.lineTo(-l * 0.46, w * 0.46);
+    ctx.lineTo(l * 0.36, w * 0.46);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Foredeck 20x P-700 Granit VLS Silos (Incline Launchers)
+    ctx.fillStyle = '#37474F';
+    ctx.strokeStyle = '#FF1744';
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(l * 0.18, -w * 0.26, l * 0.15, w * 0.52);
+    ctx.fillRect(l * 0.18, -w * 0.26, l * 0.15, w * 0.52);
+
+    // Massive Pyramid Superstructure & Radar Masts (Top Pair / Top Steer)
+    ctx.fillStyle = '#2A1820';
+    ctx.strokeStyle = detailColor;
+    ctx.strokeRect(-l * 0.08, -w * 0.32, l * 0.2, w * 0.64);
+    ctx.fillRect(-l * 0.08, -w * 0.32, l * 0.2, w * 0.64);
+
+    // S-300F Fort (SA-N-6) Revolver Silos & AK-630 CIWS Batteries
+    ctx.strokeStyle = '#FFD54F';
+    ctx.beginPath();
+    ctx.arc(l * 0.08, 0, 6, 0, Math.PI * 2);
+    ctx.arc(-l * 0.16, 0, 6, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Twin AK-130 130mm Gun Turret on Stern
+    ctx.fillStyle = '#FF5252';
+    ctx.beginPath();
+    ctx.arc(-l * 0.35, 0, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // Soviet Sovremenny Class Destroyer (Project 956 Sarych with 8x Moskit Sunburn)
+  private drawSovremennyDD(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#1A1015';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 1.9;
+
+    ctx.beginPath();
+    ctx.moveTo(l * 0.5, 0);
+    ctx.lineTo(l * 0.32, -w * 0.44);
+    ctx.lineTo(-l * 0.46, -w * 0.44);
+    ctx.lineTo(-l * 0.49, 0);
+    ctx.lineTo(-l * 0.46, w * 0.44);
+    ctx.lineTo(l * 0.32, w * 0.44);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 2x Quad P-270 Moskit (SS-N-22 Sunburn) Angled Canisters (Port & Starboard)
+    ctx.strokeStyle = '#FF1744';
+    ctx.lineWidth = 1.4;
+    ctx.strokeRect(l * 0.08, -w * 0.45, 12, 6);
+    ctx.strokeRect(l * 0.08, w * 0.45 - 6, 12, 6);
+
+    // Bow & Stern AK-130 Twin 130mm Gun Mounts
+    ctx.fillStyle = '#37474F';
+    ctx.strokeStyle = '#FFE082';
+    ctx.beginPath();
+    ctx.arc(l * 0.34, 0, 4.5, 0, Math.PI * 2);
+    ctx.arc(-l * 0.38, 0, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // CVN-68 Nimitz Nuclear Supercarrier Line Art (Angled flight deck, aft nuclear island, 4 catapults)
+  // ══════════════════════════════════════════════════════════
+  private drawNimitzCVN(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#06101E';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 2.4;
+
+    // Angled Flight Deck Outer Perimeter:
+    ctx.beginPath();
+    ctx.moveTo(l * 0.52, -w * 0.16);
+    ctx.lineTo(l * 0.48, w * 0.36);
+    ctx.lineTo(l * 0.24, w * 0.40);
+    ctx.lineTo(-l * 0.04, w * 0.40);
+    ctx.lineTo(-l * 0.08, w * 0.46);
+    ctx.lineTo(-l * 0.34, w * 0.46);
+    ctx.lineTo(-l * 0.38, w * 0.38);
+    ctx.lineTo(-l * 0.50, w * 0.30);
+    ctx.lineTo(-l * 0.52, 0);
+    ctx.lineTo(-l * 0.50, -w * 0.34);
+    ctx.lineTo(-l * 0.36, -w * 0.44);
+    ctx.lineTo(-l * 0.08, -w * 0.54);
+    ctx.lineTo(l * 0.20, -w * 0.54);
+    ctx.lineTo(l * 0.34, -w * 0.30);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Steel Deck Armor Tint
+    ctx.fillStyle = 'rgba(16, 36, 56, 0.5)';
+    ctx.fill();
+
+    // 1. Bow Steam Catapults (Cat 1 & Cat 2)
+    ctx.strokeStyle = '#FFE082';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(l * 0.18, w * 0.12);
+    ctx.lineTo(l * 0.48, w * 0.12);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(l * 0.18, -w * 0.05);
+    ctx.lineTo(l * 0.48, -w * 0.05);
+    ctx.stroke();
+
+    // 2. Angled Waist Steam Catapults (Cat 3 & Cat 4)
+    const cantAngle = -0.165; // ~9.5 deg
+    ctx.save();
+    ctx.translate(-l * 0.04, -w * 0.18);
+    ctx.rotate(cantAngle);
+    ctx.strokeStyle = '#FFE082';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(-l * 0.14, -w * 0.06);
+    ctx.lineTo(l * 0.24, -w * 0.06);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-l * 0.14, w * 0.06);
+    ctx.lineTo(l * 0.24, w * 0.06);
+    ctx.stroke();
+
+    // Angled Runway Centerline
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1.6;
+    ctx.setLineDash([8, 6]);
+    ctx.beginPath();
+    ctx.moveTo(-l * 0.44, 0);
+    ctx.lineTo(l * 0.26, 0);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 4 Cross-Deck Pendant Arresting Cables
+    ctx.strokeStyle = '#80DEEA';
+    ctx.lineWidth = 1.4;
+    for (let c = 0; c < 4; c++) {
+      const cx = -l * 0.30 + c * 11;
+      ctx.beginPath();
+      ctx.moveTo(cx, -w * 0.19);
+      ctx.lineTo(cx, w * 0.19);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // 3. Four Large Deck-Edge Elevators (2 starboard fwd, 1 starboard aft, 1 port aft)
+    ctx.strokeStyle = '#4FC3F7';
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(l * 0.22, w * 0.38, l * 0.08, w * 0.09);
+    ctx.strokeRect(l * 0.06, w * 0.38, l * 0.08, w * 0.09);
+    ctx.strokeRect(-l * 0.24, w * 0.36, l * 0.08, w * 0.09); // Starboard aft (behind island)
+    ctx.strokeRect(-l * 0.36, -w * 0.45, l * 0.08, w * 0.09); // Port aft
+
+    // 4. Compact Nuclear Island placed far aft on starboard side (Behind Elevator 2)
+    ctx.fillStyle = '#0B1D2E';
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.rect(-l * 0.06, w * 0.28, l * 0.15, w * 0.11);
+    ctx.fill();
+    ctx.stroke();
+
+    // Radars atop Island: SPS-48 3D radar & SPN-43 air traffic radar
+    ctx.fillStyle = '#FFE082';
+    ctx.fillRect(-l * 0.02, w * 0.31, 3, 3);
+    ctx.fillRect(l * 0.04, w * 0.31, 3, 3);
+
+    // 5. Weapon Sponsons: Mk 29 Sea Sparrow & Phalanx CIWS
+    ctx.fillStyle = '#37474F';
+    ctx.strokeStyle = '#80DEEA';
+    ctx.lineWidth = 1;
+    // Bow starboard CIWS sponson
+    ctx.strokeRect(l * 0.44, w * 0.32, 5, 5);
+    // Stern port Sea Sparrow sponson
+    ctx.strokeRect(-l * 0.48, -w * 0.32, 6, 6);
+    // Stern starboard Sea Sparrow + CIWS sponson
+    ctx.strokeRect(-l * 0.48, w * 0.28, 6, 6);
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // CGN-38 Virginia-Class Nuclear Cruiser Line Art
+  // ══════════════════════════════════════════════════════════
+  private drawVirginiaCG(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#06101E';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 2.0;
+
+    // Sleek, flush-deck nuclear cruiser hull
+    ctx.beginPath();
+    ctx.moveTo(l * 0.52, 0); // Sharp raked bow
+    ctx.lineTo(l * 0.36, -w * 0.44);
+    ctx.lineTo(-l * 0.38, -w * 0.44);
+    ctx.lineTo(-l * 0.50, -w * 0.28); // Transom stern
+    ctx.lineTo(-l * 0.50, w * 0.28);
+    ctx.lineTo(-l * 0.38, w * 0.44);
+    ctx.lineTo(l * 0.36, w * 0.44);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Boxy nuclear superstructure (no main smokestacks)
+    ctx.fillStyle = '#0C2032';
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1.4;
+    ctx.fillRect(-l * 0.24, -w * 0.30, l * 0.48, w * 0.60);
+    ctx.strokeRect(-l * 0.24, -w * 0.30, l * 0.48, w * 0.60);
+
+    // Forward Bridge & Navigation Tower
+    ctx.fillStyle = '#102A44';
+    ctx.fillRect(l * 0.08, -w * 0.24, l * 0.14, w * 0.48);
+    ctx.strokeRect(l * 0.08, -w * 0.24, l * 0.14, w * 0.48);
+
+    // SPS-40 / SPS-48 Radar Masts
+    ctx.strokeStyle = '#FFE082';
+    ctx.strokeRect(l * 0.12, -w * 0.08, 4, w * 0.16);
+    ctx.strokeRect(-l * 0.16, -w * 0.08, 4, w * 0.16);
+
+    // Mk 26 Mod 0/1 Twin-Arm Missile Launchers (Fore & Aft)
+    ctx.fillStyle = '#263238';
+    ctx.strokeStyle = '#4FC3F7';
+    ctx.lineWidth = 1.2;
+    // Forward Mk 26 Launcher
+    ctx.beginPath();
+    ctx.arc(l * 0.28, 0, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(l * 0.28, -6);
+    ctx.lineTo(l * 0.28, 6);
+    ctx.stroke();
+
+    // Aft Mk 26 Launcher
+    ctx.beginPath();
+    ctx.arc(-l * 0.30, 0, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-l * 0.30, -6);
+    ctx.lineTo(-l * 0.30, 6);
+    ctx.stroke();
+
+    // Midships Harpoon Quad Canisters (Port & Starboard)
+    ctx.strokeStyle = '#FFCA28';
+    ctx.strokeRect(-l * 0.02, -w * 0.36, 6, 4);
+    ctx.strokeRect(-l * 0.02, w * 0.30, 6, 4);
+
+    // Stern Helo Flight Deck & Internal Hangar
+    ctx.strokeStyle = '#80DEEA';
+    ctx.strokeRect(-l * 0.48, -w * 0.22, l * 0.14, w * 0.44);
+    ctx.beginPath();
+    ctx.arc(-l * 0.41, 0, 5, 0, Math.PI * 2);
+    ctx.stroke();
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // DD-963 Spruance-Class Destroyer Line Art (Gas turbine, twin macks, dual helo hangar)
+  // ══════════════════════════════════════════════════════════
+  private drawSpruanceDD(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#06101E';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 2.0;
+
+    // 172m Gas-Turbine Destroyer Hull with flared bow and transom stern
+    ctx.beginPath();
+    ctx.moveTo(l * 0.52, 0);
+    ctx.lineTo(l * 0.38, -w * 0.46);
+    ctx.lineTo(-l * 0.40, -w * 0.46);
+    ctx.lineTo(-l * 0.50, -w * 0.32);
+    ctx.lineTo(-l * 0.50, w * 0.32);
+    ctx.lineTo(-l * 0.40, w * 0.46);
+    ctx.lineTo(l * 0.38, w * 0.46);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Deck Superstructure (Split into forward bridge, twin macks, and dual hangar)
+    ctx.fillStyle = '#0C1E30';
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1.3;
+    ctx.fillRect(-l * 0.30, -w * 0.32, l * 0.56, w * 0.64);
+    ctx.strokeRect(-l * 0.30, -w * 0.32, l * 0.56, w * 0.64);
+
+    // Forward ASROC / Mk 41 VLS Deck Hatch
+    ctx.fillStyle = '#263238';
+    ctx.strokeStyle = '#4FC3F7';
+    ctx.strokeRect(l * 0.18, -w * 0.22, l * 0.08, w * 0.44);
+
+    // Forward Mack (Combined Mast and Stack)
+    ctx.fillStyle = '#1A237E';
+    ctx.fillRect(l * 0.04, -w * 0.18, l * 0.06, w * 0.36);
+    ctx.strokeRect(l * 0.04, -w * 0.18, l * 0.06, w * 0.36);
+    ctx.fillStyle = '#212121'; // Soot cap
+    ctx.fillRect(l * 0.05, -w * 0.12, l * 0.04, w * 0.24);
+
+    // Aft Mack (Aft Combined Mast and Stack)
+    ctx.fillStyle = '#1A237E';
+    ctx.fillRect(-l * 0.12, -w * 0.18, l * 0.06, w * 0.36);
+    ctx.strokeRect(-l * 0.12, -w * 0.18, l * 0.06, w * 0.36);
+    ctx.fillStyle = '#212121'; // Soot cap
+    ctx.fillRect(-l * 0.11, -w * 0.12, l * 0.04, w * 0.24);
+
+    // Dual Helicopter Hangars (houses 2x SH-60B)
+    ctx.strokeStyle = '#80DEEA';
+    ctx.strokeRect(-l * 0.30, -w * 0.26, l * 0.12, w * 0.24);
+    ctx.strokeRect(-l * 0.30, w * 0.02, l * 0.12, w * 0.24);
+
+    // Stern Helo Landing Deck
+    ctx.strokeRect(-l * 0.48, -w * 0.26, l * 0.15, w * 0.52);
+    ctx.beginPath();
+    ctx.arc(-l * 0.40, 0, 5, 0, Math.PI * 2);
+    ctx.stroke();
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // DDG-993 Kidd-Class Guided Missile Destroyer Line Art (Spruance hull + Mk 26 fore/aft)
+  // ══════════════════════════════════════════════════════════
+  private drawKiddDDG(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#06101E';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 2.0;
+
+    // Spruance-Derived Heavy Destroyer Hull
+    ctx.beginPath();
+    ctx.moveTo(l * 0.52, 0);
+    ctx.lineTo(l * 0.38, -w * 0.46);
+    ctx.lineTo(-l * 0.40, -w * 0.46);
+    ctx.lineTo(-l * 0.50, -w * 0.32);
+    ctx.lineTo(-l * 0.50, w * 0.32);
+    ctx.lineTo(-l * 0.40, w * 0.46);
+    ctx.lineTo(l * 0.38, w * 0.46);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Central Superstructure with SPS-48 3D Radar Tower
+    ctx.fillStyle = '#0C1E30';
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1.3;
+    ctx.fillRect(-l * 0.26, -w * 0.32, l * 0.48, w * 0.64);
+    ctx.strokeRect(-l * 0.26, -w * 0.32, l * 0.48, w * 0.64);
+
+    // Forward and Aft Twin Macks with SPG-51 Illuminators
+    ctx.fillStyle = '#102A44';
+    ctx.fillRect(l * 0.04, -w * 0.18, l * 0.06, w * 0.36);
+    ctx.strokeRect(l * 0.04, -w * 0.18, l * 0.06, w * 0.36);
+    ctx.fillRect(-l * 0.12, -w * 0.18, l * 0.06, w * 0.36);
+    ctx.strokeRect(-l * 0.12, -w * 0.18, l * 0.06, w * 0.36);
+
+    // Forward Mk 26 Twin-Arm Guided Missile Launcher
+    ctx.fillStyle = '#263238';
+    ctx.strokeStyle = '#4FC3F7';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(l * 0.22, 0, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(l * 0.22, -5);
+    ctx.lineTo(l * 0.22, 5);
+    ctx.stroke();
+
+    // Aft Mk 26 Twin-Arm Guided Missile Launcher (Replaces Spruance aft helo hangar)
+    ctx.beginPath();
+    ctx.arc(-l * 0.28, 0, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-l * 0.28, -5);
+    ctx.lineTo(-l * 0.28, 5);
+    ctx.stroke();
+
+    // Midships Harpoon quad canister racks
+    ctx.strokeStyle = '#FFCA28';
+    ctx.strokeRect(-l * 0.04, -w * 0.38, 5, 4);
+    ctx.strokeRect(-l * 0.04, w * 0.30, 5, 4);
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // LPD-4 Austin-Class Amphibious Transport Dock Line Art (Forward bridge, floodable well deck)
+  // ══════════════════════════════════════════════════════════
+  private drawAustinLPD(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#06101E';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 2.0;
+
+    // High, beamy amphibious transport hull with open transom stern
+    ctx.beginPath();
+    ctx.moveTo(l * 0.50, 0);
+    ctx.lineTo(l * 0.36, -w * 0.46);
+    ctx.lineTo(-l * 0.44, -w * 0.46);
+    ctx.lineTo(-l * 0.50, -w * 0.38);
+    ctx.lineTo(-l * 0.50, w * 0.38);
+    ctx.lineTo(-l * 0.44, w * 0.46);
+    ctx.lineTo(l * 0.36, w * 0.46);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Forward Command Bridge Superstructure
+    ctx.fillStyle = '#0B1E2E';
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1.4;
+    ctx.fillRect(l * 0.14, -w * 0.36, l * 0.22, w * 0.72);
+    ctx.strokeRect(l * 0.14, -w * 0.36, l * 0.22, w * 0.72);
+
+    // Twin Funnels atop Forward Superstructure
+    ctx.strokeRect(l * 0.18, -w * 0.22, 5, 8);
+    ctx.strokeRect(l * 0.18, w * 0.14, 5, 8);
+
+    // Heavy-duty Midships Cargo Crane
+    ctx.strokeStyle = '#FFE082';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(l * 0.06, 0, 4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(l * 0.06, 0);
+    ctx.lineTo(-l * 0.04, -w * 0.25);
+    ctx.stroke();
+
+    // Massive Stern Floodable Well Deck with Dock Water Surface
+    ctx.fillStyle = 'rgba(0, 150, 136, 0.35)';
+    ctx.strokeStyle = '#4FC3F7';
+    ctx.lineWidth = 1.2;
+    ctx.fillRect(-l * 0.46, -w * 0.28, l * 0.42, w * 0.56);
+    ctx.strokeRect(-l * 0.46, -w * 0.28, l * 0.42, w * 0.56);
+
+    // Stern Well-Deck Gate Opening lines
+    ctx.strokeStyle = '#80CBC4';
+    ctx.beginPath();
+    ctx.moveTo(-l * 0.50, -w * 0.28);
+    ctx.lineTo(-l * 0.46, -w * 0.28);
+    ctx.moveTo(-l * 0.50, w * 0.28);
+    ctx.lineTo(-l * 0.46, w * 0.28);
+    ctx.stroke();
+
+    // Elevated Helo Landing Deck over Well Deck
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.strokeRect(-l * 0.42, -w * 0.36, l * 0.34, w * 0.72);
+    ctx.beginPath();
+    ctx.arc(-l * 0.25, 0, 7, 0, Math.PI * 2);
+    ctx.stroke();
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // SSN-688 Los Angeles-Class Nuclear Attack Submarine Line Art
+  // ══════════════════════════════════════════════════════════
+  private drawLosAngelesSSN(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#040C16';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 2.0;
+
+    // 110m Streamlined Teardrop Cylindrical Hull
+    ctx.beginPath();
+    ctx.moveTo(l * 0.50, 0); // Rounded hemispherical sonar bow
+    ctx.bezierCurveTo(l * 0.46, -w * 0.45, l * 0.25, -w * 0.45, 0, -w * 0.45);
+    ctx.bezierCurveTo(-l * 0.25, -w * 0.45, -l * 0.44, -w * 0.30, -l * 0.50, 0);
+    ctx.bezierCurveTo(-l * 0.44, w * 0.30, -l * 0.25, w * 0.45, 0, w * 0.45);
+    ctx.bezierCurveTo(l * 0.25, w * 0.45, l * 0.46, w * 0.45, l * 0.50, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 12 VLS Tomahawk Vertical Launch Tube Hatches on Forward Casing
+    ctx.fillStyle = '#1A237E';
+    ctx.strokeStyle = '#4FC3F7';
+    ctx.lineWidth = 1;
+    for (let row = 0; row < 6; row++) {
+      const vx = l * 0.24 + row * 4;
+      ctx.fillRect(vx, -w * 0.18, 2.5, 2.5);
+      ctx.fillRect(vx, w * 0.10, 2.5, 2.5);
+    }
+
+    // Streamlined Sail (Conning Tower) with Fairwater Dive Planes
+    ctx.fillStyle = '#0D233A';
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.roundRect(l * 0.05, -w * 0.20, l * 0.14, w * 0.40, 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Fairwater Dive Planes extending from sail
+    ctx.strokeStyle = '#80DEEA';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(l * 0.12, -w * 0.42);
+    ctx.lineTo(l * 0.12, -w * 0.20);
+    ctx.moveTo(l * 0.12, w * 0.20);
+    ctx.lineTo(l * 0.12, w * 0.42);
+    ctx.stroke();
+
+    // Cruciform Stern Control Surfaces (Rudders & Elevators) & 7-Blade Screw
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 2.0;
+    ctx.beginPath();
+    ctx.moveTo(-l * 0.46, -w * 0.48);
+    ctx.lineTo(-l * 0.52, -w * 0.48);
+    ctx.moveTo(-l * 0.46, w * 0.48);
+    ctx.lineTo(-l * 0.52, w * 0.48);
+    ctx.stroke();
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // Project 949A Oscar-II Class Nuclear Cruise Missile Submarine Line Art
+  // ══════════════════════════════════════════════════════════
+  private drawOscarSSGN(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#040C16';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 2.2;
+
+    // Massive 18.2m Broad Double Hull (Widest Submarine Profile)
+    ctx.beginPath();
+    ctx.moveTo(l * 0.52, 0);
+    ctx.bezierCurveTo(l * 0.48, -w * 0.50, l * 0.28, -w * 0.50, 0, -w * 0.50);
+    ctx.bezierCurveTo(-l * 0.30, -w * 0.50, -l * 0.46, -w * 0.35, -l * 0.52, 0);
+    ctx.bezierCurveTo(-l * 0.46, w * 0.35, -l * 0.30, w * 0.50, 0, w * 0.50);
+    ctx.bezierCurveTo(l * 0.28, w * 0.50, l * 0.48, w * 0.50, l * 0.52, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 24 Angled Silo Hatches for P-700 Granit (SS-N-19 Shipwreck) Missiles
+    ctx.fillStyle = '#263238';
+    ctx.strokeStyle = '#FF8A80';
+    ctx.lineWidth = 1;
+    for (let s = 0; s < 12; s++) {
+      const sx = l * 0.18 - s * 5.5;
+      // Port missile silos
+      ctx.strokeRect(sx, -w * 0.42, 4.5, 4);
+      // Starboard missile silos
+      ctx.strokeRect(sx, w * 0.32, 4.5, 4);
+    }
+
+    // Wide, Low Streamlined Sail
+    ctx.fillStyle = '#102A44';
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.roundRect(-l * 0.04, -w * 0.24, l * 0.20, w * 0.48, 3);
+    ctx.fill();
+    ctx.stroke();
+
+    // Prominent Towed-Array Sonar Pod atop Aft Vertical Rudder
+    ctx.fillStyle = '#37474F';
+    ctx.strokeStyle = '#80DEEA';
+    ctx.beginPath();
+    ctx.ellipse(-l * 0.48, 0, 6, 2.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // Project 1155 Udaloy-Class Large ASW Destroyer Line Art
+  // ══════════════════════════════════════════════════════════
+  private drawUdaloyDD(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#06101E';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 2.0;
+
+    // 163m Deep Knuckle Bow Soviet Destroyer Hull
+    ctx.beginPath();
+    ctx.moveTo(l * 0.52, 0);
+    ctx.lineTo(l * 0.38, -w * 0.45);
+    ctx.lineTo(-l * 0.42, -w * 0.45);
+    ctx.lineTo(-l * 0.50, -w * 0.28);
+    ctx.lineTo(-l * 0.50, w * 0.28);
+    ctx.lineTo(-l * 0.42, w * 0.45);
+    ctx.lineTo(l * 0.38, w * 0.45);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Central Superstructure & Top Pair Air-Search Radar Towers
+    ctx.fillStyle = '#0B1D2E';
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1.3;
+    ctx.fillRect(-l * 0.24, -w * 0.32, l * 0.46, w * 0.64);
+    ctx.strokeRect(-l * 0.24, -w * 0.32, l * 0.46, w * 0.64);
+
+    // Twin 4-Tube KT-100 Box Launchers for Rastrub-B (SS-N-14 Silex) ASW Missiles
+    ctx.strokeStyle = '#FF8A80';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(l * 0.12, -w * 0.42, l * 0.08, w * 0.16);
+    ctx.strokeRect(l * 0.12, w * 0.26, l * 0.08, w * 0.16);
+
+    // 3K95 Kinzhal (SA-N-9 Gauntlet) VLS Rotary Drums (4 fwd, 4 aft)
+    ctx.fillStyle = '#263238';
+    ctx.strokeStyle = '#4FC3F7';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(l * 0.28, -w * 0.14, 3, 0, Math.PI * 2);
+    ctx.arc(l * 0.28, w * 0.14, 3, 0, Math.PI * 2);
+    ctx.arc(-l * 0.16, -w * 0.14, 3, 0, Math.PI * 2);
+    ctx.arc(-l * 0.16, w * 0.14, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Twin Helicopter Hangars & Sunken Landing Deck for Ka-27 Helix
+    ctx.strokeStyle = '#80DEEA';
+    ctx.strokeRect(-l * 0.36, -w * 0.28, l * 0.12, w * 0.26);
+    ctx.strokeRect(-l * 0.36, w * 0.02, l * 0.12, w * 0.26);
+    ctx.strokeRect(-l * 0.48, -w * 0.25, l * 0.12, w * 0.50);
+
+    // Bow Twin AK-100 100mm Single Gun Turrets
+    ctx.fillStyle = '#37474F';
+    ctx.strokeStyle = '#FFE082';
+    ctx.beginPath();
+    ctx.arc(l * 0.38, 0, 4, 0, Math.PI * 2);
+    ctx.arc(l * 0.44, 0, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // Project 58 Kynda-Class Guided Missile Cruiser Line Art
+  // ══════════════════════════════════════════════════════════
+  private drawKyndaCG(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#06101E';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 2.0;
+
+    // Raked Bow Soviet Cruiser Hull
+    ctx.beginPath();
+    ctx.moveTo(l * 0.52, 0);
+    ctx.lineTo(l * 0.38, -w * 0.44);
+    ctx.lineTo(-l * 0.40, -w * 0.44);
+    ctx.lineTo(-l * 0.50, -w * 0.26);
+    ctx.lineTo(-l * 0.50, w * 0.26);
+    ctx.lineTo(-l * 0.40, w * 0.44);
+    ctx.lineTo(l * 0.38, w * 0.44);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Tall Pyramidal Lattice Mast Towers (Head Net A Radar)
+    ctx.fillStyle = '#0B1E2E';
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1.3;
+    ctx.fillRect(l * 0.02, -w * 0.26, l * 0.10, w * 0.52);
+    ctx.strokeRect(l * 0.02, -w * 0.26, l * 0.10, w * 0.52);
+    ctx.fillRect(-l * 0.16, -w * 0.24, l * 0.08, w * 0.48);
+    ctx.strokeRect(-l * 0.16, -w * 0.24, l * 0.08, w * 0.48);
+
+    // Massive Quadruple SM-70 Trainable Launchers for P-35 Shaddock (Fore & Aft)
+    ctx.fillStyle = '#263238';
+    ctx.strokeStyle = '#FF5252';
+    ctx.lineWidth = 1.5;
+    // Forward Quad SM-70
+    ctx.strokeRect(l * 0.20, -w * 0.30, l * 0.12, w * 0.60);
+    // Aft Quad SM-70
+    ctx.strokeRect(-l * 0.34, -w * 0.30, l * 0.12, w * 0.60);
+
+    // Twin AK-726 76mm Enclosed Gun Turret at Stern
+    ctx.fillStyle = '#37474F';
+    ctx.strokeStyle = '#FFE082';
+    ctx.beginPath();
+    ctx.arc(-l * 0.44, 0, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // Project 68bis Sverdlov-Class Conventional Gun Cruiser Line Art
+  // ══════════════════════════════════════════════════════════
+  private drawSverdlovCL(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#06101E';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 2.0;
+
+    // 210m Long Flush-Deck Classic Cruiser Hull
+    ctx.beginPath();
+    ctx.moveTo(l * 0.52, 0);
+    ctx.lineTo(l * 0.40, -w * 0.44);
+    ctx.lineTo(-l * 0.40, -w * 0.44);
+    ctx.lineTo(-l * 0.50, -w * 0.24);
+    ctx.lineTo(-l * 0.50, w * 0.24);
+    ctx.lineTo(-l * 0.40, w * 0.44);
+    ctx.lineTo(l * 0.40, w * 0.44);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Elongated Citadel & Bridge
+    ctx.fillStyle = '#0B1D2E';
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1.3;
+    ctx.fillRect(-l * 0.20, -w * 0.28, l * 0.40, w * 0.56);
+    ctx.strokeRect(-l * 0.20, -w * 0.28, l * 0.40, w * 0.56);
+
+    // Twin Raked Funnels with Caps
+    ctx.fillStyle = '#212121';
+    ctx.fillRect(l * 0.04, -w * 0.12, l * 0.05, w * 0.24);
+    ctx.fillRect(-l * 0.10, -w * 0.12, l * 0.05, w * 0.24);
+
+    // 4 Triple 152mm Main Turrets (Turrets 1 & 2 fwd, 3 & 4 aft)
+    ctx.fillStyle = '#37474F';
+    ctx.strokeStyle = '#FFE082';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(l * 0.36, 0, 5, 0, Math.PI * 2);
+    ctx.arc(l * 0.26, 0, 5, 0, Math.PI * 2);
+    ctx.arc(-l * 0.28, 0, 5, 0, Math.PI * 2);
+    ctx.arc(-l * 0.38, 0, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // Project 159 Petya-Class Coastal ASW Frigate Line Art
+  // ══════════════════════════════════════════════════════════
+  private drawPetyaFFG(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#06101E';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 1.8;
+
+    // Compact 82m Flush-Deck Frigate Hull
+    ctx.beginPath();
+    ctx.moveTo(l * 0.50, 0);
+    ctx.lineTo(l * 0.36, -w * 0.45);
+    ctx.lineTo(-l * 0.42, -w * 0.45);
+    ctx.lineTo(-l * 0.50, -w * 0.28);
+    ctx.lineTo(-l * 0.50, w * 0.28);
+    ctx.lineTo(-l * 0.42, w * 0.45);
+    ctx.lineTo(l * 0.36, w * 0.45);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Central Bridge & Gas Turbine Stack
+    ctx.fillStyle = '#0B1D2E';
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1.2;
+    ctx.fillRect(-l * 0.16, -w * 0.30, l * 0.32, w * 0.60);
+    ctx.strokeRect(-l * 0.16, -w * 0.30, l * 0.32, w * 0.60);
+
+    // Central RBU-6000 12-Barrel Rocket Launcher
+    ctx.strokeStyle = '#FF8A80';
+    ctx.beginPath();
+    ctx.arc(l * 0.12, 0, 3.5, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Bow & Stern Twin 76mm AK-726 Gun Mounts
+    ctx.fillStyle = '#37474F';
+    ctx.strokeStyle = '#FFE082';
+    ctx.beginPath();
+    ctx.arc(l * 0.34, 0, 4, 0, Math.PI * 2);
+    ctx.arc(-l * 0.34, 0, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // IJN Takao-Class Heavy Cruiser (Chokai) Line Art (Iconic Castle/Pagoda Bridge)
+  // ══════════════════════════════════════════════════════════
+  private drawChokaiCA(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#081726';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 2.0;
+
+    // Japanese Cruiser Flush Deck Hull with S-Curved Bow Shear
+    ctx.beginPath();
+    ctx.moveTo(l * 0.52, 0);
+    ctx.lineTo(l * 0.40, -w * 0.44);
+    ctx.lineTo(-l * 0.40, -w * 0.44);
+    ctx.lineTo(-l * 0.50, -w * 0.22);
+    ctx.lineTo(-l * 0.50, w * 0.22);
+    ctx.lineTo(-l * 0.40, w * 0.44);
+    ctx.lineTo(l * 0.40, w * 0.44);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Massive 10-Story Pagoda Castle Bridge Superstructure
+    ctx.fillStyle = '#050E18';
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1.6;
+    ctx.fillRect(l * 0.05, -w * 0.32, l * 0.16, w * 0.64);
+    ctx.strokeRect(l * 0.05, -w * 0.32, l * 0.16, w * 0.64);
+
+    // Bridge tiers with optical rangefinders
+    ctx.strokeRect(l * 0.08, -w * 0.22, l * 0.09, w * 0.44);
+    ctx.strokeRect(l * 0.11, -w * 0.14, l * 0.04, w * 0.28);
+
+    // Forward Funnel (curved sharply aft) & Second Funnel (straight)
+    ctx.fillStyle = '#212121';
+    ctx.beginPath();
+    ctx.ellipse(-l * 0.03, 0, 5, 8, -0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(-l * 0.12, 0, 4, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Quadruple Type 93 Long Lance Torpedo Sponsons (Midships)
+    ctx.strokeStyle = '#4FC3F7';
+    ctx.strokeRect(-l * 0.18, -w * 0.46, 6, 4);
+    ctx.strokeRect(-l * 0.18, w * 0.38, 6, 4);
+
+    // 5 Twin 20cm Main Turrets: 3 fwd (Turret 3 facing aft), 2 aft
+    ctx.fillStyle = '#37474F';
+    ctx.strokeStyle = '#FFE082';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.arc(l * 0.38, 0, 4.5, 0, Math.PI * 2);
+    ctx.arc(l * 0.28, 0, 4.5, 0, Math.PI * 2);
+    ctx.arc(l * 0.18, 0, 4.5, 0, Math.PI * 2); // Turret 3
+    ctx.arc(-l * 0.28, 0, 4.5, 0, Math.PI * 2);
+    ctx.arc(-l * 0.38, 0, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // IJN Kongo-Class Fast Battleship Line Art (Multi-Tier Pagoda Mast)
+  // ══════════════════════════════════════════════════════════
+  private drawKongoBB(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#081726';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 2.0;
+
+    // Long, Fast Battleship Hull with Clipper Bow & Torpedo Bulge
+    ctx.beginPath();
+    ctx.moveTo(l * 0.52, 0);
+    ctx.lineTo(l * 0.38, -w * 0.45);
+    ctx.lineTo(-l * 0.38, -w * 0.46);
+    ctx.lineTo(-l * 0.50, -w * 0.20);
+    ctx.lineTo(-l * 0.50, w * 0.20);
+    ctx.lineTo(-l * 0.38, w * 0.46);
+    ctx.lineTo(l * 0.38, w * 0.45);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Famous 6-Tier Japanese Pagoda Mast
+    ctx.fillStyle = '#050E18';
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(l * 0.04, -w * 0.26, l * 0.14, w * 0.52);
+    ctx.strokeRect(l * 0.04, -w * 0.26, l * 0.14, w * 0.52);
+    // Upper Pagoda tiers
+    ctx.strokeRect(l * 0.07, -w * 0.18, l * 0.08, w * 0.36);
+    ctx.strokeRect(l * 0.09, -w * 0.10, l * 0.04, w * 0.20);
+
+    // Twin Funnels with Steam Pipes
+    ctx.fillStyle = '#212121';
+    ctx.fillRect(-l * 0.04, -w * 0.14, l * 0.05, w * 0.28);
+    ctx.strokeRect(-l * 0.04, -w * 0.14, l * 0.05, w * 0.28);
+    ctx.fillRect(-l * 0.13, -w * 0.14, l * 0.05, w * 0.28);
+    ctx.strokeRect(-l * 0.13, -w * 0.14, l * 0.05, w * 0.28);
+
+    // 4 Twin 35.6cm Main Gun Turrets (2 fwd, 2 aft)
+    ctx.fillStyle = '#37474F';
+    ctx.strokeStyle = '#FFE082';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(l * 0.34, 0, 5.5, 0, Math.PI * 2);
+    ctx.arc(l * 0.22, 0, 5.5, 0, Math.PI * 2);
+    ctx.arc(-l * 0.26, 0, 5.5, 0, Math.PI * 2);
+    ctx.arc(-l * 0.38, 0, 5.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // IJN Akizuki-Class Dedicated Anti-Air Destroyer Line Art (4x Twin 10cm)
+  // ══════════════════════════════════════════════════════════
+  private drawAkizukiDD(ship: Ship, hullColor: string, detailColor: string) {
+    const ctx = this.ctx;
+    const l = ship.length;
+    const w = ship.width;
+
+    ctx.fillStyle = '#06101E';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 1.8;
+
+    // 134m Clean Flush-Deck Destroyer Hull
+    ctx.beginPath();
+    ctx.moveTo(l * 0.52, 0);
+    ctx.lineTo(l * 0.38, -w * 0.44);
+    ctx.lineTo(-l * 0.40, -w * 0.44);
+    ctx.lineTo(-l * 0.50, -w * 0.26);
+    ctx.lineTo(-l * 0.50, w * 0.26);
+    ctx.lineTo(-l * 0.40, w * 0.44);
+    ctx.lineTo(l * 0.38, w * 0.44);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // Bridge with Type 94 High-Angle Fire Director Tower
+    ctx.fillStyle = '#0B1D2E';
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1.3;
+    ctx.fillRect(l * 0.08, -w * 0.26, l * 0.12, w * 0.52);
+    ctx.strokeRect(l * 0.08, -w * 0.26, l * 0.12, w * 0.52);
+    // Director tower dome
+    ctx.fillStyle = '#FFE082';
+    ctx.beginPath();
+    ctx.arc(l * 0.12, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Single Large Streamlined Funnel
+    ctx.fillStyle = '#212121';
+    ctx.beginPath();
+    ctx.ellipse(-l * 0.02, 0, 5, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // Centerline Quadruple Type 92 61cm Torpedo Launcher with Shielded Reload Box
+    ctx.strokeStyle = '#4FC3F7';
+    ctx.strokeRect(-l * 0.12, -w * 0.22, 6, w * 0.44);
+
+    // 4 Twin 10cm/65 Type 98 High-Angle Dual-Purpose Turrets (2 fwd, 2 aft)
+    ctx.fillStyle = '#37474F';
+    ctx.strokeStyle = '#FFE082';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.arc(l * 0.36, 0, 4.5, 0, Math.PI * 2);
+    ctx.arc(l * 0.24, 0, 4.5, 0, Math.PI * 2);
+    ctx.arc(-l * 0.24, 0, 4.5, 0, Math.PI * 2);
+    ctx.arc(-l * 0.36, 0, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // 盟軍水面打擊群 (Allied SAG) 專屬考證艦艇外觀與動態軍艦旗
+  // ══════════════════════════════════════════════════════════
+
+  private drawNavalEnsign(
+    ensignType: 'white_ensign' | 'rising_sun' | 'de_bundesmarine' | 'fr_marine',
+    x: number,
+    y: number,
+    length: number = 13,
+    height: number = 8.5
+  ) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(x, y);
+
+    // Dynamic wave flutter
+    const wave = Math.sin(this.time * 6.5 + x * 0.08) * 1.4;
+    const wave2 = Math.cos(this.time * 7.2 + y * 0.08) * 0.9;
+
+    // Flagstaff
+    ctx.strokeStyle = '#263238';
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(0, -height * 0.9);
+    ctx.lineTo(0, height * 0.9);
+    ctx.stroke();
+
+    ctx.save();
+    ctx.translate(0, -height * 0.75);
+
+    // Wave clipping mask
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(length * 0.45, wave, length, wave2);
+    ctx.lineTo(length, height + wave2);
+    ctx.quadraticCurveTo(length * 0.45, height + wave, 0, height);
+    ctx.closePath();
+    ctx.clip();
+
+    if (ensignType === 'white_ensign') {
+      // 🇬🇧 英國皇家海軍白船旗 (Royal Navy White Ensign)
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, length, height);
+
+      // Red St. George's Cross
+      ctx.fillStyle = '#D32F2F';
+      ctx.fillRect(length * 0.42, 0, length * 0.16, height);
+      ctx.fillRect(0, height * 0.42, length, height * 0.16);
+
+      // Union Jack in canton (top-left)
+      const cW = length * 0.44;
+      const cH = height * 0.44;
+      ctx.fillStyle = '#0D47A1';
+      ctx.fillRect(0, 0, cW, cH);
+
+      // White diagonals
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(0, 0); ctx.lineTo(cW, cH);
+      ctx.moveTo(cW, 0); ctx.lineTo(0, cH);
+      ctx.stroke();
+
+      // Red diagonals
+      ctx.strokeStyle = '#D32F2F';
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(0, 0); ctx.lineTo(cW, cH);
+      ctx.moveTo(cW, 0); ctx.lineTo(0, cH);
+      ctx.stroke();
+
+      // Cross
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(cW * 0.36, 0, cW * 0.28, cH);
+      ctx.fillRect(0, cH * 0.36, cW, cH * 0.28);
+      ctx.fillStyle = '#D32F2F';
+      ctx.fillRect(cW * 0.42, 0, cW * 0.16, cH);
+      ctx.fillRect(0, cH * 0.42, cW, cH * 0.16);
+
+    } else if (ensignType === 'rising_sun') {
+      // 🇯🇵 日本海上自衛隊十六條旭日旗 (JMSDF 16-ray Rising Sun Ensign)
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, length, height);
+
+      const sunX = length * 0.36;
+      const sunY = height * 0.5;
+      const sunR = height * 0.28;
+
+      ctx.fillStyle = '#C62828';
+      for (let r = 0; r < 16; r++) {
+        const a1 = (r * Math.PI) / 8 - 0.08;
+        const a2 = (r * Math.PI) / 8 + 0.08;
+        ctx.beginPath();
+        ctx.moveTo(sunX, sunY);
+        ctx.lineTo(sunX + Math.cos(a1) * length * 1.6, sunY + Math.sin(a1) * length * 1.6);
+        ctx.lineTo(sunX + Math.cos(a2) * length * 1.6, sunY + Math.sin(a2) * length * 1.6);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      ctx.beginPath();
+      ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2);
+      ctx.fill();
+
+    } else if (ensignType === 'de_bundesmarine') {
+      // 🇩🇪 德國聯邦海軍旗 (Bundesdienstflagge der Seestreitkräfte)
+      const h3 = height / 3;
+      ctx.fillStyle = '#212121';
+      ctx.fillRect(0, 0, length, h3);
+      ctx.fillStyle = '#D32F2F';
+      ctx.fillRect(0, h3, length, h3);
+      ctx.fillStyle = '#FFC107';
+      ctx.fillRect(0, h3 * 2, length, h3);
+
+      ctx.fillStyle = '#FFC107';
+      ctx.strokeStyle = '#212121';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.arc(length * 0.38, height * 0.5, height * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+    } else if (ensignType === 'fr_marine') {
+      // 🇫🇷 法國海軍旗 (Pavillon de la Marine nationale)
+      const w1 = length * 0.30;
+      const w2 = length * 0.33;
+      const w3 = length - w1 - w2;
+      ctx.fillStyle = '#0D47A1';
+      ctx.fillRect(0, 0, w1, height);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(w1, 0, w2, height);
+      ctx.fillStyle = '#D32F2F';
+      ctx.fillRect(w1 + w2, 0, w3, height);
+    }
+
+    ctx.restore();
+    ctx.restore();
+  }
+
+  // 專屬盟軍艦艇外觀分流分發器
+  private drawAlliedSAGShip(ship: Ship, hullColor: string, detailColor: string) {
+    const name = ship.name || '';
+    const l = ship.length;
+    const w = ship.width;
+    const ctx = this.ctx;
+
+    // 1. 日本海上自衛隊 (JMSDF SAG)
+    if (name.includes('JDS ') || ship.alliedSAGName?.includes('海上自衛隊')) {
+      const isDDH = name.includes('Haruna') || name.includes('Shirane') || name.includes('DDH');
+      const isAsagiriOrHatsuyuki = name.includes('Asagiri') || name.includes('Hatsuyuki') || name.includes('Takatsuki');
+
+      // JMSDF 海自暗灰塗裝
+      const jmsdfHull = '#2E3D48';
+      const jmsdfDeck = '#455A64';
+      const jmsdfDetail = '#80CBC4';
+
+      ctx.fillStyle = '#1A2630';
+      ctx.strokeStyle = jmsdfDetail;
+      ctx.lineWidth = 2.0;
+
+      // 現代護衛艦船型
+      ctx.beginPath();
+      ctx.moveTo(l * 0.52, 0);
+      ctx.lineTo(l * 0.38, -w * 0.46);
+      ctx.lineTo(-l * 0.44, -w * 0.46);
+      ctx.lineTo(-l * 0.50, -w * 0.35);
+      ctx.lineTo(-l * 0.50, w * 0.35);
+      ctx.lineTo(-l * 0.44, w * 0.46);
+      ctx.lineTo(l * 0.38, w * 0.46);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      if (isDDH) {
+        // ═══ 榛名型 / 白根型 直升機護衛艦 (DDH) 專屬特徵 ═══
+        // 前部階梯雙座 5吋砲甲板
+        ctx.fillStyle = jmsdfDeck;
+        ctx.fillRect(l * 0.16, -w * 0.32, l * 0.18, w * 0.64);
+
+        // Mk 112 八聯裝 ASROC 椒鹽盒發射箱
+        ctx.fillStyle = '#37474F';
+        ctx.strokeStyle = '#B0BEC5';
+        ctx.lineWidth = 1.0;
+        ctx.fillRect(l * 0.08, -w * 0.22, l * 0.08, w * 0.44);
+        ctx.strokeRect(l * 0.08, -w * 0.22, l * 0.08, w * 0.44);
+
+        // 中央整合式 Mack (Mast + Stack 艦橋煙囪複合結構)
+        ctx.fillStyle = '#212D38';
+        ctx.fillRect(-l * 0.08, -w * 0.26, l * 0.14, w * 0.52);
+        ctx.strokeStyle = '#80DEEA';
+        ctx.strokeRect(-l * 0.08, -w * 0.26, l * 0.14, w * 0.52);
+
+        // 後部巨型 3機直升機雙機庫 (Double Helicopter Hangar)
+        ctx.fillStyle = '#1E2B37';
+        ctx.fillRect(-l * 0.30, -w * 0.38, l * 0.20, w * 0.76);
+        ctx.strokeStyle = jmsdfDetail;
+        ctx.strokeRect(-l * 0.30, -w * 0.38, l * 0.20, w * 0.76);
+
+        // 機庫頂部 Mk 29 海麻雀發射器
+        ctx.fillStyle = '#455A64';
+        ctx.fillRect(-l * 0.22, -w * 0.14, l * 0.06, w * 0.28);
+
+        // 後甲板大型起降飛行甲板與直升機著艦 "H" 標線
+        ctx.fillStyle = '#263238';
+        ctx.fillRect(-l * 0.48, -w * 0.38, l * 0.18, w * 0.76);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.lineWidth = 1.2;
+        ctx.strokeRect(-l * 0.48, -w * 0.38, l * 0.18, w * 0.76);
+
+        // 白色著艦圓環與 "H"
+        ctx.beginPath();
+        ctx.arc(-l * 0.39, 0, w * 0.22, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 8px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('H', -l * 0.39, 0);
+
+      } else {
+        // ═══ 朝霧型 / 初雪型 / 高月型 護衛艦 (DD/FFG) ═══
+        // 艦首砲位與 ASROC 區
+        ctx.fillStyle = jmsdfDeck;
+        ctx.fillRect(l * 0.18, -w * 0.26, l * 0.15, w * 0.52);
+
+        // 緊湊現代艦橋與方陣 CIWS 耳台
+        ctx.fillStyle = '#212D38';
+        ctx.fillRect(-l * 0.04, -w * 0.30, l * 0.16, w * 0.60);
+        ctx.strokeStyle = jmsdfDetail;
+        ctx.strokeRect(-l * 0.04, -w * 0.30, l * 0.16, w * 0.60);
+
+        // CIWS sponsons (白色方陣密集陣)
+        ctx.fillStyle = '#ECEFF1';
+        ctx.beginPath();
+        ctx.arc(l * 0.02, -w * 0.34, 2.8, 0, Math.PI * 2);
+        ctx.arc(l * 0.02, w * 0.34, 2.8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 艦舯魚叉發射架
+        ctx.fillStyle = '#455A64';
+        ctx.fillRect(-l * 0.14, -w * 0.22, l * 0.07, w * 0.44);
+
+        // 艦尾海麻雀與 SH-60J 機庫甲板
+        ctx.fillStyle = '#263238';
+        ctx.fillRect(-l * 0.42, -w * 0.32, l * 0.24, w * 0.64);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.strokeRect(-l * 0.42, -w * 0.32, l * 0.24, w * 0.64);
+        ctx.beginPath();
+        ctx.arc(-l * 0.30, 0, w * 0.18, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // 艦尾動態揮舞：日本海上自衛隊十六條旭日旗
+      this.drawNavalEnsign('rising_sun', -l * 0.48, 0, 13, 8.5);
+
+    } else if (name.includes('Bremen') || name.includes('FGS ')) {
+      // 2. 德國布萊梅級巡防艦 (FGS Bremen F207)
+      const deHull = '#2A3742';
+      const deDetail = '#FFD54F';
+
+      ctx.fillStyle = '#1A252E';
+      ctx.strokeStyle = deDetail;
+      ctx.lineWidth = 1.9;
+
+      ctx.beginPath();
+      ctx.moveTo(l * 0.52, 0);
+      ctx.lineTo(l * 0.36, -w * 0.46);
+      ctx.lineTo(-l * 0.44, -w * 0.46);
+      ctx.lineTo(-l * 0.50, 0);
+      ctx.lineTo(-l * 0.44, w * 0.46);
+      ctx.lineTo(l * 0.36, w * 0.46);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // 前甲板 8聯裝 NATO 海麻雀
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(l * 0.14, -w * 0.22, l * 0.08, w * 0.44);
+
+      // 緊湊現代德式上層建築
+      ctx.fillStyle = '#263238';
+      ctx.fillRect(-l * 0.06, -w * 0.28, l * 0.16, w * 0.56);
+      ctx.strokeStyle = '#90A4AE';
+      ctx.strokeRect(-l * 0.06, -w * 0.28, l * 0.16, w * 0.56);
+
+      // 艦尾飛行甲板
+      ctx.fillStyle = '#212D38';
+      ctx.fillRect(-l * 0.44, -w * 0.32, l * 0.22, w * 0.64);
+
+      // 艦尾動態：德國聯邦海軍旗
+      this.drawNavalEnsign('de_bundesmarine', -l * 0.47, 0, 13, 8.5);
+
+    } else if (name.includes('Tourville') || name.includes('FS ')) {
+      // 3. 法國杜爾維爾級導向飛彈驅逐艦 (FS Tourville D610)
+      const frDetail = '#64B5F6';
+      ctx.fillStyle = '#1E2B37';
+      ctx.strokeStyle = frDetail;
+      ctx.lineWidth = 2.0;
+
+      ctx.beginPath();
+      ctx.moveTo(l * 0.52, 0);
+      ctx.lineTo(l * 0.36, -w * 0.45);
+      ctx.lineTo(-l * 0.45, -w * 0.45);
+      ctx.lineTo(-l * 0.50, 0);
+      ctx.lineTo(-l * 0.45, w * 0.45);
+      ctx.lineTo(l * 0.36, w * 0.45);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // 法式高聳傾斜主桅杆與雷達罩
+      ctx.fillStyle = '#2A3C4D';
+      ctx.fillRect(-l * 0.02, -w * 0.28, l * 0.16, w * 0.56);
+      ctx.fillStyle = '#ECEFF1';
+      ctx.beginPath();
+      ctx.arc(l * 0.05, 0, 4.0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 艦舯 Malafon 重型反潛飛彈箱
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(-l * 0.18, -w * 0.20, l * 0.10, w * 0.40);
+
+      // 艦尾響尾蛇 (Crotale) 防空飛彈發射架
+      ctx.fillStyle = '#546E7A';
+      ctx.fillRect(-l * 0.34, -w * 0.16, l * 0.08, w * 0.32);
+
+      // 艦尾動態：法國海軍三色旗
+      this.drawNavalEnsign('fr_marine', -l * 0.48, 0, 13, 8.5);
+
+    } else {
+      // 4. 英國皇家海軍 (Royal Navy SAG: KGV / Duke of York / Sheffield / Belfast / Type 42 / Jervis)
+      const isRNBB = name.includes('George') || name.includes('York') || ship.type === 'battleship';
+      const isRNDDG = name.includes('Type 42') || name.includes('42型') || name.includes('Gloucester') || (name.includes('Sheffield') && name.includes('D80'));
+      const isRNCruiser = name.includes('Belfast') || (name.includes('Sheffield') && !isRNDDG);
+      const isRNDD = !isRNBB && !isRNDDG && !isRNCruiser;
+
+      // 英國海軍部海軍灰 (Admiralty Dark Sea Grey)
+      ctx.fillStyle = isRNBB ? '#1E2B37' : '#192633';
+      ctx.strokeStyle = '#80DEEA';
+      ctx.lineWidth = 2.0;
+
+      // 艦體線條
+      ctx.beginPath();
+      ctx.moveTo(l * 0.52, 0);
+      ctx.lineTo(l * 0.36, -w * 0.46);
+      ctx.lineTo(-l * 0.42, -w * 0.46);
+      ctx.lineTo(-l * 0.50, -w * 0.30);
+      ctx.lineTo(-l * 0.50, w * 0.30);
+      ctx.lineTo(-l * 0.42, w * 0.46);
+      ctx.lineTo(l * 0.36, w * 0.46);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      if (isRNBB) {
+        // ═══ 喬治五世級戰艦 (KGV / Duke of York) 城堡艦橋與 14吋砲座 ═══
+        // 城堡型裝甲艦橋 (Citadel Tower)
+        ctx.fillStyle = '#263849';
+        ctx.fillRect(l * 0.02, -w * 0.28, l * 0.16, w * 0.56);
+        ctx.strokeStyle = '#B0BEC5';
+        ctx.strokeRect(l * 0.02, -w * 0.28, l * 0.16, w * 0.56);
+
+        // 觀察窗光澤 (Cyan Bridge Windows)
+        ctx.fillStyle = '#80DEEA';
+        ctx.fillRect(l * 0.14, -w * 0.20, 2.5, w * 0.40);
+
+        // 雙煙囪帶防雨排氣帽
+        ctx.fillStyle = '#1A2530';
+        ctx.beginPath();
+        ctx.ellipse(-l * 0.04, 0, 5, 3.5, 0, 0, Math.PI * 2);
+        ctx.ellipse(-l * 0.14, 0, 5, 3.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 艦舯水上飛機彈射甲板
+        ctx.fillStyle = '#37474F';
+        ctx.fillRect(-l * 0.22, -w * 0.34, l * 0.07, w * 0.68);
+
+        // 5.25吋兩用副砲耳台 (左右各四座)
+        ctx.fillStyle = '#455A64';
+        for (let s = -1; s <= 1; s += 2) {
+          ctx.beginPath();
+          ctx.arc(l * 0.08, s * w * 0.38, 3.5, 0, Math.PI * 2);
+          ctx.arc(-l * 0.08, s * w * 0.38, 3.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+      } else if (isRNDDG) {
+        // ═══ 42型 導向飛彈驅逐艦 (Type 42 Sheffield / Gloucester) ═══
+        // 艦首海鏢雙臂發射架底座 (Twin Sea Dart Launcher)
+        ctx.fillStyle = '#37474F';
+        ctx.fillRect(l * 0.18, -w * 0.20, l * 0.08, w * 0.40);
+        ctx.strokeStyle = '#80DEEA';
+        ctx.strokeRect(l * 0.18, -w * 0.20, l * 0.08, w * 0.40);
+
+        // 艦橋前 Type 909 白色球型射控天線罩
+        ctx.fillStyle = '#ECEFF1';
+        ctx.beginPath();
+        ctx.arc(l * 0.14, 0, 3.8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 緊湊艦橋與 Type 965 雷達大桅
+        ctx.fillStyle = '#263849';
+        ctx.fillRect(-l * 0.04, -w * 0.26, l * 0.15, w * 0.52);
+        ctx.strokeStyle = '#B0BEC5';
+        ctx.strokeRect(-l * 0.04, -w * 0.26, l * 0.15, w * 0.52);
+
+        // 艦橋後 Type 909 第二座球型天線罩
+        ctx.fillStyle = '#ECEFF1';
+        ctx.beginPath();
+        ctx.arc(-l * 0.12, 0, 3.8, 0, Math.PI * 2);
+        ctx.fill();
+
+        // 山貓直升機飛行甲板
+        ctx.fillStyle = '#1E2C38';
+        ctx.fillRect(-l * 0.44, -w * 0.34, l * 0.22, w * 0.68);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.strokeRect(-l * 0.44, -w * 0.34, l * 0.22, w * 0.68);
+
+      } else if (isRNCruiser) {
+        // ═══ 謝菲爾德 / 貝爾法斯特 輕巡洋艦 ═══
+        // 箱型上層艦橋
+        ctx.fillStyle = '#263849';
+        ctx.fillRect(l * 0.05, -w * 0.26, l * 0.15, w * 0.52);
+        ctx.strokeStyle = '#80DEEA';
+        ctx.strokeRect(l * 0.05, -w * 0.26, l * 0.15, w * 0.52);
+
+        // 雙傾斜煙囪
+        ctx.fillStyle = '#1A2530';
+        ctx.beginPath();
+        ctx.ellipse(-l * 0.05, 0, 4.5, 3, 0, 0, Math.PI * 2);
+        ctx.ellipse(-l * 0.16, 0, 4.5, 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+      } else {
+        // ═══ 皇家海軍驅逐艦 (Jervis / Cossack / Defender) ═══
+        ctx.fillStyle = '#263849';
+        ctx.fillRect(l * 0.06, -w * 0.24, l * 0.14, w * 0.48);
+        ctx.fillStyle = '#1A2530';
+        ctx.beginPath();
+        ctx.ellipse(-l * 0.06, 0, 4.5, 3, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // 艦尾動態：英國皇家海軍白船旗 (White Ensign)
+      this.drawNavalEnsign('white_ensign', -l * 0.48, 0, 13, 8.5);
+    }
+
+    this.drawShipTurrets(ship, hullColor);
+  }
+
   // 依照艦種呼叫對應之向量線條艦體繪製
   private renderShipHullByType(ship: Ship, hullColor: string, detailColor: string) {
+    // 優先判定盟軍水面作戰群 (Allied SAG) 專屬外觀
+    if (ship.isAlliedSAG || ship.side === 'allied') {
+      this.drawAlliedSAGShip(ship, hullColor, detailColor);
+      return;
+    }
+
     if (ship.type === 'carrier') {
       this.drawCarrier(ship, hullColor, detailColor);
     } else if (ship.type === 'cv63') {
       this.drawCV63(ship, hullColor, detailColor);
     } else if (ship.type === 'cg') {
       this.drawBelknapCG(ship, hullColor, detailColor);
+    } else if (ship.type === 'cvn') {
+      this.drawNimitzCVN(ship, hullColor, detailColor); // Nimitz supercarrier dedicated modern angled deck
+    } else if (ship.type === 'cg_tico') {
+      this.drawTiconderogaCG(ship, hullColor, detailColor);
+    } else if (ship.type === 'cg_virginia') {
+      this.drawVirginiaCG(ship, hullColor, detailColor);
+    } else if (ship.type === 'bb_iowa_mod') {
+      this.drawIowaModernized(ship, hullColor, detailColor);
+    } else if (ship.type === 'dd_spruance') {
+      this.drawSpruanceDD(ship, hullColor, detailColor);
+    } else if (ship.type === 'ddg_kidd') {
+      this.drawKiddDDG(ship, hullColor, detailColor);
+    } else if (ship.type === 'ffg_ohp') {
+      this.drawPerryFFG(ship, hullColor, detailColor);
+    } else if (ship.type === 'ssn_la') {
+      this.drawLosAngelesSSN(ship, hullColor, detailColor);
+    } else if (ship.type === 'lpd') {
+      this.drawAustinLPD(ship, hullColor, detailColor);
+    } else if (ship.type === 'lcac') {
+      this.drawLCAC(ship, hullColor, detailColor);
+    } else if (ship.type === 'cvhg_kiev') {
+      this.drawKievCVHG(ship, hullColor, detailColor);
+    } else if (ship.type === 'cgn_kirov') {
+      this.drawKirovCGN(ship, hullColor, detailColor);
+    } else if (ship.type === 'dd_sovremenny') {
+      this.drawSovremennyDD(ship, hullColor, detailColor);
+    } else if (ship.type === 'dd_udaloy') {
+      this.drawUdaloyDD(ship, hullColor, detailColor);
+    } else if (ship.type === 'ssgn_oscar') {
+      this.drawOscarSSGN(ship, hullColor, detailColor);
     } else if (ship.type === 'ddg') {
       this.drawAdamsDDG(ship, hullColor, detailColor);
     } else if (ship.type === 'dd') {
@@ -3736,12 +6244,27 @@ export class VectorRenderer {
       this.drawLSMR(ship, hullColor, detailColor);
     } else if (ship.type === 'cve') {
       this.drawCVE(ship, hullColor, detailColor);
+    } else if (ship.type === 'chokai') {
+      this.drawChokaiCA(ship, hullColor, detailColor);
+    } else if (ship.type === 'kongo') {
+      this.drawKongoBB(ship, hullColor, detailColor);
+    } else if (ship.type === 'akizuki') {
+      this.drawAkizukiDD(ship, hullColor, detailColor);
+    } else if (ship.type === 'sverdlov') {
+      this.drawSverdlovCL(ship, hullColor, detailColor);
+    } else if (ship.type === 'kynda') {
+      this.drawKyndaCG(ship, hullColor, detailColor);
+    } else if (ship.type === 'petya') {
+      this.drawPetyaFFG(ship, hullColor, detailColor);
+    } else {
+      this.drawCruiser(ship, hullColor, detailColor);
     }
   }
 
-  private drawShipStatus(ship: Ship) {
+  private drawShipStatus(ship: Ship, zoom: number = 0.65, isSelected: boolean = false) {
     const ctx = this.ctx;
     const isPlayer = ship.side === 'player';
+    const isAllied = ship.side === 'allied';
     
     const maxWcs = ship.maxWeaponControlHealth || ship.maxHealth;
     const curWcs = ship.weaponControlHealth !== undefined ? ship.weaponControlHealth : ship.health;
@@ -3750,6 +6273,18 @@ export class VectorRenderer {
     const maxHcs = ship.maxHullCrewHealth || ship.maxHealth;
     const curHcs = ship.hullCrewHealth !== undefined ? ship.hullCrewHealth : ship.health;
     const hcsPct = Math.max(0, Math.min(1, curHcs / maxHcs));
+
+    // Strategic Zoom LOD: when zoomed far out, render a clean compact HP bar unless flagship/selected
+    if (zoom < 0.34 && !ship.isFlagship && !isSelected) {
+      const compactW = 48;
+      const compactY = ship.pos.y - ship.width - 18;
+      const compactX = ship.pos.x - compactW / 2;
+      ctx.fillStyle = 'rgba(5, 14, 25, 0.85)';
+      ctx.fillRect(compactX - 1, compactY - 1, compactW + 2, 7);
+      ctx.fillStyle = hcsPct > 0.5 ? (isPlayer ? '#00E5FF' : isAllied ? '#00E676' : '#EF5350') : hcsPct > 0.25 ? '#FFCA28' : '#FF1744';
+      ctx.fillRect(compactX, compactY, compactW * hcsPct, 5);
+      return;
+    }
 
     const barWidth = 60;
     const barHeight = 4;
@@ -3763,7 +6298,7 @@ export class VectorRenderer {
     const plateY = ship.pos.y + yOffset - 12;
 
     ctx.fillStyle = 'rgba(5, 14, 25, 0.82)';
-    ctx.strokeStyle = isPlayer ? 'rgba(66, 165, 245, 0.45)' : 'rgba(239, 83, 80, 0.45)';
+    ctx.strokeStyle = isPlayer ? 'rgba(66, 165, 245, 0.45)' : isAllied ? 'rgba(0, 230, 118, 0.55)' : 'rgba(239, 83, 80, 0.45)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.roundRect(plateX, plateY, plateWidth, plateHeight, 3);
@@ -3773,13 +6308,21 @@ export class VectorRenderer {
     // 1. Ship Identifier Name & Submarine Status
     ctx.font = 'bold 9px monospace';
     ctx.textAlign = 'center';
-    ctx.fillStyle = isPlayer ? '#E0F7FA' : '#FFCDD2';
+    ctx.fillStyle = isPlayer ? '#E0F7FA' : isAllied ? '#A7FFEB' : '#FFCDD2';
     ctx.fillText(ship.codeName || ship.name, ship.pos.x, ship.pos.y + yOffset - 1);
 
-    if (ship.type === 'submarine' && (ship.isSubmerged ?? true)) {
+    if (this.isSubmarineShip(ship) && (ship.isSubmerged ?? true)) {
       ctx.font = 'bold 7.5px monospace';
-      ctx.fillStyle = '#4DD0E1';
-      ctx.fillText('[深潛 · 艦砲免疫]', ship.pos.x, plateY - 4);
+      if (ship.side === 'enemy') {
+        ctx.fillStyle = '#FFAB40';
+        ctx.fillText('[聲吶接觸定位 · 艦砲免疫]', ship.pos.x, plateY - 4);
+      } else if (ship.isSpottedByEnemy) {
+        ctx.fillStyle = '#FF5252';
+        ctx.fillText('[敵聲吶鎖定 · 位置暴露]', ship.pos.x, plateY - 4);
+      } else {
+        ctx.fillStyle = '#4DD0E1';
+        ctx.fillText('[潛航隱蔽 · 聲吶靜默]', ship.pos.x, plateY - 4);
+      }
     }
 
     const startX = ship.pos.x - barWidth / 2 + 6;
@@ -3920,7 +6463,8 @@ export class VectorRenderer {
       // ══════════════════════════════════════════════════════════
       // 4. 戰機本體向量繪製與多元墜毀模式 (Aircraft Vector & Crash Modes)
       // ══════════════════════════════════════════════════════════
-      const color = isPlayer ? '#80D8FF' : '#FF8A80';
+      const isAllied = plane.side === 'allied';
+      const color = isPlayer ? '#80D8FF' : isAllied ? '#00E676' : '#FF8A80';
 
       if (plane.state === 'shot_down') {
         const mode = plane.crashMode || 'smoke';
@@ -4028,7 +6572,7 @@ export class VectorRenderer {
         this.drawSpecificAircraftModel(plane, color);
 
         // ══════════════════════════════════════════════════════════
-        // 時代三噴射機尾焰與直升機旋翼動效 (Jet Flame & Helicopter Rotor)
+        // 現代噴射機尾焰與直升機旋翼動效 (Jet Flame & Helicopter Rotor)
         // ══════════════════════════════════════════════════════════
         const isJet =
           plane.model === 'f9f' ||
@@ -4047,8 +6591,42 @@ export class VectorRenderer {
           plane.model === 'f105' ||
           plane.model === 'a7' ||
           plane.model === 'mig21' ||
+          plane.model === 'mig19' ||
           plane.model === 'mig17' ||
-          plane.model === 'il28';
+          plane.model === 'su7' ||
+          plane.model === 'il28' ||
+          plane.model === 'tu16' ||
+          // Era 5 Jets (時代五全噴射戰機)
+          plane.model === 'f14a' ||
+          plane.model === 'fa18a' ||
+          plane.model === 'f15a' ||
+          plane.model === 'f16a' ||
+          plane.model === 'a10a' ||
+          plane.model === 'a6e' ||
+          plane.model === 'ea6b' ||
+          plane.model === 'av8b' ||
+          plane.model === 's3a' ||
+          plane.model === 'e3a' ||
+          plane.model === 'f111' ||
+          plane.model === 'tu22m3' ||
+          plane.model === 'yak38' ||
+          plane.model === 'mig29a' ||
+          plane.model === 'su27' ||
+          plane.model === 'a50' ||
+          plane.model === 'su25' ||
+          // Expanded Player & Allied Jets (時代三/四/五盟軍與美軍噴射機)
+          plane.model === 'meteor' ||
+          plane.model === 'a37b' ||
+          plane.model === 'f5a' ||
+          plane.model === 'f104g' ||
+          plane.model === 'mirage3' ||
+          plane.model === 'hunter_fga9' ||
+          plane.model === 'tornado_gr1' ||
+          plane.model === 'tornado_ids' ||
+          plane.model === 'tornado_adv' ||
+          plane.model === 'mirage2000' ||
+          plane.model === 'jaguar_gr1' ||
+          plane.model === 'viggen_ja37';
 
         if (isJet && plane.state !== 'landing') {
           const flamePulse = (Math.sin(this.time * 30 + (plane.id.charCodeAt(0) || 0)) + 1) * 0.5;
@@ -4061,7 +6639,24 @@ export class VectorRenderer {
             plane.model === 'a6b_weasel' ||
             plane.model === 'f2h' ||
             plane.model === 'tu14' ||
-            plane.model === 'il28';
+            plane.model === 'il28' ||
+            // Era 5 Twin Jets:
+            plane.model === 'f14a' ||
+            plane.model === 'fa18a' ||
+            plane.model === 'f15a' ||
+            plane.model === 's3a' ||
+            plane.model === 'a6e' ||
+            plane.model === 'ea6b' ||
+            plane.model === 'f111' ||
+            plane.model === 'tu22m3' ||
+            plane.model === 'mig29a' ||
+            plane.model === 'su27' ||
+            plane.model === 'su25' ||
+            plane.model === 'tornado_gr1' ||
+            plane.model === 'tornado_ids' ||
+            plane.model === 'tornado_adv' ||
+            plane.model === 'jaguar_gr1' ||
+            plane.model === 'a37b';
           const exhaustX = -16;
 
           if (isTwinExhaust) {
@@ -4109,57 +6704,156 @@ export class VectorRenderer {
           }
         }
 
-        const isHelo = plane.model === 'ho3s1' || plane.model === 'uh2' || plane.model === 'uh1' || plane.model === 'ah1' || plane.model === 'sh2';
+        // ══════════════════════════════════════════════════════════
+        // 蘇聯/北越「一擊脫離 (Hit & Run)」超音速掠殺與馬赫震波動效
+        // ══════════════════════════════════════════════════════════
+        if (plane.isHitAndRunActive) {
+          const abLen = 32 + (Math.sin(this.time * 40) + 1) * 8;
+          const abGrad = ctx.createLinearGradient(-16, 0, -16 - abLen, 0);
+          abGrad.addColorStop(0, '#FFFFFF');
+          abGrad.addColorStop(0.25, '#00E5FF');
+          abGrad.addColorStop(0.65, '#2979FF');
+          abGrad.addColorStop(1, 'rgba(41, 121, 255, 0)');
+          ctx.fillStyle = abGrad;
+          ctx.beginPath();
+          ctx.moveTo(-16, -3.5);
+          ctx.lineTo(-16 - abLen, 0);
+          ctx.lineTo(-16, 3.5);
+          ctx.closePath();
+          ctx.fill();
+
+          // Mach shock diamonds
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.lineWidth = 1.2;
+          for (let d = 1; d <= 3; d++) {
+            const dx = -16 - d * 7;
+            ctx.beginPath();
+            ctx.moveTo(dx, -2.5);
+            ctx.lineTo(dx - 3.5, 0);
+            ctx.lineTo(dx, 2.5);
+            ctx.lineTo(dx + 3.5, 0);
+            ctx.closePath();
+            ctx.stroke();
+          }
+
+          // Tactical HUD label
+          ctx.font = 'bold 9px monospace';
+          ctx.fillStyle = '#00E5FF';
+          ctx.textAlign = 'center';
+          ctx.fillText('⚡ MACH 1.8+ BUG-OUT', 0, -18);
+        }
+
+        const isHelo =
+          plane.model === 'ho3s1' ||
+          plane.model === 'uh2' ||
+          plane.model === 'uh1' ||
+          plane.model === 'ah1' ||
+          plane.model === 'sh2' ||
+          plane.model === 'sh3f' ||
+          plane.model === 'ch53' ||
+          plane.model === 'ah64a' ||
+          plane.model === 'ah1w' ||
+          plane.model === 'ka27' ||
+          plane.model === 'mi24';
         if (isHelo) {
           const rotorAngle = this.time * 42;
-          const rRadius = plane.model === 'ah1' ? 18 : 22;
+          const rRadius = plane.model === 'ah1' || plane.model === 'ah1w' ? 18 : plane.model === 'ch53' ? 28 : plane.model === 'ka27' ? 21 : 22;
           ctx.strokeStyle = 'rgba(128, 222, 234, 0.4)';
           ctx.lineWidth = 1.2;
           ctx.beginPath();
           ctx.arc(0, 0, rRadius, 0, Math.PI * 2);
           ctx.stroke();
 
-          // 2-blade or 3-blade main rotor
-          const blades = plane.model === 'ho3s1' ? 3 : 2;
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-          ctx.lineWidth = 2;
-          for (let b = 0; b < blades; b++) {
-            const rad = rotorAngle + (b * Math.PI * 2) / blades;
+          if (plane.model === 'ka27') {
+            // ════ Ka-27 Helix: Soviet Coaxial Contra-Rotating Dual Rotors (NO TAIL ROTOR) ════
+            // Upper rotor spinning clockwise, lower rotor spinning counter-clockwise
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.lineWidth = 2;
+            for (let b = 0; b < 3; b++) {
+              const radUpper = rotorAngle + (b * Math.PI * 2) / 3;
+              ctx.beginPath();
+              ctx.moveTo(0, 0);
+              ctx.lineTo(Math.cos(radUpper) * rRadius, Math.sin(radUpper) * rRadius);
+              ctx.stroke();
+            }
+            ctx.strokeStyle = 'rgba(179, 229, 252, 0.85)';
+            ctx.lineWidth = 1.8;
+            for (let b = 0; b < 3; b++) {
+              const radLower = -rotorAngle + (b * Math.PI * 2) / 3;
+              ctx.beginPath();
+              ctx.moveTo(0, 0);
+              ctx.lineTo(Math.cos(radLower) * (rRadius * 0.95), Math.sin(radLower) * (rRadius * 0.95));
+              ctx.stroke();
+            }
+            // Mast hub
+            ctx.fillStyle = '#CFD8DC';
             ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(Math.cos(rad) * rRadius, Math.sin(rad) * rRadius);
+            ctx.arc(0, 0, 3, 0, Math.PI * 2);
+            ctx.fill();
+            // Note: Ka-27 has NO tail rotor because contra-rotating torque cancels out!
+          } else {
+            // Main rotor blade counts: CH-53 (6 blades), Mi-24 / SH-3F (5 blades), AH-64A / UH-2 / SH-2 (4 blades), HO3S-1 (3 blades), AH-1 / AH-1W / UH-1 (2 blades)
+            const blades =
+              plane.model === 'ch53'
+                ? 6
+                : plane.model === 'mi24' || plane.model === 'sh3f'
+                ? 5
+                : plane.model === 'ah64a' || plane.model === 'sh2' || plane.model === 'uh2'
+                ? 4
+                : plane.model === 'ho3s1'
+                ? 3
+                : 2;
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.lineWidth = 2;
+            for (let b = 0; b < blades; b++) {
+              const rad = rotorAngle + (b * Math.PI * 2) / blades;
+              ctx.beginPath();
+              ctx.moveTo(0, 0);
+              ctx.lineTo(Math.cos(rad) * rRadius, Math.sin(rad) * rRadius);
+              ctx.stroke();
+            }
+
+            // Tail rotor
+            const tailDistance = plane.model === 'ch53' ? -22 : plane.model === 'mi24' ? -19 : -16;
+            ctx.strokeStyle = '#FFD54F';
+            ctx.lineWidth = 1.4;
+            ctx.beginPath();
+            ctx.arc(tailDistance, 2, 4.5, 0, Math.PI * 2);
             ctx.stroke();
           }
-
-          // Tail rotor
-          ctx.strokeStyle = '#FFD54F';
-          ctx.lineWidth = 1.4;
-          ctx.beginPath();
-          ctx.arc(-16, 2, 4.5, 0, Math.PI * 2);
-          ctx.stroke();
         }
 
         // ══════════════════════════════════════════════════════════
         // 5. 雙方二戰史實敵我識別特徵 (Historical Combat IFF Markings - No Civilian Nav Lights)
         // ══════════════════════════════════════════════════════════
         if (!isPlayer) {
-          const isColdWarOpfor =
-            plane.model === 'mig15' ||
-            plane.model === 'tu14' ||
-            plane.model === 'yak9' ||
-            plane.model === 'il10';
+          const isWw2Japanese =
+            plane.model === 'zero' ||
+            plane.model === 'zero_a6m2' ||
+            plane.model === 'zero_a6m5' ||
+            plane.model === 'kamikaze_zero' ||
+            plane.model === 'ki61' ||
+            plane.model === 'george' ||
+            plane.model === 'val' ||
+            plane.model === 'judy' ||
+            plane.model === 'kamikaze_judy' ||
+            plane.model === 'kate' ||
+            plane.model === 'jill' ||
+            plane.model === 'g4m' ||
+            plane.model === 'ohka';
 
-          if (!isColdWarOpfor) {
+          if (isWw2Japanese) {
             // 日軍特徵: 主翼前緣黃色敵我識別帶 (Yellow Leading Edge Band) + 胴體識別標帶
             const m = plane.model;
-            const span = m === 'g4m' ? 32 : (m === 'kate' || m === 'jill' || m === 'val') ? 17 : 14;
+            const span = m === 'g4m' ? 32 : (m === 'kate' || m === 'jill' || m === 'val' || m === 'judy') ? 17 : 14;
             this.drawJapaneseIFFLeadingEdge(span, 3.5, 3.5);
 
             // 機尾識別白胴帶 (Hachimaki identification stripe across fuselage)
             ctx.fillStyle = '#FFFFFF';
             ctx.fillRect(-6, -2.5, 2.5, 5);
           } else {
-            // 冷戰聯軍: 機尾紅星識別與紅星翼徽 (Red Star OPFOR Combat Markings)
+            // 冷戰/現代蘇軍與華約戰機: 機尾紅星識別與紅星翼徽 (Red Star OPFOR Combat Markings)
             ctx.fillStyle = '#D50000';
             ctx.strokeStyle = '#FFFFFF';
             ctx.lineWidth = 0.8;
@@ -4336,21 +7030,64 @@ export class VectorRenderer {
         const frameW = 34;
         const frameH = 17;
         const tagY = plane.pos.y - 28;
-        ctx.strokeStyle = isPlayer ? '#42A5F5' : '#FF5252';
-        ctx.fillStyle = isPlayer ? 'rgba(13, 71, 161, 0.75)' : 'rgba(183, 28, 28, 0.75)';
+        const isPl = isPlayer;
+        const isAl = plane.side === 'allied';
+        ctx.strokeStyle = isPl ? '#42A5F5' : isAl ? '#00E676' : '#FF5252';
+        ctx.fillStyle = isPl ? 'rgba(13, 71, 161, 0.75)' : isAl ? 'rgba(27, 94, 32, 0.75)' : 'rgba(183, 28, 28, 0.75)';
         ctx.lineWidth = 1.6;
 
-        ctx.strokeRect(plane.pos.x - frameW / 2, tagY, frameW, frameH);
-        ctx.fillRect(plane.pos.x - frameW / 2, tagY, frameW, frameH);
+        if (!isPl && !isAl) {
+          // NATO APP-6 敵軍菱形邊框 (Hostile Diamond Frame)
+          ctx.beginPath();
+          ctx.moveTo(plane.pos.x, tagY);
+          ctx.lineTo(plane.pos.x + frameW * 0.55, tagY + frameH / 2);
+          ctx.lineTo(plane.pos.x, tagY + frameH);
+          ctx.lineTo(plane.pos.x - frameW * 0.55, tagY + frameH / 2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          // NATO APP-6 友軍長方形邊框 (Friendly Rectangle Frame - Blue for US, Green for Allied)
+          ctx.fillRect(plane.pos.x - frameW / 2, tagY, frameW, frameH);
+          ctx.strokeRect(plane.pos.x - frameW / 2, tagY, frameW, frameH);
+        }
 
-        // Aviation Wing Symbol: Horizontal line with double arched wings
+        // Aviation Role Symbol: Rotary-wing vs Fixed-wing
         ctx.strokeStyle = '#FFFFFF';
         ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        ctx.moveTo(plane.pos.x - 11, tagY + frameH * 0.5);
-        ctx.quadraticCurveTo(plane.pos.x - 5, tagY + frameH * 0.2, plane.pos.x, tagY + frameH * 0.5);
-        ctx.quadraticCurveTo(plane.pos.x + 5, tagY + frameH * 0.2, plane.pos.x + 11, tagY + frameH * 0.5);
-        ctx.stroke();
+        const isRotary =
+          plane.model === 'ho3s1' ||
+          plane.model === 'uh2' ||
+          plane.model === 'uh1' ||
+          plane.model === 'ah1' ||
+          plane.model === 'sh2' ||
+          plane.model === 'sh3f' ||
+          plane.model === 'ch53' ||
+          plane.model === 'ah64a' ||
+          plane.model === 'ah1w' ||
+          plane.model === 'ka27' ||
+          plane.model === 'mi24';
+
+        if (isRotary) {
+          // 旋翼機/直升機 (Rotary-wing / Helicopter): 旋翼十字節點 (Rotor Hub with Blades)
+          const cy = tagY + frameH * 0.5;
+          ctx.beginPath();
+          ctx.moveTo(plane.pos.x - 7.5, cy - 3.5);
+          ctx.lineTo(plane.pos.x + 7.5, cy + 3.5);
+          ctx.moveTo(plane.pos.x - 7.5, cy + 3.5);
+          ctx.lineTo(plane.pos.x + 7.5, cy - 3.5);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(plane.pos.x, cy, 2, 0, Math.PI * 2);
+          ctx.stroke();
+        } else {
+          // 定翼機 (Fixed-wing Aircraft): 雙弧形海鷗飛翼 (Double Arched Wings)
+          ctx.beginPath();
+          ctx.moveTo(plane.pos.x - 11, tagY + frameH * 0.5);
+          ctx.quadraticCurveTo(plane.pos.x - 5, tagY + frameH * 0.2, plane.pos.x, tagY + frameH * 0.5);
+          ctx.quadraticCurveTo(plane.pos.x + 5, tagY + frameH * 0.2, plane.pos.x + 11, tagY + frameH * 0.5);
+          ctx.stroke();
+        }
 
         // Altitude & Speed Label (e.g. "FL08 · 140KT")
         const fl = Math.round(plane.altitude * 10);
@@ -4375,6 +7112,44 @@ export class VectorRenderer {
               : `MG: ${plane.gunAmmo} 發`;
           ctx.fillText(ammoLabel, plane.pos.x, tagY - 14);
         }
+      }
+
+      // 6d. 飛彈威脅對策規避戰術指示 (Threat-Matched Evasion HUD Badges: Notching & Breaking)
+      if (plane.isEvading && plane.evasionTactic && plane.state !== 'shot_down') {
+        ctx.save();
+        const pulse = (Math.sin(this.time * 20) + 1) * 0.5;
+        const bY = plane.pos.y - 30;
+        if (plane.evasionTactic === 'notching') {
+          // Cyan Notching Badge: 90° Beam Aspect to defeat radar
+          ctx.font = 'bold 9px monospace';
+          ctx.fillStyle = '#00E5FF';
+          ctx.textAlign = 'center';
+          ctx.fillText(`📡 NOTCHING 90° [都卜勒盲區]`, plane.pos.x, bY);
+
+          // Perpendicular Beam Aspect Guide
+          ctx.strokeStyle = `rgba(0, 229, 255, ${0.45 + pulse * 0.4})`;
+          ctx.lineWidth = 1.6;
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.moveTo(plane.pos.x - Math.cos(plane.heading) * 32, plane.pos.y - Math.sin(plane.heading) * 32);
+          ctx.lineTo(plane.pos.x + Math.cos(plane.heading) * 32, plane.pos.y + Math.sin(plane.heading) * 32);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        } else if (plane.evasionTactic === 'breaking') {
+          // Orange/Amber Breaking Badge: High-G Hard Slice + Flares
+          ctx.font = 'bold 9px monospace';
+          ctx.fillStyle = '#FF9100';
+          ctx.textAlign = 'center';
+          ctx.fillText(`⚡ HIGH-G BREAK [大G破轉]`, plane.pos.x, bY);
+
+          // High-G turn vortex arc
+          ctx.strokeStyle = `rgba(255, 145, 0, ${0.4 + pulse * 0.5})`;
+          ctx.lineWidth = 2.0;
+          ctx.beginPath();
+          ctx.arc(plane.pos.x, plane.pos.y, 22, plane.heading - 1.2, plane.heading + 1.2);
+          ctx.stroke();
+        }
+        ctx.restore();
       }
 
       // 7. AIM-7 Semi-Active Radar Homing (SARH) Nose Pencil Illumination Beam
@@ -4496,6 +7271,49 @@ export class VectorRenderer {
     ctx.moveTo(rootX, 3.5);
     ctx.lineTo(tipX, wingSpan * 0.72);
     ctx.stroke();
+    ctx.restore();
+  }
+
+  // British Royal Air Force / Fleet Air Arm Cockade Roundel (Type B / C1 Roundel)
+  private drawRAFRoundel(x: number, y: number, r: number) {
+    const ctx = this.ctx;
+    ctx.save();
+    // Outer Blue ring
+    ctx.fillStyle = '#0D47A1';
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+    // Middle White ring
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.65, 0, Math.PI * 2);
+    ctx.fill();
+    // Center Red dot
+    ctx.fillStyle = '#D32F2F';
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.32, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Republic of Korea Air Force (ROKAF) Taegeuk Insignia
+  private drawROKAFRoundel(x: number, y: number, r: number) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(x, y);
+    // Outer white wing bar
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(-r * 1.4, -r * 0.45, r * 2.8, r * 0.9);
+    // Taegeuk circle
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fillStyle = '#D32F2F';
+    ctx.fill();
+    // Blue half
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI);
+    ctx.fillStyle = '#1976D2';
+    ctx.fill();
     ctx.restore();
   }
 
@@ -6678,6 +9496,52 @@ export class VectorRenderer {
       ctx.stroke();
 
       if (isPlayer) this.drawUSInsignia(0, -18, 3.2);
+    } else if (m === 'c47') {
+      // ════ C-47 Skytrain / Dakota: Twin-Engine Paratrooper Transport ════
+      ctx.fillStyle = '#3B4D36';
+      ctx.strokeStyle = '#C5E1A5';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 17, 4.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Swept-back tapered transport wings
+      ctx.beginPath();
+      ctx.moveTo(5, -24);
+      ctx.lineTo(-4, -24);
+      ctx.lineTo(-5, 24);
+      ctx.lineTo(4, 24);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Invasion white stripes on wings
+      ctx.strokeStyle = '#ECEFF1';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(2, -13);
+      ctx.lineTo(-3, -13);
+      ctx.moveTo(2, 13);
+      ctx.lineTo(-3, 13);
+      ctx.stroke();
+
+      // Tailplane
+      ctx.strokeStyle = '#C5E1A5';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-14, -9);
+      ctx.lineTo(-14, 9);
+      ctx.stroke();
+
+      // Twin radial propellers
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.78)';
+      ctx.beginPath();
+      ctx.arc(8, -8, 5, 0, Math.PI * 2);
+      ctx.arc(8, 8, 5, 0, Math.PI * 2);
+      ctx.stroke();
+
+      if (isPlayer) this.drawUSInsignia(0, -18, 3.3);
     } else if (m === 'c1' || m === 's2') {
       // ════ C-1 Trader / S-2 Tracker: Twin-Engine Carrier Transport/ASW ════
       ctx.fillStyle = '#061322';
@@ -6933,6 +9797,2628 @@ export class VectorRenderer {
       ctx.arc(0, -16, 3, 0, Math.PI * 2);
       ctx.arc(0, 16, 3, 0, Math.PI * 2);
       ctx.fill();
+    } else if (m === 'su7') {
+      // ════ Su-7 Fitter: Supersonic Heavy Strike Fighter ════
+      ctx.fillStyle = '#141416';
+      ctx.strokeStyle = '#FF5252';
+      // Long tubular fuselage with Lyulka AL-7F afterburning turbojet
+      ctx.beginPath();
+      ctx.ellipse(3, 0, 18, 3.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Nose intake shock cone
+      ctx.fillStyle = '#263238';
+      ctx.beginPath();
+      ctx.moveTo(17, 0);
+      ctx.lineTo(21, 0);
+      ctx.stroke();
+
+      // Heavily swept 62-degree wings with prominent wing fences
+      ctx.beginPath();
+      ctx.moveTo(6, 0);
+      ctx.lineTo(-4, -18);
+      ctx.lineTo(-9, -18);
+      ctx.lineTo(-2, 0);
+      ctx.lineTo(-9, 18);
+      ctx.lineTo(-4, 18);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Wing boundary-layer fences
+      ctx.beginPath();
+      ctx.moveTo(0, -9);
+      ctx.lineTo(-6, -9);
+      ctx.moveTo(0, 9);
+      ctx.lineTo(-6, 9);
+      ctx.stroke();
+
+      // Twin 30mm NR-30 wing-root autocannons
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(4, -4);
+      ctx.lineTo(9, -4);
+      ctx.moveTo(4, 4);
+      ctx.lineTo(9, 4);
+      ctx.stroke();
+
+      // Red Star
+      ctx.fillStyle = '#D50000';
+      ctx.beginPath();
+      ctx.arc(-2, -12, 2.8, 0, Math.PI * 2);
+      ctx.arc(-2, 12, 2.8, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (m === 'mig19') {
+      // ════ MiG-19 Farmer: Twin-Jet Supersonic Fighter (VPAF 925th Reg) ════
+      ctx.fillStyle = '#161418';
+      ctx.strokeStyle = '#FF5252';
+      // Twin-engine fuselage with wide rear section
+      ctx.beginPath();
+      ctx.ellipse(2, 0, 15, 3.8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Twin exhaust nozzles at rear
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(-13, -2.6, 3, 2.2);
+      ctx.fillRect(-13, 0.4, 3, 2.2);
+
+      // 55° sharply swept wings
+      ctx.beginPath();
+      ctx.moveTo(4, 0);
+      ctx.lineTo(-4, -17);
+      ctx.lineTo(-8, -17);
+      ctx.lineTo(-3, 0);
+      ctx.lineTo(-8, 17);
+      ctx.lineTo(-4, 17);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Wing fence on each wing
+      ctx.beginPath();
+      ctx.moveTo(0, -10);
+      ctx.lineTo(-5, -10);
+      ctx.moveTo(0, 10);
+      ctx.lineTo(-5, 10);
+      ctx.stroke();
+
+      // Triple 30mm NR-30 guns (2 in wing roots, 1 in nose)
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(2, -4);
+      ctx.lineTo(8, -4);
+      ctx.moveTo(2, 4);
+      ctx.lineTo(8, 4);
+      ctx.moveTo(10, 1.8);
+      ctx.lineTo(15, 1.8);
+      ctx.stroke();
+
+      // VPAF Red Star with Yellow Border
+      ctx.fillStyle = '#D50000';
+      ctx.beginPath();
+      ctx.arc(-2, -11, 2.6, 0, Math.PI * 2);
+      ctx.arc(-2, 11, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (m === 'tu16') {
+      // ════ Tu-16 Badger: Heavy Maritime Anti-Ship Missile Bomber (Soviet AV-MF) ════
+      ctx.fillStyle = '#121922';
+      ctx.strokeStyle = '#FF5252';
+      // Long fuselage with glazed navigator nose and chin radome
+      ctx.beginPath();
+      ctx.ellipse(3, 0, 26, 4.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Glazed cockpit & nose
+      ctx.fillStyle = '#80DEEA';
+      ctx.beginPath();
+      ctx.arc(24, 0, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Chin search radar radome (Short Horn)
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(14, -2, 4.5, 4);
+
+      // Large 35° swept wings
+      ctx.beginPath();
+      ctx.moveTo(8, 0);
+      ctx.lineTo(-8, -34);
+      ctx.lineTo(-15, -34);
+      ctx.lineTo(-4, 0);
+      ctx.lineTo(-15, 34);
+      ctx.lineTo(-8, 34);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Huge Mikulin AM-3 turbojet nacelles blended into wing roots
+      ctx.fillStyle = '#263238';
+      ctx.fillRect(2, -8.5, 14, 5.2);
+      ctx.fillRect(2, 3.3, 14, 5.2);
+
+      // Swept tailplane and tail barbette
+      ctx.beginPath();
+      ctx.moveTo(-18, -12);
+      ctx.lineTo(-24, -12);
+      ctx.lineTo(-20, 0);
+      ctx.lineTo(-24, 12);
+      ctx.lineTo(-18, 12);
+      ctx.stroke();
+
+      // Tail gunner 23mm turret
+      ctx.fillStyle = '#FF5252';
+      ctx.fillRect(-26, -1, 4, 2);
+
+      // Underwing KSR-5 (AS-5 Kelt) heavy anti-ship cruise missiles
+      ctx.fillStyle = '#ECEFF1';
+      ctx.strokeStyle = '#FF3D00';
+      ctx.lineWidth = 1.3;
+      for (const my of [-18, 18]) {
+        ctx.fillRect(-2, my - 1.6, 12, 3.2);
+        ctx.strokeRect(-2, my - 1.6, 12, 3.2);
+        // Missile delta wings
+        ctx.beginPath();
+        ctx.moveTo(3, my - 4);
+        ctx.lineTo(6, my);
+        ctx.lineTo(3, my + 4);
+        ctx.stroke();
+      }
+
+      // Soviet Red Stars on wings
+      ctx.fillStyle = '#D50000';
+      ctx.beginPath();
+      ctx.arc(-6, -26, 3.2, 0, Math.PI * 2);
+      ctx.arc(-6, 26, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (m === 'f14a') {
+      // ════ F-14A Tomcat: Variable-sweep wings, twin vertical tails, glove vanes ════
+      ctx.fillStyle = '#091A2C';
+      // Blended lifting-body fuselage
+      ctx.beginPath();
+      ctx.moveTo(18, 0);
+      ctx.lineTo(8, -4.5);
+      ctx.lineTo(-14, -5.5);
+      ctx.lineTo(-18, -4);
+      ctx.lineTo(-18, 4);
+      ctx.lineTo(-14, 5.5);
+      ctx.lineTo(8, 4.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Variable-Sweep Wings (Swept position for high-speed intercept)
+      ctx.beginPath();
+      ctx.moveTo(6, -5);
+      ctx.lineTo(-6, -22);
+      ctx.lineTo(-12, -22);
+      ctx.lineTo(-4, -5);
+      ctx.moveTo(6, 5);
+      ctx.lineTo(-6, 22);
+      ctx.lineTo(-12, 22);
+      ctx.lineTo(-4, 5);
+      ctx.stroke();
+
+      // Twin canted vertical stabilizers
+      ctx.strokeStyle = '#4FC3F7';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(-10, -3.8);
+      ctx.lineTo(-16, -3.8);
+      ctx.moveTo(-10, 3.8);
+      ctx.lineTo(-16, 3.8);
+      ctx.stroke();
+
+      // Twin TF30 engine exhausts
+      ctx.fillStyle = '#FFB300';
+      ctx.fillRect(-19, -4.5, 2, 2.5);
+      ctx.fillRect(-19, 2, 2, 2.5);
+
+      if (isPlayer) this.drawUSInsignia(0, -12, 3.0);
+    } else if (m === 'fa18a') {
+      // ════ F/A-18A Hornet: Leading edge root extensions (LEX) and twin canted tails ════
+      ctx.fillStyle = '#08182A';
+      ctx.beginPath();
+      ctx.moveTo(17, 0);
+      ctx.lineTo(10, -2.8);
+      ctx.lineTo(2, -4.5);
+      ctx.lineTo(-14, -4.5);
+      ctx.lineTo(-17, 0);
+      ctx.lineTo(-14, 4.5);
+      ctx.lineTo(2, 4.5);
+      ctx.lineTo(10, 2.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Mid-mounted 20-degree swept wings
+      ctx.beginPath();
+      ctx.moveTo(2, -4.5);
+      ctx.lineTo(-2, -18);
+      ctx.lineTo(-7, -18);
+      ctx.lineTo(-6, -4.5);
+      ctx.moveTo(2, 4.5);
+      ctx.lineTo(-2, 18);
+      ctx.lineTo(-7, 18);
+      ctx.lineTo(-6, 4.5);
+      ctx.stroke();
+
+      // Twin outward-canted rudders
+      ctx.strokeStyle = '#29B6F6';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-8, -3.2);
+      ctx.lineTo(-14, -3.8);
+      ctx.moveTo(-8, 3.2);
+      ctx.lineTo(-14, 3.8);
+      ctx.stroke();
+
+      if (isPlayer) this.drawUSInsignia(0, -10, 2.8);
+    } else if (m === 'a10a') {
+      // ════ A-10A Thunderbolt II: Straight unswept high-aspect wing, twin nacelles over tail ════
+      ctx.fillStyle = '#091A26';
+      // Rugged titanium bathtub cockpit & fuselage
+      ctx.beginPath();
+      ctx.moveTo(16, 0);
+      ctx.lineTo(12, -2.8);
+      ctx.lineTo(-16, -2.8);
+      ctx.lineTo(-18, 0);
+      ctx.lineTo(-16, 2.8);
+      ctx.lineTo(12, 2.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Long unswept wings (Wide Wingspan)
+      ctx.beginPath();
+      ctx.moveTo(4, -26);
+      ctx.lineTo(4, 26);
+      ctx.lineTo(-4, 26);
+      ctx.lineTo(-4, -26);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Twin elevated TF34 turbofans mounted on rear fuselage
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(-8, -7, 10, 3.8);
+      ctx.fillRect(-8, 3.2, 10, 3.8);
+
+      // GAU-8 30mm Avenger Gatling Gun muzzle in nose
+      ctx.fillStyle = '#FFD54F';
+      ctx.fillRect(16, -0.6, 2.5, 1.2);
+
+      if (isPlayer) this.drawUSInsignia(-1, -14, 3.2);
+    } else if (m === 'f15a') {
+      // ════ F-15A Eagle: Twin-tail high-wing air superiority fighter ════
+      ctx.fillStyle = '#071626';
+      ctx.beginPath();
+      ctx.moveTo(19, 0);
+      ctx.lineTo(10, -3.5);
+      ctx.lineTo(-16, -4.8);
+      ctx.lineTo(-18, 0);
+      ctx.lineTo(-16, 4.8);
+      ctx.lineTo(10, 3.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Large clipped-delta wings
+      ctx.beginPath();
+      ctx.moveTo(6, -4.5);
+      ctx.lineTo(-4, -22);
+      ctx.lineTo(-11, -22);
+      ctx.lineTo(-8, -4.8);
+      ctx.moveTo(6, 4.5);
+      ctx.lineTo(-4, 22);
+      ctx.lineTo(-11, 22);
+      ctx.lineTo(-8, 4.8);
+      ctx.stroke();
+
+      // Twin vertical fins
+      ctx.strokeStyle = '#00E5FF';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(-10, -4);
+      ctx.lineTo(-16, -4);
+      ctx.moveTo(-10, 4);
+      ctx.lineTo(-16, 4);
+      ctx.stroke();
+
+      if (isPlayer) this.drawUSInsignia(0, -12, 3.0);
+    } else if (m === 'f16a') {
+      // ════ F-16A Fighting Falcon: Single engine, frameless bubble canopy, blended wing-body ════
+      ctx.fillStyle = '#081A2A';
+      ctx.beginPath();
+      ctx.moveTo(16, 0);
+      ctx.lineTo(8, -2.6);
+      ctx.lineTo(-13, -3.4);
+      ctx.lineTo(-16, 0);
+      ctx.lineTo(-13, 3.4);
+      ctx.lineTo(8, 2.6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Cropped-delta wing with missile rails on tips
+      ctx.beginPath();
+      ctx.moveTo(3, -3.2);
+      ctx.lineTo(-3, -16);
+      ctx.lineTo(-7, -16);
+      ctx.lineTo(-6, -3.4);
+      ctx.moveTo(3, 3.2);
+      ctx.lineTo(-3, 16);
+      ctx.lineTo(-7, 16);
+      ctx.lineTo(-6, 3.4);
+      ctx.stroke();
+
+      if (isPlayer) this.drawUSInsignia(-1, -9, 2.6);
+    } else if (m === 'mig29a' || m === 'su27') {
+      // ════ MiG-29A Fulcrum & Su-27 Flanker: Twin engine, twin tail, blended LERX ════
+      const isSu27 = m === 'su27';
+      const scale = isSu27 ? 1.25 : 1.0;
+      ctx.fillStyle = '#1C1217';
+      ctx.strokeStyle = '#FF5252';
+      ctx.lineWidth = 1.5;
+
+      ctx.beginPath();
+      ctx.moveTo(17 * scale, 0);
+      ctx.lineTo(9 * scale, -3.2 * scale);
+      ctx.lineTo(-14 * scale, -4.5 * scale);
+      ctx.lineTo(-17 * scale, 0);
+      ctx.lineTo(-14 * scale, 4.5 * scale);
+      ctx.lineTo(9 * scale, 3.2 * scale);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Swept wing with prominent root extensions
+      ctx.beginPath();
+      ctx.moveTo(2 * scale, -4 * scale);
+      ctx.lineTo(-4 * scale, -18 * scale);
+      ctx.lineTo(-9 * scale, -18 * scale);
+      ctx.lineTo(-7 * scale, -4.5 * scale);
+      ctx.moveTo(2 * scale, 4 * scale);
+      ctx.lineTo(-4 * scale, 18 * scale);
+      ctx.lineTo(-9 * scale, 18 * scale);
+      ctx.lineTo(-7 * scale, 4.5 * scale);
+      ctx.stroke();
+
+      // Soviet Red Stars
+      ctx.fillStyle = '#D50000';
+      ctx.beginPath();
+      ctx.arc(-4 * scale, -10 * scale, 2.5, 0, Math.PI * 2);
+      ctx.arc(-4 * scale, 10 * scale, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (m === 'tu22m3') {
+      // ════ Tu-22M3 Backfire: Supersonic variable-sweep heavy missile bomber ════
+      ctx.fillStyle = '#1B0E14';
+      ctx.strokeStyle = '#FF3D00';
+      ctx.lineWidth = 1.8;
+
+      ctx.beginPath();
+      ctx.moveTo(24, 0);
+      ctx.lineTo(14, -4.5);
+      ctx.lineTo(-18, -6);
+      ctx.lineTo(-24, 0);
+      ctx.lineTo(-18, 6);
+      ctx.lineTo(14, 4.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Variable sweep wings swept back for supersonic penetration
+      ctx.beginPath();
+      ctx.moveTo(8, -6);
+      ctx.lineTo(-6, -26);
+      ctx.lineTo(-12, -26);
+      ctx.lineTo(-4, -6);
+      ctx.moveTo(8, 6);
+      ctx.lineTo(-6, 26);
+      ctx.lineTo(-12, 26);
+      ctx.lineTo(-4, 6);
+      ctx.stroke();
+
+      // Kh-22 (AS-4 Kitchen) heavy supersonic anti-ship missile mounted under belly
+      ctx.fillStyle = '#ECEFF1';
+      ctx.fillRect(-6, -1.8, 16, 3.6);
+
+      // Red Stars
+      ctx.fillStyle = '#D50000';
+      ctx.beginPath();
+      ctx.arc(-8, -16, 3, 0, Math.PI * 2);
+      ctx.arc(-8, 16, 3, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (m === 'ah64a') {
+      // ════ AH-64A Apache: Tandem cockpit, cheek sponsons, TADS turret, 30mm chain gun, Hellfire rails ════
+      ctx.fillStyle = '#102015';
+      ctx.strokeStyle = '#66BB6A';
+      ctx.lineWidth = 1.6;
+
+      // Narrow fuselage with cheek avionics sponsons
+      ctx.beginPath();
+      ctx.moveTo(15, 0);
+      ctx.lineTo(10, -2.2);
+      ctx.lineTo(2, -4.2);
+      ctx.lineTo(-8, -3.2);
+      ctx.lineTo(-20, -1.5);
+      ctx.lineTo(-24, 0);
+      ctx.lineTo(-20, 1.5);
+      ctx.lineTo(-8, 3.2);
+      ctx.lineTo(2, 4.2);
+      ctx.lineTo(10, 2.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Nose TADS/PNVS sensor turret ball
+      ctx.fillStyle = '#37474F';
+      ctx.beginPath();
+      ctx.arc(15, 0, 2.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // M230 30mm chain gun barrel
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(11, 0);
+      ctx.lineTo(18, 0);
+      ctx.stroke();
+
+      // Stub wings with rocket pods and AGM-114 Hellfire rails
+      ctx.strokeStyle = '#81C784';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(0, -4.2);
+      ctx.lineTo(-2, -12);
+      ctx.moveTo(0, 4.2);
+      ctx.lineTo(-2, 12);
+      ctx.stroke();
+
+      // Hellfire racks & Hydra pods
+      ctx.fillStyle = '#2E7D32';
+      ctx.fillRect(-4, -13, 5, 2.2);
+      ctx.fillRect(-4, 10.8, 5, 2.2);
+
+      // Tail horizontal stabilator
+      ctx.beginPath();
+      ctx.moveTo(-21, -6);
+      ctx.lineTo(-21, 6);
+      ctx.stroke();
+
+      if (isPlayer) this.drawUSInsignia(-4, 0, 2.4);
+    } else if (m === 'ah1w') {
+      // ════ AH-1W SuperCobra: Ultra-slim tandem fuselage, chin Gatling turret, stub wings ════
+      ctx.fillStyle = '#0F1A1B';
+      ctx.strokeStyle = '#4DB6AC';
+      ctx.lineWidth = 1.5;
+
+      ctx.beginPath();
+      ctx.moveTo(16, 0);
+      ctx.lineTo(11, -1.8);
+      ctx.lineTo(-6, -2.4);
+      ctx.lineTo(-21, -1.2);
+      ctx.lineTo(-23, 0);
+      ctx.lineTo(-21, 1.2);
+      ctx.lineTo(-6, 2.4);
+      ctx.lineTo(11, 1.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Under-chin 20mm 3-barrel cannon
+      ctx.strokeStyle = '#FFCA28';
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(13, 0);
+      ctx.lineTo(19, 0);
+      ctx.stroke();
+
+      // Stub wings with TOW/Hellfire pods
+      ctx.strokeStyle = '#80CBC4';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-1, -2.4);
+      ctx.lineTo(-2, -9);
+      ctx.moveTo(-1, 2.4);
+      ctx.lineTo(-2, 9);
+      ctx.stroke();
+
+      if (isPlayer) this.drawUSInsignia(-4, 0, 2.2);
+    } else if (m === 'f111') {
+      // ════ F-111 Aardvark: Long needle nose, variable-sweep shoulder wings, twin TF30 afterburners ════
+      ctx.fillStyle = '#0A1822';
+      ctx.strokeStyle = '#4FC3F7';
+      ctx.lineWidth = 1.8;
+
+      ctx.beginPath();
+      ctx.moveTo(25, 0);
+      ctx.lineTo(15, -3.2);
+      ctx.lineTo(-17, -5.2);
+      ctx.lineTo(-22, 0);
+      ctx.lineTo(-17, 5.2);
+      ctx.lineTo(15, 3.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Variable sweep wings
+      ctx.beginPath();
+      ctx.moveTo(8, -5);
+      ctx.lineTo(-5, -24);
+      ctx.lineTo(-11, -24);
+      ctx.lineTo(-7, -5.2);
+      ctx.moveTo(8, 5);
+      ctx.lineTo(-5, 24);
+      ctx.lineTo(-11, 24);
+      ctx.lineTo(-7, 5.2);
+      ctx.stroke();
+
+      // Horizontal stabs & twin exhausts
+      ctx.beginPath();
+      ctx.moveTo(-16, -11);
+      ctx.lineTo(-20, -11);
+      ctx.lineTo(-19, -4.5);
+      ctx.moveTo(-16, 11);
+      ctx.lineTo(-20, 11);
+      ctx.lineTo(-19, 4.5);
+      ctx.stroke();
+
+      if (isPlayer) this.drawUSInsignia(0, -14, 3.0);
+    } else if (m === 'e3a') {
+      // ════ E-3A Sentry AWACS: 4-engine Boeing 707 airframe with rotating APY-2 rotodome radar ════
+      ctx.fillStyle = '#0E1E2E';
+      ctx.strokeStyle = '#81D4FA';
+      ctx.lineWidth = 2;
+
+      // Long 707 airliner fuselage
+      ctx.beginPath();
+      ctx.moveTo(28, 0);
+      ctx.lineTo(20, -4.2);
+      ctx.lineTo(-24, -4.8);
+      ctx.lineTo(-29, 0);
+      ctx.lineTo(-24, 4.8);
+      ctx.lineTo(20, 4.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Swept wings with 4 turbofan nacelles
+      ctx.beginPath();
+      ctx.moveTo(6, -4.8);
+      ctx.lineTo(-8, -32);
+      ctx.lineTo(-14, -32);
+      ctx.lineTo(-6, -4.8);
+      ctx.moveTo(6, 4.8);
+      ctx.lineTo(-8, 32);
+      ctx.lineTo(-14, 32);
+      ctx.lineTo(-6, 4.8);
+      ctx.stroke();
+
+      // 4 CFM56 Turbofan engines
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(-2, -16, 8, 3.2);
+      ctx.fillRect(-6, -26, 8, 3.2);
+      ctx.fillRect(-2, 12.8, 8, 3.2);
+      ctx.fillRect(-6, 22.8, 8, 3.2);
+
+      // Rotating APY-2 Rotodome 30ft Radar Disc on rear fuselage
+      const rotAngle = this.time * 2.5;
+      ctx.save();
+      ctx.translate(-4, 0);
+      ctx.rotate(rotAngle);
+      // Dark half & light half
+      ctx.fillStyle = '#212121';
+      ctx.beginPath();
+      ctx.arc(0, 0, 11, -Math.PI / 2, Math.PI / 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#ECEFF1';
+      ctx.beginPath();
+      ctx.arc(0, 0, 11, Math.PI / 2, (3 * Math.PI) / 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#00E5FF';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 11, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+
+      if (isPlayer) this.drawUSInsignia(-12, 0, 3.5);
+    } else if (m === 'e2c') {
+      // ════ E-2C Hawkeye: Twin turboprop carrier AWACS with rotating rotodome and quad tailfins ════
+      ctx.fillStyle = '#0B1C2A';
+      ctx.strokeStyle = '#4FC3F7';
+      ctx.lineWidth = 1.8;
+
+      ctx.beginPath();
+      ctx.moveTo(17, 0);
+      ctx.lineTo(12, -3.8);
+      ctx.lineTo(-16, -4.2);
+      ctx.lineTo(-20, 0);
+      ctx.lineTo(-16, 4.2);
+      ctx.lineTo(12, 3.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // High straight wings
+      ctx.beginPath();
+      ctx.moveTo(3, -26);
+      ctx.lineTo(3, 26);
+      ctx.lineTo(-4, 26);
+      ctx.lineTo(-4, -26);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Twin Allison T56 turboprop nacelles & propeller blur discs
+      ctx.fillStyle = '#263238';
+      ctx.fillRect(0, -11, 8, 3.6);
+      ctx.fillRect(0, 7.4, 8, 3.6);
+      ctx.strokeStyle = 'rgba(128, 222, 234, 0.4)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(8, -9.2, 5.5, 0, Math.PI * 2);
+      ctx.arc(8, 9.2, 5.5, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Quad vertical tail fins
+      ctx.strokeStyle = '#29B6F6';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(-18, -10);
+      ctx.lineTo(-18, 10);
+      ctx.moveTo(-16, -10);
+      ctx.lineTo(-20, -10);
+      ctx.moveTo(-16, -3.5);
+      ctx.lineTo(-20, -3.5);
+      ctx.moveTo(-16, 3.5);
+      ctx.lineTo(-20, 3.5);
+      ctx.moveTo(-16, 10);
+      ctx.lineTo(-20, 10);
+      ctx.stroke();
+
+      // Rotating APS-125 Radar Rotodome
+      const e2Rot = this.time * 2.8;
+      ctx.save();
+      ctx.translate(-2, 0);
+      ctx.rotate(e2Rot);
+      ctx.fillStyle = '#ECEFF1';
+      ctx.strokeStyle = '#00E5FF';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(0, 0, 9.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-9.5, 0);
+      ctx.lineTo(9.5, 0);
+      ctx.stroke();
+      ctx.restore();
+
+      if (isPlayer) this.drawUSInsignia(-9, 0, 2.6);
+    } else if (m === 'a6e') {
+      // ════ A-6E Intruder: Broad bulbous radome, TRAM FLIR ball turret, swept wings ════
+      ctx.fillStyle = '#081724';
+      ctx.strokeStyle = '#29B6F6';
+      ctx.lineWidth = 1.7;
+
+      ctx.beginPath();
+      ctx.moveTo(15, 0);
+      ctx.lineTo(9, -4.2);
+      ctx.lineTo(-13, -4.6);
+      ctx.lineTo(-17, 0);
+      ctx.lineTo(-13, 4.6);
+      ctx.lineTo(9, 4.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Under-nose TRAM FLIR sensor ball turret
+      ctx.fillStyle = '#00E5FF';
+      ctx.beginPath();
+      ctx.arc(13, 0, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Mid-mounted swept wings with wingtip speed brakes
+      ctx.beginPath();
+      ctx.moveTo(4, -4.5);
+      ctx.lineTo(-4, -22);
+      ctx.lineTo(-9, -22);
+      ctx.lineTo(-6, -4.6);
+      ctx.moveTo(4, 4.5);
+      ctx.lineTo(-4, 22);
+      ctx.lineTo(-9, 22);
+      ctx.lineTo(-6, 4.6);
+      ctx.stroke();
+
+      if (isPlayer) this.drawUSInsignia(-2, -12, 2.8);
+    } else if (m === 'ea6b') {
+      // ════ EA-6B Prowler: Stretched 4-seat cockpit, football ECM pod on tailfin, ALQ-99 pods ════
+      ctx.fillStyle = '#081726';
+      ctx.strokeStyle = '#00E5FF';
+      ctx.lineWidth = 1.8;
+
+      ctx.beginPath();
+      ctx.moveTo(17, 0);
+      ctx.lineTo(10, -4.2);
+      ctx.lineTo(-15, -4.6);
+      ctx.lineTo(-19, 0);
+      ctx.lineTo(-15, 4.6);
+      ctx.lineTo(10, 4.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // 4-seat gold-tinted canopy
+      ctx.fillStyle = 'rgba(255, 215, 0, 0.4)';
+      ctx.fillRect(4, -2.8, 8, 5.6);
+
+      // Swept wings
+      ctx.beginPath();
+      ctx.moveTo(5, -4.5);
+      ctx.lineTo(-4, -22);
+      ctx.lineTo(-9, -22);
+      ctx.lineTo(-6, -4.6);
+      ctx.moveTo(5, 4.5);
+      ctx.lineTo(-4, 22);
+      ctx.lineTo(-9, 22);
+      ctx.lineTo(-6, 4.6);
+      ctx.stroke();
+
+      // Football ECM pod on top of vertical fin
+      ctx.fillStyle = '#ECEFF1';
+      ctx.beginPath();
+      ctx.ellipse(-16, 0, 4.5, 2.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // ALQ-99 Tactical Jamming Pods under wings
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(-2, -14, 6, 2.5);
+      ctx.fillRect(-2, 11.5, 6, 2.5);
+
+      if (isPlayer) this.drawUSInsignia(-1, 0, 2.8);
+    } else if (m === 'av8b') {
+      // ════ AV-8B Harrier II: Anhedral drooping wings, outrigger landing gear pods, 4 Pegasus nozzles ════
+      ctx.fillStyle = '#091925';
+      ctx.strokeStyle = '#26C6DA';
+      ctx.lineWidth = 1.6;
+
+      ctx.beginPath();
+      ctx.moveTo(15, 0);
+      ctx.lineTo(9, -2.8);
+      ctx.lineTo(-12, -3.8);
+      ctx.lineTo(-16, 0);
+      ctx.lineTo(-12, 3.8);
+      ctx.lineTo(9, 2.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Supercritical high wing with anhedral droop
+      ctx.beginPath();
+      ctx.moveTo(3, -3.6);
+      ctx.lineTo(-2, -16);
+      ctx.lineTo(-7, -16);
+      ctx.lineTo(-5, -3.8);
+      ctx.moveTo(3, 3.6);
+      ctx.lineTo(-2, 16);
+      ctx.lineTo(-7, 16);
+      ctx.lineTo(-5, 3.8);
+      ctx.stroke();
+
+      // Wingtip outrigger landing gear fairings
+      ctx.fillStyle = '#CFD8DC';
+      ctx.fillRect(-6, -17.2, 3, 1.8);
+      ctx.fillRect(-6, 15.4, 3, 1.8);
+
+      // Four Pegasus vectored thrust rotating nozzle fairings
+      ctx.fillStyle = '#FFB300';
+      ctx.fillRect(1, -4.5, 2.5, 1.2);
+      ctx.fillRect(-3, -4.5, 2.5, 1.2);
+      ctx.fillRect(1, 3.3, 2.5, 1.2);
+      ctx.fillRect(-3, 3.3, 2.5, 1.2);
+
+      if (isPlayer) this.drawUSInsignia(-2, -9, 2.4);
+    } else if (m === 's3a') {
+      // ════ S-3A Viking: High swept wings, TF34 turbofans under wings, retractable MAD boom ════
+      ctx.fillStyle = '#081726';
+      ctx.strokeStyle = '#4FC3F7';
+      ctx.lineWidth = 1.8;
+
+      ctx.beginPath();
+      ctx.moveTo(16, 0);
+      ctx.lineTo(11, -3.5);
+      ctx.lineTo(-15, -4.0);
+      ctx.lineTo(-18, 0);
+      ctx.lineTo(-15, 4.0);
+      ctx.lineTo(11, 3.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // High swept wings
+      ctx.beginPath();
+      ctx.moveTo(3, -4);
+      ctx.lineTo(-3, -24);
+      ctx.lineTo(-8, -24);
+      ctx.lineTo(-5, -4);
+      ctx.moveTo(3, 4);
+      ctx.lineTo(-3, 24);
+      ctx.lineTo(-8, 24);
+      ctx.lineTo(-5, 4);
+      ctx.stroke();
+
+      // Twin TF34 turbofan nacelles under wings
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(-2, -10, 8, 3.4);
+      ctx.fillRect(-2, 6.6, 8, 3.4);
+
+      // Retractable Magnetic Anomaly Detector (MAD) boom from tail
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(-18, 0);
+      ctx.lineTo(-26, 0);
+      ctx.stroke();
+
+      if (isPlayer) this.drawUSInsignia(-2, -14, 2.8);
+    } else if (m === 'c130') {
+      // ════ C-130 Hercules: Four turboprops, high straight wing, side sponsons, blunt nose ════
+      ctx.fillStyle = '#0B1C28';
+      ctx.strokeStyle = '#80CBC4';
+      ctx.lineWidth = 2;
+
+      // Heavy transport fuselage with sponsons
+      ctx.beginPath();
+      ctx.moveTo(24, 0);
+      ctx.lineTo(18, -4.8);
+      ctx.lineTo(4, -5.8);
+      ctx.lineTo(-6, -5.8); // Side sponson
+      ctx.lineTo(-22, -4.4);
+      ctx.lineTo(-27, 0);
+      ctx.lineTo(-22, 4.4);
+      ctx.lineTo(-6, 5.8);
+      ctx.lineTo(4, 5.8);
+      ctx.lineTo(18, 4.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // High straight wings
+      ctx.beginPath();
+      ctx.moveTo(6, -34);
+      ctx.lineTo(6, 34);
+      ctx.lineTo(-4, 34);
+      ctx.lineTo(-4, -34);
+      ctx.closePath();
+      ctx.stroke();
+
+      // 4 Allison T56 Turboprop engines and blur discs
+      ctx.fillStyle = '#263238';
+      ctx.fillRect(3, -16, 7, 3.2);
+      ctx.fillRect(3, -27, 7, 3.2);
+      ctx.fillRect(3, 12.8, 7, 3.2);
+      ctx.fillRect(3, 23.8, 7, 3.2);
+
+      ctx.strokeStyle = 'rgba(178, 235, 242, 0.45)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(10, -14.4, 5, 0, Math.PI * 2);
+      ctx.arc(10, -25.4, 5, 0, Math.PI * 2);
+      ctx.arc(10, 14.4, 5, 0, Math.PI * 2);
+      ctx.arc(10, 25.4, 5, 0, Math.PI * 2);
+      ctx.stroke();
+
+      if (isPlayer) this.drawUSInsignia(-6, 0, 3.4);
+    } else if (m === 'c2a') {
+      // ════ C-2A Greyhound: Carrier transport, quad tail fins, twin turboprops ════
+      ctx.fillStyle = '#091A29';
+      ctx.strokeStyle = '#4FC3F7';
+      ctx.lineWidth = 1.8;
+
+      ctx.beginPath();
+      ctx.moveTo(17, 0);
+      ctx.lineTo(12, -4.0);
+      ctx.lineTo(-17, -4.5);
+      ctx.lineTo(-21, 0);
+      ctx.lineTo(-17, 4.5);
+      ctx.lineTo(12, 4.0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Wings
+      ctx.beginPath();
+      ctx.moveTo(3, -25);
+      ctx.lineTo(3, 25);
+      ctx.lineTo(-4, 25);
+      ctx.lineTo(-4, -25);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Turboprops
+      ctx.fillStyle = '#263238';
+      ctx.fillRect(0, -11, 8, 3.6);
+      ctx.fillRect(0, 7.4, 8, 3.6);
+
+      // Quad fins
+      ctx.strokeStyle = '#29B6F6';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(-18, -10);
+      ctx.lineTo(-18, 10);
+      ctx.moveTo(-16, -10);
+      ctx.lineTo(-20, -10);
+      ctx.moveTo(-16, -3.5);
+      ctx.lineTo(-20, -3.5);
+      ctx.moveTo(-16, 3.5);
+      ctx.lineTo(-20, 3.5);
+      ctx.moveTo(-16, 10);
+      ctx.lineTo(-20, 10);
+      ctx.stroke();
+
+      if (isPlayer) this.drawUSInsignia(-8, 0, 2.6);
+    } else if (m === 'sh3f') {
+      // ════ SH-3H / SH-3F Sea King: Boat hull, twin sponsons with torpedoes, 5-blade rotor ════
+      ctx.fillStyle = '#0A1B28';
+      ctx.strokeStyle = '#4FC3F7';
+      ctx.lineWidth = 1.6;
+
+      ctx.beginPath();
+      ctx.moveTo(17, 0);
+      ctx.lineTo(10, -3.6);
+      ctx.lineTo(0, -4.5); // Sponson
+      ctx.lineTo(-8, -4.5);
+      ctx.lineTo(-16, -2.6);
+      ctx.lineTo(-22, -1.2);
+      ctx.lineTo(-24, 0);
+      ctx.lineTo(-22, 1.2);
+      ctx.lineTo(-16, 2.6);
+      ctx.lineTo(-8, 4.5);
+      ctx.lineTo(0, 4.5);
+      ctx.lineTo(10, 3.6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Twin amphibious side sponsons
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(-6, -6.5, 8, 2.2);
+      ctx.fillRect(-6, 4.3, 8, 2.2);
+
+      // Mk 46 torpedo mounted on sponson
+      ctx.fillStyle = '#FFB300';
+      ctx.fillRect(-5, -7.5, 6, 1.3);
+      ctx.fillRect(-5, 6.2, 6, 1.3);
+
+      if (isPlayer) this.drawUSInsignia(-6, 0, 2.5);
+    } else if (m === 'ch53') {
+      // ════ CH-53 Sea Stallion: Heavy-lift helicopter, massive cylindrical fuel sponsons ════
+      ctx.fillStyle = '#0D1E20';
+      ctx.strokeStyle = '#26A69A';
+      ctx.lineWidth = 2;
+
+      ctx.beginPath();
+      ctx.moveTo(22, 0);
+      ctx.lineTo(15, -4.5);
+      ctx.lineTo(-14, -5.5);
+      ctx.lineTo(-24, -2.2);
+      ctx.lineTo(-28, 0);
+      ctx.lineTo(-24, 2.2);
+      ctx.lineTo(-14, 5.5);
+      ctx.lineTo(15, 4.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Huge cylindrical external fuel tanks / sponsons on both sides
+      ctx.fillStyle = '#004D40';
+      ctx.strokeStyle = '#80CBC4';
+      ctx.lineWidth = 1.4;
+      ctx.fillRect(-8, -9.5, 16, 4);
+      ctx.strokeRect(-8, -9.5, 16, 4);
+      ctx.fillRect(-8, 5.5, 16, 4);
+      ctx.strokeRect(-8, 5.5, 16, 4);
+
+      // Aft cargo ramp seam
+      ctx.beginPath();
+      ctx.moveTo(-16, -3.5);
+      ctx.lineTo(-22, 0);
+      ctx.lineTo(-16, 3.5);
+      ctx.stroke();
+
+      if (isPlayer) this.drawUSInsignia(-4, 0, 3.2);
+    } else if (m === 'tu95') {
+      // ════ Tu-95 Bear: 35-degree swept wings, 4 contra-rotating turboprops (8 blur discs!) ════
+      ctx.fillStyle = '#1C1217';
+      ctx.strokeStyle = '#FF3D00';
+      ctx.lineWidth = 2.2;
+
+      // Massive needle-nose fuselage
+      ctx.beginPath();
+      ctx.moveTo(34, 0);
+      ctx.lineTo(24, -4.2);
+      ctx.lineTo(-28, -5.0);
+      ctx.lineTo(-35, 0);
+      ctx.lineTo(-28, 5.0);
+      ctx.lineTo(24, 4.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // 35-degree heavily swept giant wings
+      ctx.beginPath();
+      ctx.moveTo(8, -5);
+      ctx.lineTo(-18, -42);
+      ctx.lineTo(-26, -42);
+      ctx.lineTo(-10, -5);
+      ctx.moveTo(8, 5);
+      ctx.lineTo(-18, 42);
+      ctx.lineTo(-26, 42);
+      ctx.lineTo(-10, 5);
+      ctx.stroke();
+
+      // 4 Kuznetsov NK-12 Turboprop engine nacelles
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(-2, -18, 14, 4.2);
+      ctx.fillRect(-10, -32, 14, 4.2);
+      ctx.fillRect(-2, 13.8, 14, 4.2);
+      ctx.fillRect(-10, 27.8, 14, 4.2);
+
+      // Contra-rotating dual propeller blur rings on each engine!
+      ctx.strokeStyle = 'rgba(255, 112, 67, 0.55)';
+      ctx.lineWidth = 1.2;
+      const t95P = [
+        { x: 12, y: -16 },
+        { x: 4, y: -30 },
+        { x: 12, y: 16 },
+        { x: 4, y: 30 },
+      ];
+      for (const p of t95P) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2);
+        ctx.arc(p.x - 2, p.y, 5.5, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Kh-55 Cruise Missiles under belly / rotary bay
+      ctx.fillStyle = '#ECEFF1';
+      ctx.fillRect(-8, -2, 16, 4);
+
+      // Red Stars
+      ctx.fillStyle = '#D50000';
+      ctx.beginPath();
+      ctx.arc(-14, -28, 3.5, 0, Math.PI * 2);
+      ctx.arc(-14, 28, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (m === 'ka27') {
+      // ════ Ka-27 Helix: Coaxial twin rotors, stubby boxy fuselage, twin endplate vertical fins ════
+      ctx.fillStyle = '#1D1217';
+      ctx.strokeStyle = '#FF5252';
+      ctx.lineWidth = 1.6;
+
+      // Stubby compact anti-submarine fuselage
+      ctx.beginPath();
+      ctx.moveTo(14, 0);
+      ctx.lineTo(8, -3.8);
+      ctx.lineTo(-10, -4.2);
+      ctx.lineTo(-16, -2.5);
+      ctx.lineTo(-18, 0);
+      ctx.lineTo(-16, 2.5);
+      ctx.lineTo(-10, 4.2);
+      ctx.lineTo(8, 3.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Chin search radar radome blister
+      ctx.fillStyle = '#37474F';
+      ctx.beginPath();
+      ctx.arc(13, 0, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Twin endplate vertical tail fins
+      ctx.strokeStyle = '#FF1744';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-16, -9);
+      ctx.lineTo(-16, 9);
+      ctx.moveTo(-14, -9);
+      ctx.lineTo(-18, -9);
+      ctx.moveTo(-14, 9);
+      ctx.lineTo(-18, 9);
+      ctx.stroke();
+
+      // Red Star
+      ctx.fillStyle = '#D50000';
+      ctx.beginPath();
+      ctx.arc(-4, 0, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (m === 'mi24') {
+      // ════ Mi-24 Hind: Stepped tandem cockpit, titanium bathtub, angled 12-deg anhedral stub wings ════
+      ctx.fillStyle = '#1A1116';
+      ctx.strokeStyle = '#FF5252';
+      ctx.lineWidth = 1.8;
+
+      // Heavy armored fuselage with stepped double-bubble canopy
+      ctx.beginPath();
+      ctx.moveTo(18, 0);
+      ctx.lineTo(12, -2.5);
+      ctx.lineTo(2, -4.5);
+      ctx.lineTo(-10, -3.5);
+      ctx.lineTo(-22, -1.5);
+      ctx.lineTo(-24, 0);
+      ctx.lineTo(-22, 1.5);
+      ctx.lineTo(-10, 3.5);
+      ctx.lineTo(2, 4.5);
+      ctx.lineTo(12, 2.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Stepped tandem cockpit bubbles (Front gunner & rear pilot)
+      ctx.fillStyle = 'rgba(255, 82, 82, 0.5)';
+      ctx.beginPath();
+      ctx.arc(13, 0, 2, 0, Math.PI * 2);
+      ctx.arc(8, 0, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Angled stub wings with 12-degree anhedral droop
+      ctx.strokeStyle = '#FF1744';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(2, -4.5);
+      ctx.lineTo(-2, -14);
+      ctx.moveTo(2, 4.5);
+      ctx.lineTo(-2, 14);
+      ctx.stroke();
+
+      // AT-6 Spiral missile launch tubes on wingtips & UB-32 rocket pods
+      ctx.fillStyle = '#ECEFF1';
+      ctx.fillRect(-4, -15.5, 6, 2.2);
+      ctx.fillRect(-4, 13.3, 6, 2.2);
+
+      // Chin Yak-B 12.7mm four-barrel Gatling turret
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(15, 0);
+      ctx.lineTo(21, 0);
+      ctx.stroke();
+
+      // Red Star
+      ctx.fillStyle = '#D50000';
+      ctx.beginPath();
+      ctx.arc(-4, 0, 2.8, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (m === 'yak38') {
+      // ════ Yak-38 Forger: Soviet naval carrier V/STOL jet ════
+      ctx.fillStyle = '#1A1218';
+      ctx.strokeStyle = '#FF5252';
+      ctx.lineWidth = 1.6;
+
+      ctx.beginPath();
+      ctx.moveTo(16, 0);
+      ctx.lineTo(10, -2.8);
+      ctx.lineTo(-13, -3.8);
+      ctx.lineTo(-16, 0);
+      ctx.lineTo(-13, 3.8);
+      ctx.lineTo(10, 2.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Lift engine doors behind cockpit
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(4, -2.2, 5, 4.4);
+
+      // Small cropped-delta wings
+      ctx.beginPath();
+      ctx.moveTo(1, -3.6);
+      ctx.lineTo(-3, -13);
+      ctx.lineTo(-7, -13);
+      ctx.lineTo(-6, -3.8);
+      ctx.moveTo(1, 3.6);
+      ctx.lineTo(-3, 13);
+      ctx.lineTo(-7, 13);
+      ctx.lineTo(-6, 3.8);
+      ctx.stroke();
+
+      // Red Star
+      ctx.fillStyle = '#D50000';
+      ctx.beginPath();
+      ctx.arc(-4, -8, 2.2, 0, Math.PI * 2);
+      ctx.arc(-4, 8, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (m === 'a50') {
+      // ════ A-50 Mainstay: Soviet heavy AWACS with rotating Shmel rotodome, high T-tail ════
+      ctx.fillStyle = '#1A1116';
+      ctx.strokeStyle = '#FF3D00';
+      ctx.lineWidth = 2.2;
+
+      ctx.beginPath();
+      ctx.moveTo(28, 0);
+      ctx.lineTo(20, -4.5);
+      ctx.lineTo(-24, -5.2);
+      ctx.lineTo(-30, 0);
+      ctx.lineTo(-24, 5.2);
+      ctx.lineTo(20, 4.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Swept high wings
+      ctx.beginPath();
+      ctx.moveTo(6, -5.2);
+      ctx.lineTo(-8, -32);
+      ctx.lineTo(-14, -32);
+      ctx.lineTo(-6, -5.2);
+      ctx.moveTo(6, 5.2);
+      ctx.lineTo(-8, 32);
+      ctx.lineTo(-14, 32);
+      ctx.lineTo(-6, 5.2);
+      ctx.stroke();
+
+      // 4 D-30KP Turbofan engines
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(-2, -16, 8, 3.4);
+      ctx.fillRect(-6, -26, 8, 3.4);
+      ctx.fillRect(-2, 12.6, 8, 3.4);
+      ctx.fillRect(-6, 22.6, 8, 3.4);
+
+      // Shmel Rotating Radar Rotodome disc
+      const a50Rot = this.time * 2.6;
+      ctx.save();
+      ctx.translate(-4, 0);
+      ctx.rotate(a50Rot);
+      ctx.fillStyle = '#CFD8DC';
+      ctx.strokeStyle = '#FF1744';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(0, 0, 10.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-10.5, 0);
+      ctx.lineTo(10.5, 0);
+      ctx.stroke();
+      ctx.restore();
+
+      // Red Stars
+      ctx.fillStyle = '#D50000';
+      ctx.beginPath();
+      ctx.arc(-10, -18, 3, 0, Math.PI * 2);
+      ctx.arc(-10, 18, 3, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (m === 'su25') {
+      // ════ Su-25 Frogfoot: Armored close air support, straight wings, 10 weapon pylons ════
+      ctx.fillStyle = '#1A1215';
+      ctx.strokeStyle = '#FF5252';
+      ctx.lineWidth = 1.8;
+
+      ctx.beginPath();
+      ctx.moveTo(17, 0);
+      ctx.lineTo(12, -3.2);
+      ctx.lineTo(-14, -4.2);
+      ctx.lineTo(-18, 0);
+      ctx.lineTo(-14, 4.2);
+      ctx.lineTo(12, 3.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // High-aspect straight wings with wingtip speed brake pods
+      ctx.beginPath();
+      ctx.moveTo(3, -4.2);
+      ctx.lineTo(0, -21);
+      ctx.lineTo(-6, -21);
+      ctx.lineTo(-5, -4.2);
+      ctx.moveTo(3, 4.2);
+      ctx.lineTo(0, 21);
+      ctx.lineTo(-6, 21);
+      ctx.lineTo(-5, 4.2);
+      ctx.stroke();
+
+      // Wingtip pods
+      ctx.fillStyle = '#CFD8DC';
+      ctx.fillRect(-6, -22.5, 5, 2.4);
+      ctx.fillRect(-6, 20.1, 5, 2.4);
+
+      // GSh-30-2 30mm twin cannon in nose
+      ctx.strokeStyle = '#FFCA28';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(14, -1);
+      ctx.lineTo(18, -1);
+      ctx.stroke();
+
+      // Red Stars
+      ctx.fillStyle = '#D50000';
+      ctx.beginPath();
+      ctx.arc(-4, -12, 2.8, 0, Math.PI * 2);
+      ctx.arc(-4, 12, 2.8, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (m === 'p36a') {
+      // ════ Curtiss P-36A Hawk: Classic Radial Fighter, Round Cowl, Olive/Silver ════
+      ctx.fillStyle = '#061322';
+      ctx.beginPath();
+      ctx.ellipse(2, 0, 12, 4.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Rounded Curtiss wings
+      ctx.beginPath();
+      ctx.moveTo(3, -16);
+      ctx.quadraticCurveTo(5, 0, 3, 16);
+      ctx.lineTo(-3, 16);
+      ctx.quadraticCurveTo(-4, 0, -3, -16);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Big Twin Wasp radial engine cowling
+      ctx.fillStyle = '#37474F';
+      ctx.beginPath();
+      ctx.arc(11, 0, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // 3-blade prop
+      const propA = this.time * 28;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(14, 0, 7, 0, Math.PI * 2);
+      ctx.stroke();
+
+      if (isPlayer) this.drawUSInsignia(0, -9, 3.2, true);
+    } else if (m === 'b25') {
+      // ════ North American B-25 Mitchell: Twin R-2600 Radials & Twin H-Tail ════
+      ctx.fillStyle = '#071626';
+      // Long fuselage with glazed bombardier nose
+      ctx.beginPath();
+      ctx.ellipse(3, 0, 19, 4.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Glazed greenhouse nose
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
+      ctx.beginPath();
+      ctx.arc(18, 0, 2.5, -Math.PI / 2, Math.PI / 2);
+      ctx.fill();
+
+      // Broad shoulder wings (Wingspan 44)
+      ctx.beginPath();
+      ctx.moveTo(5, -22);
+      ctx.lineTo(7, -22);
+      ctx.lineTo(5, 0);
+      ctx.lineTo(7, 22);
+      ctx.lineTo(5, 22);
+      ctx.lineTo(-4, 22);
+      ctx.lineTo(-4, -22);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Twin Wright R-2600 engine nacelles
+      for (const ny of [-9.5, 9.5]) {
+        ctx.fillStyle = '#263238';
+        ctx.fillRect(-2, ny - 2.8, 12, 5.6);
+        ctx.strokeRect(-2, ny - 2.8, 12, 5.6);
+
+        // Propeller blur
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.beginPath();
+        ctx.arc(10.5, ny, 6, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Iconic H-Tail: Horizontal tail with twin outboard vertical fins
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(-15, -9);
+      ctx.lineTo(-15, 9);
+      ctx.stroke();
+      // Twin vertical endplate rudders
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(-17, -10, 4, 2.5);
+      ctx.fillRect(-17, 7.5, 4, 2.5);
+
+      // Top dorsal Bendix turret
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.6)';
+      ctx.beginPath();
+      ctx.arc(0, 0, 2.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      if (isPlayer) this.drawUSInsignia(2, -15, 3.6, true);
+    } else if (m === 'p39d') {
+      // ════ Bell P-39D Airacobra: Mid-Engine, 37mm Hub Cannon, Car Doors ════
+      ctx.fillStyle = '#061322';
+      ctx.beginPath();
+      ctx.ellipse(1, 0, 12, 3.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Tapered wings with rounded tips
+      ctx.beginPath();
+      ctx.moveTo(2, -15);
+      ctx.lineTo(4, -15);
+      ctx.lineTo(2, 0);
+      ctx.lineTo(4, 15);
+      ctx.lineTo(2, 15);
+      ctx.lineTo(-3, 15);
+      ctx.lineTo(-3, -15);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Centerline 37mm Oldsmobile T9 cannon muzzle sticking out through prop hub
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(11, 0);
+      ctx.lineTo(16, 0);
+      ctx.stroke();
+
+      // Mid-fuselage Allison V-1710 cooling scoops
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(-1, -2.5, 4, 5);
+
+      if (isPlayer) this.drawUSInsignia(0, -9, 3.2, true);
+    } else if (m === 'b17_late') {
+      // ════ B-17G Flying Fortress (Late): Bendix Chin Turret + Cheyenne Tail ════
+      ctx.fillStyle = '#071626';
+      ctx.beginPath();
+      ctx.ellipse(3, 0, 23, 5.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Wingspan 54
+      ctx.beginPath();
+      ctx.moveTo(5, -27);
+      ctx.lineTo(8, -27);
+      ctx.lineTo(6, 0);
+      ctx.lineTo(8, 27);
+      ctx.lineTo(5, 27);
+      ctx.lineTo(-5, 27);
+      ctx.lineTo(-5, -27);
+      ctx.closePath();
+      ctx.stroke();
+
+      // 4 Wright Cyclone R-1820 engine nacelles
+      for (const ey of [-18, -10, 10, 18]) {
+        ctx.fillStyle = '#263238';
+        ctx.fillRect(-2, ey - 2.5, 12, 5);
+        ctx.strokeRect(-2, ey - 2.5, 12, 5);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.beginPath();
+        ctx.arc(10.5, ey, 5.5, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Distinctive B-17G Bendix Chin Turret under nose with twin .50 cal guns
+      ctx.fillStyle = '#1A237E';
+      ctx.beginPath();
+      ctx.arc(22, 0, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#FFE082';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(22, -1.2);
+      ctx.lineTo(26, -1.2);
+      ctx.moveTo(22, 1.2);
+      ctx.lineTo(26, 1.2);
+      ctx.stroke();
+
+      // Cheyenne tail turret with twin .50s
+      ctx.beginPath();
+      ctx.moveTo(-20, -1);
+      ctx.lineTo(-24, -1);
+      ctx.moveTo(-20, 1);
+      ctx.lineTo(-24, 1);
+      ctx.stroke();
+
+      // Dorsal sperry ball turret
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.6)';
+      ctx.beginPath();
+      ctx.arc(4, 0, 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (isPlayer) this.drawUSInsignia(3, -19, 4, true);
+    } else if (m === 'f82') {
+      // ════ North American F-82 Twin Mustang: Twin Fuselages & Center Wing ════
+      ctx.fillStyle = '#061322';
+
+      // Port & starboard twin fuselages
+      for (const fy of [-7.5, 7.5]) {
+        ctx.beginPath();
+        ctx.ellipse(2, fy, 14, 3.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Cockpit canopy
+        ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
+        ctx.beginPath();
+        ctx.ellipse(1, fy, 3.6, 1.8, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Propeller
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+        ctx.beginPath();
+        ctx.arc(15, fy, 6, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Outer wings and center connecting wing
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      // Outboard left wing
+      ctx.moveTo(3, -22);
+      ctx.lineTo(3, -7.5);
+      ctx.lineTo(-3, -7.5);
+      ctx.lineTo(-3, -22);
+      ctx.closePath();
+      // Center connecting wing (houses 6x .50 cal guns)
+      ctx.moveTo(3, -7.5);
+      ctx.lineTo(3, 7.5);
+      ctx.lineTo(-3, 7.5);
+      ctx.lineTo(-3, -7.5);
+      ctx.closePath();
+      // Outboard right wing
+      ctx.moveTo(3, 7.5);
+      ctx.lineTo(3, 22);
+      ctx.lineTo(-3, 22);
+      ctx.lineTo(-3, 7.5);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Common continuous horizontal tailplane connecting both vertical fins
+      ctx.beginPath();
+      ctx.moveTo(-11, -8.5);
+      ctx.lineTo(-11, 8.5);
+      ctx.lineTo(-13, 8.5);
+      ctx.lineTo(-13, -8.5);
+      ctx.closePath();
+      ctx.stroke();
+
+      // 6 center-wing machine gun muzzles
+      ctx.fillStyle = '#FFD54F';
+      for (let g = -2.5; g <= 2.5; g += 1) {
+        ctx.fillRect(3, g * 2 - 0.5, 2, 1);
+      }
+
+      if (isPlayer) this.drawUSInsignia(0, -15, 3.2, true);
+    } else if (m === 'a1h') {
+      // ════ Douglas A-1H Skyraider: Heavy Armor, Wide Wings, 15 Pylons ════
+      ctx.fillStyle = '#061322';
+      // Bulky deep fuselage with Wright R-3350 Duplex-Cyclone
+      ctx.beginPath();
+      ctx.ellipse(2, 0, 15, 4.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Wide broad straight wings (Wingspan 40)
+      ctx.beginPath();
+      ctx.moveTo(3, -20);
+      ctx.lineTo(5, -20);
+      ctx.lineTo(3, 0);
+      ctx.lineTo(5, 20);
+      ctx.lineTo(3, 20);
+      ctx.lineTo(-5, 20);
+      ctx.lineTo(-5, -20);
+      ctx.closePath();
+      ctx.stroke();
+
+      // 4 wing-mounted 20mm M3 cannons
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 1.6;
+      for (const cy of [-8, -6, 6, 8]) {
+        ctx.beginPath();
+        ctx.moveTo(3, cy);
+        ctx.lineTo(8, cy);
+        ctx.stroke();
+      }
+
+      // Big 4-blade prop
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.beginPath();
+      ctx.arc(17, 0, 8, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Dive brakes on fuselage sides
+      ctx.fillStyle = '#455A64';
+      ctx.fillRect(-6, -4.8, 5, 1.2);
+      ctx.fillRect(-6, 3.6, 5, 1.2);
+
+      if (isPlayer) this.drawUSInsignia(0, -13, 3.6);
+    } else if (m === 'a37b') {
+      // ════ Cessna A-37B Dragonfly: Side-by-Side Twin Cockpit, Wingtip Tip Tanks ════
+      ctx.fillStyle = '#061322';
+      // Stubby twin-seat fuselage
+      ctx.beginPath();
+      ctx.ellipse(1, 0, 11, 4.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Side-by-side cockpit canopy
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.beginPath();
+      ctx.ellipse(2, 0, 4.5, 3.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Straight wings with prominent wingtip fuel tanks
+      ctx.beginPath();
+      ctx.moveTo(2, -15);
+      ctx.lineTo(2, 15);
+      ctx.lineTo(-4, 15);
+      ctx.lineTo(-4, -15);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Distinctive wingtip fuel tanks
+      ctx.fillStyle = '#CFD8DC';
+      ctx.fillRect(-6, -17, 8, 2.8);
+      ctx.fillRect(-6, 14.2, 8, 2.8);
+
+      // Nose GAU-2B/A Minigun (7.62mm 6-barrel)
+      ctx.strokeStyle = '#FFCA28';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(11, 0);
+      ctx.lineTo(14, 0);
+      ctx.stroke();
+
+      if (isPlayer) this.drawUSInsignia(0, -9, 3);
+    } else if (m === 'f5a') {
+      // ════ Northrop F-5A Freedom Fighter: Slender Area-Ruled Fuselage & Tip Sidewinders ════
+      ctx.fillStyle = '#061322';
+      // Slender needle nose with coke-bottle waist
+      ctx.beginPath();
+      ctx.moveTo(17, 0);
+      ctx.lineTo(10, -2.2);
+      ctx.lineTo(-6, -3.2);
+      ctx.lineTo(-14, -2.4);
+      ctx.lineTo(-17, 0);
+      ctx.lineTo(-14, 2.4);
+      ctx.lineTo(-6, 3.2);
+      ctx.lineTo(10, 2.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Low aspect ratio trapezoidal wings
+      ctx.beginPath();
+      ctx.moveTo(2, -2.6);
+      ctx.lineTo(-2, -13);
+      ctx.lineTo(-6, -13);
+      ctx.lineTo(-5, -2.6);
+      ctx.moveTo(2, 2.6);
+      ctx.lineTo(-2, 13);
+      ctx.lineTo(-6, 13);
+      ctx.lineTo(-5, 2.6);
+      ctx.stroke();
+
+      // Wingtip missile launch rails with AIM-9 Sidewinders
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(-1, -13.5);
+      ctx.lineTo(-8, -13.5);
+      ctx.moveTo(-1, 13.5);
+      ctx.lineTo(-8, 13.5);
+      ctx.stroke();
+
+      // Twin M39A2 20mm cannons in nose upper decking
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(9, -1);
+      ctx.lineTo(12, -1);
+      ctx.moveTo(9, 1);
+      ctx.lineTo(12, 1);
+      ctx.stroke();
+
+      if (isPlayer) this.drawUSInsignia(-2, -8, 2.8);
+    } else if (m === 'f104g') {
+      // ════ Lockheed F-104G Starfighter: Missile with a Man in it, Razor Wings, T-Tail ════
+      ctx.fillStyle = '#061322';
+      // Extreme needle fuselage (24m long feel)
+      ctx.beginPath();
+      ctx.moveTo(21, 0);
+      ctx.lineTo(12, -2.2);
+      ctx.lineTo(-14, -2.4);
+      ctx.lineTo(-18, 0);
+      ctx.lineTo(-14, 2.4);
+      ctx.lineTo(12, 2.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Razor-thin trapezoidal stub wings with negative dihedral (droop)
+      ctx.beginPath();
+      ctx.moveTo(0, -2.2);
+      ctx.lineTo(-2, -11);
+      ctx.lineTo(-6, -11);
+      ctx.lineTo(-5, -2.2);
+      ctx.moveTo(0, 2.2);
+      ctx.lineTo(-2, 11);
+      ctx.lineTo(-6, 11);
+      ctx.lineTo(-5, 2.2);
+      ctx.stroke();
+
+      // High T-Tail horizontal stabilizer mounted atop tall vertical fin
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(-16, -6.5);
+      ctx.lineTo(-16, 6.5);
+      ctx.stroke();
+
+      // Shock cone half-spike engine intakes
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(4, -3.2, 4, 1.4);
+      ctx.fillRect(4, 1.8, 4, 1.4);
+
+      // Wingtip tiptanks or Sidewinders
+      ctx.fillStyle = '#CFD8DC';
+      ctx.fillRect(-7, -12, 7, 2);
+      ctx.fillRect(-7, 10, 7, 2);
+
+      if (isPlayer) this.drawUSInsignia(-3, -7, 2.5);
+    } else if (m === 'hurricane') {
+      // ════ Hawker Hurricane Mk.II: Thick Wing, Rear Stringers, RAF Roundel ════
+      ctx.fillStyle = '#061322';
+      // Robust fuselage with fabric rear stringers
+      ctx.beginPath();
+      ctx.ellipse(2, 0, 13, 3.8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Thick RAF five-spar wings with wide chord
+      ctx.beginPath();
+      ctx.moveTo(3, -17);
+      ctx.lineTo(4, -17);
+      ctx.lineTo(2, 0);
+      ctx.lineTo(4, 17);
+      ctx.lineTo(3, 17);
+      ctx.lineTo(-4, 17);
+      ctx.lineTo(-4, -17);
+      ctx.closePath();
+      ctx.stroke();
+
+      // 4x 20mm Hispano cannons (Mk.IIc) protruding from wings
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 1.5;
+      for (const cy of [-11, -8, 8, 11]) {
+        ctx.beginPath();
+        ctx.moveTo(3, cy);
+        ctx.lineTo(7.5, cy);
+        ctx.stroke();
+      }
+
+      // Propeller
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+      ctx.beginPath();
+      ctx.arc(15, 0, 7, 0, Math.PI * 2);
+      ctx.stroke();
+
+      this.drawRAFRoundel(0, -11, 3.4);
+    } else if (m === 'spitfire_v') {
+      // ════ Supermarine Spitfire Mk.V: Iconic Elliptical Wings & Merlin Nose ════
+      ctx.fillStyle = '#061322';
+      ctx.beginPath();
+      ctx.ellipse(3, 0, 13.5, 3.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Pure iconic elliptical wings (雙橢圓機翼)
+      ctx.beginPath();
+      ctx.ellipse(1, 0, 4.5, 17, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Twin 20mm Hispano cannon fairings & twin .303 brownings
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(3, -8.5);
+      ctx.lineTo(8, -8.5);
+      ctx.moveTo(3, 8.5);
+      ctx.lineTo(8, 8.5);
+      ctx.stroke();
+
+      // Elliptical tailplane
+      ctx.beginPath();
+      ctx.ellipse(-9, 0, 2.5, 6, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // 3-blade Rotol prop
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.beginPath();
+      ctx.arc(16, 0, 7, 0, Math.PI * 2);
+      ctx.stroke();
+
+      this.drawRAFRoundel(1, -11, 3.3);
+    } else if (m === 'beaufighter') {
+      // ════ Bristol Beaufighter: Twin Hercules Radials, Blunt Nose, Torpedo ════
+      ctx.fillStyle = '#061322';
+      // Blunt heavy nose
+      ctx.beginPath();
+      ctx.ellipse(1, 0, 16, 4.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Thick straight-taper wings (Wingspan 38)
+      ctx.beginPath();
+      ctx.moveTo(4, -19);
+      ctx.lineTo(6, -19);
+      ctx.lineTo(4, 0);
+      ctx.lineTo(6, 19);
+      ctx.lineTo(4, 19);
+      ctx.lineTo(-4, 19);
+      ctx.lineTo(-4, -19);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Twin Bristol Hercules radial engines
+      for (const ey of [-8.5, 8.5]) {
+        ctx.fillStyle = '#263238';
+        ctx.fillRect(-1, ey - 3, 10, 6);
+        ctx.strokeRect(-1, ey - 3, 10, 6);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.beginPath();
+        ctx.arc(9, ey, 6, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Torpedo mounted under belly
+      ctx.strokeStyle = '#00E5FF';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(-4, 0);
+      ctx.lineTo(6, 0);
+      ctx.stroke();
+
+      this.drawRAFRoundel(1, -13, 3.5);
+    } else if (m === 'swordfish') {
+      // ════ Fairey Swordfish: Stringbag Biplane, Struts, Slung Torpedo ════
+      ctx.fillStyle = '#061322';
+      ctx.beginPath();
+      ctx.ellipse(1, 0, 14, 3.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Upper and lower biplane wings
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(3, -19);
+      ctx.lineTo(3, 19);
+      ctx.lineTo(-3, 19);
+      ctx.lineTo(-3, -19);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Interplane struts & bracing wires
+      ctx.strokeStyle = '#B0BEC5';
+      ctx.lineWidth = 1;
+      for (const sx of [-13, -7, 7, 13]) {
+        ctx.strokeRect(-2, sx - 1, 4, 2);
+      }
+
+      // Slung 18-inch aerial torpedo
+      ctx.strokeStyle = '#00E5FF';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(-5, 0);
+      ctx.lineTo(5, 0);
+      ctx.stroke();
+
+      this.drawRAFRoundel(0, -12, 3.2);
+    } else if (m === 'spitfire_xiv') {
+      // ════ Supermarine Spitfire Mk.XIV: 5-Blade Griffon, Bubble Canopy, Pointed Rudder ════
+      ctx.fillStyle = '#061322';
+      ctx.beginPath();
+      ctx.ellipse(3, 0, 14, 3.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Elliptical wings with E-wing armament (2x 20mm + 2x .50 cal)
+      ctx.beginPath();
+      ctx.ellipse(1, 0, 4.4, 17, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Pointed rudder & teardrop bubble canopy
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 4, 1.8, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 5-blade Rotol propeller
+      const propA = this.time * 32;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.beginPath();
+      ctx.arc(17, 0, 7.5, 0, Math.PI * 2);
+      ctx.stroke();
+
+      this.drawRAFRoundel(1, -11, 3.4);
+    } else if (m === 'tempest') {
+      // ════ Hawker Tempest Mk.V: Chin Radiator Beard, Laminar Elliptical Wings ════
+      ctx.fillStyle = '#061322';
+      ctx.beginPath();
+      ctx.ellipse(3, 0, 14, 3.8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Huge chin annular radiator scoop under nose ("bearded smile")
+      ctx.fillStyle = '#263238';
+      ctx.fillRect(8, -2.5, 6, 5);
+      ctx.strokeStyle = '#FFD54F';
+      ctx.strokeRect(8, -2.5, 6, 5);
+
+      // Semi-elliptical laminar flow wings
+      ctx.beginPath();
+      ctx.moveTo(3, -18);
+      ctx.lineTo(5, -18);
+      ctx.lineTo(3, 0);
+      ctx.lineTo(5, 18);
+      ctx.lineTo(3, 18);
+      ctx.lineTo(-4, 18);
+      ctx.lineTo(-4, -18);
+      ctx.closePath();
+      ctx.stroke();
+
+      // 4x 20mm Hispano Mk.V short barrel flush cannons
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 1.4;
+      for (const cy of [-11, -8, 8, 11]) {
+        ctx.beginPath();
+        ctx.moveTo(3, cy);
+        ctx.lineTo(6, cy);
+        ctx.stroke();
+      }
+
+      this.drawRAFRoundel(1, -12, 3.4);
+    } else if (m === 'mosquito') {
+      // ════ De Havilland Mosquito FB.VI "Wooden Wonder": Twin Merlins, Elegant Swept Fin ════
+      ctx.fillStyle = '#061322';
+      // Extremely sleek plywood monocoque fuselage
+      ctx.beginPath();
+      ctx.ellipse(3, 0, 16, 3.8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Pointed swept wings (Wingspan 38)
+      ctx.beginPath();
+      ctx.moveTo(4, -19);
+      ctx.lineTo(6, 0);
+      ctx.lineTo(4, 19);
+      ctx.lineTo(-3, 19);
+      ctx.lineTo(-2, 0);
+      ctx.lineTo(-3, -19);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Twin Rolls-Royce Merlin nacelles
+      for (const ey of [-8, 8]) {
+        ctx.fillStyle = '#263238';
+        ctx.fillRect(-1, ey - 2.6, 12, 5.2);
+        ctx.strokeRect(-1, ey - 2.6, 12, 5.2);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.beginPath();
+        ctx.arc(11, ey, 6, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // 4x .303 Browning in nose + 4x 20mm Hispano in belly
+      ctx.fillStyle = '#FFD54F';
+      for (let g = -1.5; g <= 1.5; g += 1) {
+        ctx.fillRect(17, g * 1.2 - 0.5, 2, 1);
+      }
+
+      this.drawRAFRoundel(1, -13, 3.5);
+    } else if (m === 'lancaster') {
+      // ════ Avro Lancaster B.I: 4 Merlins, Twin Endplate Rudders, 33ft Bomb Bay ════
+      ctx.fillStyle = '#071626';
+      // Long heavy bomber slab fuselage
+      ctx.beginPath();
+      ctx.ellipse(4, 0, 24, 5.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Broad tapering wings (Wingspan 56)
+      ctx.beginPath();
+      ctx.moveTo(6, -28);
+      ctx.lineTo(8, -28);
+      ctx.lineTo(6, 0);
+      ctx.lineTo(8, 28);
+      ctx.lineTo(6, 28);
+      ctx.lineTo(-5, 28);
+      ctx.lineTo(-5, -28);
+      ctx.closePath();
+      ctx.stroke();
+
+      // 4 Merlin engines
+      for (const ey of [-19, -11, 11, 19]) {
+        ctx.fillStyle = '#263238';
+        ctx.fillRect(-1, ey - 2.4, 12, 4.8);
+        ctx.strokeRect(-1, ey - 2.4, 12, 4.8);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.beginPath();
+        ctx.arc(11, ey, 5.5, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Massive Twin Endplate Rudders on tailplane
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(-18, -12);
+      ctx.lineTo(-18, 12);
+      ctx.stroke();
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(-20, -13.5, 4, 3);
+      ctx.fillRect(-20, 10.5, 4, 3);
+
+      this.drawRAFRoundel(2, -20, 4);
+    } else if (m === 'meteor') {
+      // ════ Gloster Meteor F.8: Twin Derwent Turbojets Mid-Wing, Early Jet Fighter ════
+      ctx.fillStyle = '#061322';
+      ctx.beginPath();
+      ctx.ellipse(2, 0, 15, 3.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Straight wings with two large Derwent turbojet nacelles breaking through mid-wing
+      ctx.beginPath();
+      ctx.moveTo(2, -18);
+      ctx.lineTo(4, 0);
+      ctx.lineTo(2, 18);
+      ctx.lineTo(-4, 18);
+      ctx.lineTo(-2, 0);
+      ctx.lineTo(-4, -18);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Twin Derwent engine tubes
+      for (const ey of [-8, 8]) {
+        ctx.fillStyle = '#37474F';
+        ctx.fillRect(-6, ey - 2.8, 14, 5.6);
+        ctx.strokeRect(-6, ey - 2.8, 14, 5.6);
+      }
+
+      // T-Tail high cruciform tail
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(-12, -7);
+      ctx.lineTo(-12, 7);
+      ctx.stroke();
+
+      this.drawRAFRoundel(0, -13, 3.4);
+    } else if (m === 'sea_fury') {
+      // ════ Hawker Sea Fury FB.11: Centaurus 18-Cyl Radial, 5-Blade Rotol, FAA Paint ════
+      ctx.fillStyle = '#061322';
+      ctx.beginPath();
+      ctx.ellipse(2, 0, 14, 4.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Semi-elliptical wings
+      ctx.beginPath();
+      ctx.moveTo(3, -17);
+      ctx.lineTo(5, -17);
+      ctx.lineTo(3, 0);
+      ctx.lineTo(5, 17);
+      ctx.lineTo(3, 17);
+      ctx.lineTo(-4, 17);
+      ctx.lineTo(-4, -17);
+      ctx.closePath();
+      ctx.stroke();
+
+      // 4x 20mm Hispano Mk.V cannons
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 1.6;
+      for (const cy of [-10, -7.5, 7.5, 10]) {
+        ctx.beginPath();
+        ctx.moveTo(3, cy);
+        ctx.lineTo(7, cy);
+        ctx.stroke();
+      }
+
+      // 5-blade Rotol prop
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.beginPath();
+      ctx.arc(16, 0, 7.5, 0, Math.PI * 2);
+      ctx.stroke();
+
+      this.drawRAFRoundel(1, -11, 3.4);
+    } else if (m === 'rokaf_p51') {
+      // ════ ROKAF F-51D Mustang: ROKAF Taegeuk Roundel & Korean War Combat Fighter ════
+      ctx.fillStyle = '#061322';
+      ctx.beginPath();
+      ctx.ellipse(3, 0, 14, 3.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Laminar flow wings
+      ctx.beginPath();
+      ctx.moveTo(4, -16);
+      ctx.lineTo(6, -16);
+      ctx.lineTo(4, 0);
+      ctx.lineTo(6, 16);
+      ctx.lineTo(4, 16);
+      ctx.lineTo(-3, 16);
+      ctx.lineTo(-3, -16);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Belly radiator scoop
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(-4, -2, 6, 4);
+
+      // Bubble canopy
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 4.2, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 4-blade prop
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.55)';
+      ctx.beginPath();
+      ctx.arc(17, 0, 7, 0, Math.PI * 2);
+      ctx.stroke();
+
+      this.drawROKAFRoundel(1, -10, 3.2);
+    } else if (m === 'firefly_as5') {
+      // ════ Fairey Firefly AS.5: Griffon Chin Radiator, ASH Wing Pod Radar ════
+      ctx.fillStyle = '#061322';
+      ctx.beginPath();
+      ctx.ellipse(2, 0, 15, 4.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Broad elliptical wings
+      ctx.beginPath();
+      ctx.moveTo(3, -18);
+      ctx.lineTo(5, 0);
+      ctx.lineTo(3, 18);
+      ctx.lineTo(-4, 18);
+      ctx.lineTo(-2, 0);
+      ctx.lineTo(-4, -18);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Distinctive ASH radar pod slung under starboard wing leading edge
+      ctx.fillStyle = '#263238';
+      ctx.beginPath();
+      ctx.arc(4, 9, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Chin radiator scoop
+      ctx.fillRect(8, -2.5, 5, 5);
+
+      this.drawRAFRoundel(0, -11, 3.4);
+    } else if (m === 'mirage3') {
+      // ════ Dassault Mirage IIIE: Pure Tailless Delta Wing, Shock-Cone Intakes ════
+      ctx.fillStyle = '#061322';
+      // Long slender conical nose
+      ctx.beginPath();
+      ctx.moveTo(18, 0);
+      ctx.lineTo(9, -2.5);
+      ctx.lineTo(-14, -3.2);
+      ctx.lineTo(-17, 0);
+      ctx.lineTo(-14, 3.2);
+      ctx.lineTo(9, 2.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Pure 60° Delta Wing (無尾翼三角翼)
+      ctx.beginPath();
+      ctx.moveTo(6, 0);
+      ctx.lineTo(-14, -17);
+      ctx.lineTo(-14, 17);
+      ctx.closePath();
+      ctx.stroke();
+
+      // Half-cone shock spikes on air intakes
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(5, -3.8, 4, 1.4);
+      ctx.fillRect(5, 2.4, 4, 1.4);
+
+      // French Armée de l'Air roundel
+      this.drawRAFRoundel(-5, -8, 3);
+    } else if (m === 'hunter_fga9') {
+      // ════ Hawker Hunter FGA.9: Curved Wing-Root Intakes, Dogtooth Swept Wings ════
+      ctx.fillStyle = '#061322';
+      ctx.beginPath();
+      ctx.ellipse(3, 0, 16, 3.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Swept wings with wing-root air intakes
+      ctx.beginPath();
+      ctx.moveTo(4, 0);
+      ctx.lineTo(-3, -16);
+      ctx.lineTo(-7, -16);
+      ctx.lineTo(-4, 0);
+      ctx.lineTo(-7, 16);
+      ctx.lineTo(-3, 16);
+      ctx.closePath();
+      ctx.stroke();
+
+      // 4x 30mm ADEN cannon pack in lower forward fuselage
+      ctx.fillStyle = '#FFD54F';
+      ctx.fillRect(7, -1.8, 3, 3.6);
+
+      this.drawRAFRoundel(-1, -10, 3.2);
+    } else if (m === 'tornado_gr1' || m === 'tornado_ids') {
+      // ════ Panavia Tornado GR.1 / IDS: Swing-Wing Strike Bomber, Twin RB199, Tall Fin ════
+      ctx.fillStyle = '#061322';
+      // Heavy twin-engine box fuselage
+      ctx.beginPath();
+      ctx.moveTo(18, 0);
+      ctx.lineTo(12, -3.5);
+      ctx.lineTo(-14, -4.5);
+      ctx.lineTo(-18, 0);
+      ctx.lineTo(-14, 4.5);
+      ctx.lineTo(12, 3.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Variable sweep wings swept at 45°
+      ctx.beginPath();
+      ctx.moveTo(4, -3.5);
+      ctx.lineTo(-5, -17);
+      ctx.lineTo(-9, -17);
+      ctx.lineTo(-3, -3.5);
+      ctx.moveTo(4, 3.5);
+      ctx.lineTo(-5, 17);
+      ctx.lineTo(-9, 17);
+      ctx.lineTo(-3, 3.5);
+      ctx.stroke();
+
+      // Huge tall swept vertical tail
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(-16, -1.5, 7, 3);
+
+      // Box air intakes
+      ctx.fillRect(3, -4.8, 5, 1.6);
+      ctx.fillRect(3, 3.2, 5, 1.6);
+
+      // JP233 or ALARM/Sea Eagle pods under fuselage
+      if (m === 'tornado_ids') {
+        ctx.fillStyle = '#FFE082';
+        ctx.fillRect(-4, -2.5, 10, 5);
+      }
+
+      this.drawRAFRoundel(-5, -10, 3.2);
+    } else if (m === 'tornado_adv') {
+      // ════ Panavia Tornado ADV F.3: Stretched Radome, Semi-Recessed Skyflash SARH ════
+      ctx.fillStyle = '#061322';
+      // Stretched interceptor nose for Foxhunter radar
+      ctx.beginPath();
+      ctx.moveTo(22, 0);
+      ctx.lineTo(12, -3.5);
+      ctx.lineTo(-14, -4.5);
+      ctx.lineTo(-18, 0);
+      ctx.lineTo(-14, 4.5);
+      ctx.lineTo(12, 3.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Variable sweep wings swept at 25° for high altitude patrol
+      ctx.beginPath();
+      ctx.moveTo(4, -3.5);
+      ctx.lineTo(-2, -18);
+      ctx.lineTo(-6, -18);
+      ctx.lineTo(-2, -3.5);
+      ctx.moveTo(4, 3.5);
+      ctx.lineTo(-2, 18);
+      ctx.lineTo(-6, 18);
+      ctx.lineTo(-2, 3.5);
+      ctx.stroke();
+
+      // 4x Skyflash SARH semi-recessed in fuselage belly
+      ctx.strokeStyle = '#00E5FF';
+      ctx.lineWidth = 1.4;
+      for (const my of [-2, 2]) {
+        ctx.beginPath();
+        ctx.moveTo(1, my);
+        ctx.lineTo(7, my);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-7, my);
+        ctx.lineTo(-1, my);
+        ctx.stroke();
+      }
+
+      this.drawRAFRoundel(-4, -11, 3.2);
+    } else if (m === 'mirage2000') {
+      // ════ Dassault Mirage 2000C: Blended Cambered Delta, Super 530D SARH ════
+      ctx.fillStyle = '#061322';
+      // Needle nose with blended fuselage-wing fillets
+      ctx.beginPath();
+      ctx.moveTo(19, 0);
+      ctx.lineTo(10, -2.6);
+      ctx.lineTo(-13, -3.6);
+      ctx.lineTo(-17, 0);
+      ctx.lineTo(-13, 3.6);
+      ctx.lineTo(10, 2.6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Large cambered delta wing
+      ctx.beginPath();
+      ctx.moveTo(7, 0);
+      ctx.lineTo(-12, -18);
+      ctx.lineTo(-14, -18);
+      ctx.lineTo(-13, 0);
+      ctx.lineTo(-14, 18);
+      ctx.lineTo(-12, 18);
+      ctx.closePath();
+      ctx.stroke();
+
+      // 2x Matra Super 530D SARH under wings
+      ctx.strokeStyle = '#00E5FF';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(-2, -9);
+      ctx.lineTo(5, -9);
+      ctx.moveTo(-2, 9);
+      ctx.lineTo(5, 9);
+      ctx.stroke();
+
+      // French roundel
+      this.drawRAFRoundel(-4, -9, 3);
+    } else if (m === 'jaguar_gr1') {
+      // ════ SEPECAT Jaguar GR.1: High Shoulder Wings, Over-Wing Rails, Chiseled Nose ════
+      ctx.fillStyle = '#061322';
+      // Long chiseled nose with Ferranti LRMTS chisel
+      ctx.beginPath();
+      ctx.moveTo(18, 0);
+      ctx.lineTo(11, -2.5);
+      ctx.lineTo(-14, -3.5);
+      ctx.lineTo(-17, 0);
+      ctx.lineTo(-14, 3.5);
+      ctx.lineTo(11, 2.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Shoulder mounted swept wings with anhedral (droop)
+      ctx.beginPath();
+      ctx.moveTo(3, -2.5);
+      ctx.lineTo(-4, -14);
+      ctx.lineTo(-7, -14);
+      ctx.lineTo(-4, -2.5);
+      ctx.moveTo(3, 2.5);
+      ctx.lineTo(-4, 14);
+      ctx.lineTo(-7, 14);
+      ctx.lineTo(-4, 2.5);
+      ctx.stroke();
+
+      // Iconic OVER-WING missile pylons (Magic/Sidewinder mounted ON TOP of wing)
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(-1, -7.5);
+      ctx.lineTo(-6, -7.5);
+      ctx.moveTo(-1, 7.5);
+      ctx.lineTo(-6, 7.5);
+      ctx.stroke();
+
+      this.drawRAFRoundel(-3, -9, 3);
+    } else if (m === 'viggen_ja37') {
+      // ════ Saab JA 37 Viggen: Double Delta with Foreplane Canards, RBS-15F ════
+      ctx.fillStyle = '#061322';
+      // Muscular delta fuselage with big Volvo RM8B afterburning turbofan
+      ctx.beginPath();
+      ctx.moveTo(18, 0);
+      ctx.lineTo(10, -3.4);
+      ctx.lineTo(-13, -4.5);
+      ctx.lineTo(-17, 0);
+      ctx.lineTo(-13, 4.5);
+      ctx.lineTo(10, 3.4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Distinctive Foreplane Canards with flaps (前置主翼鴨翼)
+      ctx.beginPath();
+      ctx.moveTo(10, -2.5);
+      ctx.lineTo(6, -8.5);
+      ctx.lineTo(4, -8.5);
+      ctx.lineTo(6, -2.5);
+      ctx.moveTo(10, 2.5);
+      ctx.lineTo(6, 8.5);
+      ctx.lineTo(4, 8.5);
+      ctx.lineTo(6, 2.5);
+      ctx.stroke();
+
+      // Main Double Delta Wing
+      ctx.beginPath();
+      ctx.moveTo(3, -3.5);
+      ctx.lineTo(0, -9);
+      ctx.lineTo(-13, -17);
+      ctx.lineTo(-14, 0);
+      ctx.lineTo(-13, 17);
+      ctx.lineTo(0, 9);
+      ctx.lineTo(3, 3.5);
+      ctx.stroke();
+
+      // Swedish Air Force Tre Kronor (Three Crowns) roundel
+      ctx.fillStyle = '#0D47A1';
+      ctx.beginPath();
+      ctx.arc(-5, -9, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#FFD54F';
+      ctx.beginPath();
+      ctx.arc(-5, -10, 0.9, 0, Math.PI * 2);
+      ctx.arc(-6, -8.2, 0.9, 0, Math.PI * 2);
+      ctx.arc(-4, -8.2, 0.9, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (m === 'be12') {
+      // ════ Beriev Be-12 Chayka: Soviet Twin-Turboprop Gull-Wing ASW Flying Boat ════
+      ctx.fillStyle = '#18131A';
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.7;
+
+      // Flying-boat chine fuselage with glazed navigator nose & rear MAD tail sting
+      ctx.beginPath();
+      ctx.moveTo(21, 0);
+      ctx.lineTo(15, -3.4);
+      ctx.lineTo(2, -4.4);
+      ctx.lineTo(-17, -2.8);
+      ctx.lineTo(-22, 0);
+      ctx.lineTo(-17, 2.8);
+      ctx.lineTo(2, 4.4);
+      ctx.lineTo(15, 3.4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // High gull-wing parasol wing with wingtip stabilizing floats
+      ctx.beginPath();
+      ctx.moveTo(4, -27);
+      ctx.lineTo(-3, -27);
+      ctx.lineTo(-5, -4);
+      ctx.lineTo(5, -4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(4, 27);
+      ctx.lineTo(-3, 27);
+      ctx.lineTo(-5, 4);
+      ctx.lineTo(5, 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Wingtip floats
+      ctx.fillStyle = '#37474F';
+      ctx.fillRect(-1, -29, 7, 2.5);
+      ctx.fillRect(-1, 26.5, 7, 2.5);
+
+      // Twin Ivchenko AI-20D turboprop nacelles & spinning prop discs
+      ctx.fillRect(1, -11.5, 9, 3.4);
+      ctx.fillRect(1, 8.1, 9, 3.4);
+      ctx.strokeStyle = 'rgba(255, 138, 128, 0.65)';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.arc(10.5, -9.8, 5, 0, Math.PI * 2);
+      ctx.arc(10.5, 9.8, 5, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Twin vertical H-tail fins & extended rear MAD sting boom
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(-18, -9.5);
+      ctx.lineTo(-18, 9.5);
+      ctx.moveTo(-16, -9.5);
+      ctx.lineTo(-20.5, -9.5);
+      ctx.moveTo(-16, 9.5);
+      ctx.lineTo(-20.5, 9.5);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#FFD54F';
+      ctx.beginPath();
+      ctx.moveTo(-21, 0);
+      ctx.lineTo(-28, 0);
+      ctx.stroke();
+
+      // Red Stars
+      ctx.fillStyle = '#D50000';
+      ctx.beginPath();
+      ctx.arc(0, -19, 2.8, 0, Math.PI * 2);
+      ctx.arc(0, 19, 2.8, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (m === 'il38') {
+      // ════ Ilyushin Il-38 May: Soviet 4-Turboprop Long-Range ASW Maritime Patrol ════
+      ctx.fillStyle = '#181218';
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.9;
+
+      // Long cylindrical patrol fuselage
+      ctx.beginPath();
+      ctx.ellipse(2, 0, 23, 4.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Forward ventral Berkut search radar bulge
+      ctx.fillStyle = '#37474F';
+      ctx.beginPath();
+      ctx.ellipse(15, 0, 5, 2.8, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Straight-tapered long-span patrol wings (mounted forward of CG)
+      ctx.fillStyle = '#181218';
+      ctx.beginPath();
+      ctx.moveTo(8, -4.5);
+      ctx.lineTo(1, -34);
+      ctx.lineTo(-5, -34);
+      ctx.lineTo(-3, -4.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(8, 4.5);
+      ctx.lineTo(1, 34);
+      ctx.lineTo(-5, 34);
+      ctx.lineTo(-3, 4.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // 4 Ivchenko AI-20M turboprop nacelles & 4 prop discs
+      ctx.fillStyle = '#37474F';
+      for (const ny of [-12, -23, 9, 20]) {
+        ctx.fillRect(0, ny, 9, 3.2);
+      }
+      ctx.strokeStyle = 'rgba(255, 138, 128, 0.65)';
+      ctx.lineWidth = 1.1;
+      for (const py of [-10.4, -21.4, 10.6, 21.6]) {
+        ctx.beginPath();
+        ctx.arc(9.5, py, 4.6, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Horizontal stabilizer & Rear MAD sting boom
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-18, -11);
+      ctx.lineTo(-22, -11);
+      ctx.lineTo(-20, 0);
+      ctx.lineTo(-22, 11);
+      ctx.lineTo(-18, 11);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#FFD54F';
+      ctx.beginPath();
+      ctx.moveTo(-21, 0);
+      ctx.lineTo(-29, 0);
+      ctx.stroke();
+
+      // Red Stars
+      ctx.fillStyle = '#D50000';
+      ctx.beginPath();
+      ctx.arc(-2, -28, 3, 0, Math.PI * 2);
+      ctx.arc(-2, 28, 3, 0, Math.PI * 2);
+      ctx.fill();
     } else {
       // Default Generic Plane
       ctx.fillStyle = '#061322';
@@ -7152,6 +12638,97 @@ export class VectorRenderer {
         ctx.font = 'bold 7px monospace';
         ctx.textAlign = 'center';
         ctx.fillText('AIRBORNE', 0, -6);
+      } else if (pType === 'aim7_aim9_combo') {
+        // 2x semi-recessed AIM-7 Sparrows + 2x AIM-9 Sidewinders
+        ctx.fillStyle = '#ECEFF1';
+        ctx.strokeStyle = '#90A4AE';
+        ctx.lineWidth = 1.1;
+        // Semi-recessed fuselage belly Sparrows
+        ctx.fillRect(-2, -2.2, 8, 1.8);
+        ctx.fillRect(-2, 0.4, 8, 1.8);
+        // Outer wing Sidewinders with yellow rollerons
+        ctx.strokeStyle = '#FFE082';
+        for (const sy of [-11, 11]) {
+          ctx.beginPath();
+          ctx.moveTo(-1, sy);
+          ctx.lineTo(5, sy);
+          ctx.stroke();
+          ctx.fillStyle = '#FF9800';
+          ctx.fillRect(-1.5, sy - 1, 1.2, 2);
+        }
+      } else if (pType === 'gbu10_laser_paveway') {
+        // GBU-10 2,000lb Paveway I Laser-Guided Bomb
+        ctx.fillStyle = '#558B2F';
+        ctx.strokeStyle = '#33691E';
+        ctx.lineWidth = 1.2;
+        for (const gy of [-7, 7]) {
+          ctx.fillRect(-3, gy - 2, 10, 4);
+          ctx.strokeRect(-3, gy - 2, 10, 4);
+          // Laser seeker ring airfoil head
+          ctx.fillStyle = '#80DEEA';
+          ctx.beginPath();
+          ctx.arc(8, gy, 1.6, 0, Math.PI * 2);
+          ctx.fill();
+          // Cruciform tail guidance fins
+          ctx.strokeStyle = '#8BC34A';
+          ctx.beginPath();
+          ctx.moveTo(-3, gy - 3);
+          ctx.lineTo(-3, gy + 3);
+          ctx.stroke();
+        }
+      } else if (pType === 'cbu_cluster_bombs') {
+        // CBU-24 / Rockeye Cluster Dispenser Canisters
+        ctx.fillStyle = '#689F38';
+        ctx.strokeStyle = '#33691E';
+        ctx.lineWidth = 1;
+        for (const cy of [-9, -5, 5, 9]) {
+          ctx.fillRect(-2, cy - 1.5, 7, 3);
+          ctx.strokeRect(-2, cy - 1.5, 7, 3);
+          // Yellow ID stripes
+          ctx.fillStyle = '#FFEB3B';
+          ctx.fillRect(0, cy - 1.5, 1.5, 3);
+        }
+      } else if (pType === 'blu27_napalm') {
+        // BLU-27 750lb Streamlined Aluminum Napalm Canisters
+        ctx.fillStyle = '#CFD8DC';
+        ctx.strokeStyle = '#B0BEC5';
+        ctx.lineWidth = 1.1;
+        for (const ny of [-8, -4, 4, 8]) {
+          ctx.beginPath();
+          ctx.ellipse(1, ny, 4.5, 1.7, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          // Red thermal igniter nose
+          ctx.fillStyle = '#FF5252';
+          ctx.beginPath();
+          ctx.arc(5.5, ny, 1.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (pType === 'agm78_standard_arm') {
+        // AGM-78 Standard ARM (Long-range heavy anti-radiation missile)
+        ctx.fillStyle = '#FFFFFF';
+        ctx.strokeStyle = '#FF3D00';
+        ctx.lineWidth = 1.2;
+        for (const ay of [-8, 8]) {
+          ctx.fillRect(-4, ay - 1.8, 12, 3.6);
+          ctx.strokeRect(-4, ay - 1.8, 12, 3.6);
+          // Long dorsal strakes
+          ctx.fillStyle = '#FF5252';
+          ctx.fillRect(-1, ay - 2.8, 6, 1);
+          ctx.fillRect(-1, ay + 1.8, 6, 1);
+        }
+      } else if (pType === 'mer_iron_bombs') {
+        // MER Multiple Ejector Racks (Dense stick of 500lb bombs)
+        ctx.fillStyle = '#558B2F';
+        ctx.strokeStyle = '#FFD54F';
+        ctx.lineWidth = 1;
+        for (const side of [-8, 8]) {
+          // 3x2 bomb rack per wing
+          for (let row = -1; row <= 1; row++) {
+            ctx.fillRect(row * 3 - 2, side - 2, 2.8, 1.8);
+            ctx.fillRect(row * 3 - 2, side + 0.4, 2.8, 1.8);
+          }
+        }
       }
     }
 
@@ -7170,11 +12747,22 @@ export class VectorRenderer {
     // ════ Propulsion Visuals: Jet Supersonic Exhaust vs. Propeller Disc ════
     const jetModels = new Set([
       'f8', 'f4b', 'f4j', 'f4e', 'a4', 'a6a', 'a6b_weasel', 'f105', 'b52', 'a7',
-      'f9f', 'f2h', 'f3h', 'f86', 'mig15', 'mig17', 'mig19', 'mig21', 'su7', 'il28',
-      'tu14', 'me262', 'ohka', 'kikka', 'meteor'
+      'f9f', 'f2h', 'f3h', 'f86', 'mig15', 'mig17', 'mig19', 'mig21', 'su7', 'il28', 'tu16',
+      'tu14', 'me262', 'ohka', 'kikka', 'meteor',
+      // Era 5 Cold War Jets (冷戰噴射戰機群，絕無螺旋槳)
+      'f14a', 'fa18a', 's3a', 'a6e', 'ea6b', 'av8b', 'a10a', 'f15a', 'f16a', 'e3a', 'f111',
+      'tu22m3', 'yak38', 'mig29a', 'su27', 'a50', 'su25'
     ]);
-    const heloModels = new Set(['uh2', 'ch46', 'uh1', 'ah1', 'ho3s1', 'hup', 'hrs']);
-    const multiPropModels = new Set(['b17', 'b24', 'b25', 'b29', 'g4m', 'p38', 'c1', 's2', 'e1', 'ov10', 'a20', 'a26']);
+    const heloModels = new Set([
+      'uh2', 'ch46', 'uh1', 'ah1', 'ho3s1', 'hup', 'hrs',
+      // Era 5 Helicopters:
+      'sh3f', 'ch53', 'ah64a', 'ah1w', 'ka27', 'mi24'
+    ]);
+    const multiPropModels = new Set([
+      'b17', 'b24', 'b25', 'b29', 'g4m', 'p38', 'c47', 'c1', 's2', 'e1', 'ov10', 'a20', 'a26',
+      // Era 4/5 Turboprops / Patrol / Transports (多發渦輪螺旋槳/反潛巡邏機):
+      'e2c', 'c2a', 'c130', 'tu95', 'be12', 'il38'
+    ]);
 
     const isJet = jetModels.has(m);
     const isHelo = heloModels.has(m);
@@ -7980,57 +13568,264 @@ export class VectorRenderer {
           ctx.restore();
         }
       } else if (proj.type === 'missile_ashm') {
-        // ════ 空艦/海艦突防飛彈 (P-15 冥河 Styx / AGM-12 犢犬 Bullpup) ════
+        // ════ 空艦/海艦突防飛彈 (依史實彈種、飛行高度、超音速激波與領彈資料鏈差異化繪製) ════
         const cosH = Math.cos(proj.heading);
         const sinH = Math.sin(proj.heading);
+        const variant = proj.ashmVariant;
+        const altRatio = proj.missileAltitude ?? 0.2;
+        const yLift = altRatio * 18;
+        const drawX = proj.pos.x;
+        const drawY = proj.pos.y - yLift;
 
-        // Low-altitude sea-spray wake ripples
-        ctx.strokeStyle = 'rgba(224, 247, 250, 0.65)';
-        ctx.lineWidth = 2.4;
-        ctx.beginPath();
-        ctx.moveTo(proj.pos.x - cosH * 36 - sinH * 4, proj.pos.y - sinH * 36 + cosH * 4);
-        ctx.lineTo(proj.pos.x - cosH * 10, proj.pos.y - sinH * 10);
-        ctx.moveTo(proj.pos.x - cosH * 36 + sinH * 4, proj.pos.y - sinH * 36 - cosH * 4);
-        ctx.lineTo(proj.pos.x - cosH * 10, proj.pos.y - sinH * 10);
-        ctx.stroke();
+        // 1. Water surface drop shadow when climbing (Harpoon pop-up / P-700 leader / Kh-22 high plunge)
+        if (yLift > 2.5) {
+          const shadowAlpha = Math.max(0.14, 0.36 - altRatio * 0.18);
+          ctx.fillStyle = `rgba(3, 10, 20, ${shadowAlpha.toFixed(2)})`;
+          ctx.beginPath();
+          ctx.ellipse(proj.pos.x, proj.pos.y + 2, 7, 2.6, proj.heading, 0, Math.PI * 2);
+          ctx.fill();
+        }
 
-        // Heavy cruise missile rocket engine exhaust
-        ctx.strokeStyle = '#FF3D00';
-        ctx.lineWidth = 4.2;
-        ctx.beginPath();
-        ctx.moveTo(proj.pos.x - cosH * 22, proj.pos.y - sinH * 22);
-        ctx.lineTo(proj.pos.x - cosH * 8, proj.pos.y - sinH * 8);
-        ctx.stroke();
+        // 2. P-700 Granit / P-500 Bazalt High-Altitude Leader Datalink Relay Lines & Halo
+        if (proj.isLeadMissile && !proj.isDecoyed) {
+          const pulse = 0.65 + Math.sin(this.time * 10) * 0.35;
+          let linkedCount = 0;
+          ctx.save();
+          ctx.strokeStyle = `rgba(0, 229, 255, ${(0.28 * pulse).toFixed(2)})`;
+          ctx.lineWidth = 1.1;
+          ctx.setLineDash([4, 5]);
+          for (const follower of projectiles) {
+            if (follower.isDead || follower.id === proj.id || follower.leadMissileId !== proj.id || follower.datalinkLost) continue;
+            const fLift = (follower.missileAltitude ?? 0.15) * 18;
+            ctx.beginPath();
+            ctx.moveTo(drawX, drawY);
+            ctx.lineTo(follower.pos.x, follower.pos.y - fLift);
+            ctx.stroke();
+            linkedCount++;
+            if (linkedCount >= 5) break;
+          }
+          ctx.setLineDash([]);
 
-        ctx.save();
-        ctx.translate(proj.pos.x, proj.pos.y);
-        ctx.rotate(proj.heading);
-        // Chunky Styx cruise missile fuselage with delta wings
-        ctx.fillStyle = '#37474F';
-        ctx.strokeStyle = '#FF5252';
-        ctx.lineWidth = 1.4;
-        ctx.fillRect(-12, -3.2, 16, 6.4);
-        ctx.strokeRect(-12, -3.2, 16, 6.4);
+          // Leader radar broadcast beacon ring
+          ctx.strokeStyle = `rgba(255, 213, 79, ${(0.55 * pulse).toFixed(2)})`;
+          ctx.lineWidth = 1.3;
+          ctx.beginPath();
+          ctx.arc(drawX, drawY, 10 + pulse * 3, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
 
-        // Delta wing surfaces
-        ctx.fillStyle = '#455A64';
-        ctx.beginPath();
-        ctx.moveTo(1, 0);
-        ctx.lineTo(-8, -8);
-        ctx.lineTo(-11, -8);
-        ctx.lineTo(-7, 0);
-        ctx.lineTo(-11, 8);
-        ctx.lineTo(-8, 8);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
+        const isExocet = variant === 'exocet_mm40' || variant === 'exocet_mm38';
+        const isHarpoon = variant === 'harpoon_rgm84' || variant === 'harpoon_ugm84' || variant === 'harpoon_agm84';
+        const isHeavySoviet = variant === 'p700_granit' || variant === 'p500_bazalt';
+        const isMoskit = variant === 'p270_moskit';
+        const isKh22 = variant === 'kh22_burya';
 
-        // Heavy warhead nose
-        ctx.fillStyle = '#FF1744';
-        ctx.beginPath();
-        ctx.arc(4, 0, 3.2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        // 3. Low-altitude sea-spray wake ripples (intense on wave-top Exocet & Moskit; fades when climbing)
+        if (altRatio < 0.35) {
+          const sprayLen = isExocet ? 44 : isMoskit ? 40 : 30;
+          const spraySpread = isExocet ? 5.2 : 4.0;
+          ctx.strokeStyle = isExocet ? 'rgba(224, 247, 250, 0.85)' : 'rgba(224, 247, 250, 0.58)';
+          ctx.lineWidth = isExocet ? 2.6 : 2.1;
+          ctx.beginPath();
+          ctx.moveTo(proj.pos.x - cosH * sprayLen - sinH * spraySpread, proj.pos.y - sinH * sprayLen + cosH * spraySpread);
+          ctx.lineTo(proj.pos.x - cosH * 8, proj.pos.y - sinH * 8);
+          ctx.moveTo(proj.pos.x - cosH * sprayLen + sinH * spraySpread, proj.pos.y - sinH * sprayLen - cosH * spraySpread);
+          ctx.lineTo(proj.pos.x - cosH * 8, proj.pos.y - sinH * 8);
+          ctx.stroke();
+        }
+
+        if (isExocet) {
+          // ── NATO Exocet MM40 / MM38: Low-signature solid rocket flare + blue-striped sea-skimmer ──
+          ctx.strokeStyle = '#80DEEA';
+          ctx.lineWidth = 2.4;
+          ctx.beginPath();
+          ctx.moveTo(drawX - cosH * 15, drawY - sinH * 15);
+          ctx.lineTo(drawX - cosH * 7, drawY - sinH * 7);
+          ctx.stroke();
+
+          ctx.save();
+          ctx.translate(drawX, drawY);
+          ctx.rotate(proj.heading);
+          // Sleek silver-grey body with NATO sky-blue tactical bands
+          ctx.fillStyle = '#CFD8DC';
+          ctx.strokeStyle = '#0277BD';
+          ctx.lineWidth = 1.2;
+          ctx.fillRect(-10, -2.0, 14, 4.0);
+          ctx.strokeRect(-10, -2.0, 14, 4.0);
+          ctx.fillStyle = '#0288D1';
+          ctx.fillRect(-4, -2.0, 3.2, 4.0);
+
+          // Swept cruciform delta wings + aft fins
+          ctx.fillStyle = '#90A4AE';
+          ctx.beginPath();
+          ctx.moveTo(1, 0);
+          ctx.lineTo(-4, -5.8);
+          ctx.lineTo(-6, -5.8);
+          ctx.lineTo(-3.5, 0);
+          ctx.lineTo(-6, 5.8);
+          ctx.lineTo(-4, 5.8);
+          ctx.closePath();
+          ctx.fill();
+
+          // Sharp sea-skimmer radome
+          ctx.fillStyle = '#E1F5FE';
+          ctx.beginPath();
+          ctx.arc(4.2, 0, 2.0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        } else if (isHarpoon) {
+          // ── USN / Allied RGM-84 / UGM-84 / AGM-84 Harpoon: Amber turbojet plume + pop-up arc ──
+          const flameLen = 14 + Math.sin(this.time * 36) * 3;
+          ctx.strokeStyle = '#FFB300';
+          ctx.lineWidth = 2.8;
+          ctx.beginPath();
+          ctx.moveTo(drawX - cosH * (8 + flameLen), drawY - sinH * (8 + flameLen));
+          ctx.lineTo(drawX - cosH * 7, drawY - sinH * 7);
+          ctx.stroke();
+
+          if (proj.ashmProfile === 'pop_up_dive' && altRatio > 0.45) {
+            ctx.strokeStyle = 'rgba(255, 213, 79, 0.55)';
+            ctx.lineWidth = 1.1;
+            ctx.beginPath();
+            ctx.arc(drawX, drawY, 8.5, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+
+          ctx.save();
+          ctx.translate(drawX, drawY);
+          ctx.rotate(proj.heading);
+          ctx.fillStyle = '#ECEFF1';
+          ctx.strokeStyle = '#37474F';
+          ctx.lineWidth = 1.2;
+          ctx.fillRect(-10, -2.1, 14, 4.2);
+          ctx.strokeRect(-10, -2.1, 14, 4.2);
+
+          // USN amber warhead band
+          ctx.fillStyle = '#FFB300';
+          ctx.fillRect(0.5, -2.1, 2.4, 4.2);
+
+          // Slim mid-body swept fins
+          ctx.strokeStyle = '#607D8B';
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.moveTo(-2, -5.2);
+          ctx.lineTo(-5, 0);
+          ctx.lineTo(-2, 5.2);
+          ctx.moveTo(-9, -4.2);
+          ctx.lineTo(-10, 0);
+          ctx.lineTo(-9, 4.2);
+          ctx.stroke();
+
+          // Radome tip
+          ctx.fillStyle = '#B0BEC5';
+          ctx.beginPath();
+          ctx.arc(4.2, 0, 2.1, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        } else if (isHeavySoviet || isMoskit || isKh22) {
+          // ── Soviet Supersonic AShMs (P-700 Granit / P-500 Bazalt / P-270 Moskit / Kh-22 Burya) ──
+          const flameLen = (isHeavySoviet ? 22 : 18) + Math.sin(this.time * 42) * 4;
+          const sGrad = ctx.createLinearGradient(
+            drawX - cosH * 8, drawY - sinH * 8,
+            drawX - cosH * (8 + flameLen), drawY - sinH * (8 + flameLen)
+          );
+          sGrad.addColorStop(0, '#FFFFFF');
+          sGrad.addColorStop(0.3, isMoskit ? '#80DEEA' : '#FFD54F');
+          sGrad.addColorStop(0.7, '#FF3D00');
+          sGrad.addColorStop(1, 'rgba(255, 61, 0, 0)');
+          ctx.strokeStyle = sGrad;
+          ctx.lineWidth = isHeavySoviet ? 4.6 : 3.8;
+          ctx.beginPath();
+          ctx.moveTo(drawX - cosH * (8 + flameLen), drawY - sinH * (8 + flameLen));
+          ctx.lineTo(drawX - cosH * 8, drawY - sinH * 8);
+          ctx.stroke();
+
+          ctx.save();
+          ctx.translate(drawX, drawY);
+          ctx.rotate(proj.heading);
+          const scale = variant === 'p700_granit' || isKh22 ? 1.16 : 1.02;
+          ctx.scale(scale, scale);
+
+          // Supersonic Mach shock-cone chevron around nose
+          ctx.strokeStyle = isMoskit ? 'rgba(128, 222, 234, 0.72)' : 'rgba(255, 224, 178, 0.62)';
+          ctx.lineWidth = 1.3;
+          ctx.beginPath();
+          ctx.moveTo(-5, -8.5);
+          ctx.lineTo(7.5, 0);
+          ctx.lineTo(-5, 8.5);
+          ctx.stroke();
+
+          if (isMoskit) {
+            ctx.beginPath();
+            ctx.moveTo(-9, -6.5);
+            ctx.lineTo(1, 0);
+            ctx.lineTo(-9, 6.5);
+            ctx.stroke();
+          }
+
+          // Heavy gunmetal fuselage & crimson intake/radome
+          ctx.fillStyle = isKh22 ? '#CFD8DC' : '#263238';
+          ctx.strokeStyle = isMoskit ? '#FF6D00' : '#FF5252';
+          ctx.lineWidth = 1.3;
+          ctx.fillRect(-12, -2.8, 17, 5.6);
+          ctx.strokeRect(-12, -2.8, 17, 5.6);
+
+          // Swept supersonic delta wings
+          ctx.fillStyle = isKh22 ? '#90A4AE' : '#37474F';
+          ctx.beginPath();
+          ctx.moveTo(2, 0);
+          ctx.lineTo(-9, -7.2);
+          ctx.lineTo(-11.5, -7.2);
+          ctx.lineTo(-7.5, 0);
+          ctx.lineTo(-11.5, 7.2);
+          ctx.lineTo(-9, 7.2);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          // Crimson nose radome (gold ring if P-700/P-500 swarm leader)
+          ctx.fillStyle = proj.isLeadMissile ? '#FFD54F' : '#FF1744';
+          ctx.beginPath();
+          ctx.arc(5, 0, 2.8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        } else {
+          // ── P-15 Styx / KSR-5 Kelt / AGM-12 Bullpup fallback ──
+          ctx.strokeStyle = '#FF3D00';
+          ctx.lineWidth = 4.2;
+          ctx.beginPath();
+          ctx.moveTo(drawX - cosH * 22, drawY - sinH * 22);
+          ctx.lineTo(drawX - cosH * 8, drawY - sinH * 8);
+          ctx.stroke();
+
+          ctx.save();
+          ctx.translate(drawX, drawY);
+          ctx.rotate(proj.heading);
+          ctx.fillStyle = '#37474F';
+          ctx.strokeStyle = '#FF5252';
+          ctx.lineWidth = 1.4;
+          ctx.fillRect(-12, -3.2, 16, 6.4);
+          ctx.strokeRect(-12, -3.2, 16, 6.4);
+
+          ctx.fillStyle = '#455A64';
+          ctx.beginPath();
+          ctx.moveTo(1, 0);
+          ctx.lineTo(-8, -8);
+          ctx.lineTo(-11, -8);
+          ctx.lineTo(-7, 0);
+          ctx.lineTo(-11, 8);
+          ctx.lineTo(-8, 8);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#FF1744';
+          ctx.beginPath();
+          ctx.arc(4, 0, 3.2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
       } else if (proj.type === 'missile_arm') {
         // ════ 反輻射雷達獵殺飛彈 (AGM-45 百舌鳥 Shrike) ════
         const cosH = Math.cos(proj.heading);
@@ -8074,6 +13869,164 @@ export class VectorRenderer {
         ctx.beginPath();
         ctx.arc(3.5, 0, 1.6, 0, Math.PI * 2);
         ctx.fill();
+        ctx.restore();
+      } else if (proj.type === 'missile_cruise') {
+        // ════ 戰斧巡弋飛彈 (BGM-109 / UGM-109 / GLCM / RK-55) ════
+        const cosH = Math.cos(proj.heading);
+        const sinH = Math.sin(proj.heading);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(proj.pos.x - cosH * 24, proj.pos.y - sinH * 24);
+        ctx.lineTo(proj.pos.x, proj.pos.y);
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(proj.pos.x, proj.pos.y);
+        ctx.rotate(proj.heading);
+        // 白色流線圓柱彈體
+        ctx.fillStyle = '#F8FAFC';
+        ctx.strokeStyle = '#64748B';
+        ctx.lineWidth = 1.0;
+        ctx.fillRect(-12, -2.0, 16, 4.0);
+        ctx.strokeRect(-12, -2.0, 16, 4.0);
+        // 展開之平直主翼
+        ctx.strokeStyle = '#94A3B8';
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.moveTo(-2, -7.5);
+        ctx.lineTo(0, 0);
+        ctx.lineTo(-2, 7.5);
+        ctx.stroke();
+        // 彈頭鼻錐
+        ctx.fillStyle = '#0284C7';
+        ctx.beginPath();
+        ctx.arc(4, 0, 2.0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      } else if (proj.type === 'slbm_trident' || proj.type === 'slbm_r39') {
+        const isTrident = proj.type === 'slbm_trident';
+        const cosH = Math.cos(proj.heading);
+        const sinH = Math.sin(proj.heading);
+        // 潛射洲際彈道飛彈高溫熾熱等離子羽流 (Massive Plasma Jet)
+        ctx.strokeStyle = isTrident ? '#00E5FF' : '#FF3D00';
+        ctx.lineWidth = 7.0;
+        ctx.beginPath();
+        ctx.moveTo(proj.pos.x - cosH * 45, proj.pos.y - sinH * 45);
+        ctx.lineTo(proj.pos.x - cosH * 14, proj.pos.y - sinH * 14);
+        ctx.stroke();
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 3.5;
+        ctx.beginPath();
+        ctx.moveTo(proj.pos.x - cosH * 32, proj.pos.y - sinH * 32);
+        ctx.lineTo(proj.pos.x - cosH * 12, proj.pos.y - sinH * 12);
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(proj.pos.x, proj.pos.y);
+        ctx.rotate(proj.heading);
+        // 重型 SLBM 圓柱彈身 (Trident D5 / R-39 Rif)
+        ctx.fillStyle = isTrident ? '#F8FAFC' : '#334155';
+        ctx.strokeStyle = isTrident ? '#0284C7' : '#EF4444';
+        ctx.lineWidth = 1.6;
+        ctx.fillRect(-22, -5, 28, 10);
+        ctx.strokeRect(-22, -5, 28, 10);
+        // MIRV 分導核彈頭空氣動力鼻錐
+        ctx.fillStyle = '#0F172A';
+        ctx.beginPath();
+        ctx.moveTo(6, -5);
+        ctx.lineTo(16, 0);
+        ctx.lineTo(6, 5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        // 減阻針 (Aerospike Extension)
+        ctx.strokeStyle = '#38BDF8';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(16, 0);
+        ctx.lineTo(24, 0);
+        ctx.stroke();
+        ctx.restore();
+      } else if (proj.type === 'missile_ssm') {
+        const isAtacms = Boolean(proj.isAtacms || proj.isBunkerBuster);
+        const cosH = Math.cos(proj.heading);
+        const sinH = Math.sin(proj.heading);
+        // 巨大高溫火箭尾焰與超音速震波光錐
+        ctx.strokeStyle = isAtacms ? '#F59E0B' : '#EF4444';
+        ctx.lineWidth = 5.5;
+        ctx.beginPath();
+        ctx.moveTo(proj.pos.x - cosH * 32, proj.pos.y - sinH * 32);
+        ctx.lineTo(proj.pos.x - cosH * 10, proj.pos.y - sinH * 10);
+        ctx.stroke();
+        ctx.strokeStyle = '#FDE047';
+        ctx.lineWidth = 2.8;
+        ctx.beginPath();
+        ctx.moveTo(proj.pos.x - cosH * 22, proj.pos.y - sinH * 22);
+        ctx.lineTo(proj.pos.x - cosH * 10, proj.pos.y - sinH * 10);
+        ctx.stroke();
+
+        ctx.save();
+        ctx.translate(proj.pos.x, proj.pos.y);
+        ctx.rotate(proj.heading);
+
+        if (isAtacms) {
+          // ════ MGM-140 ATACMS 戰術彈道飛彈 ════
+          // 美軍卡其白/灰白圓柱固體火箭彈體
+          ctx.fillStyle = '#E2E8F0';
+          ctx.strokeStyle = '#334155';
+          ctx.lineWidth = 1.4;
+          ctx.fillRect(-15, -3.5, 20, 7.0);
+          ctx.strokeRect(-15, -3.5, 20, 7.0);
+
+          // 尾部 4 片可動十字形控制格柵翼/三角控制翼
+          ctx.strokeStyle = '#475569';
+          ctx.lineWidth = 2.0;
+          ctx.beginPath();
+          ctx.moveTo(-15, -8.5);
+          ctx.lineTo(-10, -3.5);
+          ctx.lineTo(-10, 3.5);
+          ctx.lineTo(-15, 8.5);
+          ctx.stroke();
+
+          // M57 碉堡剋星 (Bunker Buster) 穿甲鎢鋼黑金屬鼻錐
+          ctx.fillStyle = '#0F172A';
+          ctx.strokeStyle = '#38BDF8';
+          ctx.lineWidth = 1.0;
+          ctx.beginPath();
+          ctx.moveTo(5, -3.5);
+          ctx.lineTo(13, 0);
+          ctx.lineTo(5, 3.5);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          // ════ 9K72 飛毛腿-B 戰術彈道飛彈 (Scud-B Heavy Ballistic Missile) ════
+          // 粗壯軍綠色飛毛腿彈體
+          ctx.fillStyle = '#3F6212';
+          ctx.strokeStyle = '#1E293B';
+          ctx.lineWidth = 1.5;
+          ctx.fillRect(-16, -3.8, 22, 7.6);
+          ctx.strokeRect(-16, -3.8, 22, 7.6);
+          // 尾部 4 片大型梯形控制翼
+          ctx.strokeStyle = '#15803D';
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.moveTo(-16, -9);
+          ctx.lineTo(-12, -3.8);
+          ctx.lineTo(-12, 3.8);
+          ctx.lineTo(-16, 9);
+          ctx.stroke();
+          // 重型高爆彈頭錐
+          ctx.fillStyle = '#DC2626';
+          ctx.beginPath();
+          ctx.moveTo(6, -3.8);
+          ctx.lineTo(12, 0);
+          ctx.lineTo(6, 3.8);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
         ctx.restore();
       }
     }
@@ -8303,6 +14256,35 @@ export class VectorRenderer {
           ctx.arc(sx, sy, 1, 0, Math.PI * 2);
           ctx.fill();
         }
+      } else if (p.type === 'tracer') {
+        const tLen = p.length || Math.min(26, Math.hypot(p.vx, p.vy) * 0.035);
+        const tAng = Math.atan2(p.vy, p.vx);
+        const tailX = p.x - Math.cos(tAng) * tLen;
+        const tailY = p.y - Math.sin(tAng) * tLen;
+
+        ctx.save();
+        // 1. Radiant outer bloom
+        ctx.strokeStyle = p.color || 'rgba(255, 224, 130, 0.65)';
+        ctx.lineWidth = 3.6;
+        ctx.beginPath();
+        ctx.moveTo(tailX, tailY);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+
+        // 2. High-intensity saturated tracer core
+        ctx.strokeStyle = p.color?.includes('FF5252') ? '#FF1744' : '#FFE082';
+        ctx.lineWidth = 2.0;
+        ctx.beginPath();
+        ctx.moveTo(tailX * 0.35 + p.x * 0.65, tailY * 0.35 + p.y * 0.65);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+
+        // 3. White-hot point
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 1.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       } else if (p.shape === 'ring' || p.type === 'shockwave') {
         ctx.strokeStyle = p.color;
         ctx.lineWidth = 2;
@@ -8451,20 +14433,94 @@ export class VectorRenderer {
       ctx.strokeStyle = '#FFFFFF';
       ctx.lineWidth = 1.8;
 
-      if (unit.type.includes('rifle') || unit.type.includes('ambush') || unit.type.includes('patrol') || unit.type.includes('infantry')) {
-        // 步兵 (Infantry): 對角交叉線 "X"
-        const xOffset = isHostile ? 7 : 10;
-        const yOffset = isHostile ? 5.5 : 6;
+      if (unit.type.includes('scud') || unit.type.includes('ssm') || unit.type.includes('ballistic') || unit.type.includes('atacms')) {
+        // 戰術地對地/彈道飛彈 (Tactical SSM / SCUD / ATACMS): 向上衝天飛彈箭頭與助推器
         ctx.beginPath();
-        ctx.moveTo(-xOffset, midY - yOffset);
-        ctx.lineTo(xOffset, midY + yOffset);
-        ctx.moveTo(xOffset, midY - yOffset);
-        ctx.lineTo(-xOffset, midY + yOffset);
+        ctx.moveTo(0, midY - 7);
+        ctx.lineTo(-3, midY - 3);
+        ctx.lineTo(-1.5, midY - 3);
+        ctx.lineTo(-1.5, midY + 5);
+        ctx.lineTo(-4, midY + 7);
+        ctx.moveTo(0, midY - 7);
+        ctx.lineTo(3, midY - 3);
+        ctx.lineTo(1.5, midY - 3);
+        ctx.lineTo(1.5, midY + 5);
+        ctx.lineTo(4, midY + 7);
         ctx.stroke();
-      } else if (unit.type.includes('armor') || unit.type.includes('tank') || unit.type.includes('t34') || unit.type.includes('patton')) {
-        // 裝甲戰車 (Armor): 履帶橢圓 "⬭"
+      } else if (unit.type.includes('mlrs') || unit.type.includes('grad') || unit.type.includes('uragan') || unit.type.includes('calliope')) {
+        // 多管火箭砲兵 (Multiple Launch Rocket System / MLRS / Calliope): 砲兵核心圓點 + 雙向齊射傾斜火箭箭頭
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(0, midY, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(-7, midY + 4);
+        ctx.lineTo(-2.5, midY - 4);
+        ctx.lineTo(-5, midY - 4);
+        ctx.moveTo(7, midY + 4);
+        ctx.lineTo(2.5, midY - 4);
+        ctx.lineTo(5, midY - 4);
+        ctx.stroke();
+      } else if (unit.type.includes('atgm') || unit.type.includes('tow') || unit.type.includes('anti_tank')) {
+        // 反戰車飛彈 / 拖式 (Anti-Tank / ATGM): 倒 V 形尖頂飛彈射擊符號
+        ctx.beginPath();
+        ctx.moveTo(-7, midY + 4);
+        ctx.lineTo(0, midY - 5);
+        ctx.lineTo(7, midY + 4);
+        ctx.stroke();
+        // Horizontal cross arrow
+        ctx.beginPath();
+        ctx.moveTo(0, midY - 5);
+        ctx.lineTo(0, midY + 4);
+        ctx.stroke();
+      } else if (unit.type.includes('lvt') || unit.type.includes('mech') || unit.type.includes('bradley') || unit.type.includes('bmp') || unit.type.includes('m113')) {
+        // 機械化步兵/兩棲 (Mechanized Infantry): 履帶橢圓內嵌步兵交叉 "X"
+        ctx.beginPath();
+        ctx.ellipse(0, midY, isHostile ? 8 : 9.5, isHostile ? 4 : 5, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-4.5, midY - 2.5);
+        ctx.lineTo(4.5, midY + 2.5);
+        ctx.moveTo(4.5, midY - 2.5);
+        ctx.lineTo(-4.5, midY + 2.5);
+        ctx.stroke();
+      } else if (unit.type.includes('armor') || unit.type.includes('tank') || unit.type.includes('abrams') || unit.type.includes('t72') || unit.type.includes('t62') || unit.type.includes('t55') || unit.type.includes('m60') || unit.type.includes('patton') || unit.type.includes('t34')) {
+        // 裝甲主力戰車 (Main Battle Tank / Armor): 裝甲履帶橢圓 "⬭"
         ctx.beginPath();
         ctx.ellipse(0, midY, isHostile ? 7.5 : 9, isHostile ? 3.8 : 4.5, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (
+        unit.type.includes('chaparral') ||
+        unit.type.includes('sam') ||
+        unit.type.includes('sa6') ||
+        unit.type.includes('sa8') ||
+        unit.type.includes('sa9') ||
+        unit.type.includes('sa11') ||
+        unit.type.includes('sa15') ||
+        unit.type.includes('strela')
+      ) {
+        // 野戰防空飛彈 (Mobile SAM Air Defense): 穹門防空頂 + 向上飛彈發射箭頭
+        ctx.beginPath();
+        ctx.arc(0, midY + 4, 6, Math.PI, 0);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, midY + 4);
+        ctx.lineTo(0, midY - 6);
+        ctx.lineTo(-2.5, midY - 3);
+        ctx.moveTo(0, midY - 6);
+        ctx.lineTo(2.5, midY - 3);
+        ctx.stroke();
+      } else if (
+        unit.type.includes('flak') ||
+        unit.type.includes('aa') ||
+        unit.type.includes('shilka') ||
+        unit.type.includes('zsu') ||
+        unit.type.includes('btr_zd') ||
+        unit.type.includes('tunguska')
+      ) {
+        // 防空高射砲 (Air Defense / Flak / SPAAG): 圓頂穹頂穹門 "⌒"
+        ctx.beginPath();
+        ctx.arc(0, midY + 3, 5, Math.PI, 0);
         ctx.stroke();
       } else if (unit.type.includes('mortar')) {
         // 迫擊砲 (Mortar): 倒 V 形迫砲帶圓彈 "▲."
@@ -8477,39 +14533,30 @@ export class VectorRenderer {
         ctx.beginPath();
         ctx.arc(0, midY + 1.5, 1.8, 0, Math.PI * 2);
         ctx.fill();
+      } else if (unit.isSPG || unit.type.includes('spg') || unit.type.includes('paladin') || unit.type.includes('priest') || unit.type.includes('hummel') || unit.type.includes('m109') || unit.type.includes('2s1') || unit.type.includes('2s3') || unit.type.includes('2s19') || unit.type.includes('su100')) {
+        // 自走砲 (Self-Propelled Gun / SPG): 裝甲履帶橢圓 "⬭" + 中央實心砲彈圓點 "●"
+        ctx.beginPath();
+        ctx.ellipse(0, midY, isHostile ? 7.5 : 9, isHostile ? 3.8 : 4.5, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(0, midY, 2.5, 0, Math.PI * 2);
+        ctx.fill();
       } else if (unit.type.includes('artillery') || unit.type.includes('howitzer')) {
-        // 野戰砲兵 (Field Artillery): 中央實心砲彈圓點 "●"
+        // 野戰牽引重砲兵 (Towed Field Artillery): 中央實心砲彈圓點 "●"
         ctx.fillStyle = '#FFFFFF';
         ctx.beginPath();
         ctx.arc(0, midY, 3.4, 0, Math.PI * 2);
         ctx.fill();
-      } else if (unit.type.includes('chaparral') || unit.type.includes('sam')) {
-        // 野戰防空飛彈 (Mobile SAM Air Defense): 穹門防空頂 + 向上飛彈發射箭頭
+      } else if (unit.type.includes('rifle') || unit.type.includes('ambush') || unit.type.includes('patrol') || unit.type.includes('infantry') || unit.type.includes('marine')) {
+        // 輕步兵 (Infantry): 對角交叉線 "X"
+        const xOffset = isHostile ? 7 : 10;
+        const yOffset = isHostile ? 5.5 : 6;
         ctx.beginPath();
-        ctx.arc(0, midY + 4, 6, Math.PI, 0);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(0, midY + 4);
-        ctx.lineTo(0, midY - 6);
-        ctx.lineTo(-2.5, midY - 3);
-        ctx.moveTo(0, midY - 6);
-        ctx.lineTo(2.5, midY - 3);
-        ctx.stroke();
-      } else if (unit.type.includes('flak') || unit.type.includes('aa')) {
-        // 防空砲兵 (Air Defense / Flak): 圓頂穹頂穹門 "⌒"
-        ctx.beginPath();
-        ctx.arc(0, midY + 3, 5, Math.PI, 0);
-        ctx.stroke();
-      } else if (unit.type.includes('lvt') || unit.type.includes('mech')) {
-        // 機械化步兵/兩棲 (Mechanized Infantry): 履帶橢圓內嵌步兵 "X"
-        ctx.beginPath();
-        ctx.ellipse(0, midY, 9.5, 5, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(-5.5, midY - 2.8);
-        ctx.lineTo(5.5, midY + 2.8);
-        ctx.moveTo(5.5, midY - 2.8);
-        ctx.lineTo(-5.5, midY + 2.8);
+        ctx.moveTo(-xOffset, midY - yOffset);
+        ctx.lineTo(xOffset, midY + yOffset);
+        ctx.moveTo(xOffset, midY - yOffset);
+        ctx.lineTo(-xOffset, midY + yOffset);
         ctx.stroke();
       } else if (unit.type === 'usmc_engineer') {
         // 戰鬥工兵 (Combat Engineer): 工兵工程橫樑拱門 "E"
@@ -8523,7 +14570,7 @@ export class VectorRenderer {
         ctx.lineTo(6, midY - 3);
         ctx.stroke();
       } else {
-        // 預設/偵察 (Recon): 單斜線 "/"
+        // 偵察部隊 (Recon): 單斜線 "/"
         ctx.beginPath();
         ctx.moveTo(-5, midY + 4);
         ctx.lineTo(5, midY - 4);
@@ -8577,6 +14624,20 @@ export class VectorRenderer {
           ctx.fillStyle = '#FF9100';
           ctx.fillText(`⚠️【火力壓制 SUPPRESSED -${spdPenalty}% SPD】`, 0, isSelected ? -46 : -32);
         }
+      }
+
+      // 反砲擊雷達火控鎖定 (Counter-Battery Radar Lock)
+      if (unit.isCounterBatteryFiring) {
+        ctx.font = 'bold 8.5px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#FF1744';
+        ctx.fillText('📡🎯【反砲擊火控雷達鎖定 COUNTER-BATTERY】', 0, isSelected ? -56 : -42);
+        const pingR = (Math.sin(this.time * 10) + 1) * 6 + 14;
+        ctx.strokeStyle = 'rgba(255, 23, 68, 0.75)';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(0, midY, pingR, 0, Math.PI * 2);
+        ctx.stroke();
       }
 
       if (isSelected || unit.isBanzaiCharging || unit.isSurrendered || unit.disorganized) {
@@ -8786,7 +14847,8 @@ export class VectorRenderer {
     if (item.typeTag === 'major_naval_port') rangeRadius = 850;
     else if (item.typeTag === 'dockyard') rangeRadius = 650;
     else if (item.typeTag === 'pontoon_pier') rangeRadius = 550;
-    else if (item.typeTag === 'coastal_gun') rangeRadius = 1600;
+    else if (item.typeTag === 'm1_240mm') rangeRadius = item.era === 'era5' ? 3800 : item.era === 'era4' ? 3600 : item.era === 'era3' ? 3400 : item.era === 'era2' ? 3200 : 2800;
+    else if (item.typeTag === 'coastal_gun') rangeRadius = 2000;
     else if (item.typeTag === 'heavy_aa') rangeRadius = 1200;
     else if (item.typeTag === 'radar') rangeRadius = 4500;
 
@@ -8846,6 +14908,17 @@ export class VectorRenderer {
       ctx.lineTo(-20, -26);
       ctx.lineTo(20, -26);
       ctx.lineTo(20, -14);
+      ctx.stroke();
+    } else if (item.typeTag === 'm1_240mm' || item.typeTag === 'coastal_gun') {
+      const rPit = item.typeTag === 'm1_240mm' ? 16 : 12;
+      ctx.beginPath();
+      ctx.arc(0, 0, rPit, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.lineWidth = item.typeTag === 'm1_240mm' ? 4 : 2.5;
+      ctx.beginPath();
+      ctx.moveTo(2, 0);
+      ctx.lineTo(item.typeTag === 'm1_240mm' ? 34 : 24, 0);
       ctx.stroke();
     } else {
       // 浮式棧橋碼頭或其他設施
@@ -9288,6 +15361,202 @@ export class VectorRenderer {
     ctx.font = 'bold 9.5px monospace';
     ctx.fillText(`中心座標: [X: ${Math.round(pos.x)}, Y: ${Math.round(pos.y)}] · 盤旋半徑 250m · 自動截擊`, pos.x, pos.y - orbitR + 2);
     ctx.shadowBlur = 0;
+
+    ctx.restore();
+  }
+
+  // Render Active Air-Dropped Passive Sonobuoys & Acoustic Ping Sweeps
+  public drawSonobuoys(sonobuoys: Sonobuoy[], camera: Camera) {
+    if (!sonobuoys || sonobuoys.length === 0) return;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(this.width / 2, this.height / 2);
+    ctx.scale(camera.zoom, camera.zoom);
+    ctx.translate(-camera.x, -camera.y);
+
+    for (const buoy of sonobuoys) {
+      const flashTimer = buoy.contactFlashTimer ?? 0;
+      const hasContact = flashTimer > 0;
+      const lifeRatio = Math.max(0, Math.min(1, buoy.lifetime / Math.max(1, buoy.maxLifetime)));
+      const pingProgress = 1 - Math.max(0, Math.min(1, buoy.pingTimer / Math.max(0.1, buoy.pingInterval)));
+
+      // Subtle dashed passive hydrophone listening perimeter
+      ctx.strokeStyle = hasContact ? 'rgba(255, 82, 82, 0.55)' : 'rgba(38, 198, 218, 0.24)';
+      ctx.lineWidth = hasContact ? 1.8 : 1.1;
+      ctx.setLineDash([10, 10]);
+      ctx.beginPath();
+      ctx.arc(buoy.pos.x, buoy.pos.y, buoy.detectionRadius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Very light acoustic water tint inside perimeter
+      ctx.fillStyle = hasContact ? 'rgba(255, 82, 82, 0.045)' : 'rgba(38, 198, 218, 0.025)';
+      ctx.beginPath();
+      ctx.arc(buoy.pos.x, buoy.pos.y, buoy.detectionRadius, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Expanding faint ping ring shortly after each listening sweep
+      if (pingProgress < 0.35) {
+        const waveProgress = pingProgress / 0.35;
+        const waveR = Math.max(18, buoy.detectionRadius * waveProgress);
+        ctx.strokeStyle = hasContact
+          ? `rgba(255, 110, 110, ${(1 - waveProgress) * 0.45})`
+          : `rgba(0, 229, 255, ${(1 - waveProgress) * 0.28})`;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.arc(buoy.pos.x, buoy.pos.y, waveR, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // Sonobuoy battery ring around surface float
+      ctx.strokeStyle = hasContact ? '#FF5252' : '#00E5FF';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.arc(buoy.pos.x, buoy.pos.y, 12, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * lifeRatio);
+      ctx.stroke();
+
+      // Surface orange/white radio float + whip antenna
+      ctx.fillStyle = hasContact ? '#FF5252' : '#FF7043';
+      ctx.beginPath();
+      ctx.arc(buoy.pos.x, buoy.pos.y, 6.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#E0F7FA';
+      ctx.lineWidth = 1.3;
+      ctx.stroke();
+
+      // Whip antenna tick
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(buoy.pos.x, buoy.pos.y);
+      ctx.lineTo(buoy.pos.x + 3, buoy.pos.y - 10);
+      ctx.stroke();
+
+      // Bearing line hint to transient contact when triggered
+      if (hasContact && buoy.lastContactPos) {
+        ctx.strokeStyle = `rgba(255, 138, 128, ${Math.min(0.85, flashTimer * 0.7)})`;
+        ctx.lineWidth = 1.4;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(buoy.pos.x, buoy.pos.y);
+        ctx.lineTo(buoy.lastContactPos.x, buoy.lastContactPos.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Zoom-gated crisp label
+      if (camera.zoom >= 0.32) {
+        ctx.fillStyle = hasContact ? '#FF8A80' : '#80DEEA';
+        ctx.font = 'bold 10px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(
+          `${hasContact ? '🚨 聲紋接觸' : '📡 聲納浮標'} · ${Math.ceil(buoy.lifetime)}s`,
+          buoy.pos.x,
+          buoy.pos.y + 24
+        );
+      }
+    }
+
+    ctx.restore();
+  }
+
+  // Interactive Passive Sonobuoy Drop Reticle
+  public drawSonobuoyPreview(pos: Vector2D, radius: number, camera: Camera, era: Era) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(this.width / 2, this.height / 2);
+    ctx.scale(camera.zoom, camera.zoom);
+    ctx.translate(-camera.x, -camera.y);
+
+    const pulse = (Math.sin(this.time * 5.5) + 1) * 0.5;
+    const isLegacyEra = era === 'era1' || era === 'era2';
+    const strokeCol = isLegacyEra ? `rgba(255, 138, 128, ${0.65 + pulse * 0.25})` : `rgba(38, 198, 218, ${0.72 + pulse * 0.28})`;
+    const fillCol = isLegacyEra ? 'rgba(255, 82, 82, 0.06)' : `rgba(0, 229, 255, ${0.06 + pulse * 0.04})`;
+
+    ctx.strokeStyle = strokeCol;
+    ctx.lineWidth = 2.2;
+    ctx.setLineDash([12, 8]);
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.fillStyle = fillCol;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Inner crosshair & buoy icon ring
+    ctx.strokeStyle = isLegacyEra ? '#FF8A80' : '#00E5FF';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, 16, 0, Math.PI * 2);
+    ctx.moveTo(pos.x - 24, pos.y);
+    ctx.lineTo(pos.x + 24, pos.y);
+    ctx.moveTo(pos.x, pos.y - 24);
+    ctx.lineTo(pos.x, pos.y + 24);
+    ctx.stroke();
+
+    ctx.fillStyle = '#E0F7FA';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = '#000000';
+    ctx.shadowBlur = 6;
+    ctx.fillText(
+      isLegacyEra
+        ? '⚠️ 二戰時期（時代一～二）尚無空投被動聲納浮標'
+        : '📡【投擲被動聲納浮標】左鍵點擊海域佈放 (Shift 連續插眼 · 右鍵/ESC 取消)',
+      pos.x,
+      pos.y - 32
+    );
+    if (!isLegacyEra) {
+      ctx.fillStyle = '#80DEEA';
+      ctx.font = 'bold 10px monospace';
+      ctx.fillText(`監聽半徑 ${radius}m · 間歇水聽暴露通過之敵軍潛艦`, pos.x, pos.y + 42);
+    }
+    ctx.shadowBlur = 0;
+
+    ctx.restore();
+  }
+
+  // Right-click RTS Tactical Order Confirmation Ripples
+  public drawOrderMarkers(markers: OrderMarker[], camera: Camera) {
+    if (!markers || markers.length === 0) return;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(this.width / 2, this.height / 2);
+    ctx.scale(camera.zoom, camera.zoom);
+    ctx.translate(-camera.x, -camera.y);
+
+    for (const m of markers) {
+      const progress = Math.max(0, Math.min(1, m.age / m.maxAge));
+      const alpha = (1 - progress) * 0.9;
+      const color =
+        m.type === 'attack'
+          ? `rgba(255, 82, 82, ${alpha})`
+          : m.type === 'patrol'
+          ? `rgba(0, 229, 255, ${alpha})`
+          : m.type === 'rescue'
+          ? `rgba(255, 213, 79, ${alpha})`
+          : `rgba(0, 230, 118, ${alpha})`;
+
+      const radius = m.type === 'attack' ? 32 - progress * 18 : 10 + progress * 34;
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2.2 / Math.max(0.4, camera.zoom);
+      ctx.beginPath();
+      ctx.arc(m.pos.x, m.pos.y, Math.max(6, radius), 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Inner crisp vector ticks
+      const tick = 10 / Math.max(0.45, camera.zoom);
+      ctx.beginPath();
+      ctx.moveTo(m.pos.x - tick, m.pos.y);
+      ctx.lineTo(m.pos.x + tick, m.pos.y);
+      ctx.moveTo(m.pos.x, m.pos.y - tick);
+      ctx.lineTo(m.pos.x, m.pos.y + tick);
+      ctx.stroke();
+    }
 
     ctx.restore();
   }

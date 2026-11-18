@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GameEngine } from './game/engine';
-import { GameCanvas } from './components/GameCanvas';
+import { GameCanvas, CameraViewportState } from './components/GameCanvas';
 import { HUD } from './components/HUD';
 import { BriefingModal } from './components/BriefingModal';
 import { AirWingPrepModal } from './components/AirWingPrepModal';
@@ -25,6 +25,7 @@ import {
   GroundUnit,
   RequisitionItem,
   Island,
+  Sonobuoy,
 } from './types/game';
 import { REQUISITION_CATALOG, getRequisitionCatalog } from './game/requisition';
 import { soundEngine } from './game/audio';
@@ -47,17 +48,22 @@ export default function App() {
   };
 
   const [era, setEra] = useState<Era>('era1');
-  const engineRef = useRef<GameEngine>(new GameEngine(1, 'era1'));
+  const engineRef = useRef<GameEngine | null>(null);
+  if (!engineRef.current) {
+    engineRef.current = new GameEngine(1, 'era1');
+  }
   const engine = engineRef.current;
 
   const [sectorNumber, setSectorNumber] = useState<number>(1);
-  const [playerShips, setPlayerShips] = useState<Ship[]>([...engine.playerShips]);
-  const [enemyShips, setEnemyShips] = useState<Ship[]>([...engine.enemyShips]);
-  const [aircraft, setAircraft] = useState<Aircraft[]>([...engine.aircraft]);
-  const [islands, setIslands] = useState<Island[]>([...engine.islands]);
+  const [playerShips, setPlayerShips] = useState<Ship[]>(() => [...engine.playerShips]);
+  const [enemyShips, setEnemyShips] = useState<Ship[]>(() => [...engine.enemyShips]);
+  const [aircraft, setAircraft] = useState<Aircraft[]>(() => [...engine.aircraft]);
+  const [groundUnits, setGroundUnits] = useState<GroundUnit[]>(() => [...engine.groundUnits]);
+  const [sonobuoys, setSonobuoys] = useState<Sonobuoy[]>(() => [...engine.sonobuoys]);
+  const [islands, setIslands] = useState<Island[]>(() => [...engine.islands]);
   const [intel, setIntel] = useState<SectorIntel | null>(engine.sectorIntel);
-  const [score, setScore] = useState<GameScore>({ ...engine.score });
-  const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([...engine.selectedUnitIds]);
+  const [score, setScore] = useState<GameScore>(() => ({ ...engine.score }));
+  const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>(() => [...engine.selectedUnitIds]);
 
   // Pier / Installation interactive map placement state
   const [activePlacementItem, setActivePlacementItem] = useState<RequisitionItem | null>(null);
@@ -73,8 +79,9 @@ export default function App() {
     ...engine.activePayloads,
   });
 
-  // Camera external pan target (from mini-radar click)
+  // Camera external pan target & live viewport state (for minimap & theater plotter)
   const [externalCameraTarget, setExternalCameraTarget] = useState<Vector2D | null>(null);
+  const [cameraViewport, setCameraViewport] = useState<CameraViewportState | null>(null);
 
   // Modal Dialogs
   const [isBriefingOpen, setIsBriefingOpen] = useState<boolean>(true);
@@ -98,8 +105,12 @@ export default function App() {
 
   // CAP Orbit Area Designation Mode
   const [isDesignatingCap, setIsDesignatingCap] = useState<boolean>(false);
+  // Passive Sonobuoy Drop Designation Mode
+  const [isDesignatingSonobuoy, setIsDesignatingSonobuoy] = useState<boolean>(false);
 
   const handleStartCapDesignation = () => {
+    setIsDesignatingSonobuoy(false);
+    setActivePlacementItem(null);
     setIsDesignatingCap(true);
   };
 
@@ -112,6 +123,25 @@ export default function App() {
 
   const handleCancelCap = () => {
     setIsDesignatingCap(false);
+  };
+
+  const handleStartSonobuoyDesignation = () => {
+    setIsDesignatingCap(false);
+    setActivePlacementItem(null);
+    setIsDesignatingSonobuoy(true);
+  };
+
+  const handleConfirmSonobuoyTarget = (worldPos: Vector2D, keepActive?: boolean) => {
+    const ok = engine.orderDropSonobuoy(worldPos, selectedUnitIds);
+    setAircraft([...engine.aircraft]);
+    setCombatLogs([...engine.combatLogs]);
+    if (!ok || !keepActive) {
+      setIsDesignatingSonobuoy(false);
+    }
+  };
+
+  const handleCancelSonobuoy = () => {
+    setIsDesignatingSonobuoy(false);
   };
 
   // Upgrades
@@ -127,13 +157,34 @@ export default function App() {
   const lastIslandsVer = useRef<number>(-1);
   const lastCombatLogsVer = useRef<number>(-1);
   const lastSelectedIdsStr = useRef<string>('');
+  const lastGameTimeRef = useRef<number>(-1);
 
-  // Sync React State from Engine tick (10 Hz) - Optimized with dirty checks
+  const syncEngineSnapshot = () => {
+    setPlayerShips([...engine.playerShips]);
+    setEnemyShips([...engine.enemyShips]);
+    setAircraft([...engine.aircraft]);
+    setGroundUnits([...engine.groundUnits]);
+    setSonobuoys([...engine.sonobuoys]);
+    setIslands([...engine.islands]);
+    setCombatLogs([...engine.combatLogs]);
+    setSelectedUnitIds([...engine.selectedUnitIds]);
+    setScore({ ...engine.score });
+    setIsPaused(engine.isPaused);
+    setGameSpeed(engine.gameSpeed);
+  };
+
+  // Sync React State from Engine tick (~8 Hz) - Pause-aware & dirty-checked
   useEffect(() => {
     const timer = setInterval(() => {
-      setPlayerShips([...engine.playerShips]);
-      setEnemyShips([...engine.enemyShips]);
-      setAircraft([...engine.aircraft]);
+      const simAdvanced = engine.gameTime !== lastGameTimeRef.current;
+      if (simAdvanced) {
+        lastGameTimeRef.current = engine.gameTime;
+        setPlayerShips([...engine.playerShips]);
+        setEnemyShips([...engine.enemyShips]);
+        setAircraft([...engine.aircraft]);
+        setGroundUnits([...engine.groundUnits]);
+        setSonobuoys([...engine.sonobuoys]);
+      }
 
       // Only sync selectedUnitIds if actual selection changed
       const idsStr = engine.selectedUnitIds.join(',');
@@ -181,16 +232,29 @@ export default function App() {
     return () => clearInterval(timer);
   }, [engine, isGameOverOpen]);
 
+  const resetUiModesForTheater = () => {
+    setIsDesignatingCap(false);
+    setIsDesignatingSonobuoy(false);
+    setActivePlacementItem(null);
+    setSelectedAirfacility(null);
+    setIsGameOverOpen(false);
+    lastIslandsVer.current = -1;
+    lastCombatLogsVer.current = -1;
+    lastGameTimeRef.current = -1;
+    const flagshipPos = engine.getFlagship()?.pos;
+    if (flagshipPos) {
+      setExternalCameraTarget({ ...flagshipPos });
+    }
+  };
+
   // Era Switcher
   const handleSetEra = (newEra: Era) => {
     setEra(newEra);
     engine.setEra(newEra);
-    setPlayerShips([...engine.playerShips]);
-    setEnemyShips([...engine.enemyShips]);
-    setAircraft([...engine.aircraft]);
-    setIslands([...engine.islands]);
     setIntel(engine.sectorIntel);
     setActivePayloads({ ...engine.activePayloads });
+    resetUiModesForTheater();
+    syncEngineSnapshot();
   };
 
   const handleLaunchModel = (model: AircraftModel, count: number = 2, payload?: AircraftPayloadType) => {
@@ -198,6 +262,7 @@ export default function App() {
     setAircraft([...engine.aircraft]);
     setPlayerShips([...engine.playerShips]);
     setActivePayloads({ ...engine.activePayloads });
+    setSelectedUnitIds([...engine.selectedUnitIds]);
   };
 
   const handleOrderSelected = (type: 'move' | 'attack' | 'patrol' | 'rtb' | 'idle') => {
@@ -305,11 +370,9 @@ export default function App() {
     const nextSector = sectorNumber + 1;
     setSectorNumber(nextSector);
     engine.loadSector(nextSector, era);
-    setPlayerShips([...engine.playerShips]);
-    setEnemyShips([...engine.enemyShips]);
-    setAircraft([...engine.aircraft]);
     setIntel(engine.sectorIntel);
-    setIsGameOverOpen(false);
+    resetUiModesForTheater();
+    syncEngineSnapshot();
     setIsAirPrepOpen(true);
   };
 
@@ -324,12 +387,18 @@ export default function App() {
       stars: 12,
     };
     engine.loadSector(1, era);
-    setPlayerShips([...engine.playerShips]);
-    setEnemyShips([...engine.enemyShips]);
-    setAircraft([...engine.aircraft]);
     setIntel(engine.sectorIntel);
-    setIsGameOverOpen(false);
+    resetUiModesForTheater();
+    syncEngineSnapshot();
     setIsBriefingOpen(true);
+  };
+
+  const handleCycleSpeed = (delta: 1 | -1) => {
+    const steps = [0.5, 1.0, 2.0, 3.0];
+    const currentIdx = steps.indexOf(engine.gameSpeed);
+    const idx = currentIdx === -1 ? 1 : currentIdx;
+    const nextIdx = Math.max(0, Math.min(steps.length - 1, idx + delta));
+    handleSetGameSpeed(steps[nextIdx]);
   };
 
   const flagship = engine.getFlagship();
@@ -337,7 +406,7 @@ export default function App() {
   const selectedUnits: (Ship | Aircraft | GroundUnit)[] = [
     ...playerShips.filter((s) => selectedUnitIds.includes(s.id)),
     ...aircraft.filter((a) => selectedUnitIds.includes(a.id)),
-    ...engine.groundUnits.filter((u) => selectedUnitIds.includes(u.id) && u.side === 'player' && !u.isDestroyed),
+    ...groundUnits.filter((u) => selectedUnitIds.includes(u.id) && u.side === 'player' && !u.isDestroyed),
   ];
 
   return (
@@ -347,7 +416,11 @@ export default function App() {
         engine={engine}
         onSelectUnits={(ids) => setSelectedUnitIds(ids)}
         onToggleMap={() => setIsMapOpen((prev) => !prev)}
+        onTogglePause={handleTogglePause}
+        onCycleSpeed={handleCycleSpeed}
         externalCameraTarget={externalCameraTarget}
+        onClearCameraTarget={() => setExternalCameraTarget(null)}
+        onCameraChange={setCameraViewport}
         onSelectAirfacility={(facilityType, facilityId) => {
           if (!facilityType) {
             setSelectedAirfacility(null);
@@ -362,6 +435,9 @@ export default function App() {
         isDesignatingCap={isDesignatingCap}
         onConfirmCapTarget={handleConfirmCapTarget}
         onCancelCap={handleCancelCap}
+        isDesignatingSonobuoy={isDesignatingSonobuoy}
+        onConfirmSonobuoyTarget={handleConfirmSonobuoyTarget}
+        onCancelSonobuoy={handleCancelSonobuoy}
         activePlacementItem={activePlacementItem}
         onConfirmPlacement={(item, worldPos) => {
           const success = engine.purchaseRequisition(item, undefined, worldPos, sandboxStamp);
@@ -394,11 +470,19 @@ export default function App() {
         isDesignatingCap={isDesignatingCap}
         onStartCapDesignation={handleStartCapDesignation}
         onCancelCap={handleCancelCap}
+        sonobuoys={sonobuoys}
+        isDesignatingSonobuoy={isDesignatingSonobuoy}
+        onStartSonobuoyDesignation={handleStartSonobuoyDesignation}
+        onCancelSonobuoy={handleCancelSonobuoy}
+        onSelectUnitIds={(ids) => {
+          engine.selectUnits(ids);
+          setSelectedUnitIds([...engine.selectedUnitIds]);
+        }}
         flagship={flagship}
         playerShips={playerShips}
         enemyShips={enemyShips}
         aircraft={aircraft}
-        groundUnits={engine.groundUnits}
+        groundUnits={groundUnits}
         islands={islands}
         worldSize={engine.worldSize}
         era={era}
@@ -426,6 +510,7 @@ export default function App() {
         activePayloads={activePayloads}
         onSelectPayload={handleSelectPayload}
         onMiniMapClick={(pos) => setExternalCameraTarget(pos)}
+        cameraViewport={cameraViewport}
         isMuted={isMuted}
         onToggleMute={handleToggleMute}
         airbasePlanes={engine.airbasePlanes}
@@ -449,6 +534,7 @@ export default function App() {
           const success = engine.purchaseRequisition(item, targetIslandId, customPos);
           setPlayerShips([...engine.playerShips]);
           setAircraft([...engine.aircraft]);
+          setGroundUnits([...engine.groundUnits]);
           setIslands([...engine.islands]);
           return success;
         }}
@@ -463,6 +549,7 @@ export default function App() {
         onToggleTransportEmbark={(transportId) => {
           engine.toggleTransportEmbarkDisembark(transportId);
           setPlayerShips([...engine.playerShips]);
+          setGroundUnits([...engine.groundUnits]);
         }}
         onTriggerLSMRocket={(lsmrId) => {
           engine.triggerLSMRocketBarrage(lsmrId);
@@ -471,6 +558,12 @@ export default function App() {
         onBuildAirfield={(engineerId) => {
           engine.buildAirfield(engineerId);
           setPlayerShips([...engine.playerShips]);
+        }}
+        onUnloadAircraft={() => {
+          engine.unloadSelectedAircraft();
+          setAircraft([...engine.aircraft]);
+          setGroundUnits([...engine.groundUnits]);
+          setIslands([...engine.islands]);
         }}
         lang={lang}
         onSetLang={handleSetLang}
@@ -481,12 +574,16 @@ export default function App() {
         isOpen={isBriefingOpen}
         onClose={() => {
           setIsBriefingOpen(false);
-          setIsAirPrepOpen(true); // Open Air Wing Prep after briefing!
         }}
         intel={intel}
         onStart={() => {
           setIsBriefingOpen(false);
           setIsAirPrepOpen(true);
+        }}
+        onQuickStart={() => {
+          setIsBriefingOpen(false);
+          engine.isPaused = false;
+          setIsPaused(false);
         }}
         lang={lang}
       />
@@ -523,6 +620,7 @@ export default function App() {
           setCombatLogs([]);
         }}
         lang={lang}
+        era={engine.era}
       />
 
       {/* Full Theater Map Modal */}
@@ -530,13 +628,21 @@ export default function App() {
         isOpen={isMapOpen}
         onClose={() => setIsMapOpen(false)}
         worldSize={engine.worldSize}
-        islands={engine.islands}
-        playerShips={engine.playerShips}
-        enemyShips={engine.enemyShips}
-        aircraft={engine.aircraft}
-        groundUnits={engine.groundUnits}
+        islands={islands}
+        playerShips={playerShips}
+        alliedShips={engine.alliedShips}
+        enemyShips={enemyShips}
+        aircraft={aircraft}
+        groundUnits={groundUnits}
+        sonobuoys={sonobuoys}
+        cameraViewport={cameraViewport}
+        onFocusWorldPos={(pos) => {
+          setExternalCameraTarget(pos);
+          setIsMapOpen(false);
+        }}
         sectorName={intel?.sectorName || 'Coral Atoll'}
         lang={lang}
+        era={engine.era}
       />
 
       {/* Pearl Harbor Dockyard & Era Modernization */}

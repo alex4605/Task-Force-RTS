@@ -1,8 +1,16 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import { GameEngine } from '../game/engine';
-import { VectorRenderer, Camera } from '../game/renderer';
+import { VectorRenderer, Camera, OrderMarker } from '../game/renderer';
 import { Vector2D, SelectionBox, RequisitionItem } from '../types/game';
 import { dist, isPointInPolygon } from '../game/procedural';
+
+export interface CameraViewportState {
+  x: number;
+  y: number;
+  zoom: number;
+  viewW: number;
+  viewH: number;
+}
 
 interface GameCanvasProps {
   engine: GameEngine;
@@ -10,6 +18,7 @@ interface GameCanvasProps {
   onToggleMap: () => void;
   externalCameraTarget?: Vector2D | null;
   onClearCameraTarget?: () => void;
+  onCameraChange?: (cam: CameraViewportState) => void;
   onSelectAirfacility?: (
     facilityType: 'carrier' | 'airbase' | 'engineer_construction' | 'battalion_cp' | null,
     facilityId?: string
@@ -21,6 +30,11 @@ interface GameCanvasProps {
   isDesignatingCap?: boolean;
   onConfirmCapTarget?: (worldPos: Vector2D) => void;
   onCancelCap?: () => void;
+  isDesignatingSonobuoy?: boolean;
+  onConfirmSonobuoyTarget?: (worldPos: Vector2D, keepActive?: boolean) => void;
+  onCancelSonobuoy?: () => void;
+  onTogglePause?: () => void;
+  onCycleSpeed?: (delta: 1 | -1) => void;
 }
 
 export const GameCanvas: React.FC<GameCanvasProps> = ({
@@ -29,6 +43,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   onToggleMap,
   externalCameraTarget,
   onClearCameraTarget,
+  onCameraChange,
   onSelectAirfacility,
   activePlacementItem,
   onConfirmPlacement,
@@ -37,10 +52,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   isDesignatingCap = false,
   onConfirmCapTarget,
   onCancelCap,
+  isDesignatingSonobuoy = false,
+  onConfirmSonobuoyTarget,
+  onCancelSonobuoy,
+  onTogglePause,
+  onCycleSpeed,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rendererRef = useRef<VectorRenderer | null>(null);
   const cameraRef = useRef<Camera>({ x: 800, y: 3400, zoom: 0.65 });
+  const cameraTargetRef = useRef<Vector2D | null>(null);
+  const orderMarkersRef = useRef<OrderMarker[]>([]);
+  const lastCamEmitRef = useRef<number>(0);
+  const lastLeftClickRef = useRef<{ time: number; key: string }>({ time: 0, key: '' });
 
   // Keyboard pan keys state
   const keysDownRef = useRef<Record<string, boolean>>({});
@@ -81,6 +105,35 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const onCancelCapRef = useRef(onCancelCap);
   onCancelCapRef.current = onCancelCap;
 
+  // Sonobuoy Designation Refs
+  const isDesignatingSonobuoyRef = useRef<boolean>(isDesignatingSonobuoy);
+  isDesignatingSonobuoyRef.current = isDesignatingSonobuoy;
+  const onConfirmSonobuoyTargetRef = useRef(onConfirmSonobuoyTarget);
+  onConfirmSonobuoyTargetRef.current = onConfirmSonobuoyTarget;
+  const onCancelSonobuoyRef = useRef(onCancelSonobuoy);
+  onCancelSonobuoyRef.current = onCancelSonobuoy;
+  const onTogglePauseRef = useRef(onTogglePause);
+  onTogglePauseRef.current = onTogglePause;
+  const onCycleSpeedRef = useRef(onCycleSpeed);
+  onCycleSpeedRef.current = onCycleSpeed;
+  const onSelectUnitsRef = useRef(onSelectUnits);
+  onSelectUnitsRef.current = onSelectUnits;
+  const onCameraChangeRef = useRef(onCameraChange);
+  onCameraChangeRef.current = onCameraChange;
+  const lastGroupTapRef = useRef<{ key: string; time: number }>({ key: '', time: 0 });
+
+  const pushOrderMarker = useCallback((pos: Vector2D, type: OrderMarker['type']) => {
+    orderMarkersRef.current.push({
+      pos: { x: pos.x, y: pos.y },
+      type,
+      age: 0,
+      maxAge: 0.75,
+    });
+    if (orderMarkersRef.current.length > 16) {
+      orderMarkersRef.current.shift();
+    }
+  }, []);
+
   useEffect(() => {
     if (activePlacementItem) {
       hoverWorldPosRef.current = { x: cameraRef.current.x, y: cameraRef.current.y };
@@ -100,11 +153,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     return { x: worldX, y: worldY };
   }, []);
 
-  // Jump camera to external target (e.g. from minimap click)
+  // Glide camera smoothly to external target (e.g. from minimap or stronghold click)
   useEffect(() => {
     if (externalCameraTarget) {
-      cameraRef.current.x = externalCameraTarget.x;
-      cameraRef.current.y = externalCameraTarget.y;
+      cameraTargetRef.current = { x: externalCameraTarget.x, y: externalCameraTarget.y };
       if (onClearCameraTarget) onClearCameraTarget();
     }
   }, [externalCameraTarget, onClearCameraTarget]);
@@ -145,18 +197,23 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       // ══════════════════════════════════════════════════════════
       const camSpeed = (950 / cameraRef.current.zoom) * dt;
       const keys = keysDownRef.current;
+      let manualPan = false;
 
       if (keys['w'] || keys['W'] || keys['ArrowUp']) {
         cameraRef.current.y -= camSpeed;
+        manualPan = true;
       }
       if (keys['s'] || keys['S'] || keys['ArrowDown']) {
         cameraRef.current.y += camSpeed;
+        manualPan = true;
       }
       if (keys['a'] || keys['A'] || keys['ArrowLeft']) {
         cameraRef.current.x -= camSpeed;
+        manualPan = true;
       }
       if (keys['d'] || keys['D'] || keys['ArrowRight']) {
         cameraRef.current.x += camSpeed;
+        manualPan = true;
       }
 
       // Screen edge pan (within 18px of edge if cursor is inside canvas)
@@ -164,27 +221,71 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const my = mouseScreenPosRef.current.y;
       if (mx >= 0 && my >= 0 && mx <= canvas.width && my <= canvas.height && !selectionBoxRef.current.isActive) {
         const edgeMargin = 18;
-        if (mx <= edgeMargin) cameraRef.current.x -= camSpeed * 0.75;
-        if (mx >= canvas.width - edgeMargin) cameraRef.current.x += camSpeed * 0.75;
-        if (my <= edgeMargin) cameraRef.current.y -= camSpeed * 0.75;
-        if (my >= canvas.height - edgeMargin) cameraRef.current.y += camSpeed * 0.75;
+        if (mx <= edgeMargin) {
+          cameraRef.current.x -= camSpeed * 0.75;
+          manualPan = true;
+        }
+        if (mx >= canvas.width - edgeMargin) {
+          cameraRef.current.x += camSpeed * 0.75;
+          manualPan = true;
+        }
+        if (my <= edgeMargin) {
+          cameraRef.current.y -= camSpeed * 0.75;
+          manualPan = true;
+        }
+        if (my >= canvas.height - edgeMargin) {
+          cameraRef.current.y += camSpeed * 0.75;
+          manualPan = true;
+        }
+      }
+
+      if (manualPan) {
+        cameraTargetRef.current = null;
+      } else if (cameraTargetRef.current) {
+        const alpha = 1 - Math.exp(-10 * dt);
+        cameraRef.current.x += (cameraTargetRef.current.x - cameraRef.current.x) * alpha;
+        cameraRef.current.y += (cameraTargetRef.current.y - cameraRef.current.y) * alpha;
+        if (Math.hypot(cameraTargetRef.current.x - cameraRef.current.x, cameraTargetRef.current.y - cameraRef.current.y) < 1.5) {
+          cameraRef.current.x = cameraTargetRef.current.x;
+          cameraRef.current.y = cameraTargetRef.current.y;
+          cameraTargetRef.current = null;
+        }
       }
 
       // Clamp camera within world bounds
       cameraRef.current.x = Math.max(200, Math.min(engine.worldSize - 200, cameraRef.current.x));
       cameraRef.current.y = Math.max(200, Math.min(engine.worldSize - 200, cameraRef.current.y));
 
-      // Update simulation
+      // Report throttled camera viewport for minimap & theater plotter rectangle
+      if (onCameraChangeRef.current && currentTime - lastCamEmitRef.current >= 90) {
+        lastCamEmitRef.current = currentTime;
+        onCameraChangeRef.current({
+          x: cameraRef.current.x,
+          y: cameraRef.current.y,
+          zoom: cameraRef.current.zoom,
+          viewW: canvas.width,
+          viewH: canvas.height,
+        });
+      }
+
+      // Update simulation & visual order markers
       engine.update(dt);
       renderer.updateTime(dt);
+      if (orderMarkersRef.current.length > 0) {
+        for (const m of orderMarkersRef.current) {
+          m.age += dt;
+        }
+        orderMarkersRef.current = orderMarkersRef.current.filter((m) => m.age < m.maxAge);
+      }
 
       // Render Scene with Carrier Radar Sweep
       const flagship = engine.getFlagship();
       renderer.drawOcean(cameraRef.current, engine.worldSize, flagship ? flagship.pos : undefined);
       renderer.drawIslands(engine.islands, cameraRef.current);
       renderer.drawStrongholds(engine.islands, cameraRef.current);
+      renderer.drawSonobuoys(engine.sonobuoys, cameraRef.current);
       renderer.drawShips(
-        [...engine.playerShips, ...engine.enemyShips],
+        [...engine.playerShips, ...engine.enemyShips, ...(engine.alliedShips || [])],
         cameraRef.current,
         engine.selectedUnitIds
       );
@@ -196,6 +297,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       renderer.drawLifeRafts(engine.lifeRafts, cameraRef.current);
       // Draw Tactical Nuclear Strike Screen Flash & Mushroom Cloud Detonations
       renderer.drawNuclearEffects(engine.nuclearFlash, engine.nuclearDetonations, cameraRef.current);
+      // Draw RTS Command Ripple Markers
+      renderer.drawOrderMarkers(orderMarkersRef.current, cameraRef.current);
 
       // Draw Placement Ghost Blueprint (Pier, Dockyard, Coastal Installation)
       if (activePlacementItemRef.current) {
@@ -212,6 +315,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         renderer.drawCapPreview(hoverWorldPosRef.current, cameraRef.current);
       }
 
+      // Draw Interactive Passive Sonobuoy Drop Preview
+      if (isDesignatingSonobuoyRef.current) {
+        renderer.drawSonobuoyPreview(
+          hoverWorldPosRef.current,
+          engine.getSonobuoyPreviewRadius(),
+          cameraRef.current,
+          engine.era
+        );
+      }
+
       // Draw RTS Screen-Space Drag Box
       renderer.drawSelectionBox(selectionBoxRef.current);
 
@@ -226,15 +339,42 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     };
   }, [engine]);
 
-  // Mouse Wheel Zoom
+  // Mouse Wheel Zoom-to-Cursor
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const sx = e.clientX - rect.left;
+    const sy = e.clientY - rect.top;
+    const cam = cameraRef.current;
+    const worldBeforeX = cam.x + (sx - canvas.width / 2) / cam.zoom;
+    const worldBeforeY = cam.y + (sy - canvas.height / 2) / cam.zoom;
+
     const zoomFactor = e.deltaY < 0 ? 1.14 : 0.88;
-    cameraRef.current.zoom = Math.max(0.12, Math.min(1.8, cameraRef.current.zoom * zoomFactor));
+    const nextZoom = Math.max(0.12, Math.min(1.8, cam.zoom * zoomFactor));
+    cam.zoom = nextZoom;
+    cam.x = Math.max(200, Math.min(engine.worldSize - 200, worldBeforeX - (sx - canvas.width / 2) / nextZoom));
+    cam.y = Math.max(200, Math.min(engine.worldSize - 200, worldBeforeY - (sy - canvas.height / 2) / nextZoom));
+    cameraTargetRef.current = null;
   };
 
   // Mouse Down
   const handleMouseDown = (e: React.MouseEvent) => {
+    // Interactive Sonobuoy Drop Designation Interceptor
+    if (isDesignatingSonobuoyRef.current) {
+      if (e.button === 0) {
+        e.preventDefault();
+        const worldPos = screenToWorld(e.clientX, e.clientY);
+        onConfirmSonobuoyTargetRef.current?.(worldPos, e.shiftKey);
+        return;
+      } else if (e.button === 2) {
+        e.preventDefault();
+        onCancelSonobuoyRef.current?.();
+        return;
+      }
+    }
+
     // Interactive CAP Area Designation Interceptor
     if (isDesignatingCapRef.current) {
       if (e.button === 0) {
@@ -283,13 +423,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       // 0. Check if right-clicked a downed pilot Life Raft (Era 3 SAR rescue!)
       const hitRaft = engine.lifeRafts.find((r) => !r.rescued && dist(worldPos, r.pos) < 55);
       if (hitRaft) {
+        pushOrderMarker(hitRaft.pos, 'rescue');
         engine.orderRescueRaft(hitRaft.id);
         return;
       }
 
-      // 1. Check if right-clicked a transport craft (LCVP / LST)
+      // 1. Check if right-clicked a transport craft (LCVP / LST / LCM-8 / LCAC / LPD)
       const hitTransport = engine.playerShips.find(
-        (s) => (s.type === 'lcvp' || s.type === 'lst') && !s.isSunk && dist(worldPos, s.pos) < 65
+        (s) => (s.type === 'lcvp' || s.type === 'lst' || s.type === 'lcm8' || s.type === 'lcac' || s.type === 'lpd') && !s.isSunk && dist(worldPos, s.pos) < 65
       );
 
       const selectedGroundUnits = engine.groundUnits.filter(
@@ -298,11 +439,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       if (hitTransport) {
         if (selectedGroundUnits.length > 0) {
-          // Embark selected troops onto this transport
+          pushOrderMarker(hitTransport.pos, 'move');
           engine.toggleTransportEmbarkDisembark(hitTransport.id);
           return;
         } else if (engine.selectedUnitIds.includes(hitTransport.id)) {
-          // Transport right-clicking itself: toggle embark/disembark
+          pushOrderMarker(hitTransport.pos, 'move');
           engine.toggleTransportEmbarkDisembark(hitTransport.id);
           return;
         }
@@ -310,7 +451,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       // If a transport is selected and has troops, and player right-clicks near shore: disembark!
       const selectedTransports = engine.playerShips.filter(
-        (s) => engine.selectedUnitIds.includes(s.id) && (s.type === 'lcvp' || s.type === 'lst') && !s.isSunk
+        (s) => engine.selectedUnitIds.includes(s.id) && (s.type === 'lcvp' || s.type === 'lst' || s.type === 'lcm8' || s.type === 'lcac' || s.type === 'lpd') && !s.isSunk
       );
       if (selectedTransports.length > 0) {
         const trans = selectedTransports[0];
@@ -323,6 +464,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
         }
         if (hasCargo && nearIsland && dist(trans.pos, worldPos) < 480) {
+          pushOrderMarker(worldPos, 'move');
           engine.toggleTransportEmbarkDisembark(trans.id);
           return;
         }
@@ -331,6 +473,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       // 2. Check if right-clicked an enemy ground unit
       const hitEnemyGround = engine.groundUnits.find((u) => u.side === 'enemy' && !u.isDestroyed && dist(worldPos, u.pos) < 32);
       if (hitEnemyGround) {
+        if (engine.selectedUnitIds.length > 0) pushOrderMarker(hitEnemyGround.pos, 'attack');
         engine.issueOrderToSelected({
           type: 'attack',
           targetPos: hitEnemyGround.pos,
@@ -339,9 +482,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         return;
       }
 
-      // 3. Check if right-clicked an enemy ship
-      const hitEnemyShip = engine.enemyShips.find((s) => !s.isSunk && dist(worldPos, s.pos) < 55);
+      // 3. Check if right-clicked an enemy ship (Enemy submarines cannot be targeted while undetected under Fog of War)
+      const hitEnemyShip = engine.enemyShips.find(
+        (s) => !s.isSunk && (!engine.isSubmarine(s) || Boolean(s.isSpotted)) && dist(worldPos, s.pos) < 55
+      );
       if (hitEnemyShip) {
+        if (engine.selectedUnitIds.length > 0) pushOrderMarker(hitEnemyShip.pos, 'attack');
         engine.issueOrderToSelected({
           type: 'attack',
           targetPos: hitEnemyShip.pos,
@@ -353,6 +499,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       // 4. Check if right-clicked an enemy aircraft
       const hitEnemyPlane = engine.aircraft.find((a) => a.side === 'enemy' && a.state !== 'shot_down' && dist(worldPos, a.pos) < 35);
       if (hitEnemyPlane) {
+        if (engine.selectedUnitIds.length > 0) pushOrderMarker(hitEnemyPlane.pos, 'attack');
         engine.issueOrderToSelected({
           type: 'attack',
           targetPos: hitEnemyPlane.pos,
@@ -363,12 +510,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       // 5. Check if right-clicked an enemy installation or CP
       for (const isl of engine.islands) {
-        const hitInst = isl.installations.find((i) => !i.isDestroyed && dist(worldPos, i.pos) < 40);
-        if (hitInst) {
+        const hitEnemyInst = isl.installations.find((i) => !i.isDestroyed && i.side === 'enemy' && dist(worldPos, i.pos) < 40);
+        if (hitEnemyInst) {
+          if (engine.selectedUnitIds.length > 0) pushOrderMarker(hitEnemyInst.pos, 'attack');
           engine.issueOrderToSelected({
             type: 'attack',
-            targetPos: hitInst.pos,
-            targetId: hitInst.id,
+            targetPos: hitEnemyInst.pos,
+            targetId: hitEnemyInst.id,
           });
           return;
         }
@@ -377,6 +525,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       // 6. Check if right-clicked a friendly ship (Escort / CAP friendly ship)
       const hitFriendlyShip = engine.playerShips.find((s) => !s.isSunk && dist(worldPos, s.pos) < 55);
       if (hitFriendlyShip) {
+        if (engine.selectedUnitIds.length > 0) pushOrderMarker(hitFriendlyShip.pos, 'patrol');
         engine.issueOrderToSelected({
           type: 'patrol',
           targetPos: hitFriendlyShip.pos,
@@ -385,7 +534,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         return;
       }
 
+      // 6b. Check if right-clicked a friendly or allied aircraft (CAP / Escort)
+      const hitFriendlyPlane = engine.aircraft.find((a) => (a.side === 'player' || a.side === 'allied') && a.state !== 'shot_down' && dist(worldPos, a.pos) < 35);
+      if (hitFriendlyPlane) {
+        if (engine.selectedUnitIds.length > 0) pushOrderMarker(hitFriendlyPlane.pos, 'patrol');
+        engine.issueOrderToSelected({
+          type: 'patrol',
+          targetPos: hitFriendlyPlane.pos,
+          patrolOrigin: hitFriendlyPlane.pos,
+        });
+        return;
+      }
+
       // 7. Default: RTS Move to coordinate
+      if (engine.selectedUnitIds.length > 0) pushOrderMarker(worldPos, 'move');
       engine.issueOrderToSelected({
         type: 'move',
         targetPos: worldPos,
@@ -415,6 +577,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const dy = (e.clientY - lastPanPosRef.current.y) / cameraRef.current.zoom;
       cameraRef.current.x -= dx;
       cameraRef.current.y -= dy;
+      cameraTargetRef.current = null;
       lastPanPosRef.current = { x: e.clientX, y: e.clientY };
       return;
     }
@@ -439,14 +602,24 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const deltaX = Math.abs(box.currentX - box.startX);
       const deltaY = Math.abs(box.currentY - box.startY);
 
-      // Single Click (< 6px drag)
+      // Single Click (< 6px drag) — supports double-click same-type selection
       if (deltaX < 6 && deltaY < 6) {
         const worldPos = screenToWorld(box.startX, box.startY);
+        const now = performance.now();
 
         // Check if clicked player aircraft
         const hitPlane = engine.aircraft.find((a) => a.side === 'player' && a.state !== 'shot_down' && dist(worldPos, a.pos) < 32);
         if (hitPlane) {
-          engine.selectUnits([hitPlane.id], e.shiftKey);
+          const clickKey = `plane:${hitPlane.model}`;
+          if (!e.shiftKey && lastLeftClickRef.current.key === clickKey && now - lastLeftClickRef.current.time < 360) {
+            const samePlanes = engine.aircraft
+              .filter((a) => a.side === 'player' && a.state !== 'shot_down' && a.model === hitPlane.model)
+              .map((a) => a.id);
+            engine.selectUnits(samePlanes, false);
+          } else {
+            engine.selectUnits([hitPlane.id], e.shiftKey);
+          }
+          lastLeftClickRef.current = { time: now, key: clickKey };
           onSelectUnits(engine.selectedUnitIds);
           onSelectAirfacility?.(null);
           return;
@@ -457,10 +630,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           (u) => u.side === 'player' && !u.isDestroyed && !u.embarkedInShipId && dist(worldPos, u.pos) < 28
         );
         if (hitGround) {
-          engine.selectUnits([hitGround.id], e.shiftKey);
+          const clickKey = `ground:${hitGround.type}`;
+          if (!e.shiftKey && lastLeftClickRef.current.key === clickKey && now - lastLeftClickRef.current.time < 360) {
+            const sameGround = engine.groundUnits
+              .filter((u) => u.side === 'player' && !u.isDestroyed && !u.embarkedInShipId && u.type === hitGround.type)
+              .map((u) => u.id);
+            engine.selectUnits(sameGround, false);
+          } else {
+            engine.selectUnits([hitGround.id], e.shiftKey);
+          }
+          lastLeftClickRef.current = { time: now, key: clickKey };
           onSelectUnits(engine.selectedUnitIds);
           if (hitGround.type === 'usmc_engineer') {
-            // 工兵部隊：只能打開建造選單
             onSelectAirfacility?.('engineer_construction', hitGround.id);
           } else {
             onSelectAirfacility?.(null);
@@ -471,10 +652,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         // Check if clicked player ship
         const hitShip = engine.playerShips.find((s) => !s.isSunk && dist(worldPos, s.pos) < 45);
         if (hitShip) {
-          engine.selectUnits([hitShip.id], e.shiftKey);
+          const clickKey = `ship:${hitShip.type}`;
+          if (!e.shiftKey && lastLeftClickRef.current.key === clickKey && now - lastLeftClickRef.current.time < 360) {
+            const sameShips = engine.playerShips
+              .filter((s) => !s.isSunk && s.type === hitShip.type)
+              .map((s) => s.id);
+            engine.selectUnits(sameShips, false);
+          } else {
+            engine.selectUnits([hitShip.id], e.shiftKey);
+          }
+          lastLeftClickRef.current = { time: now, key: clickKey };
           onSelectUnits(engine.selectedUnitIds);
-          if (hitShip.type === 'carrier' || hitShip.type === 'cve') {
-            // 航母：只能顯示從該艦起飛的飛機
+          if (hitShip.type === 'carrier' || hitShip.type === 'cve' || hitShip.type === 'cv63' || hitShip.type === 'cvn' || hitShip.type === 'lph') {
             onSelectAirfacility?.('carrier', hitShip.id);
           } else {
             onSelectAirfacility?.(null);
@@ -484,18 +673,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
         // Check if clicked an installation (Battalion CP or Airfield)
         for (const isl of engine.islands) {
-          // 1. 營指揮所 (Battalion CP): 出現呼叫支援選單，並在該營指揮所旁 Spawn 陸地單位
           const hitBattalionCp = isl.installations.find(
-            (inst) => (inst.type === 'battalion_cp' || inst.type === 'command_post') && !inst.isDestroyed && dist(worldPos, inst.pos) < 60
+            (inst) => (inst.type === 'battalion_cp' || inst.type === 'command_post') && !inst.isDestroyed && dist(worldPos, inst.pos) < 85
           );
           if (hitBattalionCp) {
             onSelectAirfacility?.('battalion_cp', hitBattalionCp.id);
             return;
           }
 
-          // 2. 機場 (Airfield): 只能打開陸基飛機選單
           const hitAirfieldInst = isl.installations.find(
-            (inst) => (inst.type === 'airfield' || inst.type === 'radar_station') && !inst.isDestroyed && dist(worldPos, inst.pos) < 55
+            (inst) => (inst.type === 'airfield' || inst.type === 'radar_station') && !inst.isDestroyed && dist(worldPos, inst.pos) < 65
           );
           const hasAirfield = isl.installations.some((i) => i.type === 'airfield' && !i.isDestroyed);
           if (hitAirfieldInst || ((isl.isFriendlyBase || hasAirfield) && isPointInPolygon(worldPos, isl.points))) {
@@ -505,6 +692,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
 
         // Empty ocean click: clear selection unless shift pressed
+        lastLeftClickRef.current = { time: 0, key: '' };
         if (!e.shiftKey) {
           engine.clearSelection();
           onSelectUnits([]);
@@ -523,7 +711,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         (u) => engine.selectedUnitIds.includes(u.id) && u.type === 'usmc_engineer'
       );
       const hasCarrierInBox = engine.playerShips.some(
-        (s) => engine.selectedUnitIds.includes(s.id) && (s.type === 'carrier' || s.type === 'cve')
+        (s) =>
+          engine.selectedUnitIds.includes(s.id) &&
+          (s.type === 'carrier' || s.type === 'cve' || s.type === 'cv63' || s.type === 'cvn' || s.type === 'lph')
       );
       if (hasEngineerInBox) {
         onSelectAirfacility?.('engineer_construction');
@@ -538,9 +728,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   // Keyboard Listeners
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
+        return;
+      }
+
       keysDownRef.current[e.key] = true;
 
       if (e.key === 'Escape') {
+        if (isDesignatingSonobuoyRef.current) {
+          e.preventDefault();
+          onCancelSonobuoyRef.current?.();
+          return;
+        }
         if (isDesignatingCapRef.current) {
           e.preventDefault();
           onCancelCapRef.current?.();
@@ -551,6 +750,54 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           onCancelPlacementRef.current?.();
           return;
         }
+      }
+
+      // Control Groups (Ctrl+1..4 to assign, 1..4 to recall, double-tap to center camera)
+      if (e.key >= '1' && e.key <= '4') {
+        if (e.ctrlKey || e.metaKey) {
+          e.preventDefault();
+          const count = engine.assignControlGroup(e.key);
+          if (count > 0) {
+            engine.addCombatLog({
+              category: 'naval',
+              sourceSide: 'player',
+              sourceName: `第 ${e.key} 特遣編隊`,
+              targetName: `${count} 個單位`,
+              actionType: 'recon_spotted',
+              text: `🎖️【編隊設定】已將 ${count} 個作戰單位編為快捷編組 [${e.key}]（按 ${e.key} 選取 · 連按兩下跳轉視角）。`,
+            });
+          }
+          return;
+        } else if (!e.altKey) {
+          const recalled = engine.recallControlGroup(e.key);
+          if (recalled.length > 0) {
+            onSelectUnitsRef.current(recalled);
+            const now = performance.now();
+            if (lastGroupTapRef.current.key === e.key && now - lastGroupTapRef.current.time < 350) {
+              const targetPos = engine.getControlGroupTargetPos(e.key);
+              if (targetPos) {
+                cameraTargetRef.current = { x: targetPos.x, y: targetPos.y };
+              }
+            }
+            lastGroupTapRef.current = { key: e.key, time: now };
+          }
+          return;
+        }
+      }
+
+      if (e.key === 'Backspace' || e.key === 'Pause') {
+        e.preventDefault();
+        onTogglePauseRef.current?.();
+        return;
+      }
+
+      if (e.key === '[') {
+        onCycleSpeedRef.current?.(-1);
+        return;
+      }
+      if (e.key === ']') {
+        onCycleSpeedRef.current?.(1);
+        return;
       }
 
       if (e.key === 'F3' || e.code === 'F3') {
@@ -567,10 +814,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const flagship = engine.getFlagship();
         const selectedShip = engine.playerShips.find((s) => engine.selectedUnitIds.includes(s.id));
         const selectedPlane = engine.aircraft.find((a) => engine.selectedUnitIds.includes(a.id));
-        const focusTarget = selectedShip || selectedPlane || flagship;
+        const selectedGround = engine.groundUnits.find((u) => engine.selectedUnitIds.includes(u.id));
+        const focusTarget = selectedShip || selectedPlane || selectedGround || flagship;
         if (focusTarget) {
-          cameraRef.current.x = focusTarget.pos.x;
-          cameraRef.current.y = focusTarget.pos.y;
+          cameraTargetRef.current = { x: focusTarget.pos.x, y: focusTarget.pos.y };
         }
       } else if (e.key === 'x' || e.key === 'X') {
         // Stop / Halt all selected ships
@@ -585,6 +832,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       } else if (e.key === 'p' || e.key === 'P') {
         engine.issueOrderToSelected({ type: 'patrol' });
+      } else if (e.key === 'u' || e.key === 'U') {
+        engine.unloadSelectedAircraft();
       } else if (e.key === 'm' || e.key === 'M' || e.key === 'Tab') {
         e.preventDefault();
         onToggleMap();

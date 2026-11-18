@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { CombatLogEntry, CombatLogCategory, CasualtiesReport, ResourceState } from '../types/game';
+import React, { useState, useEffect } from 'react';
+import { CombatLogEntry, CombatLogCategory, CasualtiesReport, ResourceState, Era } from '../types/game';
 import {
   X,
   ScrollText,
@@ -14,7 +14,6 @@ import {
   Award,
   Layers,
   TrendingDown,
-  Activity,
   Zap,
 } from 'lucide-react';
 
@@ -28,6 +27,7 @@ interface BattleLogModalProps {
   resourceState?: ResourceState;
   onClearLogs?: () => void;
   lang?: Language;
+  era?: Era;
 }
 
 export const BattleLogModal: React.FC<BattleLogModalProps> = ({
@@ -38,11 +38,21 @@ export const BattleLogModal: React.FC<BattleLogModalProps> = ({
   resourceState,
   onClearLogs,
   lang = 'zh',
+  era = 'era1',
 }) => {
   const t = getTranslation(lang);
   const [mainView, setMainView] = useState<'log' | 'casualties'>('log');
   const [activeTab, setActiveTab] = useState<CombatLogCategory>('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -198,13 +208,21 @@ export const BattleLogModal: React.FC<BattleLogModalProps> = ({
             <div className="bg-[#040C16] border border-[#1E3A5F] rounded-xl p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-cyan-400 animate-pulse" />
+                  <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)]" />
                   <span className="font-bold text-cyan-300 text-sm">美軍特混艦隊 (US PACIFIC FLEET)</span>
                 </div>
                 <div className="text-xs text-slate-400 font-bold">戰區實力對比與損失平衡</div>
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-rose-400 text-sm">帝國海軍聯合艦隊 (IJN FLEET)</span>
-                  <div className="w-3 h-3 rounded-full bg-rose-500 animate-pulse" />
+                  <span className="font-bold text-rose-400 text-sm">
+                    {era === 'era5'
+                      ? '蘇聯紅旗太平洋艦隊 (SOVIET FLEET)'
+                      : era === 'era4'
+                      ? '北越/蘇聯海空軍部隊 (PAVN/SOVIET)'
+                      : era === 'era3'
+                      ? '遠東人民軍海空力量 (KPA/SOVIET)'
+                      : '帝國海軍聯合艦隊 (IJN FLEET)'}
+                  </span>
+                  <div className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]" />
                 </div>
               </div>
 
@@ -230,7 +248,7 @@ export const BattleLogModal: React.FC<BattleLogModalProps> = ({
               </div>
               <div className="flex justify-between text-[10px] text-slate-400 mt-1">
                 <span>美軍優勢戰損比</span>
-                <span>日軍聯合艦隊</span>
+                <span>{era === 'era5' ? '蘇聯紅海軍戰區部隊' : era === 'era4' ? 'OPFOR 水面與岸防部隊' : era === 'era3' ? '中蘇遠東聯軍' : '日軍聯合艦隊'}</span>
               </div>
             </div>
 
@@ -242,7 +260,7 @@ export const BattleLogModal: React.FC<BattleLogModalProps> = ({
                 </div>
                 <div className="col-span-2 text-center text-slate-400">作戰指標 / 統計項目</div>
                 <div className="col-span-5 text-right text-rose-300 flex items-center justify-end gap-1.5">
-                  <span>🇯🇵 大日本帝國海軍聯合艦隊</span>
+                  <span>{era === 'era5' ? '🚩 蘇聯紅旗太平洋艦隊' : era === 'era4' ? '🚩 OPFOR 遠東紅海軍艦隊' : era === 'era3' ? '🚩 中蘇志願聯合艦隊' : '🇯🇵 大日本帝國海軍聯合艦隊'}</span>
                 </div>
               </div>
 

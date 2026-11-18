@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Era,
   AircraftRole,
@@ -15,11 +15,6 @@ import {
   Eye,
   Check,
   Zap,
-  Flame,
-  Rocket,
-  Bomb,
-  Radio,
-  Sliders,
 } from 'lucide-react';
 import { soundEngine } from '../game/audio';
 
@@ -41,6 +36,16 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
   lang = 'zh',
 }) => {
   const [activeRoleFilter, setActiveRoleFilter] = useState<AircraftRole | 'all'>('all');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
   const t = getTranslation(lang);
 
@@ -56,7 +61,11 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
       role: 'fighter',
       title: lang === 'zh' ? '戰鬥機外掛配置 (FIGHTERS)' : 'Carrier Fighters (Fighters)',
       planes:
-        era === 'era1'
+        era === 'era5'
+          ? 'F-14A Tomcat / F/A-18A Hornet / F-15A Eagle / F-16A Falcon'
+          : era === 'era4'
+          ? 'F-4B / F-4J Phantom II / F-8 Crusader / F-4E'
+          : era === 'era1'
           ? 'P-40 Warhawk / F4F Wildcat'
           : era === 'era2'
           ? 'P-51 Mustang / P-38 Lightning / F6F Hellcat / F4U Corsair'
@@ -64,7 +73,30 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
       icon: <Shield className="w-4 h-4 text-[#80DEEA]" />,
       color: 'border-[#1976D2]',
       options:
-        era === 'era3'
+        era === 'era5'
+          ? [
+              PAYLOAD_CATALOG.aim54_phoenix,
+              PAYLOAD_CATALOG.aim7_aim9_combo,
+              PAYLOAD_CATALOG.rgm84_harpoon,
+              PAYLOAD_CATALOG.agm88_harm,
+              PAYLOAD_CATALOG.agm65_maverick,
+              PAYLOAD_CATALOG.aim7_sparrow,
+              PAYLOAD_CATALOG.aim9_sidewinder,
+              PAYLOAD_CATALOG.clean_guns,
+              PAYLOAD_CATALOG.tactical_b61_nuke,
+            ]
+          : era === 'era4'
+          ? [
+              PAYLOAD_CATALOG.aim7_aim9_combo,
+              PAYLOAD_CATALOG.aim7_sparrow,
+              PAYLOAD_CATALOG.aim9_sidewinder,
+              PAYLOAD_CATALOG.clean_guns,
+              PAYLOAD_CATALOG.blu27_napalm,
+              PAYLOAD_CATALOG.bombs_snakeye_retarded,
+              PAYLOAD_CATALOG.agm12_bullpup,
+              PAYLOAD_CATALOG.tactical_b61_nuke,
+            ]
+          : era === 'era3'
           ? [
               PAYLOAD_CATALOG.clean_guns,
               PAYLOAD_CATALOG.hvar_rockets,
@@ -86,9 +118,13 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
     },
     {
       role: 'dive_bomber',
-      title: lang === 'zh' ? '俯衝轟炸機主武裝 (DIVE BOMBERS)' : 'Dive Bombers (Strike)',
+      title: lang === 'zh' ? '俯衝/戰術攻擊機主武裝 (DIVE & STRIKE)' : 'Dive Bombers & Strike',
       planes:
-        era === 'era1'
+        era === 'era5'
+          ? 'A-6E Intruder / AV-8B Harrier II / F-111 Aardvark'
+          : era === 'era4'
+          ? 'A-4 Skyhawk / A-7 Corsair II / A-6A Intruder'
+          : era === 'era1'
           ? 'SBD-3 Dauntless 無畏'
           : era === 'era2'
           ? 'SB2C-4 Helldiver 地獄俯衝'
@@ -96,7 +132,29 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
       icon: <Crosshair className="w-4 h-4 text-[#FFD54F]" />,
       color: 'border-[#FFB300]',
       options:
-        era === 'era3'
+        era === 'era5'
+          ? [
+              PAYLOAD_CATALOG.agm65_maverick,
+              PAYLOAD_CATALOG.rgm84_harpoon,
+              PAYLOAD_CATALOG.agm88_harm,
+              PAYLOAD_CATALOG.gbu10_laser_paveway,
+              PAYLOAD_CATALOG.cbu_cluster_bombs,
+              PAYLOAD_CATALOG.mer_iron_bombs,
+              PAYLOAD_CATALOG.bombs_snakeye_retarded,
+              PAYLOAD_CATALOG.tactical_b61_nuke,
+            ]
+          : era === 'era4'
+          ? [
+              PAYLOAD_CATALOG.gbu10_laser_paveway,
+              PAYLOAD_CATALOG.cbu_cluster_bombs,
+              PAYLOAD_CATALOG.blu27_napalm,
+              PAYLOAD_CATALOG.mer_iron_bombs,
+              PAYLOAD_CATALOG.agm62_walleye,
+              PAYLOAD_CATALOG.bombs_snakeye_retarded,
+              PAYLOAD_CATALOG.agm12_bullpup,
+              PAYLOAD_CATALOG.bomb_2000,
+            ]
+          : era === 'era3'
           ? [
               PAYLOAD_CATALOG.bomb_1000,
               PAYLOAD_CATALOG.bomb_2000,
@@ -117,7 +175,11 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
       role: 'torpedo_bomber',
       title: lang === 'zh' ? '魚雷打擊機／反潛配置 (TORPEDO & ASW)' : 'Torpedo & ASW Bombers',
       planes:
-        era === 'era1'
+        era === 'era5'
+          ? 'S-3A Viking / SH-3F Sea King / P-3C Orion (聲納浮標 + Mk 46)'
+          : era === 'era4'
+          ? 'A-6A Intruder / S-2 Tracker / SH-2 Seasprite / P-3C'
+          : era === 'era1'
           ? 'TBD Devastator 毀滅者'
           : era === 'era2'
           ? 'TBF-1C Avenger 復仇者'
@@ -125,7 +187,24 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
       icon: <Target className="w-4 h-4 text-[#4DD0E1]" />,
       color: 'border-[#00ACC1]',
       options:
-        era === 'era3'
+        era === 'era5'
+          ? [
+              PAYLOAD_CATALOG.asw_acoustic_torpedo,
+              PAYLOAD_CATALOG.rgm84_harpoon,
+              PAYLOAD_CATALOG.asw_torpedo,
+              PAYLOAD_CATALOG.gbu10_laser_paveway,
+              PAYLOAD_CATALOG.depth_bombs,
+            ]
+          : era === 'era4'
+          ? [
+              PAYLOAD_CATALOG.asw_acoustic_torpedo,
+              PAYLOAD_CATALOG.asw_torpedo,
+              PAYLOAD_CATALOG.gbu10_laser_paveway,
+              PAYLOAD_CATALOG.depth_bombs,
+              PAYLOAD_CATALOG.aerial_torpedo,
+              PAYLOAD_CATALOG.bomb_1000,
+            ]
+          : era === 'era3'
           ? [
               PAYLOAD_CATALOG.asw_torpedo,
               PAYLOAD_CATALOG.aerial_torpedo,
@@ -141,9 +220,13 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
     },
     {
       role: 'attacker',
-      title: lang === 'zh' ? '雙發/重型攻擊機掛載 (ATTACKERS & CAS)' : 'Heavy Attackers (CAS)',
+      title: lang === 'zh' ? '重型攻擊／電戰與對地支援 (ATTACKERS & CAS)' : 'Heavy Attackers & SEAD',
       planes:
-        era === 'era1'
+        era === 'era5'
+          ? 'EA-6B Prowler / A-10A Warthog / AH-64A Apache / AH-1W'
+          : era === 'era4'
+          ? 'A-6B Wild Weasel / F-105D / A-7D / A-4F / OV-10'
+          : era === 'era1'
           ? 'A-20 Havoc 浩劫'
           : era === 'era2'
           ? 'P-47 Thunderbolt 雷霆 / A-26 侵略者'
@@ -151,7 +234,29 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
       icon: <Target className="w-4 h-4 text-[#00E676]" />,
       color: 'border-[#00C853]',
       options:
-        era === 'era3'
+        era === 'era5'
+          ? [
+              PAYLOAD_CATALOG.agm88_harm,
+              PAYLOAD_CATALOG.agm65_maverick,
+              PAYLOAD_CATALOG.hellfire_missiles,
+              PAYLOAD_CATALOG.tow_missiles,
+              PAYLOAD_CATALOG.rgm84_harpoon,
+              PAYLOAD_CATALOG.gbu10_laser_paveway,
+              PAYLOAD_CATALOG.cbu_cluster_bombs,
+              PAYLOAD_CATALOG.tactical_b61_nuke,
+            ]
+          : era === 'era4'
+          ? [
+              PAYLOAD_CATALOG.agm78_standard_arm,
+              PAYLOAD_CATALOG.gbu10_laser_paveway,
+              PAYLOAD_CATALOG.mer_iron_bombs,
+              PAYLOAD_CATALOG.cbu_cluster_bombs,
+              PAYLOAD_CATALOG.blu27_napalm,
+              PAYLOAD_CATALOG.agm45_shrike,
+              PAYLOAD_CATALOG.agm62_walleye,
+              PAYLOAD_CATALOG.tactical_b61_nuke,
+            ]
+          : era === 'era3'
           ? [
               PAYLOAD_CATALOG.tiny_tim_rocket,
               PAYLOAD_CATALOG.napalm_canister,
@@ -177,7 +282,11 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
       role: 'level_bomber',
       title: lang === 'zh' ? '遠程重轟炸機彈艙掛載 (STRATEGIC BOMBERS)' : 'Heavy Strategic Bombers',
       planes:
-        era === 'era1'
+        era === 'era5'
+          ? 'B-52G Stratofortress 同溫層堡壘 (8x AGM-84 魚叉反艦飛彈 / 108枚地毯轟炸)'
+          : era === 'era4'
+          ? 'B-52D Stratofortress 同溫層堡壘 (108枚航彈走廊/戰略熱核)'
+          : era === 'era1'
           ? 'B-17 飛行堡壘 (4發重轟)'
           : era === 'era2'
           ? 'B-24 解放者 (遠程重轟)'
@@ -185,7 +294,24 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
       icon: <Zap className="w-4 h-4 text-[#FFCA28]" />,
       color: 'border-[#FFA000]',
       options:
-        era === 'era3'
+        era === 'era5'
+          ? [
+              PAYLOAD_CATALOG.rgm84_harpoon,
+              PAYLOAD_CATALOG.b52_megaton_carpet,
+              PAYLOAD_CATALOG.mer_iron_bombs,
+              PAYLOAD_CATALOG.cbu_cluster_bombs,
+              PAYLOAD_CATALOG.b52_megaton_nuke,
+              PAYLOAD_CATALOG.bomb_2000,
+            ]
+          : era === 'era4'
+          ? [
+              PAYLOAD_CATALOG.b52_megaton_carpet,
+              PAYLOAD_CATALOG.mer_iron_bombs,
+              PAYLOAD_CATALOG.cbu_cluster_bombs,
+              PAYLOAD_CATALOG.b52_megaton_nuke,
+              PAYLOAD_CATALOG.bomb_2000,
+            ]
+          : era === 'era3'
           ? [
               PAYLOAD_CATALOG.tactical_nuke,
               PAYLOAD_CATALOG.bombs_carpet_250,
@@ -214,9 +340,13 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
     },
     {
       role: 'scout',
-      title: lang === 'zh' ? '水上偵察與預警直升機 (RECON & AEW)' : 'Reconnaissance & SAR',
+      title: lang === 'zh' ? '水上偵察與預警機群 (RECON & AEW)' : 'Reconnaissance & AEW',
       planes:
-        era === 'era1'
+        era === 'era5'
+          ? 'E-2C Hawkeye / E-3A Sentry / C-2A / C-130'
+          : era === 'era4'
+          ? 'E-1B Tracer 預警機 / OV-10 Bronco / UH-1 / UH-2'
+          : era === 'era1'
           ? 'OS2U Kingfisher 水上偵察機'
           : era === 'era2'
           ? 'SC-1 Seahawk 水上偵察機'
@@ -224,7 +354,21 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
       icon: <Eye className="w-4 h-4 text-[#A7FFEB]" />,
       color: 'border-[#00BFA5]',
       options:
-        era === 'era3'
+        era === 'era5'
+          ? [
+              PAYLOAD_CATALOG.scout_fuel,
+              PAYLOAD_CATALOG.agm88_harm,
+              PAYLOAD_CATALOG.ffar_rockets_pod,
+              PAYLOAD_CATALOG.clean_guns,
+            ]
+          : era === 'era4'
+          ? [
+              PAYLOAD_CATALOG.scout_fuel,
+              PAYLOAD_CATALOG.blu27_napalm,
+              PAYLOAD_CATALOG.ffar_rockets_pod,
+              PAYLOAD_CATALOG.clean_guns,
+            ]
+          : era === 'era3'
           ? [PAYLOAD_CATALOG.scout_fuel, PAYLOAD_CATALOG.clean_guns, PAYLOAD_CATALOG.bomb_500]
           : [PAYLOAD_CATALOG.scout_fuel, PAYLOAD_CATALOG.bomb_500, PAYLOAD_CATALOG.scout_depth_charge],
     },

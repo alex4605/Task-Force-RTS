@@ -1,6 +1,0 @@
-{
-  "summary":  "Implementation plan for Era 4 naval & air combat enhancements:\n1. Anti-AShM Fleet Defense Restructure: Drastically restrict historical SAM anti-missile capability; implement rapid-fire gun barrage and shipboard RBOC chaff decoy mortars to seduce incoming Styx missiles.\n2. BLUFOR Aircraft Chaff & Flare Countermeasures: Automatic dispensing of chaff clouds and magnesium flares with defensive high-G evasive breaks, slashing SA-2 and K-13 missile hit rates.\n3. Reinforcement Requisition Menu Synchronization: Add Forrest Sherman DD, Knox FFG, SH-2 Seasprite, P-3C Orion, US Army 1965 Rifle Platoon, M113 Mech Infantry, and Chaparral SAM into fleet, air sortie, and battalion CP call-in menus.\n4. Era 4 OPFOR Warship Roster (Soviet & North Vietnamese Navy): Model Kashin DDG, Riga FFG, Osa/Komar PTGs, and Foxtrot SS with authentic Soviet naval armaments and vector rendering.",
-  "updatedAt":  "2026-10-29T11:07:07.161379692Z",
-  "requestFeedback":  true,
-  "userFacing":  true
-}

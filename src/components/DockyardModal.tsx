@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Ship, FleetUpgrades, Era } from '../types/game';
 import { Language, getTranslation } from '../game/i18n';
-import { Wrench, Shield, Plane, Crosshair, ArrowRight, X, Sparkles, Anchor, Zap } from 'lucide-react';
+import { Wrench, Shield, Plane, Crosshair, X, Sparkles, Anchor, Zap } from 'lucide-react';
 import { soundEngine } from '../game/audio';
 
 interface DockyardModalProps {
@@ -25,16 +25,25 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
   onClose,
   stars,
   onSpendStars,
-  playerShips,
+  playerShips: _playerShips,
   onRepairShips,
   upgrades,
   onUpgrade,
   era,
   onSetEra,
-  onNextSector,
-  canAdvance = false,
+  onNextSector: _onNextSector,
+  canAdvance: _canAdvance = false,
   lang = 'zh',
 }) => {
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
   const t = getTranslation(lang);
 
@@ -189,7 +198,7 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
             {t.eraSelectionDesc}
           </p>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 pt-1">
             {/* Era 1 */}
             <button
               type="button"
@@ -271,6 +280,27 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
                 {lang === 'zh'
                   ? '小鷹號／幽靈／入侵者／雷公／飛彈體系'
                   : 'CV-63 / F-4 / A-6 / F-105 / Missiles'}
+              </div>
+            </button>
+
+            {/* Era 5 */}
+            <button
+              type="button"
+              onClick={() => onSetEra('era5')}
+              className={`p-3 rounded-lg border text-left transition-all col-span-2 sm:col-span-1 ${
+                era === 'era5'
+                  ? 'bg-[#0B2545] border-[#00E676] shadow-[0_0_10px_rgba(0,230,118,0.25)] ring-1 ring-[#00E676]'
+                  : 'bg-[#071322] border-[#1E3A5F] hover:border-[#80DEEA]'
+              }`}
+            >
+              <div className="font-bold text-xs text-[#E0F7FA]">{t.era5}</div>
+              <div className="text-[10px] text-purple-300 font-semibold mt-0.5">
+                NIMITZ CVN-68
+              </div>
+              <div className="text-[9.5px] text-slate-400 mt-1 leading-relaxed">
+                {lang === 'zh'
+                  ? '神盾巡洋艦／F-14A 鳳凰／戰斧／白令海飽和'
+                  : 'Aegis / F-14A Phoenix / Tomahawk / ASW'}
               </div>
             </button>
           </div>

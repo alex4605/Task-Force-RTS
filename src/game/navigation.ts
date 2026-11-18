@@ -1,0 +1,417 @@
+import { Island, Ship, Vector2D } from '../types/game';
+import { isPointOnIslandLand } from './procedural';
+
+// Cell states: 0 = deep open water, 1 = coastal margin buffer, 2 = impassable land
+const CELL_OPEN = 0;
+const CELL_COASTAL = 1;
+const CELL_LAND = 2;
+
+const DIRS_8 = [
+  { dx: 1, dy: 0, cost: 1 },
+  { dx: -1, dy: 0, cost: 1 },
+  { dx: 0, dy: 1, cost: 1 },
+  { dx: 0, dy: -1, cost: 1 },
+  { dx: 1, dy: 1, cost: Math.SQRT2 },
+  { dx: 1, dy: -1, cost: Math.SQRT2 },
+  { dx: -1, dy: 1, cost: Math.SQRT2 },
+  { dx: -1, dy: -1, cost: Math.SQRT2 },
+];
+
+export class NavalNavigationGrid {
+  public readonly worldSize: number;
+  public readonly cellSize: number;
+  public readonly cols: number;
+  public readonly rows: number;
+  private readonly grid: Uint8Array;
+  private readonly islands: Island[];
+
+  constructor(worldSize: number, islands: Island[], cellSize: number = 110) {
+    this.worldSize = worldSize;
+    this.cellSize = cellSize;
+    this.cols = Math.max(10, Math.ceil(worldSize / cellSize));
+    this.rows = Math.max(10, Math.ceil(worldSize / cellSize));
+    this.grid = new Uint8Array(this.cols * this.rows);
+    this.islands = islands;
+    this.bakeTerrain();
+  }
+
+  private bakeTerrain() {
+    const half = this.cellSize * 0.5;
+    const probeOffset = this.cellSize * 0.34;
+
+    // Pass 1: Detect island dry land cells using 5-point sampling within each cell
+    for (let gy = 0; gy < this.rows; gy++) {
+      const wy = gy * this.cellSize + half;
+      for (let gx = 0; gx < this.cols; gx++) {
+        const wx = gx * this.cellSize + half;
+        let isLand = false;
+
+        for (const isl of this.islands) {
+          const maxReach = isl.radius + this.cellSize * 1.4;
+          const dx = wx - isl.center.x;
+          const dy = wy - isl.center.y;
+          if (dx * dx + dy * dy > maxReach * maxReach) continue;
+
+          if (
+            isPointOnIslandLand({ x: wx, y: wy }, isl) ||
+            isPointOnIslandLand({ x: wx - probeOffset, y: wy - probeOffset }, isl) ||
+            isPointOnIslandLand({ x: wx + probeOffset, y: wy - probeOffset }, isl) ||
+            isPointOnIslandLand({ x: wx - probeOffset, y: wy + probeOffset }, isl) ||
+            isPointOnIslandLand({ x: wx + probeOffset, y: wy + probeOffset }, isl)
+          ) {
+            isLand = true;
+            break;
+          }
+        }
+
+        this.grid[gy * this.cols + gx] = isLand ? CELL_LAND : CELL_OPEN;
+      }
+    }
+
+    // Pass 2: Mark 1-cell coastal buffer around land so A* prefers wide open sea lanes
+    for (let gy = 0; gy < this.rows; gy++) {
+      for (let gx = 0; gx < this.cols; gx++) {
+        const idx = gy * this.cols + gx;
+        if (this.grid[idx] !== CELL_OPEN) continue;
+
+        let nearLand = false;
+        for (let oy = -1; oy <= 1 && !nearLand; oy++) {
+          for (let ox = -1; ox <= 1; ox++) {
+            const nx = gx + ox;
+            const ny = gy + oy;
+            if (nx >= 0 && nx < this.cols && ny >= 0 && ny < this.rows) {
+              if (this.grid[ny * this.cols + nx] === CELL_LAND) {
+                nearLand = true;
+                break;
+              }
+            }
+          }
+        }
+        if (nearLand) {
+          this.grid[idx] = CELL_COASTAL;
+        }
+      }
+    }
+  }
+
+  public worldToCell(pos: Vector2D): { gx: number; gy: number } {
+    const gx = Math.max(0, Math.min(this.cols - 1, Math.floor(pos.x / this.cellSize)));
+    const gy = Math.max(0, Math.min(this.rows - 1, Math.floor(pos.y / this.cellSize)));
+    return { gx, gy };
+  }
+
+  public cellToWorld(gx: number, gy: number): Vector2D {
+    return {
+      x: Math.max(80, Math.min(this.worldSize - 80, gx * this.cellSize + this.cellSize * 0.5)),
+      y: Math.max(80, Math.min(this.worldSize - 80, gy * this.cellSize + this.cellSize * 0.5)),
+    };
+  }
+
+  public isWalkableCell(gx: number, gy: number): boolean {
+    if (gx < 0 || gx >= this.cols || gy < 0 || gy >= this.rows) return false;
+    return this.grid[gy * this.cols + gx] !== CELL_LAND;
+  }
+
+  public findNearestWalkableCell(startGx: number, startGy: number, maxRadius: number = 14): { gx: number; gy: number } | null {
+    if (this.isWalkableCell(startGx, startGy)) {
+      return { gx: startGx, gy: startGy };
+    }
+
+    let bestCell: { gx: number; gy: number } | null = null;
+    let bestScore = Infinity;
+
+    for (let r = 1; r <= maxRadius; r++) {
+      for (let oy = -r; oy <= r; oy++) {
+        for (let ox = -r; ox <= r; ox++) {
+          if (Math.abs(ox) !== r && Math.abs(oy) !== r) continue;
+          const nx = startGx + ox;
+          const ny = startGy + oy;
+          if (!this.isWalkableCell(nx, ny)) continue;
+          const cellType = this.grid[ny * this.cols + nx];
+          const penalty = cellType === CELL_COASTAL ? 0.6 : 0;
+          const score = Math.hypot(ox, oy) + penalty;
+          if (score < bestScore) {
+            bestScore = score;
+            bestCell = { gx: nx, gy: ny };
+          }
+        }
+      }
+      if (bestCell) return bestCell;
+    }
+
+    return null;
+  }
+
+  public projectToWalkableWater(pos: Vector2D): Vector2D {
+    const clamped: Vector2D = {
+      x: Math.max(80, Math.min(this.worldSize - 80, pos.x)),
+      y: Math.max(80, Math.min(this.worldSize - 80, pos.y)),
+    };
+    const { gx, gy } = this.worldToCell(clamped);
+    if (this.grid[gy * this.cols + gx] === CELL_OPEN) {
+      return clamped;
+    }
+    const walkable = this.findNearestWalkableCell(gx, gy);
+    if (!walkable) return clamped;
+    return this.cellToWorld(walkable.gx, walkable.gy);
+  }
+
+  public hasClearWaterLine(a: Vector2D, b: Vector2D, avoidCoastal: boolean = true): boolean {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const length = Math.hypot(dx, dy);
+    if (length < 10) return true;
+
+    const stepSize = this.cellSize * 0.42;
+    const steps = Math.ceil(length / stepSize);
+
+    for (let s = 1; s < steps; s++) {
+      const t = s / steps;
+      const px = a.x + dx * t;
+      const py = a.y + dy * t;
+      const { gx, gy } = this.worldToCell({ x: px, y: py });
+      const val = this.grid[gy * this.cols + gx];
+      if (val === CELL_LAND) return false;
+      if (avoidCoastal && val === CELL_COASTAL) return false;
+    }
+    return true;
+  }
+
+  /**
+   * Computes an 8-directional A* path on the sea-lane grid and smooths it via line-of-sight string-pulling.
+   */
+  public findPath(rawStart: Vector2D, rawGoal: Vector2D): Vector2D[] {
+    const clampedGoal: Vector2D = {
+      x: Math.max(80, Math.min(this.worldSize - 80, rawGoal.x)),
+      y: Math.max(80, Math.min(this.worldSize - 80, rawGoal.y)),
+    };
+
+    const startCellRaw = this.worldToCell(rawStart);
+    const goalCellRaw = this.worldToCell(clampedGoal);
+
+    const startCell = this.findNearestWalkableCell(startCellRaw.gx, startCellRaw.gy);
+    const goalCell = this.findNearestWalkableCell(goalCellRaw.gx, goalCellRaw.gy);
+
+    if (!startCell || !goalCell) {
+      return [clampedGoal];
+    }
+
+    const goalWorld = this.isWalkableCell(goalCellRaw.gx, goalCellRaw.gy)
+      ? clampedGoal
+      : this.cellToWorld(goalCell.gx, goalCell.gy);
+
+    // Fast path: direct clear deep-water sightline
+    if (this.hasClearWaterLine(rawStart, goalWorld, true)) {
+      return [goalWorld];
+    }
+
+    const totalCells = this.cols * this.rows;
+    const gScore = new Float32Array(totalCells);
+    gScore.fill(Infinity);
+    const fScore = new Float32Array(totalCells);
+    fScore.fill(Infinity);
+    const cameFrom = new Int32Array(totalCells);
+    cameFrom.fill(-1);
+    const closed = new Uint8Array(totalCells);
+    const inOpen = new Uint8Array(totalCells);
+
+    const startIdx = startCell.gy * this.cols + startCell.gx;
+    const goalIdx = goalCell.gy * this.cols + goalCell.gx;
+
+    gScore[startIdx] = 0;
+    fScore[startIdx] = this.octileHeuristic(startCell.gx, startCell.gy, goalCell.gx, goalCell.gy);
+
+    // Binary Min-Heap over cell indices
+    const heap: number[] = [startIdx];
+    inOpen[startIdx] = 1;
+
+    const pushHeap = (node: number) => {
+      heap.push(node);
+      let idx = heap.length - 1;
+      while (idx > 0) {
+        const parent = (idx - 1) >> 1;
+        if (fScore[heap[parent]] <= fScore[heap[idx]]) break;
+        const tmp = heap[parent];
+        heap[parent] = heap[idx];
+        heap[idx] = tmp;
+        idx = parent;
+      }
+    };
+
+    const popHeap = (): number => {
+      const top = heap[0];
+      const last = heap.pop()!;
+      if (heap.length > 0) {
+        heap[0] = last;
+        let idx = 0;
+        const n = heap.length;
+        while (true) {
+          let smallest = idx;
+          const left = idx * 2 + 1;
+          const right = left + 1;
+          if (left < n && fScore[heap[left]] < fScore[heap[smallest]]) smallest = left;
+          if (right < n && fScore[heap[right]] < fScore[heap[smallest]]) smallest = right;
+          if (smallest === idx) break;
+          const tmp = heap[idx];
+          heap[idx] = heap[smallest];
+          heap[smallest] = tmp;
+          idx = smallest;
+        }
+      }
+      return top;
+    };
+
+    let found = false;
+    let expansions = 0;
+    const maxExpansions = totalCells;
+
+    while (heap.length > 0 && expansions < maxExpansions) {
+      const current = popHeap();
+      inOpen[current] = 0;
+      if (current === goalIdx) {
+        found = true;
+        break;
+      }
+      if (closed[current]) continue;
+      closed[current] = 1;
+      expansions++;
+
+      const cx = current % this.cols;
+      const cy = Math.floor(current / this.cols);
+
+      for (const dir of DIRS_8) {
+        const nx = cx + dir.dx;
+        const ny = cy + dir.dy;
+        if (nx < 0 || nx >= this.cols || ny < 0 || ny >= this.rows) continue;
+
+        const nIdx = ny * this.cols + nx;
+        if (closed[nIdx]) continue;
+        const cellType = this.grid[nIdx];
+        if (cellType === CELL_LAND) continue;
+
+        // Prevent diagonal corner-cutting across land corners
+        if (dir.dx !== 0 && dir.dy !== 0) {
+          if (
+            this.grid[cy * this.cols + nx] === CELL_LAND ||
+            this.grid[ny * this.cols + cx] === CELL_LAND
+          ) {
+            continue;
+          }
+        }
+
+        const terrainWeight = cellType === CELL_COASTAL ? 3.2 : 1.0;
+        const tentativeG = gScore[current] + dir.cost * terrainWeight;
+        if (tentativeG < gScore[nIdx]) {
+          cameFrom[nIdx] = current;
+          gScore[nIdx] = tentativeG;
+          fScore[nIdx] = tentativeG + this.octileHeuristic(nx, ny, goalCell.gx, goalCell.gy);
+          if (!inOpen[nIdx]) {
+            pushHeap(nIdx);
+            inOpen[nIdx] = 1;
+          }
+        }
+      }
+    }
+
+    if (!found) {
+      return [goalWorld];
+    }
+
+    // Reconstruct world points from goal back to start
+    const rawPath: Vector2D[] = [];
+    let cur = goalIdx;
+    while (cur !== -1 && cur !== startIdx) {
+      const gx = cur % this.cols;
+      const gy = Math.floor(cur / this.cols);
+      rawPath.push(this.cellToWorld(gx, gy));
+      cur = cameFrom[cur];
+    }
+    rawPath.reverse();
+    if (rawPath.length === 0) {
+      return [goalWorld];
+    }
+    rawPath[rawPath.length - 1] = goalWorld;
+
+    // String-pulling / Line-of-Sight Waypoint Smoothing
+    const smoothed: Vector2D[] = [];
+    let anchor: Vector2D = rawStart;
+    let i = 0;
+
+    while (i < rawPath.length) {
+      let farthest = i;
+      for (let j = rawPath.length - 1; j > i; j--) {
+        if (this.hasClearWaterLine(anchor, rawPath[j], true)) {
+          farthest = j;
+          break;
+        }
+      }
+      smoothed.push(rawPath[farthest]);
+      anchor = rawPath[farthest];
+      i = farthest + 1;
+    }
+
+    return smoothed.length > 0 ? smoothed : [goalWorld];
+  }
+
+  private octileHeuristic(ax: number, ay: number, bx: number, by: number): number {
+    const dx = Math.abs(ax - bx);
+    const dy = Math.abs(ay - by);
+    return dx + dy + (Math.SQRT2 - 2) * Math.min(dx, dy);
+  }
+}
+
+/**
+ * Computes ship-to-ship separation steering force to prevent clumping/overlapping
+ * among friendly and allied task forces while respecting submarine depth separation.
+ */
+export function computeShipSeparationSteering(
+  ship: Ship,
+  otherShips: Ship[],
+  isSubmarineFn: (s: Ship) => boolean
+): { vx: number; vy: number; speedScale: number } {
+  let pushX = 0;
+  let pushY = 0;
+  let closestRatio = 0;
+  const selfIsSub = isSubmarineFn(ship);
+
+  for (const other of otherShips) {
+    if (other.id === ship.id || other.isSunk) continue;
+    // Submarines operate below surface keels; only separate same-layer hulls
+    if (isSubmarineFn(other) !== selfIsSub) continue;
+
+    const dx = ship.pos.x - other.pos.x;
+    const dy = ship.pos.y - other.pos.y;
+    const d = Math.hypot(dx, dy);
+    const safeDist = Math.max(92, (ship.length + other.length) * 0.72);
+
+    if (d < safeDist) {
+      const closeness = 1 - d / safeDist;
+      if (closeness > closestRatio) closestRatio = closeness;
+
+      let nx: number;
+      let ny: number;
+      if (d < 1) {
+        // Deterministic tie-breaker if hulls overlap identically
+        const tieAngle = (ship.id.charCodeAt(ship.id.length - 1) % 8) * (Math.PI / 4);
+        nx = Math.cos(tieAngle);
+        ny = Math.sin(tieAngle);
+      } else {
+        nx = dx / d;
+        ny = dy / d;
+      }
+
+      // Add slight starboard pass bias so head-on ships glide past smoothly
+      const tangentX = -ny * 0.25;
+      const tangentY = nx * 0.25;
+      const weight = closeness * closeness * 2.2;
+      pushX += (nx + tangentX) * weight;
+      pushY += (ny + tangentY) * weight;
+    }
+  }
+
+  return {
+    vx: pushX,
+    vy: pushY,
+    speedScale: closestRatio > 0.65 ? 0.75 : closestRatio > 0.35 ? 0.88 : 1.0,
+  };
+}

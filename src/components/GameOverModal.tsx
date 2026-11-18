@@ -29,7 +29,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
         <div className="text-center space-y-1.5">
           <div className="flex justify-center mb-2">
             {isVictory ? (
-              <div className="p-3.5 bg-[#1B5E20]/60 border border-[#4CAF50] rounded-full text-[#66BB6A] shadow-[0_0_20px_rgba(76,175,80,0.4)] animate-bounce">
+              <div className="p-3.5 bg-[#1B5E20]/60 border border-[#4CAF50] rounded-full text-[#66BB6A] shadow-[0_0_20px_rgba(76,175,80,0.4)]">
                 <Trophy className="w-9 h-9" />
               </div>
             ) : (

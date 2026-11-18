@@ -14,6 +14,8 @@ export interface TranslationDictionary {
   era3Tooltip: string;
   era4: string;
   era4Tooltip: string;
+  era5: string;
+  era5Tooltip: string;
   paused: string;
   pause: string;
   speedSlow: string;
@@ -76,6 +78,9 @@ export interface TranslationDictionary {
   orderCapOrbit: string;
   orderCapOrbitHint: string;
   cancelCap: string;
+  orderDropSonobuoy: string;
+  orderDropSonobuoyHint: string;
+  cancelSonobuoy: string;
 
   // Requisition Categories
   catShips: string;
@@ -198,6 +203,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     era3Tooltip: '時代三：冷戰與噴射時代 (第七艦隊／米格走廊／興南撤退)',
     era4: '時代四 (1965-73)',
     era4Tooltip: '時代四：冷戰超音速與越戰風暴 (東京灣／小鷹號超級航母／空空反輻射飛彈／直升機垂直包圍)',
+    era5: '時代五 (1973-91)',
+    era5Tooltip: '時代五：冷戰終局與大洋決戰 (尼米茲核航母／神盾巡洋艦／CIWS近迫防禦／魚叉與花崗岩超音速反艦／反飛彈攔截)',
     paused: '已暫停',
     pause: '暫停 (空白鍵)',
     speedSlow: '0.5x 慢速推演',
@@ -260,6 +267,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     orderCapOrbit: '指派空優巡邏空域 (CAP)',
     orderCapOrbitHint: '在地圖上點擊指定空域，在航戰鬥機將前往盤旋警戒',
     cancelCap: '取消空優指派',
+    orderDropSonobuoy: '投擲被動聲納浮標 (G)',
+    orderDropSonobuoyHint: '在海圖上點擊目標海域，派遣反潛機/直升機投擲被動聲納（插眼）監聽過境敵潛艦',
+    cancelSonobuoy: '取消聲納投擲',
 
     // Requisition Categories
     catShips: '水面艦艇支援',
@@ -380,6 +390,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     era3Tooltip: 'Era 3: Cold War & Jet Era (7th Fleet / MiG Alley / Hungnam)',
     era4: 'Era 4 (1965-73)',
     era4Tooltip: 'Era 4: Cold War Supersonic & Vietnam War (Gulf of Tonkin / CV-63 Kitty Hawk / Guided Missiles / Heliborne Envelopment)',
+    era5: 'Era 5 (1973-91)',
+    era5Tooltip: 'Era 5: Cold War Climax & High-Tech Fleet (Nimitz CVN, Aegis CG, CIWS, Harpoon & Granit AShM, Missile Interception)',
     paused: 'PAUSED',
     pause: 'PAUSE (Space)',
     speedSlow: '0.5x Slow Motion',
@@ -442,6 +454,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     orderCapOrbit: 'Designate CAP Patrol Sector',
     orderCapOrbitHint: 'Click target coordinates on map to dispatch airborne fighters on orbital combat air patrol',
     cancelCap: 'Cancel CAP Designation',
+    orderDropSonobuoy: 'Drop Passive Sonobuoy (G)',
+    orderDropSonobuoyHint: 'Click sea coordinates to deploy an air-dropped passive sonobuoy that intermittently pings passing submarines',
+    cancelSonobuoy: 'Cancel Sonobuoy Drop',
 
     // Requisition Categories
     catShips: 'Naval Warships',
