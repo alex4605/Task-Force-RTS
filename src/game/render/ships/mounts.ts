@@ -12,7 +12,8 @@ type MountStyle =
   | { kind: 'ciws' }
   | { kind: 'armLauncher' }
   | { kind: 'box'; fixed: boolean; cols: number; rows: number; round: boolean }
-  | { kind: 'rbu' };
+  | { kind: 'rbu' }
+  | { kind: 'casemate'; bore: number };
 
 const styleCache = new Map<string, MountStyle>();
 
@@ -29,6 +30,7 @@ export function parseBoreMm(caliber: string): number | null {
 function classify(caliber: string, barrelCount: number): MountStyle {
   if (/Phalanx|CIWS/i.test(caliber) && !/Sea Sparrow/i.test(caliber)) return { kind: 'ciws' };
   if (/RBU/.test(caliber)) return { kind: 'rbu' };
+  if (/砲郭|[Cc]asemate/.test(caliber)) return { kind: 'casemate', bore: parseBoreMm(caliber) ?? 152 };
   if (/P-700|Granit 20/.test(caliber)) return { kind: 'box', fixed: true, cols: 5, rows: 4, round: true };
   // Rail launchers first: 'Mk 41 VLS / Mk 26' on the lead Ticonderogas was really the Mk 26 twin arm
   if (/Arm|Mk 1[013]\b|Mk 26|SA-N-[137]|Shtil|Volna|Shtorm/i.test(caliber)) return { kind: 'armLauncher' };
@@ -60,7 +62,9 @@ export function drawShipTurrets(rc: RenderContext, ship: Ship, color: string) {
     const ctx = rc.ctx;
     ctx.save();
     ctx.translate(turret.relX, turret.relY);
-    if (!(style.kind === 'box' && style.fixed)) ctx.rotate(turret.angle - ship.heading);
+    // Fixed VLS cells don't train; casemate guns train only a little either side of the beam
+    if (style.kind === 'casemate') ctx.rotate(Math.sign(turret.relY || 1) * Math.PI / 2 + clampBeamTrain(turret.angle - ship.heading, turret.relY));
+    else if (!(style.kind === 'box' && style.fixed)) ctx.rotate(turret.angle - ship.heading);
     switch (style.kind) {
       case 'gun':
         drawGunHouse(ctx, style.radius, style.bore, turret.barrelCount, color);
@@ -79,6 +83,9 @@ export function drawShipTurrets(rc: RenderContext, ship: Ship, color: string) {
         break;
       case 'rbu':
         drawRbu(ctx, color);
+        break;
+      case 'casemate':
+        drawCasemate(ctx, style.bore, color);
         break;
     }
     ctx.restore();
@@ -248,5 +255,29 @@ function drawRbu(ctx: CanvasRenderingContext2D, color: string) {
     ctx.moveTo(Math.cos(a) * 1.5, Math.sin(a) * 1.5);
     ctx.lineTo(Math.cos(a) * 5, Math.sin(a) * 5);
   }
+  ctx.stroke();
+}
+
+/** Offset of a casemate gun from its beam bearing, limited to the ±60° a hull embrasure allows. */
+function clampBeamTrain(relAngle: number, relY: number): number {
+  const beam = Math.sign(relY || 1) * Math.PI / 2;
+  let d = relAngle - beam;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return Math.max(-Math.PI / 3, Math.min(Math.PI / 3, d));
+}
+
+function drawCasemate(ctx: CanvasRenderingContext2D, bore: number, color: string) {
+  // Hull-side casemate (Kongo / Hiei 15.2cm): an embrasure in the hull with a short barrel outboard
+  ctx.fillStyle = '#0A1622';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 0.8;
+  ctx.fillRect(-1.6, -1.4, 2.4, 2.8);
+  ctx.strokeRect(-1.6, -1.4, 2.4, 2.8);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = Math.max(0.9, bore / 150);
+  ctx.beginPath();
+  ctx.moveTo(0.8, 0);
+  ctx.lineTo(0.8 + bore * 0.03, 0);
   ctx.stroke();
 }
