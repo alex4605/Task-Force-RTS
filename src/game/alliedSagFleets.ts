@@ -253,6 +253,11 @@ export function getAlliedSagFleet(era: Era): AlliedSagFleet {
           { id: 'jerv-t3', pos: { x: -18, y: 0 }, angle: Math.PI, range: 1500, damage: 280, cooldown: 0, maxCooldown: 3.2, caliber: '4.7吋 Mk XII 雙聯裝 (X砲塔)' },
         ],
       },
+      sagShip({ name: 'HMS Warspite (厭戰號戰艦 · 東方艦隊旗艦)', codeName: 'HMS Warspite (03)', type: 'battleship', length: 122, width: 28, maxHealth: 15000, speed: 17, flakRange: 1300 }, 'rn-warspite', [
+        [40, 0, '15吋 Mk I 雙聯裝 (A砲塔)', 2600, 880, 6.8], [28, 0, '15吋 Mk I 雙聯裝 (B砲塔)', 2600, 880, 6.8],
+        [-28, 0, '15吋 Mk I 雙聯裝 (X砲塔)', 2600, 880, 6.8], [-40, 0, '15吋 Mk I 雙聯裝 (Y砲塔)', 2600, 880, 6.8],
+        [6, -11, '4吋 Mk XVI 雙聯裝高平砲', 1500, 220, 2.2], [6, 11, '4吋 Mk XVI 雙聯裝高平砲', 1500, 220, 2.2],
+      ]),
     ];
   } else if (era === 'era2') {
     title = '英國皇家海軍第57特遣艦隊 (Royal Navy Task Force 57 SAG)';
@@ -410,6 +415,9 @@ export function getAlliedSagFleet(era: Era): AlliedSagFleet {
             { id: 'andro-ashm', pos: { x: -14, y: 0 }, angle: 0, range: 4000, damage: 1650, cooldown: 0, maxCooldown: 24.0, caliber: 'Exocet (飛魚 MM38) 掠海反艦飛彈' },
           ],
         },
+        sagShip({ name: 'HMCS Iroquois 易洛魁號 (DDH-280 部族級)', codeName: 'HMCS Iroquois (280)', type: 'ddg', length: 92, width: 15, maxHealth: 6400, speed: 26, flakRange: 1300, hasModernNavalGunAA: true, hasSAM: true, samRange: 2400, samModel: 'RIM-7 海麻雀防空飛彈', hasASROC: true }, 'ca-280e4', [
+          [28, 0, '127mm OTO Melara 超速砲', 1800, 480, 1.8],
+        ]),
       ];
     } else {
       title = '日本海上自衛隊護衛艦群 (JMSDF Escort Flotilla SAG)';
@@ -452,6 +460,9 @@ export function getAlliedSagFleet(era: Era): AlliedSagFleet {
             { id: 'taka-t2', pos: { x: -22, y: 0 }, angle: Math.PI, range: 1800, damage: 500, cooldown: 0, maxCooldown: 2.5, caliber: '54倍徑 5吋砲 (Mk 42)' },
           ],
         },
+        sagShip({ name: 'JDS Amatsukaze 天津風號飛彈護衛艦 (DDG-163)', codeName: 'JDS Amatsukaze (DDG-163)', type: 'ddg', length: 88, width: 14, maxHealth: 6000, speed: 26, flakRange: 1300, hasModernNavalGunAA: true, hasSAM: true, samRange: 2600, samModel: 'RIM-24 韃靼人 (Mk 13 單臂)', hasASROC: true }, 'jds-163', [
+          [28, 0, '3吋/50 Mk 33 雙聯裝', 1500, 260, 1.8], [-24, 0, 'Mk 13 韃靼人單臂發射架', 2600, 850, 8.0],
+        ]),
       ];
     }
   } else {

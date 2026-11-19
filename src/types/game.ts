@@ -1262,6 +1262,12 @@ export type AircraftNation =
   | 'west_germany' // Luftwaffe / Marineflieger Balkenkreuz
   | 'france'       // Armée de l'Air cocarde
   | 'sweden'       // Flygvapnet (drawn by the Viggen silhouette itself)
+  | 'australia'    // RAAF: Pacific blue/white 1942-46, RAF-style in Korea, red kangaroo from 1956
+  | 'new_zealand'  // RNZAF: Pacific blue/white 1942-46, RAF-style afterwards
+  | 'canada'       // RCAF / RCN: RAF-style roundel until 1965, maple leaf afterwards
+  | 'south_africa' // SAAF: orange-centred roundel
+  | 'netherlands'  // Royal Netherlands Air Force / Navy
+  | 'british_pacific' // British Pacific Fleet 1945: blue/white roundel with white bars
   | 'ussr';
 
 export type AirMission = 'cap' | 'barcap' | 'sweep' | 'escort' | 'strike';
@@ -1428,6 +1434,13 @@ export type AircraftModel =
   | 'a50'    // A-50 Mainstay (主桅長程空中早期預警機 · 伊留申-76 改裝)
   | 'su25'   // Su-25 Frogfoot (蛙足重裝甲近接支援強擊機 · 雙管30mm · S-24大火箭)
   | 'mi24'   // Mi-24 Hind (雌鹿空中飛行戰車 · 12.7mm四聯旋轉機槍 · 9M114 螺旋反裝甲)
+  | 'beaufort'    // Bristol Beaufort (澳洲 DAP 生產 · RAAF 第100中隊魚雷轟炸機)
+  | 'boomerang'   // CAC Boomerang 回力鏢 (澳洲自製戰鬥 / 陸軍協同機)
+  | 'seafire'     // Supermarine Seafire 海火 (艦隊航空隊艦載噴火)
+  | 'barracuda'   // Fairey Barracuda 梭魚 (艦隊航空隊魚雷 / 俯衝轟炸機)
+  | 'canberra'    // English Electric Canberra B.20 坎培拉 (RAAF 第2中隊 · 越南)
+  | 'buccaneer'   // Blackburn Buccaneer S.2B 海盜式 (英國低空海上打擊機)
+  | 'sea_harrier' // BAe Sea Harrier FRS.1 海獵鷹 (福克蘭戰爭艦載戰鬥機)
   | 'rufe'   // A6M2-N 二式水上戰鬥機 Rufe (所羅門群島水上戰鬥機隊)
   | 'ki84'   // Ki-84 四式戰鬥機 疾風 Frank (陸軍末期最強戰鬥機)
   | 'po2'    // Po-2 夜間騷擾雙翼機 Bedcheck Charlie (韓戰北韓夜襲)

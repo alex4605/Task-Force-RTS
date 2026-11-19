@@ -163,6 +163,13 @@ const LOADOUTS: Partial<Record<AircraftModel, readonly Store[]>> = {
   c130: [s('c1_paratroopers')],
   ch53: [s('helo_assault_troops'), s('c1_paratroopers')],
   // ── Allied (Commonwealth, ROK and NATO) squadrons flown from the friendly airbase ──
+  beaufort: [s('aerial_torpedo'), s('bombs_dual_500'), s('clean_guns')],
+  boomerang: [s('clean_guns'), s('bomb_500')],
+  seafire: [s('clean_guns'), s('bomb_500')],
+  barracuda: [s('aerial_torpedo'), s('bombs_dual_500'), s('bomb_1600'), s('depth_bombs', 4)], // 1,600 lb AP vs Tirpitz
+  canberra: [s('bombs_carpet_250'), s('bombs_dual_1000')], // six 750 lb or 1,000 lb bombs over Vietnam
+  buccaneer: [s('rgm84_harpoon', 2), s('gbu10_laser_paveway', 2), s('bombs_snakeye_retarded', 4)], // Sea Eagle / Martel
+  sea_harrier: [s('aim9_sidewinder', 2), s('clean_guns'), s('cbu_cluster_bombs', 2)], // AIM-9L, Falklands 1982
   hurricane: [s('clean_guns')],
   spitfire_v: [s('clean_guns')],
   spitfire_xiv: [s('clean_guns')],

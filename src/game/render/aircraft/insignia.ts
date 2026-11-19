@@ -182,3 +182,85 @@ export function drawFrenchRoundel(rc: RenderContext, x: number, y: number, r: nu
   }
   ctx.restore();
 }
+
+function disc(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, color: string) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+/**
+ * Pacific roundel (1942-46): RAAF, RNZAF and the British Pacific Fleet removed the red centre so
+ * it could not be mistaken for the Hinomaru. The BPF added white bars like the US star-and-bars.
+ */
+export function drawPacificRoundel(rc: RenderContext, x: number, y: number, r: number, withBars: boolean) {
+  const ctx = rc.ctx;
+  ctx.save();
+  if (withBars) {
+    ctx.fillStyle = '#0D2B5C';
+    ctx.fillRect(x - r * 1.6 - 0.6, y - r * 0.32 - 0.6, r * 3.2 + 1.2, r * 0.64 + 1.2);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(x - r * 1.6, y - r * 0.32, r * 3.2, r * 0.64);
+  }
+  disc(ctx, x, y, r, '#0D2B5C');
+  disc(ctx, x, y, r * 0.5, '#FFFFFF');
+  ctx.restore();
+}
+
+/** RAAF roundel from 1956: red leaping kangaroo in place of the red centre. */
+export function drawRAAFKangarooRoundel(rc: RenderContext, x: number, y: number, r: number) {
+  const ctx = rc.ctx;
+  ctx.save();
+  disc(ctx, x, y, r, '#0D47A1');
+  disc(ctx, x, y, r * 0.65, '#FFFFFF');
+  ctx.fillStyle = '#D32F2F';
+  ctx.beginPath();
+  ctx.ellipse(x, y + r * 0.05, r * 0.32, r * 0.18, -0.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(x - r * 0.25, y + r * 0.1);
+  ctx.lineTo(x - r * 0.5, y + r * 0.35);
+  ctx.lineTo(x - r * 0.2, y + r * 0.2);
+  ctx.closePath();
+  ctx.fill();
+  disc(ctx, x + r * 0.28, y - r * 0.18, r * 0.11, '#D32F2F');
+  ctx.restore();
+}
+
+/** RCAF / Canadian Forces roundel from 1965: red maple leaf centre. */
+export function drawMapleLeafRoundel(rc: RenderContext, x: number, y: number, r: number) {
+  const ctx = rc.ctx;
+  ctx.save();
+  disc(ctx, x, y, r, '#0D47A1');
+  disc(ctx, x, y, r * 0.65, '#FFFFFF');
+  ctx.fillStyle = '#D32F2F';
+  ctx.beginPath();
+  const pts: Array<[number, number]> = [[0, -0.5], [0.12, -0.25], [0.32, -0.32], [0.24, -0.08], [0.45, 0], [0.2, 0.12], [0.24, 0.3], [0, 0.22], [-0.24, 0.3], [-0.2, 0.12], [-0.45, 0], [-0.24, -0.08], [-0.32, -0.32], [-0.12, -0.25]];
+  pts.forEach(([px, py], i) => (i === 0 ? ctx.moveTo(x + px * r, y + py * r) : ctx.lineTo(x + px * r, y + py * r)));
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillRect(x - r * 0.03, y + r * 0.22, r * 0.06, r * 0.22);
+  ctx.restore();
+}
+
+/** SAAF roundel of the Korean War era: orange centre in place of red. */
+export function drawSAAFRoundel(rc: RenderContext, x: number, y: number, r: number) {
+  const ctx = rc.ctx;
+  ctx.save();
+  disc(ctx, x, y, r, '#0D47A1');
+  disc(ctx, x, y, r * 0.65, '#FFFFFF');
+  disc(ctx, x, y, r * 0.32, '#FB8C00');
+  ctx.restore();
+}
+
+/** Royal Netherlands Air Force / Navy roundel: red, white and blue rings around an orange dot. */
+export function drawDutchRoundel(rc: RenderContext, x: number, y: number, r: number) {
+  const ctx = rc.ctx;
+  ctx.save();
+  disc(ctx, x, y, r, '#C62828');
+  disc(ctx, x, y, r * 0.72, '#FFFFFF');
+  disc(ctx, x, y, r * 0.46, '#1565C0');
+  disc(ctx, x, y, r * 0.2, '#FB8C00');
+  ctx.restore();
+}

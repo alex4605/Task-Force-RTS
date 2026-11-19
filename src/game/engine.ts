@@ -1999,14 +1999,14 @@ export class GameEngine {
     this.alliedSortieTimer -= effectiveDt;
     if (this.alliedSortieTimer <= 0) {
       this.spawnAlliedAirSortie();
-      this.alliedSortieTimer = 45 + Math.random() * 25; // 45 to 70 seconds
+      this.alliedSortieTimer = 35 + Math.random() * 20; // 35 to 55 seconds
     }
 
     // 跨時代盟軍水面打擊群支援 (Allied Surface Action Group - SAG Autonomous Patrol & Strike)
     this.alliedSagTimer -= effectiveDt;
     if (this.alliedSagTimer <= 0) {
       this.spawnAlliedSAG();
-      this.alliedSagTimer = 160 + Math.random() * 30; // 160 to 190 seconds
+      this.alliedSagTimer = 130 + Math.random() * 30; // 130 to 160 seconds
     }
 
     this.updateScheduledActions(effectiveDt);
@@ -14779,8 +14779,10 @@ export class GameEngine {
         { model: 'spitfire_v', role: 'fighter', modelName: '噴火式 Mk.V 戰鬥機', speed: getAircraftSpeed('spitfire_v'), baseHealth: 420, payloadType: 'clean_guns', payloadName: '2x 20mm 機砲 + 4x .303', ammo: 1800, affiliation: '英國皇家空軍 (RAF)' },
         { model: 'beaufighter', role: 'attacker', modelName: '雙頭怪 (Beaufighter) 打擊機', speed: getAircraftSpeed('beaufighter'), baseHealth: 620, payloadType: 'aerial_torpedo', payloadName: 'Mk 13 航空魚雷 / 4x 20mm', ammo: 1200, affiliation: '皇家空軍岸防司令部' },
         { model: 'swordfish', role: 'torpedo_bomber', modelName: '劍魚魚雷轟炸機', speed: getAircraftSpeed('swordfish'), baseHealth: 340, payloadType: 'aerial_torpedo', payloadName: '18吋航空重型魚雷', ammo: 600, affiliation: '皇家海軍航空隊 (FAA)' },
-        { model: 'p40', role: 'fighter', modelName: 'P-40E 小鷹式 (Kittyhawk)', speed: getAircraftSpeed('p40'), baseHealth: 420, payloadType: 'clean_guns', payloadName: '6x .50 白朗寧機槍', ammo: 1440, affiliation: '澳洲皇家空軍第75中隊 (RAAF)', nation: 'uk' },
-        { model: 'a20', role: 'attacker', modelName: 'A-20C 波士頓 (Boston) 攻擊機', speed: getAircraftSpeed('a20'), baseHealth: 520, payloadType: 'bombs_dual_500', payloadName: '機首機槍群 + 500lb 航彈', ammo: 2000, affiliation: '澳洲皇家空軍第22中隊 (RAAF)', nation: 'uk' },
+        { model: 'p40', role: 'fighter', modelName: 'P-40E 小鷹式 (Kittyhawk)', speed: getAircraftSpeed('p40'), baseHealth: 420, payloadType: 'clean_guns', payloadName: '6x .50 白朗寧機槍', ammo: 1440, affiliation: '澳洲皇家空軍第75中隊 (RAAF)', nation: 'australia' },
+        { model: 'a20', role: 'attacker', modelName: 'A-20C 波士頓 (Boston) 攻擊機', speed: getAircraftSpeed('a20'), baseHealth: 520, payloadType: 'bombs_dual_500', payloadName: '機首機槍群 + 500lb 航彈', ammo: 2000, affiliation: '澳洲皇家空軍第22中隊 (RAAF)', nation: 'australia' },
+        { model: 'beaufort', role: 'torpedo_bomber', modelName: '蒲福式 Mk.VIII (DAP Beaufort) 魚雷轟炸機', speed: getAircraftSpeed('beaufort'), baseHealth: 700, payloadType: 'aerial_torpedo', payloadName: '18吋 Mk XII 航空魚雷', ammo: 1500, affiliation: '澳洲皇家空軍第100中隊 (RAAF)', nation: 'australia' },
+        { model: 'boomerang', role: 'fighter', modelName: 'CA-12 回力鏢 (Boomerang) 戰鬥機', speed: getAircraftSpeed('boomerang'), baseHealth: 460, payloadType: 'clean_guns', payloadName: '2x 20mm 機砲 + 4x .303 機槍', ammo: 1600, affiliation: '澳洲皇家空軍第84中隊 (RAAF)', nation: 'australia' },
       ];
     } else if (this.era === 'era2') {
       pool = [
@@ -14788,9 +14790,11 @@ export class GameEngine {
         { model: 'tempest', role: 'fighter', modelName: '暴風式 Mk.V 戰鬥機', speed: getAircraftSpeed('tempest'), baseHealth: 520, payloadType: 'hvar_rockets', payloadName: '8x 航空火箭 / 4x 20mm', ammo: 1600, affiliation: '英國皇家空軍 (RAF)' },
         { model: 'mosquito', role: 'attacker', modelName: '蚊式 (Mosquito FB.VI) 轟炸機', speed: getAircraftSpeed('mosquito'), baseHealth: 580, payloadType: 'bombs_dual_500', payloadName: '雙聯 500lb 航彈 + 4x 20mm', ammo: 1400, affiliation: '英國皇家空軍 (RAF)' },
         { model: 'lancaster', role: 'level_bomber', modelName: '蘭開斯特重型轟炸機', speed: getAircraftSpeed('lancaster'), baseHealth: 980, payloadType: 'bombs_carpet_250', payloadName: '16枚連環地毯航彈', ammo: 1800, affiliation: '皇家空軍轟炸司令部' },
-        { model: 'f4u', role: 'fighter', modelName: '海盜 Mk.II (Corsair) 艦載戰鬥機', speed: getAircraftSpeed('f4u'), baseHealth: 480, payloadType: 'clean_guns', payloadName: '6x .50 機槍', ammo: 2400, affiliation: '英國太平洋艦隊 艦隊航空隊 (FAA)', nation: 'uk' },
-        { model: 'f6f', role: 'fighter', modelName: '地獄貓 Mk.II (Hellcat) 艦載戰鬥機', speed: getAircraftSpeed('f6f'), baseHealth: 440, payloadType: 'clean_guns', payloadName: '6x .50 機槍', ammo: 2400, affiliation: '英國太平洋艦隊 艦隊航空隊 (FAA)', nation: 'uk' },
-        { model: 'tbf', role: 'torpedo_bomber', modelName: '復仇者 Mk.I (Avenger) 魚雷轟炸機', speed: getAircraftSpeed('tbf'), baseHealth: 460, payloadType: 'aerial_torpedo', payloadName: 'Mk 13 航空魚雷', ammo: 600, affiliation: '英國太平洋艦隊 艦隊航空隊 (FAA)', nation: 'uk' },
+        { model: 'f4u', role: 'fighter', modelName: '海盜 Mk.II (Corsair) 艦載戰鬥機', speed: getAircraftSpeed('f4u'), baseHealth: 480, payloadType: 'clean_guns', payloadName: '6x .50 機槍', ammo: 2400, affiliation: '英國太平洋艦隊 艦隊航空隊 (FAA)', nation: 'british_pacific' },
+        { model: 'f6f', role: 'fighter', modelName: '地獄貓 Mk.II (Hellcat) 艦載戰鬥機', speed: getAircraftSpeed('f6f'), baseHealth: 440, payloadType: 'clean_guns', payloadName: '6x .50 機槍', ammo: 2400, affiliation: '英國太平洋艦隊 艦隊航空隊 (FAA)', nation: 'british_pacific' },
+        { model: 'tbf', role: 'torpedo_bomber', modelName: '復仇者 Mk.I (Avenger) 魚雷轟炸機', speed: getAircraftSpeed('tbf'), baseHealth: 460, payloadType: 'aerial_torpedo', payloadName: 'Mk 13 航空魚雷', ammo: 600, affiliation: '英國太平洋艦隊 艦隊航空隊 (FAA)', nation: 'british_pacific' },
+        { model: 'seafire', role: 'fighter', modelName: '海火式 F.III (Seafire) 艦載戰鬥機', speed: getAircraftSpeed('seafire'), baseHealth: 420, payloadType: 'clean_guns', payloadName: '2x 20mm 機砲 + 4x .303 機槍', ammo: 1200, affiliation: '英國太平洋艦隊 第887中隊 (FAA)', nation: 'british_pacific' },
+        { model: 'barracuda', role: 'attacker', modelName: '梭魚式 Mk.II (Barracuda) 俯衝/魚雷轟炸機', speed: getAircraftSpeed('barracuda'), baseHealth: 540, payloadType: 'bombs_dual_500', payloadName: '2x 500lb 航彈 (沙璜/巨港空襲)', ammo: 600, affiliation: '英國東方艦隊 第827中隊 (FAA)', nation: 'british_pacific' },
       ];
     } else if (this.era === 'era3') {
       pool = [
@@ -14798,8 +14802,11 @@ export class GameEngine {
         { model: 'rokaf_p51', role: 'fighter', modelName: 'F-51D 野馬式戰鬥機', speed: getAircraftSpeed('rokaf_p51'), baseHealth: 460, payloadType: 'clean_guns', payloadName: '6x .50 M2 機槍', ammo: 1800, affiliation: '大韓民國空軍 (ROKAF)' },
         { model: 'sea_fury', role: 'attacker', modelName: '海怒 (Sea Fury FB.11) 艦載機', speed: getAircraftSpeed('sea_fury'), baseHealth: 500, payloadType: 'hvar_rockets', payloadName: '8x 60lb 火箭 + 4x 20mm', ammo: 1600, affiliation: '英聯邦特遣艦隊航空隊' },
         { model: 'firefly_as5', role: 'attacker', modelName: '螢火蟲 (Firefly AS.5) 攻擊機', speed: getAircraftSpeed('firefly_as5'), baseHealth: 490, payloadType: 'hvar_rockets', payloadName: 'ASH雷達 + 8x 火箭', ammo: 1200, affiliation: '英聯邦海軍特遣隊' },
-        { model: 'p51', role: 'attacker', modelName: 'F-51D 野馬 (飛豹中隊)', speed: getAircraftSpeed('p51'), baseHealth: 450, payloadType: 'hvar_rockets', payloadName: '6x HVAR 火箭 + 6x .50 機槍', ammo: 1880, affiliation: '南非空軍第2中隊「飛豹」(SAAF)', nation: 'uk' },
+        { model: 'p51', role: 'attacker', modelName: 'F-51D 野馬 (飛豹中隊)', speed: getAircraftSpeed('p51'), baseHealth: 450, payloadType: 'hvar_rockets', payloadName: '6x HVAR 火箭 + 6x .50 機槍', ammo: 1880, affiliation: '南非空軍第2中隊「飛豹」(SAAF)', nation: 'south_africa' },
         { model: 'f4u4', role: 'attacker', modelName: 'F4U-4 海盜 (Corsair) 對地攻擊', speed: getAircraftSpeed('f4u4'), baseHealth: 500, payloadType: 'napalm_canister', payloadName: '凝固汽油彈 + HVAR', ammo: 1800, affiliation: '美國海軍陸戰隊第1陸戰航空聯隊 (1st MAW)' },
+        { model: 'p51', role: 'fighter', modelName: 'P-51D 野馬 (韓戰首月)', speed: getAircraftSpeed('p51'), baseHealth: 450, payloadType: 'hvar_rockets', payloadName: '6x HVAR + 6x .50 機槍', ammo: 1880, affiliation: '澳洲皇家空軍第77中隊 (RAAF)', nation: 'australia' },
+        { model: 'sea_fury', role: 'attacker', modelName: '海怒 FB.11 (雪梨號航艦)', speed: getAircraftSpeed('sea_fury'), baseHealth: 500, payloadType: 'hvar_rockets', payloadName: '8x 60lb 火箭 + 4x 20mm', ammo: 1600, affiliation: '澳洲皇家海軍 第805中隊 (RAN FAA)', nation: 'australia' },
+        { model: 'firefly_as5', role: 'attacker', modelName: '螢火蟲 FR.5 (雪梨號航艦)', speed: getAircraftSpeed('firefly_as5'), baseHealth: 490, payloadType: 'bombs_dual_500', payloadName: '2x 500lb 航彈 + 4x 20mm', ammo: 1200, affiliation: '澳洲皇家海軍 第817中隊 (RAN FAA)', nation: 'australia' },
       ];
     } else if (this.era === 'era4') {
       pool = [
@@ -14809,8 +14816,10 @@ export class GameEngine {
         { model: 'a1h', role: 'attacker', modelName: 'A-1H 天襲者密接打擊機', speed: getAircraftSpeed('a1h'), baseHealth: 680, payloadType: 'bombs_snakeye_retarded', payloadName: '重裝航彈 + 4x 20mm 機砲', ammo: 1200, affiliation: '盟軍戰術空軍聯隊' },
         { model: 'a37b', role: 'attacker', modelName: 'A-37B 蜻蜓式輕型攻擊機', speed: getAircraftSpeed('a37b'), baseHealth: 500, payloadType: 'bombs_snakeye_retarded', payloadName: 'GAU-2B 米尼岡機槍 + 航彈', ammo: 1500, affiliation: '南越空軍 (VNAF)' },
         { model: 'hunter_fga9', role: 'attacker', modelName: '獵手 (Hunter FGA.9) 攻擊機', speed: getAircraftSpeed('hunter_fga9'), baseHealth: 580, payloadType: 'bombs_snakeye_retarded', payloadName: '4x 30mm 亞丁機砲 + 航彈', ammo: 1000, affiliation: '英國皇家空軍 (RAF)' },
-        { model: 'f4e', role: 'fighter', modelName: 'F-4E 幽靈II (租借機)', speed: getAircraftSpeed('f4e'), baseHealth: 740, payloadType: 'aim7_aim9_combo', payloadName: '4x AIM-7 + 4x AIM-9', ammo: 1000, affiliation: '澳洲皇家空軍第1/6中隊 (RAAF)', nation: 'uk' },
+        { model: 'f4e', role: 'fighter', modelName: 'F-4E 幽靈II (租借機)', speed: getAircraftSpeed('f4e'), baseHealth: 740, payloadType: 'aim7_aim9_combo', payloadName: '4x AIM-7 + 4x AIM-9', ammo: 1000, affiliation: '澳洲皇家空軍第1/6中隊 (RAAF)', nation: 'australia' },
         { model: 'f100', role: 'attacker', modelName: 'F-100D 超級軍刀', speed: getAircraftSpeed('f100'), baseHealth: 640, payloadType: 'bombs_snakeye_retarded', payloadName: '蛇眼減速彈 + 4x 20mm', ammo: 800, affiliation: '美國空軍第3戰術戰鬥聯隊 (邊和空軍基地)' },
+        { model: 'canberra', role: 'level_bomber', modelName: '坎培拉 B.20 (Canberra) 轟炸機', speed: getAircraftSpeed('canberra'), baseHealth: 900, payloadType: 'bombs_carpet_250', payloadName: '6x 750lb 航彈 (藩朗 1967-71)', ammo: 0, affiliation: '澳洲皇家空軍第2中隊 (RAAF)', nation: 'australia' },
+        { model: 'a4', role: 'attacker', modelName: 'A-4G 天鷹 (墨爾本號航艦)', speed: getAircraftSpeed('a4'), baseHealth: 580, payloadType: 'bombs_snakeye_retarded', payloadName: 'Mk 82 蛇眼 + 2x 20mm', ammo: 400, affiliation: '澳洲皇家海軍 第805中隊 (RAN FAA)', nation: 'australia' },
       ];
     } else {
       // Era 5 Cold War NATO Coalition (Ceiling is SARH, AMRAAM not yet deployed)
@@ -14825,6 +14834,10 @@ export class GameEngine {
         { model: 'f15a', role: 'fighter', modelName: 'F-15J 鷹式 (三菱授權生產)', speed: getAircraftSpeed('f15a'), baseHealth: 850, payloadType: 'aim7_aim9_combo', payloadName: '4x AIM-7F + 4x AIM-9L', ammo: 940, affiliation: '日本航空自衛隊 第2航空團 (JASDF)', nation: 'japan' },
         { model: 'f4e', role: 'fighter', modelName: 'F-4EJ 改 幽靈II', speed: getAircraftSpeed('f4e'), baseHealth: 740, payloadType: 'aim7_aim9_combo', payloadName: '4x AIM-7E + 4x AIM-9', ammo: 1000, affiliation: '日本航空自衛隊 第8航空團 (JASDF)', nation: 'japan' },
         { model: 'av8b', role: 'attacker', modelName: '獵鷹 GR.3 (Harrier) 垂直起降攻擊機', speed: getAircraftSpeed('av8b'), baseHealth: 720, payloadType: 'cbu_cluster_bombs', payloadName: 'BL755 集束炸彈 + 30mm 亞丁砲莢', ammo: 300, affiliation: '英國皇家空軍第1中隊 (RAF)', nation: 'uk' },
+        { model: 'buccaneer', role: 'attacker', modelName: '海盜式 S.2B (Buccaneer) 海上打擊機', speed: getAircraftSpeed('buccaneer'), baseHealth: 900, payloadType: 'rgm84_harpoon', payloadName: '2x 海鷹 (Sea Eagle) 反艦飛彈', ammo: 0, affiliation: '英國皇家空軍第12中隊 (RAF)', nation: 'uk' },
+        { model: 'sea_harrier', role: 'fighter', modelName: '海獵鷹 FRS.1 (Sea Harrier)', speed: getAircraftSpeed('sea_harrier'), baseHealth: 640, payloadType: 'aim9_sidewinder', payloadName: '2x AIM-9L + 2x 30mm 亞丁', ammo: 300, affiliation: '英國皇家海軍 第800中隊 (FAA)', nation: 'uk' },
+        { model: 'fa18a', role: 'fighter', modelName: 'CF-18A 大黃蜂', speed: getAircraftSpeed('fa18a'), baseHealth: 800, payloadType: 'aim7_aim9_combo', payloadName: '4x AIM-7M + 2x AIM-9L', ammo: 940, affiliation: '加拿大空軍第409中隊 (CAF, 西德巴登)', nation: 'canada' },
+        { model: 'f16a', role: 'fighter', modelName: 'F-16A 戰隼 (MLU 前)', speed: getAircraftSpeed('f16a'), baseHealth: 760, payloadType: 'aim9_sidewinder', payloadName: '4x AIM-9 + M61', ammo: 940, affiliation: '荷蘭皇家空軍第322中隊 (RNLAF)', nation: 'netherlands' },
       ];
     }
 
@@ -14847,7 +14860,7 @@ export class GameEngine {
       banner = `${f.affiliation} 2架 ${f.modelName} 升空，為空中的盟軍打擊編隊擔任護航`;
     } else if (strikers.length > 0 && (hostileShips.length > 0 || hostileGround.length > 0) && Math.random() < 0.6) {
       const s = pick(strikers);
-      const strikeCount = s.role === 'level_bomber' ? 2 + Math.floor(Math.random() * 2) : 2 + Math.floor(Math.random() * 3);
+      const strikeCount = s.role === 'level_bomber' ? 2 + Math.floor(Math.random() * 3) : 2 + Math.floor(Math.random() * 4);
       const target =
         (s.role === 'attacker' || s.role === 'torpedo_bomber') && hostileShips.length > 0
           ? hostileShips[0].pos
@@ -14857,10 +14870,11 @@ export class GameEngine {
       this.launchAlliedFlight(s, strikeCount, sqId, baseCenter, heading, { type: 'attack', targetPos: { ...target } });
       if (fighters.length > 0) {
         const f = fighters.find((x) => x.affiliation === s.affiliation) ?? pick(fighters);
-        this.launchAlliedFlight(f, 2, sqId, baseCenter, heading, { type: 'patrol', patrolOrigin: { ...baseCenter } });
+        // Escort scales with the package: a pair for a small strike, a division for a big one
+        this.launchAlliedFlight(f, strikeCount >= 4 ? 4 : 2, sqId, baseCenter, heading, { type: 'patrol', patrolOrigin: { ...baseCenter } });
       }
       this.organizeStrikePackage(sqId);
-      banner = `${s.affiliation} ${strikeCount}架 ${s.modelName} 打擊編隊${fighters.length > 0 ? '（含 2 架護航戰鬥機）' : ''}出擊`;
+      banner = `${s.affiliation} ${strikeCount}架 ${s.modelName} 打擊編隊${fighters.length > 0 ? `（含 ${strikeCount >= 4 ? 4 : 2} 架護航戰鬥機）` : ''}出擊`;
     } else {
       const f = fighters.length > 0 ? pick(fighters) : pick(pool);
       const capCount = 2 + Math.floor(Math.random() * 3);

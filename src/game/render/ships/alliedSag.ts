@@ -2,6 +2,7 @@ import { Ship } from '../../../types/game';
 import { RenderContext } from '../context';
 import { drawNavalEnsign } from './index';
 import { drawShipTurrets } from './mounts';
+import { alliedEnsign, drawAlliedClassFeatures } from './alliedClasses';
 
 // 專屬盟軍艦艇外觀分流分發器
 export function drawAlliedSAGShip(rc: RenderContext, ship: Ship, hullColor: string, _detailColor: string) {
@@ -214,7 +215,9 @@ export function drawAlliedSAGShip(rc: RenderContext, ship: Ship, hullColor: stri
     ctx.fill();
     ctx.stroke();
 
-    if (isRNBB) {
+    if (drawAlliedClassFeatures(rc, ship, l, w)) {
+      // Class-specific superstructure (County, Tribal, Type 22, Tromp, Iroquois...) drawn above
+    } else if (isRNBB) {
       // ═══ 喬治五世級戰艦 (KGV / Duke of York) 城堡艦橋與 14吋砲座 ═══
       // 城堡型裝甲艦橋 (Citadel Tower)
       ctx.fillStyle = '#263849';
@@ -304,11 +307,8 @@ export function drawAlliedSAGShip(rc: RenderContext, ship: Ship, hullColor: stri
     }
 
     // 艦尾動態：英國皇家海軍白船旗 (White Ensign)
-    // White Ensign for the Royal Navy, and for the RAN / RCN / RNZN until they adopted their own (1965-68)
-    const earlyEra = ship.era === 'era1' || ship.era === 'era2' || ship.era === 'era3';
-    if (name.startsWith('HMS ') || (earlyEra && /^(HMAS|HMCS|HMNZS) /.test(name))) {
-      drawNavalEnsign(rc, 'white_ensign', -l * 0.48, 0, 13, 8.5);
-    }
+    const ensign = alliedEnsign(ship);
+    if (ensign) drawNavalEnsign(rc, ensign, -l * 0.48, 0, 13, 8.5);
   }
 
   drawShipTurrets(rc, ship, hullColor);

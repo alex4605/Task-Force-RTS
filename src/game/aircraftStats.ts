@@ -135,6 +135,13 @@ const AIRCRAFT_BASE_STATS: Partial<Record<AircraftModel, AircraftBaseStats>> = {
   su27: { health: 880, gunRounds: 1440 },
   a50: { health: 1500, gunRounds: 1440 },
   su25: { health: 1350, gunRounds: 1440 },
+  beaufort: { health: 700, gunRounds: 1500 },
+  boomerang: { health: 460, gunRounds: 1600 }, // 2 x 20 mm + 4 x .303
+  seafire: { health: 420, gunRounds: 1200 },
+  barracuda: { health: 540, gunRounds: 600 },
+  canberra: { health: 900, gunRounds: 0 },
+  buccaneer: { health: 900, gunRounds: 0 },
+  sea_harrier: { health: 640, gunRounds: 300 }, // 2 x 30 mm ADEN pods
   rufe: { health: 420, gunRounds: 900 },
   ki84: { health: 520, gunRounds: 1000 }, // 2 x 20 mm + 2 x 12.7 mm
   po2: { health: 260, gunRounds: 300 },

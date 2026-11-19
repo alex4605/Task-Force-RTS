@@ -1,7 +1,12 @@
 import { Aircraft, AircraftModel, AircraftNation } from '../../../types/game';
 import { RenderContext } from '../context';
 import {
+  drawDutchRoundel,
   drawFrenchRoundel,
+  drawMapleLeafRoundel,
+  drawPacificRoundel,
+  drawRAAFKangarooRoundel,
+  drawSAAFRoundel,
   drawHinomaru,
   drawLuftwaffeCross,
   drawRAFRoundel,
@@ -35,6 +40,8 @@ export const AIRCRAFT_NATION: Record<AircraftModel, AircraftNation> = {
   mosquito: 'uk', lancaster: 'uk', meteor: 'uk', sea_fury: 'uk', firefly_as5: 'uk', hunter_fga9: 'uk',
   tornado_gr1: 'uk', tornado_adv: 'uk', jaguar_gr1: 'uk',
   rokaf_p51: 'rok',
+  beaufort: 'australia', boomerang: 'australia', canberra: 'australia',
+  seafire: 'british_pacific', barracuda: 'british_pacific', buccaneer: 'uk', sea_harrier: 'uk',
   // NATO Europe
   f4f_phantom: 'west_germany', tornado_ids: 'west_germany', f104g: 'west_germany',
   mirage3: 'france', mirage2000: 'france',
@@ -76,6 +83,28 @@ export function drawNationalInsignia(rc: RenderContext, plane: Aircraft, x: numb
       break;
     case 'ussr':
       drawRedStar(rc, x, y, r);
+      break;
+    case 'australia':
+      if (rc.era === 'era1' || rc.era === 'era2') drawPacificRoundel(rc, x, y, r, false);
+      else if (rc.era === 'era3') drawRAFRoundel(rc, x, y, r);
+      else drawRAAFKangarooRoundel(rc, x, y, r);
+      break;
+    case 'new_zealand':
+      if (rc.era === 'era1' || rc.era === 'era2') drawPacificRoundel(rc, x, y, r, false);
+      else drawRAFRoundel(rc, x, y, r);
+      break;
+    case 'canada':
+      if (rc.era === 'era4' || rc.era === 'era5') drawMapleLeafRoundel(rc, x, y, r);
+      else drawRAFRoundel(rc, x, y, r);
+      break;
+    case 'south_africa':
+      drawSAAFRoundel(rc, x, y, r);
+      break;
+    case 'netherlands':
+      drawDutchRoundel(rc, x, y, r);
+      break;
+    case 'british_pacific':
+      drawPacificRoundel(rc, x, y, r, true);
       break;
   }
 }

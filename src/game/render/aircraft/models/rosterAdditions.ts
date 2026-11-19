@@ -589,7 +589,270 @@ function drawMig31(rc: RenderContext, plane: Aircraft, color: string): void {
   drawNationalInsignia(rc, plane, -10, 14, 2.6);
 }
 
+/**
+ * Bristol Beaufort (DAP-built for the RAAF): twin Twin Wasp nacelles that stand well proud of the
+ * wing, a glazed nose, the dorsal turret, and an 18-inch torpedo half-recessed under the belly.
+ */
+function drawBeaufort(rc: RenderContext, plane: Aircraft, color: string): void {
+  const ctx = rc.ctx;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.2;
+  ctx.fillStyle = '#2F3A2A';
+  mirrored(ctx, [[-14, 0], [-16, -8], [-20, -8], [-20, 0]]);
+  ctx.fillStyle = '#344230';
+  mirrored(ctx, [[5, -2.5], [3, -22], [-3, -22], [-5, -2.5]]);
+  ctx.fillStyle = '#2A3526';
+  ctx.beginPath();
+  ctx.moveTo(16, 0);
+  ctx.quadraticCurveTo(15, -3, 10, -3.2);
+  ctx.lineTo(-19, -1.4);
+  ctx.lineTo(-19, 1.4);
+  ctx.lineTo(10, 3.2);
+  ctx.quadraticCurveTo(15, 3, 16, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  for (const y of [-8, 8]) {
+    ctx.fillStyle = '#222C20';
+    blob(ctx, 4, y, 6.5, 2.4);
+    ctx.strokeStyle = 'rgba(207, 216, 220, 0.5)';
+    ctx.beginPath();
+    ctx.moveTo(10.8, y - 5);
+    ctx.lineTo(10.8, y + 5);
+    ctx.stroke();
+    ctx.strokeStyle = color;
+  }
+  if (plane.hasPayload) {
+    ctx.fillStyle = '#B0BEC5';
+    ctx.fillRect(-6, -0.8, 12, 1.6);
+  }
+  ctx.fillStyle = 'rgba(128, 222, 234, 0.6)';
+  blob(ctx, 14, 0, 2, 2.2);
+  blob(ctx, -5, 0, 1.8, 1.8);
+  drawNationalInsignia(rc, plane, -1, -15, 2.8);
+  drawNationalInsignia(rc, plane, -1, 15, 2.8);
+}
+
+/**
+ * CAC Boomerang: Australia's home-grown stop-gap fighter, a stubby Twin Wasp radial on a
+ * Wirraway-derived wing, later the army co-operation workhorse of New Guinea.
+ */
+function drawBoomerang(rc: RenderContext, plane: Aircraft, color: string): void {
+  const ctx = rc.ctx;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.2;
+  ctx.fillStyle = '#3B4630';
+  mirrored(ctx, [[-8, 0], [-9, -5.5], [-12, -5.5], [-12, 0]]);
+  ctx.fillStyle = '#46523A';
+  mirrored(ctx, [[4, -2.5], [2, -14], [-3, -14], [-4, -2.5]]);
+  ctx.fillStyle = '#3B4630';
+  ctx.beginPath();
+  ctx.moveTo(11, -3.4);
+  ctx.lineTo(11, 3.4);
+  ctx.lineTo(-11, 1.3);
+  ctx.lineTo(-11, -1.3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#222';
+  blob(ctx, 11.5, 0, 1.4, 3.6);
+  ctx.fillStyle = 'rgba(128, 222, 234, 0.6)';
+  ctx.fillRect(-1, -1.4, 4, 2.8);
+  drawNationalInsignia(rc, plane, -0.5, -9, 2.4);
+  drawNationalInsignia(rc, plane, -0.5, 9, 2.4);
+}
+
+/** Supermarine Seafire: the navalised Spitfire, with its elliptical wing and arrester hook, in FAA slate grey. */
+function drawSeafire(rc: RenderContext, plane: Aircraft, color: string): void {
+  const ctx = rc.ctx;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.2;
+  ctx.fillStyle = '#3A4650';
+  mirrored(ctx, [[-10, 0], [-11, -5.5], [-14, -5.5], [-14, 0]]);
+  ctx.fillStyle = '#46525C';
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(5, s * 2);
+    ctx.bezierCurveTo(6, s * 10, 3, s * 17, -1, s * 17);
+    ctx.bezierCurveTo(-4, s * 16, -5, s * 8, -5, s * 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#3A4650';
+  ctx.beginPath();
+  ctx.moveTo(15, 0);
+  ctx.quadraticCurveTo(14, -2.2, 8, -2.4);
+  ctx.lineTo(-13, -1);
+  ctx.lineTo(-13, 1);
+  ctx.lineTo(8, 2.4);
+  ctx.quadraticCurveTo(14, 2.2, 15, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(207, 216, 220, 0.5)';
+  ctx.beginPath();
+  ctx.moveTo(15.5, -5);
+  ctx.lineTo(15.5, 5);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(128, 222, 234, 0.6)';
+  blob(ctx, 0, 0, 2.6, 1.2);
+  drawNationalInsignia(rc, plane, -1, -11, 2.4);
+  drawNationalInsignia(rc, plane, -1, 11, 2.4);
+}
+
+/**
+ * Fairey Barracuda: shoulder-winged torpedo / dive bomber with the big Fairey-Youngman flaps
+ * hanging below the trailing edge, a strut-braced tailplane set high on the fin, and the deep
+ * glazed canopy for its crew of three.
+ */
+function drawBarracuda(rc: RenderContext, plane: Aircraft, color: string): void {
+  const ctx = rc.ctx;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.2;
+  ctx.fillStyle = '#3A4650';
+  mirrored(ctx, [[-12, 0], [-13, -7], [-17, -7], [-17, 0]]);
+  ctx.fillStyle = '#2E3942';
+  mirrored(ctx, [[-4, -3], [-4, -16], [-7, -16], [-7, -3]]);
+  ctx.fillStyle = '#46525C';
+  mirrored(ctx, [[4, -2.5], [3, -18], [-4, -18], [-4, -2.5]]);
+  ctx.fillStyle = '#3A4650';
+  ctx.beginPath();
+  ctx.moveTo(15, -2.8);
+  ctx.lineTo(15, 2.8);
+  ctx.lineTo(-16, 1.2);
+  ctx.lineTo(-16, -1.2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(128, 222, 234, 0.6)';
+  ctx.fillRect(-6, -1.6, 12, 3.2);
+  ctx.strokeStyle = 'rgba(207, 216, 220, 0.5)';
+  ctx.beginPath();
+  ctx.moveTo(15.5, -5);
+  ctx.lineTo(15.5, 5);
+  ctx.stroke();
+  drawNationalInsignia(rc, plane, 0, -12, 2.6);
+  drawNationalInsignia(rc, plane, 0, 12, 2.6);
+}
+
+/**
+ * English Electric Canberra B.20 (RAAF No. 2 Squadron, Phan Rang 1967-71): broad straight wing with
+ * the Avon nacelles at mid-span, a long slender fuselage, the bomb-aimer's glazed nose.
+ */
+function drawCanberra(rc: RenderContext, plane: Aircraft, color: string): void {
+  const ctx = rc.ctx;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.3;
+  ctx.fillStyle = '#3A4350';
+  mirrored(ctx, [[-17, 0], [-19, -9], [-23, -9], [-23, 0]]);
+  ctx.fillStyle = '#434D5A';
+  mirrored(ctx, [[6, -2.5], [2, -27], [-6, -27], [-8, -2.5]]);
+  ctx.fillStyle = '#3A4350';
+  ctx.beginPath();
+  ctx.moveTo(22, 0);
+  ctx.quadraticCurveTo(20, -2.8, 14, -2.8);
+  ctx.lineTo(-22, -1.4);
+  ctx.lineTo(-22, 1.4);
+  ctx.lineTo(14, 2.8);
+  ctx.quadraticCurveTo(20, 2.8, 22, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  for (const y of [-10, 10]) {
+    ctx.fillStyle = '#2E3640';
+    blob(ctx, 0, y, 8, 2.2);
+    ctx.fillStyle = '#05080C';
+    blob(ctx, 8, y, 0.8, 1.6);
+  }
+  ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+  blob(ctx, 20, 0, 2, 1.8);
+  blob(ctx, 12, 0, 2.2, 1.6);
+  drawNationalInsignia(rc, plane, -2, -19, 2.8);
+  drawNationalInsignia(rc, plane, -2, 19, 2.8);
+}
+
+/**
+ * Blackburn Buccaneer S.2B: the area-ruled low-level maritime strike jet, with the T-tail, the
+ * bulged "coke-bottle" rear fuselage, the split airbrake tail cone and wing-root Spey intakes.
+ */
+function drawBuccaneer(rc: RenderContext, plane: Aircraft, color: string): void {
+  const ctx = rc.ctx;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.3;
+  ctx.fillStyle = '#2F3A33';
+  mirrored(ctx, [[-14, -1], [-18, -8], [-21, -8], [-20, -1]]);
+  ctx.fillStyle = '#38443C';
+  mirrored(ctx, [[4, -4], [-5, -17], [-10, -17], [-8, -4]]);
+  ctx.fillStyle = '#2F3A33';
+  ctx.beginPath();
+  ctx.moveTo(21, 0);
+  ctx.quadraticCurveTo(18, -2.4, 12, -2.6);
+  ctx.lineTo(4, -4.6);
+  ctx.lineTo(-6, -3.2);
+  ctx.lineTo(-14, -4.2);
+  ctx.lineTo(-22, -1.6);
+  ctx.lineTo(-22, 1.6);
+  ctx.lineTo(-14, 4.2);
+  ctx.lineTo(-6, 3.2);
+  ctx.lineTo(4, 4.6);
+  ctx.lineTo(12, 2.6);
+  ctx.quadraticCurveTo(18, 2.4, 21, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#05080C';
+  blob(ctx, 5, -4.6, 1.2, 1);
+  blob(ctx, 5, 4.6, 1.2, 1);
+  ctx.fillStyle = 'rgba(128, 222, 234, 0.55)';
+  blob(ctx, 12, 0, 3.4, 1.4);
+  drawNationalInsignia(rc, plane, -5, -12, 2.4);
+  drawNationalInsignia(rc, plane, -5, 12, 2.4);
+}
+
+/**
+ * BAe Sea Harrier FRS.1: the Harrier with a raised bubble cockpit, the pointed Blue Fox radar nose,
+ * the anhedral wing and the four swivelling nozzles either side of the fuselage.
+ */
+function drawSeaHarrier(rc: RenderContext, plane: Aircraft, color: string): void {
+  const ctx = rc.ctx;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.3;
+  ctx.fillStyle = '#3A4550';
+  mirrored(ctx, [[-12, -1], [-15, -7], [-18, -7], [-17, -1]]);
+  ctx.fillStyle = '#434F5A';
+  mirrored(ctx, [[4, -3.5], [-3, -13], [-8, -13], [-6, -3.5]]);
+  ctx.fillStyle = '#3A4550';
+  ctx.beginPath();
+  ctx.moveTo(18, 0);
+  ctx.lineTo(10, -2.2);
+  ctx.lineTo(4, -4.4);
+  ctx.lineTo(-16, -1.6);
+  ctx.lineTo(-18, 0);
+  ctx.lineTo(-16, 1.6);
+  ctx.lineTo(4, 4.4);
+  ctx.lineTo(10, 2.2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#1C2228';
+  for (const [x, y] of [[2, -5.2], [2, 5.2], [-5, -4.4], [-5, 4.4]] as const) {
+    ctx.fillRect(x - 1.6, y - 0.9, 3.2, 1.8);
+  }
+  ctx.fillStyle = 'rgba(128, 222, 234, 0.6)';
+  blob(ctx, 8, 0, 2.6, 1.6);
+  drawNationalInsignia(rc, plane, -4, -9, 2.2);
+  drawNationalInsignia(rc, plane, -4, 9, 2.2);
+}
+
 export const ROSTER_ADDITION_DRAWERS: AircraftDrawerTable = {
+  beaufort: drawBeaufort,
+  boomerang: drawBoomerang,
+  seafire: drawSeafire,
+  barracuda: drawBarracuda,
+  canberra: drawCanberra,
+  buccaneer: drawBuccaneer,
+  sea_harrier: drawSeaHarrier,
   rufe: drawRufe,
   ki84: drawKi84,
   po2: drawPo2,

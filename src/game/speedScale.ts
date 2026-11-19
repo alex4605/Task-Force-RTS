@@ -101,6 +101,13 @@ export const AIRCRAFT_CRUISE_KMH: Record<AircraftModel, number> = {
   sb2c: 254,
   tbf: 241,
   pby: 201,
+  beaufort: 320,
+  boomerang: 340,
+  seafire: 400,
+  barracuda: 280,
+  canberra: 780,
+  buccaneer: 900,
+  sea_harrier: 850,
   rufe: 300, // A6M2-N cruise
   ki84: 380, // Ki-84 cruise
   ac47: 257, // C-47 cruise; orbits at ~190 km/h when firing
