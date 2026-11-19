@@ -271,6 +271,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       // Update simulation & visual order markers
       engine.update(dt);
       renderer.updateTime(dt);
+      renderer.setEra(engine.era);
       if (orderMarkersRef.current.length > 0) {
         for (const m of orderMarkersRef.current) {
           m.age += dt;

@@ -1,4 +1,4 @@
-import { Vector2D } from '../../types/game';
+import { Era, Vector2D } from '../../types/game';
 
 /** Shared drawing state handed to every render function. Owned and updated by VectorRenderer. */
 export interface RenderContext {
@@ -7,6 +7,8 @@ export interface RenderContext {
   height: number;
   /** Seconds of accumulated render time; drives all animation phases. */
   time: number;
+  /** Current campaign era; selects era-appropriate equipment in installation artwork. */
+  era: Era;
 }
 
 export interface Camera {

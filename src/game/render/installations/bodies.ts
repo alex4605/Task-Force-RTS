@@ -1,5 +1,5 @@
 // Per-type installation artwork. Each drawer runs with the canvas translated to the installation's position.
-import { Installation, InstallationType, Island } from '../../../types/game';
+import { Era, Installation, InstallationType, Island } from '../../../types/game';
 import { RenderContext } from '../context';
 import { drawGroundSilhouette } from '../../unitPreviewRenderer';
 import { InstallationStyle } from './style';
@@ -245,13 +245,13 @@ function drawInfantrySquad(rc: RenderContext, _inst: Installation, style: Instal
   ctx.fill();
 
   // 2. 地面物理工事: historical emplacement layout with era-appropriate silhouettes
-  drawEmplacements(ctx, 'infantry_squad', isPlayer);
+  drawEmplacements(ctx, 'infantry_squad', isPlayer, rc.era);
 
   // 標籤
   ctx.fillStyle = labelColor;
   ctx.font = 'bold 8.5px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(isPlayer ? '[NATO 友軍步兵班 SQD] .30cal' : '[NATO 步兵班 SQD] 7.7mm', 0, -33);
+  ctx.fillText(emplacementLabel('infantry_squad', isPlayer, rc.era), 0, -33);
 }
 
 function drawInfantryPlatoon(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
@@ -285,13 +285,13 @@ function drawInfantryPlatoon(rc: RenderContext, _inst: Installation, style: Inst
   ctx.fill();
 
   // 2. 地面物理工事: historical emplacement layout with era-appropriate silhouettes
-  drawEmplacements(ctx, 'infantry_platoon', isPlayer);
+  drawEmplacements(ctx, 'infantry_platoon', isPlayer, rc.era);
 
   // 標籤
   ctx.fillStyle = labelColor;
   ctx.font = 'bold 8.5px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(isPlayer ? '[NATO 友軍陸戰步兵排 PLT]' : '[NATO 步兵排 PLT] 20mm', 0, -35);
+  ctx.fillText(emplacementLabel('infantry_platoon', isPlayer, rc.era), 0, -35);
 }
 
 function drawTankPlatoon(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
@@ -322,13 +322,13 @@ function drawTankPlatoon(rc: RenderContext, _inst: Installation, style: Installa
   ctx.fill();
 
   // 2. 地面物理工事: historical emplacement layout with era-appropriate silhouettes
-  drawEmplacements(ctx, 'tank_platoon', isPlayer);
+  drawEmplacements(ctx, 'tank_platoon', isPlayer, rc.era);
 
   // 標籤
   ctx.fillStyle = labelColor;
   ctx.font = 'bold 8.5px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(isPlayer ? '[NATO 友軍戰車排 PLT] 75mm' : '[NATO 戰車排 PLT] 47mm', 0, -35);
+  ctx.fillText(emplacementLabel('tank_platoon', isPlayer, rc.era), 0, -35);
 
 }
 
@@ -362,13 +362,13 @@ function drawTankBattalion(rc: RenderContext, _inst: Installation, style: Instal
   ctx.stroke();
 
   // 2. 地面物理工事: historical emplacement layout with era-appropriate silhouettes
-  drawEmplacements(ctx, 'tank_battalion', isPlayer);
+  drawEmplacements(ctx, 'tank_battalion', isPlayer, rc.era);
 
   // 標籤
   ctx.fillStyle = labelColor;
   ctx.font = 'bold 8.5px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(isPlayer ? '[NATO 友軍裝甲大隊 BN] 重裝甲' : '[NATO 戰車大隊 BN] 重裝甲', 0, -40);
+  ctx.fillText(emplacementLabel('tank_battalion', isPlayer, rc.era), 0, -40);
 }
 
 function drawTowedArtillery(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
@@ -405,13 +405,13 @@ function drawTowedArtillery(rc: RenderContext, _inst: Installation, style: Insta
   ctx.fill();
 
   // 2. 地面物理工事: historical emplacement layout with era-appropriate silhouettes
-  drawEmplacements(ctx, 'towed_artillery', isPlayer);
+  drawEmplacements(ctx, 'towed_artillery', isPlayer, rc.era);
 
   // 標籤
   ctx.fillStyle = labelColor;
   ctx.font = 'bold 8.5px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(isPlayer ? '[NATO 友軍野戰砲兵連 BTRY] 105mm' : '[NATO 拖曳砲兵 BTRY] 75mm', 0, -35);
+  ctx.fillText(emplacementLabel('towed_artillery', isPlayer, rc.era), 0, -35);
 }
 
 function drawFlakBattery(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
@@ -445,13 +445,13 @@ function drawFlakBattery(rc: RenderContext, _inst: Installation, style: Installa
   ctx.fill();
 
   // 2. 地面物理工事: historical emplacement layout with era-appropriate silhouettes
-  drawEmplacements(ctx, 'flak_battery', isPlayer);
+  drawEmplacements(ctx, 'flak_battery', isPlayer, rc.era);
 
   // 標籤
   ctx.fillStyle = isPlayer ? '#80DEEA' : '#FF8A80';
   ctx.font = 'bold 8.5px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(isPlayer ? '[NATO 友軍防空砲連 AA] 90mm M2' : '[NATO 防空砲兵連 AA] 75mm', 0, -35);
+  ctx.fillText(emplacementLabel('flak_battery', isPlayer, rc.era), 0, -35);
 }
 
 function drawShipRepairDock(rc: RenderContext, _inst: Installation, _style: InstallationStyle, _island?: Island): void {
@@ -1518,12 +1518,58 @@ function placeUnit(ctx: CanvasRenderingContext2D, unitType: string, isPlayer: bo
   ctx.restore();
 }
 
-// WWII garrison layouts: USMC / US Army for the player, Imperial Japanese Army for the enemy,
-// matching the calibres on each installation's label.
-function drawEmplacements(ctx: CanvasRenderingContext2D, kind: EmplacementKind, isPlayer: boolean) {
-  const rifle = isPlayer ? 'usmc_rifle_42' : 'opfor_infantry_42';
-  const tank = isPlayer ? 'usmc_armor_m4' : 'opfor_type97_tank';
-  const gun = isPlayer ? 'usmc_artillery_105' : 'opfor_field_artillery';
+interface EraEquipment {
+  rifle: string;
+  tank: string;
+  gun: string;
+  flak: string;
+  /** Short designations for the installation label. */
+  names: { rifle: string; tank: string; gun: string; flak: string };
+}
+
+// Garrison equipment per era: US forces for the player, IJA / KPA-PVA / NVA / Soviet for the enemy.
+const EMPLACEMENT_EQUIPMENT: Record<Era, { player: EraEquipment; enemy: EraEquipment }> = {
+  era1: {
+    player: { rifle: 'usmc_rifle_42', tank: 'usmc_armor_m3', gun: 'usmc_artillery_105', flak: 'opfor_ks19_heavy', names: { rifle: 'M1 Garand / BAR', tank: 'M3 斯圖亞特 37mm', gun: 'M2A1 105mm', flak: 'M2 90mm' } },
+    enemy: { rifle: 'opfor_infantry_42', tank: 'opfor_type95_tank', gun: 'opfor_field_artillery', flak: 'opfor_ks19_heavy', names: { rifle: '三八式 / 九六式輕機槍', tank: '九五式輕戰車 37mm', gun: '九一式十糎榴彈砲', flak: '八八式 75mm 高射砲' } },
+  },
+  era2: {
+    player: { rifle: 'usmc_rifle_45', tank: 'usmc_armor_m4', gun: 'usmc_artillery_105', flak: 'opfor_ks19_heavy', names: { rifle: 'M1 Garand / BAR', tank: 'M4 雪曼 75mm', gun: 'M2A1 105mm', flak: 'M2 90mm' } },
+    enemy: { rifle: 'opfor_infantry_45', tank: 'opfor_type97_tank', gun: 'opfor_field_artillery', flak: 'opfor_ks19_heavy', names: { rifle: '九九式 / 九六式輕機槍', tank: '九七式中戰車 57mm', gun: '九一式十糎榴彈砲', flak: '八八式 75mm 高射砲' } },
+  },
+  era3: {
+    player: { rifle: 'usmc_korea_rifle', tank: 'usmc_patton_m46', gun: 'usmc_howitzer_155', flak: 'usmc_duster_m42', names: { rifle: 'M1 Garand / BAR', tank: 'M46 巴頓 90mm', gun: 'M114 155mm', flak: 'M42 Duster 40mm' } },
+    enemy: { rifle: 'opfor_coldwar_infantry', tank: 'opfor_t34_85', gun: 'opfor_field_artillery', flak: 'opfor_ks19_heavy', names: { rifle: 'PPSh-41 / DP', tank: 'T-34-85 85mm', gun: 'M-30 122mm', flak: 'KS-19 100mm' } },
+  },
+  era4: {
+    player: { rifle: 'us_army_rifle_platoon_65', tank: 'usmc_armor_m48', gun: 'usmc_howitzer_155', flak: 'usmc_duster_m42', names: { rifle: 'M16 / M60', tank: 'M48A3 巴頓 90mm', gun: 'M114 155mm', flak: 'M42 Duster 40mm' } },
+    enemy: { rifle: 'opfor_coldwar_infantry', tank: 'opfor_t54_tank', gun: 'opfor_field_artillery', flak: 'opfor_ks19_heavy', names: { rifle: 'AK-47 / RPG-7', tank: 'T-54 100mm', gun: 'M-46 130mm', flak: 'KS-19 100mm' } },
+  },
+  era5: {
+    player: { rifle: 'usmc_rifle_83', tank: 'us_m1ip_abrams', gun: 'us_m198_155', flak: 'us_m163_vads', names: { rifle: 'M16A2 / M249', tank: 'M1IP 艾布蘭 105mm', gun: 'M198 155mm', flak: 'M163 VADS 20mm' } },
+    enemy: { rifle: 'opfor_motor_rifle_83', tank: 'opfor_t72b', gun: 'opfor_field_artillery', flak: 'opfor_zsu23_shilka', names: { rifle: 'AK-74 / RPG-7', tank: 'T-72B 125mm', gun: 'D-30 122mm', flak: 'ZSU-23-4 石勒喀河' } },
+  },
+};
+
+const EMPLACEMENT_TITLES: Record<EmplacementKind, [string, string, keyof EraEquipment['names']]> = {
+  infantry_squad: ['[NATO 友軍步兵班 SQD]', '[NATO 步兵班 SQD]', 'rifle'],
+  infantry_platoon: ['[NATO 友軍步兵排 PLT]', '[NATO 步兵排 PLT]', 'rifle'],
+  tank_platoon: ['[NATO 友軍戰車排 PLT]', '[NATO 戰車排 PLT]', 'tank'],
+  tank_battalion: ['[NATO 友軍裝甲大隊 BN]', '[NATO 戰車大隊 BN]', 'tank'],
+  towed_artillery: ['[NATO 友軍野戰砲兵連 BTRY]', '[NATO 拖曳砲兵 BTRY]', 'gun'],
+  flak_battery: ['[NATO 友軍防空砲連 AA]', '[NATO 防空砲兵連 AA]', 'flak'],
+};
+
+function emplacementLabel(kind: EmplacementKind, isPlayer: boolean, era: Era): string {
+  const [own, foe, key] = EMPLACEMENT_TITLES[kind];
+  const eq = EMPLACEMENT_EQUIPMENT[era][isPlayer ? 'player' : 'enemy'];
+  return `${isPlayer ? own : foe} ${eq.names[key]}`;
+}
+
+// Garrison layouts with era-appropriate silhouettes.
+function drawEmplacements(ctx: CanvasRenderingContext2D, kind: EmplacementKind, isPlayer: boolean, era: Era) {
+  const eq = EMPLACEMENT_EQUIPMENT[era][isPlayer ? 'player' : 'enemy'];
+  const { rifle, tank, gun } = eq;
   switch (kind) {
     case 'infantry_squad': {
       ctx.strokeStyle = 'rgba(188, 170, 164, 0.85)';
@@ -1580,7 +1626,7 @@ function drawEmplacements(ctx: CanvasRenderingContext2D, kind: EmplacementKind, 
       // Four heavy AA guns (90mm M2 / Type 88 75mm) on cruciform platforms around the fire director
       for (const [x, y] of [[-11, 3], [11, 3], [-11, 19], [11, 19]]) {
         drawGunPit(ctx, x, y, 6);
-        placeUnit(ctx, 'opfor_ks19_heavy', isPlayer, x, y, 0.4);
+        placeUnit(ctx, eq.flak, isPlayer, x, y, 0.4);
       }
       ctx.fillStyle = '#263238';
       ctx.strokeStyle = '#B0BEC5';

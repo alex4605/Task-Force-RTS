@@ -21,7 +21,7 @@ export class VectorRenderer {
   private readonly rc: RenderContext;
 
   constructor(ctx: CanvasRenderingContext2D) {
-    this.rc = { ctx, width: 0, height: 0, time: 0 };
+    this.rc = { ctx, width: 0, height: 0, time: 0, era: 'era1' };
   }
 
   public setSize(width: number, height: number) {
@@ -31,6 +31,10 @@ export class VectorRenderer {
 
   public updateTime(dt: number) {
     this.rc.time += dt;
+  }
+
+  public setEra(era: Era) {
+    this.rc.era = era;
   }
 
   // Clear & Draw Ocean Grid with Radar Sweep & Chart Markings
