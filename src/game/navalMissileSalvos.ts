@@ -36,6 +36,8 @@ const SAM_BY_TYPE: Partial<Record<ShipType, ShipSamSystem>> = {
   dd_udaloy: { launcher: 'Kinzhal (SA-N-9) VLS', perTarget: 2, channels: 4, cycle: 3 },
   dd_sovremenny: { launcher: '2 x Shtil (SA-N-7) single-arm', perTarget: 1, channels: 2, cycle: 12 },
   cvhg_kiev: { launcher: '2 x Shtorm (SA-N-3) twin-arm', perTarget: 2, channels: 2, cycle: 10 },
+  cg_slava: { launcher: 'S-300F (SA-N-6) revolver VLS', perTarget: 2, channels: 3, cycle: 3 }, // one Top Dome
+  lha_tarawa: { launcher: '2 x Mk 25 Sea Sparrow', perTarget: 2, channels: 1, cycle: 8 },
   kashin: { launcher: '2 x Volna (SA-N-1) twin-arm', perTarget: 2, channels: 2, cycle: 10 },
   kynda: { launcher: 'Volna (SA-N-1) twin-arm', perTarget: 2, channels: 1, cycle: 12 },
 };
@@ -77,6 +79,7 @@ const ASHM_BY_TYPE: Partial<Record<ShipType, ShipAshmFit>> = {
   ssgn_oscar: { magazine: 24, salvo: 24 }, // 24 P-700 Granit
   cvhg_kiev: { magazine: 8, salvo: 8 }, // 4 twin P-500 Bazalt launchers (16 reloads below deck)
   dd_sovremenny: { magazine: 8, salvo: 8 }, // 2 x quadruple P-270 Moskit
+  cg_slava: { magazine: 16, salvo: 16 }, // 8 x twin P-500 Bazalt
   komar_ptg: { magazine: 2, salvo: 2 }, // 2 P-15 Termit
   osa: { magazine: 4, salvo: 2 }, // 4 P-15 Termit, two per target
 };

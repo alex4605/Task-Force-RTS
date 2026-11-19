@@ -2562,6 +2562,28 @@ export function createFoxtrotSS(id: string, name: string, pos: Vector2D): Ship {
   });
 }
 
+/**
+ * Project 877 Paltus (NATO "Kilo"): the quiet diesel-electric successor to the Foxtrot, with a
+ * teardrop hull, anechoic tiles and six bow tubes. Slower than an SSN but far harder to hear.
+ */
+export function createKiloSS(id: string, name: string, pos: Vector2D): Ship {
+  const sub = createFoxtrotSS(id, name, pos);
+  sub.codeName = 'Project 877 Kilo (基洛級靜音柴電攻擊潛艦)';
+  sub.subVariant = 'kilo';
+  sub.era = 'era5';
+  sub.maxSpeed = 17;
+  sub.length = 74;
+  sub.width = 12;
+  sub.health = sub.maxHealth = 1900;
+  sub.sonarRange = 2100;
+  sub.torpedoReloadTime = 12;
+  sub.detailedArmaments = [
+    { name: '533mm 魚雷發射管 (艦艏6具)', count: '6具 (備彈18枚)', type: 'torpedo', desc: 'TEST-71 線導 / 53-65 尾流自導魚雷' },
+    { name: '消音瓦與單軸低噪推進', count: '「黑洞」靜音柴電潛艦', type: 'asw', desc: '電池潛航時極難以被動聲納偵測' },
+  ];
+  return sub;
+}
+
 // ══════════════════════════════════════════════════════════════
 // ERA 5 (1973-1991) COLD WAR FLEET CONSTRUCTORS
 // ══════════════════════════════════════════════════════════════
@@ -3219,6 +3241,141 @@ export function createKirovCGN(id: string, name: string, pos: Vector2D): Ship {
     ],
     flakCooldown: 0,
     flakRange: 1000,
+  });
+}
+
+/**
+ * Project 1164 Atlant (NATO "Slava"): sixteen P-500 Bazalt anti-ship missiles in eight twin
+ * launchers lining the forecastle, eight S-300F revolver launchers aft, twin AK-130 forward.
+ */
+export function createSlavaCG(id: string, name: string, pos: Vector2D): Ship {
+  const heading = (Math.PI * 3) / 4;
+  return createShip({
+    id,
+    name,
+    codeName: 'Project 1164 Atlant (斯拉瓦級飛彈巡洋艦)',
+    type: 'cg_slava',
+    side: 'enemy',
+    era: 'era5',
+    pos: { ...pos },
+    heading,
+    speed: 16,
+    maxSpeed: 32,
+    length: 118,
+    width: 22,
+    health: 5600,
+    maxHealth: 5600,
+    armor: 0.4,
+    detectionRange: 5200,
+    hasSAM: true,
+    samRange: 4000,
+    samCooldown: 0,
+    maxSAMs: 64,
+    readySAMs: 64,
+    hasCIWS: true,
+    ciwsCooldown: 0,
+    ciwsRange: 1000,
+    ciwsType: 'ak630',
+    turrets: [
+      createTurret(44, 0, 'AK-130 130mm Twin (艦艏雙聯裝 130mm)', 1800, 1.5, 2, heading, 220),
+      createTurret(-30, 0, 'S-300F Fort (SA-N-6) Revolver SAM (艦艉轉輪垂發)', 4000, 2.0, 1, heading, 320),
+      createTurret(-14, 9, 'AK-630 30mm 6-barrel CIWS (右舷)', 1000, 0.22, 6, heading, 75),
+      createTurret(-14, -9, 'AK-630 30mm 6-barrel CIWS (左舷)', 1000, 0.22, 6, heading, 75),
+      createTurret(6, 9, 'AK-630 30mm 6-barrel CIWS (右舷)', 1000, 0.22, 6, heading, 75),
+      createTurret(6, -9, 'AK-630 30mm 6-barrel CIWS (左舷)', 1000, 0.22, 6, heading, 75),
+    ],
+    detailedArmaments: [
+      { name: 'P-500 玄武岩 (Bazalt / SS-N-12) 雙聯裝發射筒', count: '16枚 (8座雙聯裝，沿艦艏兩舷排列)', type: 'main', desc: '斯拉瓦級最醒目的特徵：一次齊射 16 枚超音速反艦飛彈' },
+      { name: 'S-300F 堡壘 (SA-N-6) 轉輪垂直發射器', count: '64枚 (8座轉輪)', type: 'aa', desc: '遠程區域防空' },
+      { name: 'AK-130 雙聯裝 130mm 艦砲', count: '2門', type: 'secondary', desc: '對海 / 防空' },
+      { name: 'AK-630 30mm 近迫武器系統', count: '6座', type: 'aa', desc: '末端反飛彈' },
+    ],
+    flakCooldown: 0,
+    flakRange: 1000,
+  });
+}
+
+/**
+ * USS Tarawa (LHA-1): the first big-deck amphibious assault ship, carrying AV-8B Harriers, CH-53
+ * and CH-46 helicopters and a well deck for landing craft; two 5"/54 Mk 45, Sea Sparrow, Phalanx.
+ */
+export function createTarawaLHA(id: string, name: string, pos: Vector2D): Ship {
+  const heading = -Math.PI / 4;
+  return createShip({
+    id,
+    name,
+    codeName: 'Tarawa-class Amphibious Assault Ship',
+    type: 'lha_tarawa',
+    side: 'player',
+    era: 'era5',
+    pos: { ...pos },
+    heading,
+    speed: 12,
+    maxSpeed: 24,
+    length: 140,
+    width: 30,
+    health: 6200,
+    maxHealth: 6200,
+    armor: 0.3,
+    detectionRange: 3800,
+    hasSAM: true,
+    samRange: 2600,
+    samModel: 'RIM-7 海麻雀防空飛彈',
+    maxSAMs: 32,
+    readySAMs: 32,
+    hasCIWS: true,
+    ciwsCooldown: 0,
+    ciwsRange: 1000,
+    turrets: [
+      createTurret(60, 8, '5-inch/54 Mk 45 (艦艏右)', 1700, 2.0, 1, heading, 90),
+      createTurret(60, -8, '5-inch/54 Mk 45 (艦艏左)', 1700, 2.0, 1, heading, 90),
+      createTurret(-60, 10, 'Mk 15 Phalanx CIWS (艦艉右)', 1000, 0.15, 6, heading, 60),
+      createTurret(30, 13, 'Mk 15 Phalanx CIWS (艦島前)', 1000, 0.15, 6, heading, 60),
+    ],
+    detailedArmaments: [
+      { name: '5吋54倍徑 Mk 45 艦砲', count: '2門', type: 'secondary', desc: '登陸支援岸轟' },
+      { name: 'Mk 25 海麻雀 八聯裝發射器', count: '2座', type: 'aa', desc: '點防空' },
+      { name: 'Mk 15 方陣近迫武器系統', count: '2座', type: 'aa', desc: '末端反飛彈' },
+      { name: '陸戰隊航空戰鬥元素 (ACE)', count: '約 35 架', type: 'main', desc: 'AV-8B 海獵鷹 / CH-53 / CH-46 / AH-1W · 塢艙可容 LCAC' },
+    ],
+    flakCooldown: 0,
+    flakRange: 900,
+  });
+}
+
+/**
+ * Patrol Boat, River (PBR) Mk II of Task Force 116 "Game Warden": a 31-foot fibreglass boat on
+ * twin water-jets, a twin .50 calibre tub forward and a single .50 aft, crew of four.
+ */
+export function createPBR(id: string, name: string, pos: Vector2D): Ship {
+  const heading = -Math.PI / 4;
+  return createShip({
+    id,
+    name,
+    codeName: 'River Rat',
+    type: 'pbr',
+    side: 'player',
+    era: 'era4',
+    pos: { ...pos },
+    heading,
+    speed: 14,
+    maxSpeed: 28,
+    length: 22,
+    width: 7,
+    health: 420,
+    maxHealth: 420,
+    armor: 0.05,
+    detectionRange: 1600,
+    turrets: [
+      createTurret(6, 0, '.50 cal M2 Twin (艇艏雙聯裝)', 700, 0.25, 2, heading, 28),
+      createTurret(-7, 0, '.50 cal M2 (艇艉單裝)', 700, 0.25, 1, heading, 22),
+    ],
+    detailedArmaments: [
+      { name: '.50 口徑 M2 雙聯裝機槍塔', count: '1座', type: 'main', desc: '湄公河三角洲巡邏與攔檢' },
+      { name: '.50 口徑 M2 / Mk 19 榴彈機槍 / M60', count: '艇艉與舷側', type: 'secondary', desc: '近距火力' },
+    ],
+    flakCooldown: 0,
+    flakRange: 420,
   });
 }
 
@@ -7895,7 +8052,9 @@ function addPlayerTaskForce(era: Era, cvPos: Vector2D, initialHeading: number, p
       createForrestShermanDD('player-dd1', 'USS Forrest Sherman (DD-931)', { x: cvPos.x + 220, y: cvPos.y - 160 }),
       createKnoxFFG('player-ffg1', 'USS Knox (FFG-1052)', { x: cvPos.x - 180, y: cvPos.y + 260 }),
       createLPHIwoJima('player-lph1', 'USS Iwo Jima (LPH-2)', { x: cvPos.x - 300, y: cvPos.y - 140 }),
-      createNewJersey1968('player-bb1', { x: cvPos.x + 120, y: cvPos.y + 300 })
+      createNewJersey1968('player-bb1', { x: cvPos.x + 120, y: cvPos.y + 300 }),
+      createPBR('player-pbr1', 'PBR-105 (River Division 531)', { x: cvPos.x - 420, y: cvPos.y - 60 }),
+      createPBR('player-pbr2', 'PBR-106 (River Division 531)', { x: cvPos.x - 450, y: cvPos.y - 20 })
     );
   } else {
     // ═══════════════════════════════════════════════════════════════════════
@@ -7921,7 +8080,8 @@ function addPlayerTaskForce(era: Era, cvPos: Vector2D, initialHeading: number, p
       createPerryFFG('player-ffg1', 'USS Oliver Hazard Perry (FFG-7)', { x: cvPos.x - 180, y: cvPos.y + 280 }),
       createLosAngelesSSN('player-ssn1', 'USS Los Angeles (SSN-688)', { x: cvPos.x + 420, y: cvPos.y + 40 }),
       createAustinLPD('player-lpd1', 'USS Austin (LPD-4)', { x: cvPos.x - 360, y: cvPos.y - 100 }),
-      createLCAC('player-lcac1', 'LCAC-01 Air Cushion Craft', { x: cvPos.x - 380, y: cvPos.y - 60 })
+      createLCAC('player-lcac1', 'LCAC-01 Air Cushion Craft', { x: cvPos.x - 380, y: cvPos.y - 60 }),
+      createTarawaLHA('player-lha1', 'USS Tarawa (LHA-1)', { x: cvPos.x - 520, y: cvPos.y - 200 })
     );
   }
 }
@@ -8798,6 +8958,7 @@ function addEnemyTaskForce(era: Era, enemyShips: Ship[], enemyCenter: Vector2D, 
       createKirovCGN('enemy-kirov-1', 'Project 1144 Kirov (CGN Kirov)', { x: enemyCenter.x - 380, y: enemyCenter.y + 220 }),
       createSovremennyDD('enemy-sovremenny-1', 'Project 956 Sovremenny (DDG-670)', { x: enemyCenter.x + 360, y: enemyCenter.y - 180 }),
       createUdaloyDD('enemy-udaloy-1', 'Project 1155 Udaloy (DDG-680)', { x: enemyCenter.x - 240, y: enemyCenter.y - 240 }),
+      createSlavaCG('enemy-slava-1', 'Project 1164 Slava (Marshal Ustinov)', { x: enemyCenter.x + 420, y: enemyCenter.y + 300 }),
       createOscarSSGN('enemy-oscar-1', 'Project 949A Oscar II (K-148 Krasnodar)', { x: 3400, y: 3600 })
     );
   }
@@ -9101,6 +9262,52 @@ function addEnemyFleetEra2(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
       side: 'enemy',
       era: 'era2',
       pos: { x: enemyCenter.x - 280, y: enemyCenter.y + 280 },
+      heading: enemyHeading,
+      speed: 11,
+      maxSpeed: 27,
+      length: 138,
+      width: 32,
+      health: 6600,
+      maxHealth: 6600,
+      armor: 0.62,
+      detectionRange: 3200,
+      turrets: [
+        createTurret(40, 0, '460mm Triple Type 94 (No.1 艦艏巨砲)', 2100, 8.5, 3, enemyHeading, 380),
+        createTurret(25, 0, '460mm Triple Type 94 (No.2 背負巨砲)', 2100, 8.5, 3, enemyHeading, 380),
+        createTurret(-36, 0, '460mm Triple Type 94 (No.3 艦艉巨砲)', 2100, 8.5, 3, enemyHeading, 380),
+        createTurret(10, 0, '155mm Triple Type 3 (艦艏副砲)', 1400, 4.0, 3, enemyHeading, 130),
+        createTurret(-22, 0, '155mm Triple Type 3 (艦艉副砲)', 1400, 4.0, 3, enemyHeading, 130),
+        createTurret(12, 14, '127mm Twin AA (右舷高角砲)', 1080, 2.5, 2, enemyHeading, 70),
+        createTurret(12, -14, '127mm Twin AA (左舷高角砲)', 1080, 2.5, 2, enemyHeading, 70),
+        createTurret(6, 14, '127mm Twin AA (右舷高角砲)', 1080, 2.5, 2, enemyHeading, 70),
+        createTurret(6, -14, '127mm Twin AA (左舷高角砲)', 1080, 2.5, 2, enemyHeading, 70),
+        createTurret(0, 14, '127mm Twin AA (右舷高角砲)', 1080, 2.5, 2, enemyHeading, 70),
+        createTurret(0, -14, '127mm Twin AA (左舷高角砲)', 1080, 2.5, 2, enemyHeading, 70),
+        createTurret(-6, 14, '127mm Twin AA (右舷高角砲)', 1080, 2.5, 2, enemyHeading, 70),
+        createTurret(-6, -14, '127mm Twin AA (左舷高角砲)', 1080, 2.5, 2, enemyHeading, 70),
+        createTurret(-12, 14, '127mm Twin AA (右舷高角砲)', 1080, 2.5, 2, enemyHeading, 70),
+        createTurret(-12, -14, '127mm Twin AA (左舷高角砲)', 1080, 2.5, 2, enemyHeading, 70),
+        createTurret(-18, 14, '127mm Twin AA (右舷高角砲)', 1080, 2.5, 2, enemyHeading, 70),
+        createTurret(-18, -14, '127mm Twin AA (左舷高角砲)', 1080, 2.5, 2, enemyHeading, 70),
+      ],
+      detailedArmaments: [
+        { name: '460mm 45倍徑九四式三聯裝巨砲', count: '9門 (3座三聯裝)', type: 'main', desc: '人類海軍史上最大艦砲，九一式穿甲彈毀滅打擊' },
+        { name: '155mm 60倍徑三聯裝副砲', count: '6門 (2座三聯裝)', type: 'secondary', desc: '最上級巡洋艦拆卸主砲改裝副砲，精準密射' },
+        { name: '127mm 雙聯裝高角砲', count: '24門 (12座雙聯裝)', type: 'secondary', desc: '防空防護火網' },
+        { name: '25mm 九六式防空機砲群', count: '162門 (52座三聯裝 + 6單裝)', type: 'aa', desc: '極度密集的刺蝟防空火網' },
+      ],
+      flakCooldown: 0,
+      flakRange: 920,
+    }),
+    // 1b. IJN Musashi - 武藏號 (大和級二號艦，1944 年 10 月 24 日錫布延海遭 19 枚魚雷、17 枚炸彈擊沉)
+    createShip({
+      id: 'enemy-bb-2',
+      name: 'IJN Musashi (Super Battleship)',
+      codeName: 'Imperial Behemoth',
+      type: 'battleship',
+      side: 'enemy',
+      era: 'era2',
+      pos: { x: enemyCenter.x - 280 - 360, y: enemyCenter.y + 280  + 260 },
       heading: enemyHeading,
       speed: 11,
       maxSpeed: 27,

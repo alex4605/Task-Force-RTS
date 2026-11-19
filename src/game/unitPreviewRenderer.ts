@@ -50,6 +50,10 @@ const TANK_SPECS: TankSpec[] = [
   { match: /armor_m4/, hullL: 20, hullW: 10.5, glacis: 2.5, turret: 'round', turretX: 0.5, turretY: 0, turretRx: 4.8, turretRy: 4.2, gunLen: 10, gunW: 1.6 },
   // Korea: M4A3E8 / M46 mix -> M46 Patton proportions with 90mm and bore evacuator
   { match: /patton_m46|armor_korea/, hullL: 22, hullW: 11.5, glacis: 2, turret: 'round', turretX: 0, turretY: 0, turretRx: 5.6, turretRy: 4.8, gunLen: 13, gunW: 1.8, evacuatorAt: 0.75, muzzleBrake: true },
+  // M26 Pershing: long low hull, wide cast turret, 90mm with muzzle brake
+  { match: /pershing/, hullL: 22, hullW: 11.5, glacis: 2.5, turret: 'round', turretX: 0, turretY: 0, turretRx: 5.4, turretRy: 4.8, gunLen: 12.5, gunW: 1.8, muzzleBrake: true },
+  // M1A1 Abrams: angular wedge turret with bustle, long 120mm smoothbore, no bore evacuator brake
+  { match: /m1a1/, hullL: 25, hullW: 12.5, glacis: 3.5, turret: 'needle', turretX: -0.8, turretY: 0, turretRx: 7.5, turretRy: 5.6, gunLen: 16, gunW: 2.2, evacuatorAt: 0.55 },
   // M551 Sheridan: low aluminium hull, flat welded turret, short fat 152mm gun-launcher
   { match: /sheridan/, hullL: 19, hullW: 10.5, glacis: 3, turret: 'boxy', turretX: -0.5, turretY: 0, turretRx: 4.6, turretRy: 4, gunLen: 7.5, gunW: 2.6 },
   // M48 Patton: big egg-shaped cast turret
@@ -841,6 +845,8 @@ export function groundSilhouetteClass(unitType: string): GroundSilhouetteClass {
     t.includes('armor_m3') ||
     t.includes('ontos') ||
     t.includes('sheridan') ||
+    t.includes('pershing') ||
+    t.includes('m1a1') ||
     t.includes('su100') ||
     t.includes('su_100');
 
@@ -1569,10 +1575,10 @@ function drawShipPreview(ctx: CanvasRenderingContext2D, w: number, h: number, ra
   ctx.lineTo(-65, 7.5);
   ctx.stroke();
 
-  if (k === 'cvn' || k === 'cv63' || k === 'carrier' || k === 'cve' || k === 'lph' || k === 'cvhg_kiev') {
+  if (k === 'cvn' || k === 'cv63' || k === 'carrier' || k === 'cve' || k === 'lph' || k === 'lha_tarawa' || k === 'cvhg_kiev') {
     const isModern = k === 'cvn' || k === 'cv63';
     const isKiev = k === 'cvhg_kiev';
-    const isLph = k === 'lph';
+    const isLph = k === 'lph' || k === 'lha_tarawa';
     ctx.fillStyle = isKiev ? '#261318' : '#0D263E';
     ctx.strokeStyle = isKiev ? '#EF5350' : isLph ? '#4DB6AC' : '#4FC3F7';
     ctx.lineWidth = 1.5;

@@ -100,7 +100,14 @@ export const AIRCRAFT_CRUISE_KMH: Record<AircraftModel, number> = {
   f8f: 330,
   sb2c: 254,
   tbf: 241,
-  pby: 201, // PBY-5A cruise 125 mph
+  pby: 201,
+  rufe: 300, // A6M2-N cruise
+  ki84: 380, // Ki-84 cruise
+  ac47: 257, // C-47 cruise; orbits at ~190 km/h when firing
+  po2: 110,
+  f100: 900,
+  ch46: 241,
+  mig31: 1000, // PBY-5A cruise 125 mph
   b17: 293,
   b17_late: 293,
   b24: 346,

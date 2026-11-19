@@ -67,6 +67,7 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   usmc_air_assault_65: 0.5,
   usmc_armor_m48: 2.0, // M41 90mm
   usmc_ontos_m50: 1.1, // M40 106mm recoilless rifle
+  us_m26_pershing: 2.0, // M3 90mm
   us_m551_sheridan: 2.0, // M81 152mm gun-launcher (HEAT / canister in Vietnam)
   usmc_lvtp5a1: 1.5,
   opfor_vietnam_sapper: 0.2,
@@ -82,6 +83,7 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   usmc_lav25: 2.5, // M242 25mm
   us_m60a1_rise: 3.0, // M68 105mm
   us_m1ip_abrams: 3.0, // M68A1 105mm
+  us_m1a1_abrams: 3.5, // M256 120mm
   us_m198_155: 22.4, // M198 155mm (standard round)
   usmc_lav_ad: 4.8, // Stinger
   us_m163_vads: 1.8, // M61 20mm

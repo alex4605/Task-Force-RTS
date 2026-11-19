@@ -50,7 +50,10 @@ export type ShipType =
   | 'cgn_kirov'    // Project 1144 基洛夫級 (Kirov) 重型核動力飛彈巡洋艦 (20x P-700 Granit)
   | 'dd_sovremenny' // Project 956 現代級 (Sovremenny) 導向飛彈驅逐艦 (P-270 白蛉超音速反艦)
   | 'dd_udaloy'    // Project 1155 無畏級 (Udaloy) 大型反潛驅逐艦
-  | 'ssgn_oscar';  // Project 949A 奧斯卡級 (Oscar II) 巡弋飛彈核潛艦 (24x P-700 Granit);
+  | 'ssgn_oscar'   // Project 949A 奧斯卡級 (Oscar II) 巡弋飛彈核潛艦 (24x P-700 Granit);
+  | 'cg_slava'     // Project 1164 Atlant (斯拉瓦級飛彈巡洋艦 · 16 枚 P-500 玄武岩 · S-300F)
+  | 'lha_tarawa'   // USS Tarawa (LHA-1) 塔拉瓦級兩棲突擊艦
+  | 'pbr';         // Patrol Boat, River Mk II (越戰褐水海軍河川巡邏艇)
 
 export type GroundUnitType =
   | 'usmc_rifle_42'      // 時代一 1942 USMC 陸戰隊步槍排 (春田M1903 / 早期M1加蘭德)
@@ -65,6 +68,7 @@ export type GroundUnitType =
   | 'usmc_armor_m48'      // 時代四 M48A3 Patton 90mm 主力戰車排
   | 'usmc_ontos_m50'      // 時代四 M50 Ontos 6聯裝106mm無後座力砲反裝甲自走車
   | 'us_m551_sheridan'    // 時代四 M551 謝里登空降突擊偵察車 (152mm 砲射飛彈兩用砲 / 鋁合金車體 / 可空投涉水)
+  | 'us_m26_pershing'     // 時代三 M26 潘興重戰車 (90mm M3 · 1950 年 8 月釜山環形防線首批抵韓)
   | 'usmc_lvtp5a1'        // 時代四 LVTP-5A1 兩棲重裝步戰車 (強烈火力支援與灘頭重載突擊)
   | 'usmc_armor_m3'      // 時代一 USMC M3 Stuart 裝甲排
   | 'usmc_armor_m4'      // 時代二 USMC M4A2 Sherman 裝甲排
@@ -89,6 +93,7 @@ export type GroundUnitType =
   | 'usmc_lav25'          // 時代五 LAV-25 輪型裝甲偵察車 (25mm M242 鏈砲高速機動)
   | 'us_m60a1_rise'       // 時代五 M60A1 RISE (Passive) 主力戰車 (105mm線膛砲 / ERA反應裝甲)
   | 'us_m1ip_abrams'      // 時代五 M1IP 艾布蘭主力戰車 (105mm M68A1 / 複合裝甲 / 燃氣渦輪高速穿插)
+  | 'us_m1a1_abrams'     // 時代五 M1A1 艾布蘭 (120mm M256 滑膛砲 · 1985 起 · 沙漠風暴主力)
   | 'us_m198_155'         // 時代五 M198 155mm 牽引重榴彈砲 (雙模砲擊：遠程曲射+直瞄平射坦克殺手)
   | 'usmc_lav_ad'         // 時代五 LAV-AD 輪型防空車 (25mm格林火神 + 刺針防空飛彈)
   | 'us_m163_vads'        // 時代五 M163 火神防空自走砲 (20mm M61A1 履帶極速密集彈幕)
@@ -277,7 +282,7 @@ export interface Ship {
   spottedTimer?: number;
   isSpottedByEnemy?: boolean;
   enemySpottedTimer?: number;
-  subVariant?: 'uboat' | 'ijn_sub' | 'whiskey' | 'zulu' | 'foxtrot' | 'victor3' | 'akula' | 'oscar2' | 'ssn_la';
+  subVariant?: 'uboat' | 'ijn_sub' | 'whiskey' | 'zulu' | 'foxtrot' | 'victor3' | 'akula' | 'oscar2' | 'ssn_la' | 'kilo';
   repathCooldown?: number;
   navAvoidSide?: number; // 繞行陸地時記住的轉向側 (+1 右 / -1 左)，避免左右抖動
   navCheckPos?: Vector2D; // 進度檢查點：一段時間未前進即判定受困並重新規劃航線
@@ -1247,6 +1252,18 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
  * strike package and engage only fighters threatening it; strike: fly with the package at its
  * slowest member's speed to the target.
  */
+/** Insignia an aircraft wears; by default its model's air arm, overridable per aircraft (e.g. a JASDF F-15J). */
+export type AircraftNation =
+  | 'usn'          // US Navy / Marine Corps (Star & Bars, dark sea blue disc)
+  | 'usaf'         // USAAF / USAF / US Army (Star & Bars, insignia blue disc)
+  | 'japan'        // Imperial Japanese Navy / Army Hinomaru
+  | 'uk'           // RAF / Fleet Air Arm roundel
+  | 'rok'          // Republic of Korea Air Force
+  | 'west_germany' // Luftwaffe / Marineflieger Balkenkreuz
+  | 'france'       // Armée de l'Air cocarde
+  | 'sweden'       // Flygvapnet (drawn by the Viggen silhouette itself)
+  | 'ussr';
+
 export type AirMission = 'cap' | 'barcap' | 'sweep' | 'escort' | 'strike';
 
 export type EnemyAirMissionType =
@@ -1411,6 +1428,13 @@ export type AircraftModel =
   | 'a50'    // A-50 Mainstay (主桅長程空中早期預警機 · 伊留申-76 改裝)
   | 'su25'   // Su-25 Frogfoot (蛙足重裝甲近接支援強擊機 · 雙管30mm · S-24大火箭)
   | 'mi24'   // Mi-24 Hind (雌鹿空中飛行戰車 · 12.7mm四聯旋轉機槍 · 9M114 螺旋反裝甲)
+  | 'rufe'   // A6M2-N 二式水上戰鬥機 Rufe (所羅門群島水上戰鬥機隊)
+  | 'ki84'   // Ki-84 四式戰鬥機 疾風 Frank (陸軍末期最強戰鬥機)
+  | 'po2'    // Po-2 夜間騷擾雙翼機 Bedcheck Charlie (韓戰北韓夜襲)
+  | 'ac47'   // AC-47D Spooky 幽靈砲艇機 (三挺 GAU-2 迷你砲 · 夜間支援)
+  | 'f100'   // F-100D Super Sabre 超級軍刀 (越戰戰轟 / Misty 快速前進管制)
+  | 'ch46'   // CH-46 Sea Knight 海騎士 (陸戰隊縱列雙旋翼突擊運輸直升機)
+  | 'mig31'  // MiG-31 Foxhound 獵狐犬 (遠程截擊機 · R-33 · Zaslon 相控陣雷達)
   | 'pby'    // PBY-5A Catalina (卡特琳娜水陸兩用巡邏機 · 黑貓夜間反艦 / 反潛 / 搜救)
   | 'f84'    // F-84E/G Thunderjet (雷霆噴射戰鬥轟炸機 · 韓戰聯合國軍主力對地攻擊機)
   | 'sh60b'  // SH-60B Seahawk (海鷹 LAMPS III 艦載反潛直升機 · Mk 46 魚雷 / 企鵝反艦飛彈)
@@ -1506,6 +1530,7 @@ export interface Aircraft {
   bombingDropCooldown?: number;
   bombingPassedTargetDist?: number;
   missionType?: EnemyAirMissionType;
+  nation?: AircraftNation; // 機徽覆寫：同一機型由不同國家操作時 (如日本航空自衛隊 F-15J)
   airMission?: AirMission; // 戰術任務：CAP / BARCAP / 戰鬥掃蕩 / 護航 / 打擊編隊
   packageId?: string; // 所屬打擊編隊 (護航機與打擊機共用)
   missionTimer?: number; // 掃蕩滯空剩餘時間

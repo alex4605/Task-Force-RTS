@@ -306,6 +306,9 @@ export function getAfbModelsForEra(era: Era): AfbModelDef[] {
     return [
       { id: 'b52', label: 'B-52 同溫層堡壘', role: 'level_bomber', desc: '8發巨型戰略重轟 · 36枚弧形地毯轟炸 (Arc Light)', isNavy: false },
       { id: 'f4e', label: 'F-4E 幽靈II (陸空軍)', role: 'fighter', desc: '火神20mm航砲 + 麻雀/響尾蛇飛彈 · 超音速空優', isNavy: false },
+      { id: 'f100', label: 'F-100D 超級軍刀', role: 'attacker', desc: '美空軍首款超音速戰機 · 越戰密接支援 / Misty 快速前進管制', isNavy: false },
+      { id: 'ac47', label: 'AC-47D 幽靈砲艇機', role: 'attacker', desc: 'Puff the Magic Dragon · 三挺 GAU-2 迷你砲側射 · 夜間據點支援', isNavy: false },
+      { id: 'ch46', label: 'CH-46 海騎士 (陸戰隊)', role: 'transport', desc: '縱列雙旋翼突擊運輸直升機 · 陸戰隊垂直機降 (按U卸載)', isNavy: true },
       { id: 'f105', label: 'F-105D 雷公', role: 'attacker', desc: '超音速戰術戰轟機 · 百舌鳥反輻射飛彈 / 蛇眼減速彈', isNavy: false },
       { id: 'a7', label: 'A-7D 海盜II', role: 'attacker', desc: '對地打擊攻擊機 · 沃爾艾電視滑翔炸彈 / 蛇眼炸彈', isNavy: false },
       { id: 'a1h', label: 'A-1H 天襲者 (陸航/海航)', role: 'attacker', desc: '重裝活塞攻擊機 · 15個武器掛點 · 巨量航彈與火箭齊射', isNavy: false },

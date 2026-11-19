@@ -961,14 +961,16 @@ const AIRCRAFT_PROPULSION: Record<AircraftModel, Propulsion> = {
   kamikaze_judy: 'single_prop', yak9: 'single_prop', il10: 'single_prop', p36a: 'single_prop',
   p39d: 'single_prop', hurricane: 'single_prop', spitfire_v: 'single_prop', swordfish: 'single_prop',
   spitfire_xiv: 'single_prop', tempest: 'single_prop', sea_fury: 'single_prop', rokaf_p51: 'single_prop',
-  firefly_as5: 'single_prop', a1h: 'single_prop',
+  firefly_as5: 'single_prop', a1h: 'single_prop', rufe: 'single_prop', ki84: 'single_prop', po2: 'single_prop',
   // multi_prop
   b17: 'multi_prop', a20: 'multi_prop', b24: 'multi_prop', p38: 'multi_prop', a26: 'multi_prop',
   b29: 'multi_prop', e1: 'multi_prop', s2: 'multi_prop', c1: 'multi_prop', c47: 'multi_prop',
   p3: 'multi_prop', ov10: 'multi_prop', g4m: 'multi_prop', e2c: 'multi_prop', c2a: 'multi_prop',
   c130: 'multi_prop', b25: 'multi_prop', beaufighter: 'multi_prop', b17_late: 'multi_prop',
   mosquito: 'multi_prop', lancaster: 'multi_prop', f82: 'multi_prop', tu95: 'multi_prop', be12: 'multi_prop',
-  il38: 'multi_prop', pby: 'multi_prop',
+  il38: 'multi_prop', pby: 'multi_prop', ac47: 'multi_prop',
+  // tandem-rotor CH-46 draws both rotors itself
+  ch46: 'multi_prop',
   // jet
   f86: 'jet', f9f: 'jet', f2h: 'jet', f8: 'jet', f4b: 'jet', f4f_phantom: 'jet', f4j: 'jet', a4: 'jet', a6a: 'jet',
   a6b_weasel: 'jet', f4e: 'jet', f105: 'jet', a7: 'jet', ohka: 'jet', mig15: 'jet', mig17: 'jet',
@@ -976,7 +978,7 @@ const AIRCRAFT_PROPULSION: Record<AircraftModel, Propulsion> = {
   av8b: 'jet', a10a: 'jet', f15a: 'jet', f16a: 'jet', f111: 'jet', meteor: 'jet', a37b: 'jet', f5a: 'jet',
   f104g: 'jet', mirage3: 'jet', hunter_fga9: 'jet', tornado_gr1: 'jet', tornado_ids: 'jet',
   tornado_adv: 'jet', mirage2000: 'jet', jaguar_gr1: 'jet', viggen_ja37: 'jet', tu22m3: 'jet', yak38: 'jet',
-  mig29a: 'jet', su27: 'jet', su25: 'jet', f84: 'jet', mig23: 'jet',
+  mig29a: 'jet', su27: 'jet', su25: 'jet', f84: 'jet', mig23: 'jet', f100: 'jet', mig31: 'jet',
   // podded_jet
   b52: 'podded_jet', tu14: 'podded_jet', il28: 'podded_jet', s3a: 'podded_jet', e3a: 'podded_jet',
   a50: 'podded_jet',

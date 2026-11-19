@@ -402,7 +402,7 @@ function drawSelectionOverlay(rc: RenderContext, ship: Ship, isSelected: boolean
     const cy = frameY + frameH / 2;
     const cx = ship.pos.x;
 
-    if (ship.type === 'carrier' || ship.type === 'cve' || ship.type === 'cv63' || ship.type === 'cvn' || ship.type === 'cvhg_kiev' || ship.type === 'lph') {
+    if (ship.type === 'carrier' || ship.type === 'cve' || ship.type === 'cv63' || ship.type === 'cvn' || ship.type === 'cvhg_kiev' || ship.type === 'lph' || ship.type === 'lha_tarawa') {
       // 航空母艦 (Aircraft Carrier): 水平水線 + 上方雙翼飛翼折角 (Aviation Chevron)
       ctx.beginPath();
       ctx.moveTo(cx - 9, cy + 3);
@@ -735,7 +735,7 @@ function drawShipUniversalDetails(rc: RenderContext, ship: Ship, hullColor: stri
     ship.type === 'cv63' ||
     ship.type === 'cvn' ||
     ship.type === 'cvhg_kiev' ||
-    ship.type === 'lph';
+    ship.type === 'lph' || ship.type === 'lha_tarawa';
   const isLandingCraft = ship.type === 'lcvp' || ship.type === 'lcm8' || ship.type === 'lcac';
 
   // 1. Bow Breakwater V-Shield & Subtle Deck Centerline on Surface Warships

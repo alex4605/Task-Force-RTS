@@ -113,6 +113,9 @@ const LOADOUTS: Partial<Record<AircraftModel, readonly Store[]>> = {
   ad3w: [s('scout_fuel')],
   ho3s1: [s('clean_guns')],
   f86: [s('clean_guns'), s('hvar_rockets', 8), s('bomb_1000', 2), s('napalm_canister', 2)], // F-86F fighter-bomber
+  ac47: [s('clean_guns')], // three GAU-2 7.62 mm miniguns, 21,000 rounds
+  f100: [s('bombs_snakeye_retarded', 4), s('blu27_napalm', 4), s('cbu_cluster_bombs', 4), s('ffar_rockets_pod', 8), s('clean_guns')],
+  ch46: [s('helo_assault_troops'), s('clean_guns')],
   f84: [s('bombs_dual_500'), s('hvar_rockets', 8), s('napalm_canister', 2), s('bomb_1000', 2), s('clean_guns')], // F-84G: Korean War interdiction
   f82: [s('clean_guns'), s('hvar_rockets', 8), s('bomb_1000', 2)],
   // ── Vietnam War ──

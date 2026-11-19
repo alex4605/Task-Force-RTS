@@ -911,7 +911,8 @@ export function drawFoxtrotSS(rc: RenderContext, ship: Ship, hullColor: string, 
   const ctx = rc.ctx;
   const l = ship.length;
   const w = ship.width;
-  const isNuclearSSN = ship.subVariant === 'victor3' || ship.subVariant === 'akula';
+  // Albacore teardrop hulls: Victor III / Akula SSNs and the diesel-electric Kilo
+  const isNuclearSSN = ship.subVariant === 'victor3' || ship.subVariant === 'akula' || ship.subVariant === 'kilo';
 
   if (ship.isSubmerged) {
     ctx.setLineDash([4, 4]);

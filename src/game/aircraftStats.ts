@@ -135,6 +135,13 @@ const AIRCRAFT_BASE_STATS: Partial<Record<AircraftModel, AircraftBaseStats>> = {
   su27: { health: 880, gunRounds: 1440 },
   a50: { health: 1500, gunRounds: 1440 },
   su25: { health: 1350, gunRounds: 1440 },
+  rufe: { health: 420, gunRounds: 900 },
+  ki84: { health: 520, gunRounds: 1000 }, // 2 x 20 mm + 2 x 12.7 mm
+  po2: { health: 260, gunRounds: 300 },
+  ac47: { health: 900, gunRounds: 21000 }, // three GAU-2 miniguns
+  f100: { health: 640, gunRounds: 800 }, // four M39 20 mm
+  ch46: { health: 820, gunRounds: 1000 }, // door guns
+  mig31: { health: 900, gunRounds: 260 },
   pby: { health: 900, gunRounds: 1500 }, // bow turret, waist blisters, tunnel gun
   f84: { health: 560, gunRounds: 1800 }, // six .50 cal
   sh60b: { health: 700, gunRounds: 0 },
