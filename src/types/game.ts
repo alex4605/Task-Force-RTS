@@ -278,6 +278,10 @@ export interface Ship {
   enemySpottedTimer?: number;
   subVariant?: 'uboat' | 'ijn_sub' | 'whiskey' | 'zulu' | 'foxtrot' | 'victor3' | 'akula' | 'oscar2' | 'ssn_la';
   repathCooldown?: number;
+  navAvoidSide?: number; // 繞行陸地時記住的轉向側 (+1 右 / -1 左)，避免左右抖動
+  navCheckPos?: Vector2D; // 進度檢查點：一段時間未前進即判定受困並重新規劃航線
+  navCheckTimer?: number;
+  navStuck?: boolean;
   carrierPlanes?: {
     ready: Record<string, number>;
     hangar: Record<string, number>;

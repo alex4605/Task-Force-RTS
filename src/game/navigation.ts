@@ -112,7 +112,12 @@ export class NavalNavigationGrid {
     return this.grid[gy * this.cols + gx] !== CELL_LAND;
   }
 
-  public findNearestWalkableCell(startGx: number, startGy: number, maxRadius: number = 14): { gx: number; gy: number } | null {
+  /**
+   * Nearest navigable cell, searched in growing rings. The default radius covers the whole grid,
+   * so a destination deep inland (a click on the mainland) resolves to the nearest stretch of
+   * coast instead of leaving ships to drive straight at the shore.
+   */
+  public findNearestWalkableCell(startGx: number, startGy: number, maxRadius: number = Math.max(this.cols, this.rows)): { gx: number; gy: number } | null {
     if (this.isWalkableCell(startGx, startGy)) {
       return { gx: startGx, gy: startGy };
     }

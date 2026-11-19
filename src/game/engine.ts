@@ -2029,12 +2029,19 @@ export class GameEngine {
 
       // RTS Navigation Orders with A* Waypoint Progression & Dynamic Island Perimeter Avoidance
       if (ship.order.type === 'move' && ship.order.targetPos) {
+        if (ship.navStuck && this.navGrid) {
+          // No headway for several seconds: replan the sea lane from where the ship actually is
+          ship.order.waypoints = this.navGrid.findPath(ship.pos, ship.order.targetPos);
+          ship.order.activeWaypointIndex = 0;
+          ship.navStuck = false;
+        }
         const wps = ship.order.waypoints;
         let wpIdx = ship.order.activeWaypointIndex ?? 0;
         let activeTarget = ship.order.targetPos;
 
         if (wps && wps.length > 0 && wpIdx < wps.length) {
-          activeTarget = wps[wpIdx];
+          activeTarget = this.advanceSeaLane(ship, wps);
+          wpIdx = ship.order.activeWaypointIndex ?? wpIdx;
           const isFinalWp = wpIdx >= wps.length - 1;
           const arriveDist = isFinalWp ? 45 : 95;
           if (dist(ship.pos, activeTarget) < arriveDist) {
@@ -2132,6 +2139,7 @@ export class GameEngine {
         ship.vel.y = Math.sin(ship.heading) * mapSpeed;
         ship.pos.x += ship.vel.x * dt;
         ship.pos.y += ship.vel.y * dt;
+        this.checkNavigationProgress(ship, dt);
       } else {
         ship.vel.x = 0;
         ship.vel.y = 0;
@@ -2374,18 +2382,14 @@ export class GameEngine {
     if (!this.navGrid) return dest;
     const dTotal = dist(ship.pos, dest);
     if (dTotal < 520) return dest;
-    if (!ship.order.waypoints || ship.order.waypoints.length === 0 || (ship.repathCooldown || 0) <= 0) {
+    if (!ship.order.waypoints || ship.order.waypoints.length === 0 || (ship.repathCooldown || 0) <= 0 || ship.navStuck) {
       ship.order.waypoints = this.navGrid.findPath(ship.pos, dest);
       ship.order.activeWaypointIndex = 0;
       ship.repathCooldown = 3.5;
+      ship.navStuck = false;
     }
     const wps = ship.order.waypoints || [dest];
-    let idx = ship.order.activeWaypointIndex ?? 0;
-    while (idx < wps.length - 1 && dist(ship.pos, wps[idx]) < 110) {
-      idx += 1;
-      ship.order.activeWaypointIndex = idx;
-    }
-    return wps[Math.min(idx, wps.length - 1)] || dest;
+    return this.advanceSeaLane(ship, wps) || dest;
   }
 
   private updateEnemyShipAI(ship: Ship, _dt: number) {
@@ -2451,6 +2455,13 @@ export class GameEngine {
   // 透過多束前方偵測探針 (Forward Lookahead Whiskers) 提前偵測環礁陸地邊界，
   // 依據碰撞緊迫度向外側切線動態轉向並調節航速，徹底避免艦艇擱淺卡灘
   // ══════════════════════════════════════════════════════════
+  /**
+   * Local land avoidance. Probes ahead along the desired heading; if land is in the way, fans out
+   * to either side in 12.5-degree steps and takes the first heading whose probe is clear, keeping
+   * the side it chose until the way ahead is open again (so it does not dither left-right along a
+   * coast). Works for any coastline shape, unlike steering by the tangent to an island's centre,
+   * which sent ships the wrong way along the mainland's irregular shore.
+   */
   private calculateNavalSteeringAvoidance(
     ship: Ship,
     desiredHeading: number,
@@ -2461,75 +2472,79 @@ export class GameEngine {
     }
 
     // 依據航速與艦艇長度動態計算前視預測距離 (90m ~ 280m)
-    const lookaheadDist = Math.max(90, Math.min(280, ship.speed * 8.5 + ship.length * 1.6));
-
-    // 檢查六束前向航向探針：目標航向、當前航向、兩側觸鬚 (±26° 與 ±52°)
-    const rays: number[] = [
-      desiredHeading,
-      ship.heading,
-      ship.heading + 0.45,
-      ship.heading - 0.45,
-      ship.heading + 0.9,
-      ship.heading - 0.9,
-    ];
-
-    let closestIsland: Island | null = null;
-    let closestDist = Infinity;
-    let mostUrgentDist = Infinity;
-    let collisionDetected = false;
-
-    for (const island of this.islands) {
-      const dCenter = dist(ship.pos, island.center);
-      if (dCenter < island.radius + lookaheadDist + 120) {
-        if (dCenter < closestDist) {
-          closestDist = dCenter;
-          closestIsland = island;
-        }
-
-        // 沿每條探針取多個取樣點 (35%, 65%, 100% 距離)
-        for (const rayAngle of rays) {
-          for (let step = 0.35; step <= 1.0; step += 0.32) {
-            const probeDist = lookaheadDist * step;
-            const probePos = {
-              x: ship.pos.x + Math.cos(rayAngle) * probeDist,
-              y: ship.pos.y + Math.sin(rayAngle) * probeDist,
-            };
-            if (isPointOnIslandLand(probePos, island)) {
-              collisionDetected = true;
-              if (probeDist < mostUrgentDist) {
-                mostUrgentDist = probeDist;
-              }
-            }
-          }
-        }
-      }
-    }
-
-    if (!collisionDetected || !closestIsland) {
+    const lookahead = Math.max(90, Math.min(280, ship.speed * 8.5 + ship.length * 1.6));
+    const nearby = this.islands.filter((isl) => dist(ship.pos, isl.center) < isl.radius + lookahead + 120);
+    if (nearby.length === 0) {
+      ship.navAvoidSide = undefined;
       return { targetHeading: desiredHeading, speedScale: 1.0 };
     }
 
-    // 計算島嶼外向斥力角度
-    const islandAngle = Math.atan2(ship.pos.y - closestIsland.center.y, ship.pos.x - closestIsland.center.x);
-    // 依據目前目標航向與島嶼中心向量的叉積決定順時針或逆時針繞行切線
-    const cross = Math.sin(desiredHeading - islandAngle);
-    const tangentSign = cross >= 0 ? 1 : -1;
-    // 切線方向加上 15° 的向外偏移，確保繞行時持續遠離淺灘
-    const tangentHeading = islandAngle + tangentSign * (Math.PI * 0.5 + 0.26);
+    // Fraction of the probe at which land is first met, or > 1 when the probe is clear
+    const landAt = (heading: number): number => {
+      const cx = Math.cos(heading);
+      const cy = Math.sin(heading);
+      for (const f of [0.3, 0.55, 0.8, 1]) {
+        const p = { x: ship.pos.x + cx * lookahead * f, y: ship.pos.y + cy * lookahead * f };
+        if (nearby.some((isl) => isPointOnIslandLand(p, isl))) return f;
+      }
+      return 2;
+    };
 
-    // 緊迫度係數 (0.2 ~ 1.0)
-    const urgency = Math.max(0.2, Math.min(1.0, 1.0 - mostUrgentDist / lookaheadDist));
+    const ahead = landAt(desiredHeading);
+    if (ahead > 1) {
+      ship.navAvoidSide = undefined;
+      return { targetHeading: desiredHeading, speedScale: 1.0 };
+    }
 
-    // 平滑插值目標航向與切線避碰航向
-    let diff = tangentHeading - desiredHeading;
-    while (diff > Math.PI) diff -= Math.PI * 2;
-    while (diff < -Math.PI) diff += Math.PI * 2;
-    const blendedHeading = desiredHeading + diff * Math.min(1.0, urgency * 1.4);
+    // Prefer the side already being used, otherwise the side with more sea room
+    const side = ship.navAvoidSide ?? (landAt(desiredHeading + 0.6) >= landAt(desiredHeading - 0.6) ? 1 : -1);
+    // Closer land ahead means a harder turn is needed: slow down to keep rudder authority
+    const speedScale = Math.max(0.45, 0.35 + ahead * 0.65);
+    for (let k = 1; k <= 12; k++) {
+      for (const s of [side, -side]) {
+        const heading = desiredHeading + s * k * 0.22;
+        if (landAt(heading) > 1) {
+          ship.navAvoidSide = s;
+          return { targetHeading: heading, speedScale };
+        }
+      }
+    }
+    // Boxed in (a bay or a beach): back off the way we came
+    return { targetHeading: desiredHeading + Math.PI, speedScale: 0.4 };
+  }
 
-    // 緊迫時適當降速保證舵效轉向
-    const speedScale = Math.max(0.4, 1.0 - urgency * 0.45);
+  /**
+   * Waypoint to steer for: skips ahead to the furthest waypoint already in clear sight, so a ship
+   * that overshoots a turn (or was pushed off its lane) never circles back for a missed point.
+   */
+  private advanceSeaLane(ship: Ship, wps: Vector2D[]): Vector2D {
+    let idx = ship.order.activeWaypointIndex ?? 0;
+    while (
+      idx < wps.length - 1 &&
+      (dist(ship.pos, wps[idx]) < 110 || (this.navGrid?.hasClearWaterLine(ship.pos, wps[idx + 1], true) ?? false))
+    ) {
+      idx += 1;
+    }
+    ship.order.activeWaypointIndex = idx;
+    return wps[Math.min(idx, wps.length - 1)];
+  }
 
-    return { targetHeading: blendedHeading, speedScale };
+  /**
+   * Flags a ship that wanted to make way but covered under a quarter of the expected distance in
+   * the last four seconds; its next steering update replans its route and tries the other side.
+   */
+  private checkNavigationProgress(ship: Ship, dt: number): void {
+    ship.navCheckTimer = (ship.navCheckTimer ?? 4) - dt;
+    if (ship.navCheckTimer > 0) return;
+    if (ship.navCheckPos && ship.targetSpeed > 2) {
+      const expected = shipMapSpeed(ship.targetSpeed) * 4;
+      if (dist(ship.pos, ship.navCheckPos) < expected * 0.25) {
+        ship.navStuck = true;
+        ship.navAvoidSide = -(ship.navAvoidSide ?? 1);
+      }
+    }
+    ship.navCheckPos = { ...ship.pos };
+    ship.navCheckTimer = 4;
   }
 
   private updateShipCombat(ship: Ship, dt: number) {
@@ -14902,20 +14917,17 @@ export class GameEngine {
         const needNewPath =
           !ship.order.waypoints ||
           ship.order.waypoints.length === 0 ||
-          (ship.repathCooldown || 0) <= 0;
+          (ship.repathCooldown || 0) <= 0 ||
+          ship.navStuck;
         if (needNewPath) {
           ship.order.waypoints = this.navGrid.findPath(ship.pos, navDestination);
           ship.order.activeWaypointIndex = 0;
           ship.order.targetPos = navDestination;
           ship.repathCooldown = 3.5;
+          ship.navStuck = false;
         }
         const wps = ship.order.waypoints || [navDestination];
-        let wpIdx = ship.order.activeWaypointIndex ?? 0;
-        while (wpIdx < wps.length - 1 && dist(ship.pos, wps[wpIdx]) < 110) {
-          wpIdx += 1;
-          ship.order.activeWaypointIndex = wpIdx;
-        }
-        const activeWp = wps[Math.min(wpIdx, wps.length - 1)] || navDestination;
+        const activeWp = this.advanceSeaLane(ship, wps) || navDestination;
         ship.targetHeading = Math.atan2(activeWp.y - ship.pos.y, activeWp.x - ship.pos.x);
       } else {
         ship.targetHeading = Math.atan2(navDestination.y - ship.pos.y, navDestination.x - ship.pos.x);
