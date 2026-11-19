@@ -1,7 +1,7 @@
 // Per-type installation artwork. Each drawer runs with the canvas translated to the installation's position.
 import { Era, Installation, InstallationType, Island } from '../../../types/game';
 import { RenderContext } from '../context';
-import { drawGroundSilhouette } from '../../unitPreviewRenderer';
+import { drawGroundSilhouette, GROUND_SILHOUETTE_SCALE, groundSilhouetteClass } from '../../unitPreviewRenderer';
 import { InstallationStyle } from './style';
 
 /** Draws the type-specific body of one installation in its local frame. */
@@ -1509,12 +1509,15 @@ function drawGunPit(ctx: CanvasRenderingContext2D, x: number, y: number, r: numb
   ctx.setLineDash([]);
 }
 
-/** Draws a unit silhouette at (x, y), facing north, at the given scale. */
-function placeUnit(ctx: CanvasRenderingContext2D, unitType: string, isPlayer: boolean, x: number, y: number, scale: number) {
+/**
+ * Draws a unit silhouette at (x, y), facing north, at the same on-map scale as a manoeuvre
+ * unit of that type; `packing` shrinks it for tightly packed layouts such as a battalion laager.
+ */
+function placeUnit(ctx: CanvasRenderingContext2D, unitType: string, isPlayer: boolean, x: number, y: number, packing = 1) {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(-Math.PI / 2);
-  drawGroundSilhouette(ctx, unitType, isPlayer, scale);
+  drawGroundSilhouette(ctx, unitType, isPlayer, GROUND_SILHOUETTE_SCALE[groundSilhouetteClass(unitType)] * packing);
   ctx.restore();
 }
 
@@ -1577,7 +1580,7 @@ function drawEmplacements(ctx: CanvasRenderingContext2D, kind: EmplacementKind, 
       ctx.beginPath();
       ctx.arc(0, 14, 12, Math.PI * 1.1, Math.PI * 1.9);
       ctx.stroke();
-      placeUnit(ctx, rifle, isPlayer, 0, 10, 0.9);
+      placeUnit(ctx, rifle, isPlayer, 0, 10);
       break;
     }
     case 'infantry_platoon': {
@@ -1592,13 +1595,13 @@ function drawEmplacements(ctx: CanvasRenderingContext2D, kind: EmplacementKind, 
       ctx.strokeStyle = 'rgba(188, 170, 164, 0.6)';
       ctx.lineWidth = 0.8;
       ctx.stroke();
-      for (const x of [-12, 0, 12]) placeUnit(ctx, rifle, isPlayer, x, 12, 0.62);
+      for (const x of [-12, 0, 12]) placeUnit(ctx, rifle, isPlayer, x, 12);
       break;
     }
     case 'tank_platoon': {
       for (const x of [-12, 0, 12]) {
         drawRevetment(ctx, x, 9, 10, 16);
-        placeUnit(ctx, tank, isPlayer, x, 9, 0.55);
+        placeUnit(ctx, tank, isPlayer, x, 9);
       }
       break;
     }
@@ -1606,7 +1609,7 @@ function drawEmplacements(ctx: CanvasRenderingContext2D, kind: EmplacementKind, 
       // Two companies abreast plus a sandbagged command bunker
       for (const [x, y] of [[-15, 4], [-5, 4], [5, 4], [15, 4], [-10, 19], [10, 19]]) {
         drawRevetment(ctx, x, y, 8.5, 13);
-        placeUnit(ctx, tank, isPlayer, x, y, 0.45);
+        placeUnit(ctx, tank, isPlayer, x, y, 0.82);
       }
       ctx.fillStyle = '#3E4A3D';
       ctx.strokeStyle = 'rgba(188, 170, 164, 0.85)';
@@ -1618,7 +1621,7 @@ function drawEmplacements(ctx: CanvasRenderingContext2D, kind: EmplacementKind, 
     case 'towed_artillery': {
       for (const x of [-15, -5, 5, 15]) {
         drawGunPit(ctx, x, 10, 5);
-        placeUnit(ctx, gun, isPlayer, x, 12, 0.42);
+        placeUnit(ctx, gun, isPlayer, x, 12);
       }
       break;
     }
@@ -1626,7 +1629,7 @@ function drawEmplacements(ctx: CanvasRenderingContext2D, kind: EmplacementKind, 
       // Four heavy AA guns (90mm M2 / Type 88 75mm) on cruciform platforms around the fire director
       for (const [x, y] of [[-11, 3], [11, 3], [-11, 19], [11, 19]]) {
         drawGunPit(ctx, x, y, 6);
-        placeUnit(ctx, eq.flak, isPlayer, x, y, 0.4);
+        placeUnit(ctx, eq.flak, isPlayer, x, y);
       }
       ctx.fillStyle = '#263238';
       ctx.strokeStyle = '#B0BEC5';

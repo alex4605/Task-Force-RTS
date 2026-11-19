@@ -791,30 +791,22 @@ function drawMortarTeam(ctx: CanvasRenderingContext2D, _isPlayer: boolean, pal: 
   drawSoldier(ctx, -3.5, 3.6, 'smg', helmet, false, pal);
 }
 
-export function drawGroundSilhouette(
-  ctx: CanvasRenderingContext2D,
-  unitType: string,
-  isPlayer: boolean,
-  scale: number = 1
-): void {
+/** Silhouette family a ground unit type is drawn as. */
+export type GroundSilhouetteClass =
+  | 'rocket'
+  | 'tank'
+  | 'spg'
+  | 'towed'
+  | 'air_defense'
+  | 'carrier'
+  | 'engineer'
+  | 'atgm'
+  | 'mortar'
+  | 'infantry';
+
+/** Classifies a ground unit (or installation equipment) type by the silhouette it is drawn as. */
+export function groundSilhouetteClass(unitType: string): GroundSilhouetteClass {
   const t = unitType.toLowerCase();
-  const hullFill = isPlayer ? '#1B3A2B' : '#3A2322';
-  const hullHighlight = isPlayer ? '#295740' : '#4E2F2D';
-  const hullStroke = isPlayer ? '#66BB6A' : '#EF9A9A';
-  const turretFill = isPlayer ? '#2E5A44' : '#52302E';
-  const trackColor = '#0F1419';
-  const barrelColor = isPlayer ? '#CFD8DC' : '#FFCCBC';
-  const accentColor = isPlayer ? '#4FC3F7' : '#FF5252';
-
-  ctx.save();
-  ctx.scale(scale, scale);
-
-  // Crisp terrain contact drop-shadow
-  ctx.fillStyle = 'rgba(2, 6, 12, 0.62)';
-  ctx.beginPath();
-  ctx.ellipse(1.6, 2.2, 13.5, 8.2, 0, 0, Math.PI * 2);
-  ctx.fill();
-
   const isRocketTel =
     t.includes('atacms') ||
     t.includes('mlrs') ||
@@ -904,7 +896,63 @@ export function drawGroundSilhouette(
     t.includes('osa') ||
     t.includes('strela');
 
-  if (isRocketTel) {
+
+  if (isRocketTel) return 'rocket';
+  if (isTank) return 'tank';
+  if (isSpg) return 'spg';
+  if (isTowed) return 'towed';
+  if (isAirDefense || AD_SPECS.some((sp) => sp.match.test(t))) return 'air_defense';
+  if (isIfvApc) return 'carrier';
+  if (t.includes('engineer')) return 'engineer';
+  if (t.includes('atgm') || t.includes('dragon')) return 'atgm';
+  if (t.includes('mortar')) return 'mortar';
+  return 'infantry';
+}
+
+/**
+ * On-map silhouette scale per family, shared by manoeuvre units and the equipment drawn inside
+ * installations, so a tank platoon on the move is the same size as a dug-in one.
+ */
+export const GROUND_SILHOUETTE_SCALE: Record<GroundSilhouetteClass, number> = {
+  rocket: 0.55,
+  tank: 0.55,
+  spg: 0.55,
+  towed: 0.42,
+  air_defense: 0.55,
+  carrier: 0.55,
+  engineer: 0.55,
+  atgm: 0.62,
+  mortar: 0.62,
+  infantry: 0.62,
+};
+
+export function drawGroundSilhouette(
+  ctx: CanvasRenderingContext2D,
+  unitType: string,
+  isPlayer: boolean,
+  scale: number = 1
+): void {
+  const t = unitType.toLowerCase();
+  const hullFill = isPlayer ? '#1B3A2B' : '#3A2322';
+  const hullHighlight = isPlayer ? '#295740' : '#4E2F2D';
+  const hullStroke = isPlayer ? '#66BB6A' : '#EF9A9A';
+  const turretFill = isPlayer ? '#2E5A44' : '#52302E';
+  const trackColor = '#0F1419';
+  const barrelColor = isPlayer ? '#CFD8DC' : '#FFCCBC';
+  const accentColor = isPlayer ? '#4FC3F7' : '#FF5252';
+
+  ctx.save();
+  ctx.scale(scale, scale);
+
+  // Crisp terrain contact drop-shadow
+  ctx.fillStyle = 'rgba(2, 6, 12, 0.62)';
+  ctx.beginPath();
+  ctx.ellipse(1.6, 2.2, 13.5, 8.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const kind = groundSilhouetteClass(t);
+
+  if (kind === 'rocket') {
     const isNuke = t.includes('nuclear');
     const isAtacms = t.includes('atacms');
     const isScud = t.includes('scud');
@@ -1036,7 +1084,7 @@ export function drawGroundSilhouette(
         }
       }
     }
-  } else if (isTank) {
+  } else if (kind === 'tank') {
     const isAbrams = t.includes('abrams') || t.includes('m1ip');
     const isSovietEra = t.includes('t72') || t.includes('t80');
     const isSovietMid = t.includes('t54') || t.includes('t55') || t.includes('t62') || t.includes('t34');
@@ -1229,13 +1277,13 @@ export function drawGroundSilhouette(
         ctx.fillRect(gx + sp.gunLen - 1.2, sp.turretY - sp.gunW * 0.85, 1.8, sp.gunW * 1.7);
       }
     }
-  } else if (isSpg) {
+  } else if (kind === 'spg') {
     drawSpg(ctx, SPG_SPECS.find((sp) => sp.match.test(t)) ?? DEFAULT_SPG, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
-  } else if (isTowed) {
+  } else if (kind === 'towed') {
     drawTowedGun(ctx, TOWED_SPECS.find((sp) => sp.match.test(t)) ?? DEFAULT_TOWED, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
-  } else if (AD_SPECS.some((sp) => sp.match.test(t))) {
+  } else if (kind === 'air_defense' && AD_SPECS.some((sp) => sp.match.test(t))) {
     drawArmoredCarrier(ctx, AD_SPECS.find((sp) => sp.match.test(t))!, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
-  } else if (isAirDefense) {
+  } else if (kind === 'air_defense') {
     const isTunguska = t.includes('tunguska');
     const isShilka = t.includes('shilka');
     // M42 Duster shares the ZSU-57-2 layout: open-topped turret with twin AA guns on a light-tank chassis
@@ -1372,9 +1420,9 @@ export function drawGroundSilhouette(
         ctx.fill();
       }
     }
-  } else if (isIfvApc) {
+  } else if (kind === 'carrier') {
     drawArmoredCarrier(ctx, IFV_SPECS.find((sp) => sp.match.test(t)) ?? DEFAULT_IFV, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
-  } else if (t.includes('engineer')) {
+  } else if (kind === 'engineer') {
     ctx.fillStyle = trackColor;
     ctx.fillRect(-9, -6.5, 18, 2.5);
     ctx.fillRect(-9, 4, 18, 2.5);
@@ -1390,7 +1438,7 @@ export function drawGroundSilhouette(
     ctx.fillStyle = '#263238';
     ctx.fillRect(6.5, -4.2, 1.8, 1.5);
     ctx.fillRect(6.5, 2.7, 1.8, 1.5);
-  } else if (t.includes('atgm') || t.includes('dragon')) {
+  } else if (kind === 'atgm') {
     ctx.strokeStyle = '#BCAAA4';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -1409,7 +1457,7 @@ export function drawGroundSilhouette(
     ctx.arc(-2, -3.5, 2.2, 0, Math.PI * 2);
     ctx.arc(-2, 3.5, 2.2, 0, Math.PI * 2);
     ctx.fill();
-  } else if (t.includes('mortar')) {
+  } else if (kind === 'mortar') {
     drawMortarTeam(ctx, isPlayer, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
   } else {
     drawSquad(ctx, INFANTRY_SPECS.find((sp) => sp.match.test(t)) ?? DEFAULT_SQUAD, isPlayer, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
