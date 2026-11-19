@@ -290,6 +290,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         cameraRef.current,
         engine.selectedUnitIds
       );
+      renderer.drawGroundWrecks(engine.groundWrecks, cameraRef.current);
       renderer.drawGroundUnits(engine.groundUnits, cameraRef.current, engine.selectedUnitIds);
       renderer.drawAircraft(engine.aircraft, cameraRef.current, engine.selectedUnitIds);
       renderer.drawProjectiles(engine.projectiles, cameraRef.current);

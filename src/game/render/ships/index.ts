@@ -1,3 +1,4 @@
+import { drawFunnelSmoke } from '../unitDetails';
 import { Ship, Vector2D } from '../../../types/game';
 import { RenderContext, Camera, isWorldCircleVisible } from '../context';
 import { drawAlliedSAGShip } from './alliedSag';
@@ -44,6 +45,8 @@ export function drawShips(rc: RenderContext, ships: Ship[], camera: Camera, sele
     const detailColor = isPlayer ? '#80DEEA' : isAllied ? '#00E676' : '#EF9A9A';
 
     drawHull(rc, ship, hullColor, detailColor);
+
+    drawFunnelSmoke(rc, ship);
 
     drawBattleDamage(rc, ship);
 

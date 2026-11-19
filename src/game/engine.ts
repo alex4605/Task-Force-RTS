@@ -40,6 +40,7 @@ import { getNavalGunPerformance, getNavalLauncherRange } from './navalGuns';
 import { getAfbModelsForEra, getCarrierModelsForEra, getCatalogRole } from './airWingCatalog';
 import { AIR_WEAPON_RANGE, gameRangeFromKm, getInstallationRange } from './rangeScale';
 import { getShipAshmFit, getShipSamSystem } from './navalMissileSalvos';
+import { GroundWreck, leavesWreck, WRECK_LIFETIME } from './render/unitDetails';
 import { AHEAD_THROWERS, hasAswWeapon, layerFactorForAircraft, layerFactorForShipSonar, layerFactorForSonobuoy, updateThermoclineDepth, STANDOFF_ASW, aircraftDetectionRange, applyHistoricalAswFit, svttLabel, depthChargePattern, enemyAswWeapon, isDieselBoat, isSurfacedBoat, shipSonar, sonarDeadZone, sonarDetectionRange, sonobuoySensitivity, updateDieselBattery } from './asw';
 import { barrierStation, isStriker, selectAirTarget } from './airMissions';
 import { getAircraftSpeed, isSupersonicMissile, MISSILE_SPEED, shipMapSpeed, SPECIAL_ATTACK_SPEED } from './speedScale';
@@ -147,6 +148,8 @@ export class GameEngine {
   public alliedShips: Ship[] = [];
   public enemyShips: Ship[] = [];
   public groundUnits: GroundUnit[] = [];
+  /** Burnt-out vehicles left where ground units were destroyed (render only). */
+  public groundWrecks: GroundWreck[] = [];
   public aircraft: Aircraft[] = [];
   public projectiles: Projectile[] = [];
   public particles: Particle[] = [];
@@ -7631,12 +7634,20 @@ export class GameEngine {
       islandSupplyMap.set(isl.id, { playerSupplied, enemySupplied, hasHospital, hasDepot, hasMajorPort });
     }
 
+    for (const w of this.groundWrecks) w.age += dt;
+    this.groundWrecks = this.groundWrecks.filter((w) => w.age < WRECK_LIFETIME);
+
     // ══════════════════════════════════════════════════════════
     // 2. 地面部隊狀態更新、組織度/建制度計算與投降審查 (Ground Unit Logic)
     // ══════════════════════════════════════════════════════════
     for (let i = this.groundUnits.length - 1; i >= 0; i--) {
       const unit = this.groundUnits[i];
       if (unit.isDestroyed) {
+        if (!unit.embarkedInShipId && leavesWreck(unit.type)) {
+          const heading = unit.order.targetPos ? Math.atan2(unit.order.targetPos.y - unit.pos.y, unit.order.targetPos.x - unit.pos.x) : unit.side === 'player' ? 0 : Math.PI;
+          this.groundWrecks.push({ id: `wreck-${unit.id}`, type: unit.type, side: unit.side, pos: { ...unit.pos }, heading, age: 0 });
+          if (this.groundWrecks.length > 60) this.groundWrecks.shift();
+        }
         this.groundUnits.splice(i, 1);
         continue;
       }

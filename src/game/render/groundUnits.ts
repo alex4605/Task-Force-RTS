@@ -2,6 +2,7 @@ import { GroundUnit } from '../../types/game';
 import { drawGroundSilhouette, GROUND_SILHOUETTE_SCALE, groundSilhouetteClass } from '../unitPreviewRenderer';
 import { RenderContext, Camera } from './context';
 import { drawUnitSelectionRing } from './ships';
+import { drawGroundDust } from './unitDetails';
 
 // Draw Ground Units (USMC Infantry, LVT Amphibious, Armor, and OPFOR Ambush squads)
 export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], camera: Camera, selectedUnitIds: string[]) {
@@ -48,6 +49,7 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
     const scale = GROUND_SILHOUETTE_SCALE[groundSilhouetteClass(unit.type)];
     ctx.ellipse(-1, 1.5, 12.5 * scale, 7.9 * scale, 0, 0, Math.PI * 2);
     ctx.fill();
+    drawGroundDust(rc, unit, scale);
     drawGroundSilhouette(ctx, unit.type, isPlayer, scale);
     ctx.restore();
 

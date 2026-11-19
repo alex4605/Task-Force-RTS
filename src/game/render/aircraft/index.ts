@@ -1,3 +1,4 @@
+import { drawAircraftLights } from '../unitDetails';
 import { Aircraft, AircraftModel } from '../../../types/game';
 import { RenderContext, Camera, isWorldCircleVisible } from '../context';
 import { drawUnitSelectionRing } from '../ships';
@@ -43,6 +44,8 @@ export function drawAircraft(rc: RenderContext, aircraftList: Aircraft[], camera
     const color = isPlayer ? '#80D8FF' : isAllied ? '#00E676' : '#FF8A80';
 
     drawPlaneBody(rc, plane, isPlayer, color);
+
+    drawAircraftLights(rc, plane, cosH, sinH);
 
     drawThreatBanner(rc, plane, isPlayer);
 

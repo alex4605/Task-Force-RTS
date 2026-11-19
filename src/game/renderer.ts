@@ -3,6 +3,7 @@ import { RenderContext } from './render/context';
 import * as aircraftRender from './render/aircraft';
 import * as effectsRender from './render/effects';
 import * as groundUnitsRender from './render/groundUnits';
+import { drawGroundWrecks, GroundWreck } from './render/unitDetails';
 import * as islandsRender from './render/islands';
 import * as oceanRender from './render/ocean';
 import * as overlaysRender from './render/overlays';
@@ -73,6 +74,10 @@ export class VectorRenderer {
   }
 
   // Draw Ground Units (USMC Infantry, LVT Amphibious, Armor, and OPFOR Ambush squads)
+  public drawGroundWrecks(wrecks: GroundWreck[], camera: Camera) {
+    drawGroundWrecks(this.rc, wrecks, camera);
+  }
+
   public drawGroundUnits(groundUnits: GroundUnit[], camera: Camera, selectedUnitIds: string[]) {
     groundUnitsRender.drawGroundUnits(this.rc, groundUnits, camera, selectedUnitIds);
   }
