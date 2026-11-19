@@ -103,6 +103,7 @@ const LOADOUTS: Partial<Record<AircraftModel, readonly Store[]>> = {
   a26: [s('napalm_canister', 2, ['era3']), s('bombs_dual_500'), s('bomb_1000'), s('bombs_quad_500'), s('hvar_rockets', 8)],
   b29: [s('bombs_carpet_250'), s('bombs_quad_500'), s('bombs_dual_1000'), s('bomb_2000'), s('bomb_1600'), s('bomb_1000'), s('tactical_nuke')],
   c47: [s('c1_paratroopers')],
+  pby: [s('scout_fuel'), s('depth_bombs', 4), s('aerial_torpedo', 2), s('bombs_dual_500')], // Black Cat: radar search, depth charges, two Mk 13 torpedoes
   // ── Korean War ──
   f9f: [s('clean_guns'), s('hvar_rockets', 6), s('bombs_dual_500'), s('napalm_canister', 2)], // F9F-2: six HVAR or 2 x 500 lb
   f2h: [s('clean_guns'), s('hvar_rockets', 4), s('bombs_dual_500')], // F2H-2: four HVAR + 2 x 500 lb
@@ -112,6 +113,10 @@ const LOADOUTS: Partial<Record<AircraftModel, readonly Store[]>> = {
   ad3w: [s('scout_fuel')],
   ho3s1: [s('clean_guns')],
   f86: [s('clean_guns'), s('hvar_rockets', 8), s('bomb_1000', 2), s('napalm_canister', 2)], // F-86F fighter-bomber
+  ac47: [s('clean_guns')], // three GAU-2 7.62 mm miniguns, 21,000 rounds
+  f100: [s('bombs_snakeye_retarded', 4), s('blu27_napalm', 4), s('cbu_cluster_bombs', 4), s('ffar_rockets_pod', 8), s('clean_guns')],
+  ch46: [s('helo_assault_troops'), s('clean_guns')],
+  f84: [s('bombs_dual_500'), s('hvar_rockets', 8), s('napalm_canister', 2), s('bomb_1000', 2), s('clean_guns')], // F-84G: Korean War interdiction
   f82: [s('clean_guns'), s('hvar_rockets', 8), s('bomb_1000', 2)],
   // ── Vietnam War ──
   f8: [s('aim9_sidewinder', 4), s('clean_guns'), s('bombs_snakeye_retarded', 4), s('ffar_rockets_pod', 8)], // four AIM-9 on cheek rails, Zuni pods
@@ -149,6 +154,7 @@ const LOADOUTS: Partial<Record<AircraftModel, readonly Store[]>> = {
   ah64a: [s('hellfire_missiles', 16), s('clean_guns')], // sixteen Hellfire, M230 chain gun
   ah1w: [s('tow_missiles', 8), s('hellfire_missiles', 8), s('aim9_sidewinder', 2), s('clean_guns')],
   s3a: [s('asw_acoustic_torpedo', 4), s('rgm84_harpoon', 2), s('depth_bombs', 4), s('scout_fuel')], // four Mk 46 in the bay; no gun
+  sh60b: [s('asw_acoustic_torpedo', 2), s('depth_bombs', 2)], // LAMPS III: two Mk 46 (Penguin from 1989)
   sh3f: [s('asw_acoustic_torpedo', 2), s('depth_bombs', 4)],
   f111: [s('gbu10_laser_paveway', 4), s('mer_iron_bombs'), s('bomb_2000', 4), s('cbu_cluster_bombs', 4)], // F-111F Pave Tack
   e2c: [s('scout_fuel')],
@@ -157,6 +163,13 @@ const LOADOUTS: Partial<Record<AircraftModel, readonly Store[]>> = {
   c130: [s('c1_paratroopers')],
   ch53: [s('helo_assault_troops'), s('c1_paratroopers')],
   // ── Allied (Commonwealth, ROK and NATO) squadrons flown from the friendly airbase ──
+  beaufort: [s('aerial_torpedo'), s('bombs_dual_500'), s('clean_guns')],
+  boomerang: [s('clean_guns'), s('bomb_500')],
+  seafire: [s('clean_guns'), s('bomb_500')],
+  barracuda: [s('aerial_torpedo'), s('bombs_dual_500'), s('bomb_1600'), s('depth_bombs', 4)], // 1,600 lb AP vs Tirpitz
+  canberra: [s('bombs_carpet_250'), s('bombs_dual_1000')], // six 750 lb or 1,000 lb bombs over Vietnam
+  buccaneer: [s('rgm84_harpoon', 2), s('gbu10_laser_paveway', 2), s('bombs_snakeye_retarded', 4)], // Sea Eagle / Martel
+  sea_harrier: [s('aim9_sidewinder', 2), s('clean_guns'), s('cbu_cluster_bombs', 2)], // AIM-9L, Falklands 1982
   hurricane: [s('clean_guns')],
   spitfire_v: [s('clean_guns')],
   spitfire_xiv: [s('clean_guns')],

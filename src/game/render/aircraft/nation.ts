@@ -1,7 +1,12 @@
-import { Aircraft, AircraftModel } from '../../../types/game';
+import { Aircraft, AircraftModel, AircraftNation } from '../../../types/game';
 import { RenderContext } from '../context';
 import {
+  drawDutchRoundel,
   drawFrenchRoundel,
+  drawMapleLeafRoundel,
+  drawPacificRoundel,
+  drawRAAFKangarooRoundel,
+  drawSAAFRoundel,
   drawHinomaru,
   drawLuftwaffeCross,
   drawRAFRoundel,
@@ -11,16 +16,7 @@ import {
 } from './insignia';
 
 /** Operator whose national markings an airframe wears. */
-export type AircraftNation =
-  | 'usn'          // US Navy / Marine Corps (Star & Bars, dark sea blue disc)
-  | 'usaf'         // USAAF / USAF / US Army (Star & Bars, insignia blue disc)
-  | 'japan'        // Imperial Japanese Navy / Army Hinomaru
-  | 'uk'           // RAF / Fleet Air Arm roundel
-  | 'rok'          // Republic of Korea Air Force
-  | 'west_germany' // Luftwaffe / Marineflieger Balkenkreuz
-  | 'france'       // Armée de l'Air cocarde
-  | 'sweden'       // Flygvapnet (drawn by the Viggen silhouette itself)
-  | 'ussr';        // Soviet VVS / AV-MF red star
+export type { AircraftNation } from '../../../types/game';        // Soviet VVS / AV-MF red star
 
 /** Exhaustive: adding an AircraftModel without a nation is a compile error. */
 export const AIRCRAFT_NATION: Record<AircraftModel, AircraftNation> = {
@@ -29,13 +25,14 @@ export const AIRCRAFT_NATION: Record<AircraftModel, AircraftNation> = {
   sc1: 'usn', f9f: 'usn', f2h: 'usn', ad1: 'usn', f4u4: 'usn', af_guardian: 'usn', ad3w: 'usn', ho3s1: 'usn',
   f8: 'usn', f4b: 'usn', f4j: 'usn', a4: 'usn', a6a: 'usn', a6b_weasel: 'usn', e1: 'usn', s2: 'usn', uh2: 'usn',
   sh2: 'usn', c1: 'usn', a7: 'usn', p3: 'usn', a1h: 'usn', f14a: 'usn', fa18a: 'usn', s3a: 'usn', a6e: 'usn',
-  e2c: 'usn', ea6b: 'usn', c2a: 'usn', sh3f: 'usn', av8b: 'usn', ch53: 'usn', ah1w: 'usn',
+  e2c: 'usn', ea6b: 'usn', c2a: 'usn', sh3f: 'usn', av8b: 'usn', ch53: 'usn', ah1w: 'usn', pby: 'usn', sh60b: 'usn', ch46: 'usn',
   // US Army Air Forces / US Air Force / US Army
   b17: 'usaf', b24: 'usaf', p40: 'usaf', p38: 'usaf', a20: 'usaf', a26: 'usaf', p51: 'usaf', p47: 'usaf',
   b29: 'usaf', f86: 'usaf', f4e: 'usaf', f105: 'usaf', b52: 'usaf', ov10: 'usaf', uh1: 'usaf', ah1: 'usaf',
   c47: 'usaf', f15a: 'usaf', f16a: 'usaf', a10a: 'usaf', f111: 'usaf', e3a: 'usaf', ah64a: 'usaf', c130: 'usaf',
-  p36a: 'usaf', b25: 'usaf', p39d: 'usaf', b17_late: 'usaf', f82: 'usaf', a37b: 'usaf', f5a: 'usaf',
+  p36a: 'usaf', b25: 'usaf', p39d: 'usaf', b17_late: 'usaf', f82: 'usaf', a37b: 'usaf', f5a: 'usaf', f84: 'usaf', ac47: 'usaf', f100: 'usaf',
   // Imperial Japan
+  rufe: 'japan', ki84: 'japan',
   zero: 'japan', zero_a6m2: 'japan', zero_a6m5: 'japan', kamikaze_zero: 'japan', ki61: 'japan', george: 'japan',
   val: 'japan', judy: 'japan', kate: 'japan', jill: 'japan', g4m: 'japan', ohka: 'japan', kamikaze_judy: 'japan',
   // Commonwealth
@@ -43,6 +40,8 @@ export const AIRCRAFT_NATION: Record<AircraftModel, AircraftNation> = {
   mosquito: 'uk', lancaster: 'uk', meteor: 'uk', sea_fury: 'uk', firefly_as5: 'uk', hunter_fga9: 'uk',
   tornado_gr1: 'uk', tornado_adv: 'uk', jaguar_gr1: 'uk',
   rokaf_p51: 'rok',
+  beaufort: 'australia', boomerang: 'australia', canberra: 'australia',
+  seafire: 'british_pacific', barracuda: 'british_pacific', buccaneer: 'uk', sea_harrier: 'uk',
   // NATO Europe
   f4f_phantom: 'west_germany', tornado_ids: 'west_germany', f104g: 'west_germany',
   mirage3: 'france', mirage2000: 'france',
@@ -50,7 +49,7 @@ export const AIRCRAFT_NATION: Record<AircraftModel, AircraftNation> = {
   // Soviet Union / Warsaw Pact
   mig15: 'ussr', tu14: 'ussr', yak9: 'ussr', il10: 'ussr', mig17: 'ussr', mig19: 'ussr', mig21: 'ussr',
   su7: 'ussr', il28: 'ussr', tu16: 'ussr', tu95: 'ussr', tu22m3: 'ussr', yak38: 'ussr', ka27: 'ussr',
-  mig29a: 'ussr', su27: 'ussr', a50: 'ussr', su25: 'ussr', mi24: 'ussr', be12: 'ussr', il38: 'ussr',
+  mig29a: 'ussr', su27: 'ussr', a50: 'ussr', su25: 'ussr', mi24: 'ussr', be12: 'ussr', il38: 'ussr', mig23: 'ussr', mig31: 'ussr', po2: 'ussr',
 };
 
 /**
@@ -58,7 +57,7 @@ export const AIRCRAFT_NATION: Record<AircraftModel, AircraftNation> = {
  * US markings are only shown on friendly (player / allied) aircraft.
  */
 export function drawNationalInsignia(rc: RenderContext, plane: Aircraft, x: number, y: number, r: number) {
-  switch (AIRCRAFT_NATION[plane.model]) {
+  switch (plane.nation ?? AIRCRAFT_NATION[plane.model]) {
     case 'usn':
       if (plane.side !== 'enemy') drawUSInsignia(rc, x, y, r, false);
       break;
@@ -84,6 +83,28 @@ export function drawNationalInsignia(rc: RenderContext, plane: Aircraft, x: numb
       break;
     case 'ussr':
       drawRedStar(rc, x, y, r);
+      break;
+    case 'australia':
+      if (rc.era === 'era1' || rc.era === 'era2') drawPacificRoundel(rc, x, y, r, false);
+      else if (rc.era === 'era3') drawRAFRoundel(rc, x, y, r);
+      else drawRAAFKangarooRoundel(rc, x, y, r);
+      break;
+    case 'new_zealand':
+      if (rc.era === 'era1' || rc.era === 'era2') drawPacificRoundel(rc, x, y, r, false);
+      else drawRAFRoundel(rc, x, y, r);
+      break;
+    case 'canada':
+      if (rc.era === 'era4' || rc.era === 'era5') drawMapleLeafRoundel(rc, x, y, r);
+      else drawRAFRoundel(rc, x, y, r);
+      break;
+    case 'south_africa':
+      drawSAAFRoundel(rc, x, y, r);
+      break;
+    case 'netherlands':
+      drawDutchRoundel(rc, x, y, r);
+      break;
+    case 'british_pacific':
+      drawPacificRoundel(rc, x, y, r, true);
       break;
   }
 }

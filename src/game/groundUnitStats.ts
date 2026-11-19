@@ -48,6 +48,8 @@ export const GROUND_UNIT_STATS: Record<GroundUnitType, GroundUnitStats> = {
   us_army_chaparral_sam: { health: 2500, armor: 0.48, speed: 5.2, damage: 380, reloadTime: 2.5 },
   usmc_air_assault_65: { health: 2200, armor: 0.40, speed: 4.8, damage: 115, reloadTime: 0.9 },
   usmc_armor_m48: { health: 3800, armor: 0.76, speed: 5.2, damage: 420, reloadTime: 2.4 },
+  us_m26_pershing: { health: 3600, armor: 0.74, speed: 4.4, damage: 400, reloadTime: 2.4 },
+  us_m551_sheridan: { health: 1500, armor: 0.32, speed: 6.2, damage: 330, reloadTime: 3.0, isAmphibious: true }, // aluminium hull swims with its flotation screen
   usmc_ontos_m50: { health: 2400, armor: 0.45, speed: 6.2, damage: 680, reloadTime: 3.6 },
   usmc_lvtp5a1: { health: 3200, armor: 0.62, speed: 5.0, damage: 280, reloadTime: 1.8, isAmphibious: true },
   opfor_vietnam_sapper: { health: 1800, armor: 0.35, speed: 5.2, damage: 140, reloadTime: 0.8 },
@@ -61,6 +63,7 @@ export const GROUND_UNIT_STATS: Record<GroundUnitType, GroundUnitStats> = {
   usmc_aav7a1: { health: 3400, armor: 0.65, speed: 5.2, damage: 320, reloadTime: 1.6, isAmphibious: true },
   usmc_lav25: { health: 3100, armor: 0.58, speed: 6.8, damage: 340, reloadTime: 1.1, isAmphibious: true },
   us_m60a1_rise: { health: 4200, armor: 0.80, speed: 5.2, damage: 520, reloadTime: 2.2 },
+  us_m1a1_abrams: { health: 5400, armor: 0.86, speed: 7.2, damage: 900, reloadTime: 2.0 },
   us_m1ip_abrams: { health: 5000, armor: 0.88, speed: 6.2, damage: 620, reloadTime: 2.0 },
   us_m198_155: { health: 2800, armor: 0.48, speed: 2.2, damage: 580, reloadTime: 3.5 },
   usmc_lav_ad: { health: 2900, armor: 0.54, speed: 6.6, damage: 380, reloadTime: 1.2 },

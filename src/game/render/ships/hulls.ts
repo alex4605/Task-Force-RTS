@@ -4,11 +4,16 @@ import { drawAkizukiDD, drawBattleship, drawCVE, drawCarrier, drawChokaiCA, draw
 import { drawAdamsDDG, drawBelknapCG, drawCV63, drawForrestShermanDD, drawFoxtrotSS, drawKashinDDG, drawKnoxFFG, drawKomarPTG, drawKyndaCG, drawLCM8, drawLPHIwoJima, drawOsaPTG, drawP6TorpedoBoat, drawPetyaFFG, drawRigaFFG, drawSverdlovCL } from './coldWar';
 import { drawAustinLPD, drawIowaModernized, drawKiddDDG, drawKievCVHG, drawKirovCGN, drawLCAC, drawLosAngelesSSN, drawNimitzCVN, drawOscarSSGN, drawPerryFFG, drawSovremennyDD, drawSpruanceDD, drawTiconderogaCG, drawUdaloyDD, drawVirginiaCG } from './modern';
 
+import { drawPBR, drawSlavaCG, drawTarawaLHA } from './additions';
+
 /** Draws a hull silhouette in the ship's local frame (bow along +x). */
 export type ShipHullDrawer = (rc: RenderContext, ship: Ship, hullColor: string, detailColor: string) => void;
 
 /** Hull artwork for every ShipType. Exhaustive: a new ShipType without artwork is a compile error. */
 export const SHIP_HULL_DRAWERS: Record<ShipType, ShipHullDrawer> = {
+  cg_slava: drawSlavaCG,
+  lha_tarawa: drawTarawaLHA,
+  pbr: drawPBR,
   carrier: drawCarrier,
   battleship: drawBattleship,
   cruiser: drawCruiser,

@@ -4,6 +4,7 @@ import { WW2_JAPAN_DRAWERS } from './ww2Japan';
 import { KOREA_DRAWERS } from './korea';
 import { VIETNAM_DRAWERS } from './vietnam';
 import { MODERN_DRAWERS } from './modern';
+import { ROSTER_ADDITION_DRAWERS } from './rosterAdditions';
 
 export type { AircraftModelDrawer, AircraftDrawerTable } from './types';
 
@@ -14,4 +15,5 @@ export const AIRCRAFT_MODEL_DRAWERS: AircraftDrawerTable = {
   ...KOREA_DRAWERS,
   ...VIETNAM_DRAWERS,
   ...MODERN_DRAWERS,
+  ...ROSTER_ADDITION_DRAWERS,
 };

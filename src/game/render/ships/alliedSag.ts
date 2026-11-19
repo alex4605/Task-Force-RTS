@@ -2,6 +2,7 @@ import { Ship } from '../../../types/game';
 import { RenderContext } from '../context';
 import { drawNavalEnsign } from './index';
 import { drawShipTurrets } from './mounts';
+import { alliedEnsign, drawAlliedClassFeatures } from './alliedClasses';
 
 // 專屬盟軍艦艇外觀分流分發器
 export function drawAlliedSAGShip(rc: RenderContext, ship: Ship, hullColor: string, _detailColor: string) {
@@ -117,7 +118,7 @@ export function drawAlliedSAGShip(rc: RenderContext, ship: Ship, hullColor: stri
     // 艦尾動態揮舞：日本海上自衛隊十六條旭日旗
     drawNavalEnsign(rc, 'rising_sun', -l * 0.48, 0, 13, 8.5);
 
-  } else if (name.includes('Bremen') || name.includes('FGS ')) {
+  } else if (name.includes('Bremen')) {
     // 2. 德國布萊梅級巡防艦 (FGS Bremen F207)
     const deDetail = '#FFD54F';
 
@@ -194,7 +195,7 @@ export function drawAlliedSAGShip(rc: RenderContext, ship: Ship, hullColor: stri
     // 4. 英國皇家海軍 (Royal Navy SAG: KGV / Duke of York / Sheffield / Belfast / Type 42 / Jervis)
     const isRNBB = name.includes('George') || name.includes('York') || ship.type === 'battleship';
     const isRNDDG = name.includes('Type 42') || name.includes('42型') || name.includes('Gloucester') || (name.includes('Sheffield') && name.includes('D80'));
-    const isRNCruiser = name.includes('Belfast') || (name.includes('Sheffield') && !isRNDDG);
+    const isRNCruiser = ship.type === 'cruiser' || name.includes('Belfast') || (name.includes('Sheffield') && !isRNDDG);
 
     // 英國海軍部海軍灰 (Admiralty Dark Sea Grey)
     ctx.fillStyle = isRNBB ? '#1E2B37' : '#192633';
@@ -214,7 +215,9 @@ export function drawAlliedSAGShip(rc: RenderContext, ship: Ship, hullColor: stri
     ctx.fill();
     ctx.stroke();
 
-    if (isRNBB) {
+    if (drawAlliedClassFeatures(rc, ship, l, w)) {
+      // Class-specific superstructure (County, Tribal, Type 22, Tromp, Iroquois...) drawn above
+    } else if (isRNBB) {
       // ═══ 喬治五世級戰艦 (KGV / Duke of York) 城堡艦橋與 14吋砲座 ═══
       // 城堡型裝甲艦橋 (Citadel Tower)
       ctx.fillStyle = '#263849';
@@ -304,7 +307,8 @@ export function drawAlliedSAGShip(rc: RenderContext, ship: Ship, hullColor: stri
     }
 
     // 艦尾動態：英國皇家海軍白船旗 (White Ensign)
-    drawNavalEnsign(rc, 'white_ensign', -l * 0.48, 0, 13, 8.5);
+    const ensign = alliedEnsign(ship);
+    if (ensign) drawNavalEnsign(rc, ensign, -l * 0.48, 0, 13, 8.5);
   }
 
   drawShipTurrets(rc, ship, hullColor);

@@ -328,7 +328,7 @@ export const HUD: React.FC<HUDProps> = ({
   }, [islands, selectedAirfacility]);
 
   const hasPlayerCarrier = playerShips.some(
-    (s) => !s.isSunk && (s.type === 'carrier' || s.type === 'cve' || s.type === 'cv63' || s.type === 'cvn' || s.type === 'lph')
+    (s) => !s.isSunk && (s.type === 'carrier' || s.type === 'cve' || s.type === 'cv63' || s.type === 'cvn' || s.type === 'lph' || s.type === 'lha_tarawa')
   ) || !!flagship;
 
   // 指揮出擊與支援選單常時可供最高指揮官調遣檢視
@@ -354,7 +354,7 @@ export const HUD: React.FC<HUDProps> = ({
       (u) => ('type' in u) && u.type === 'usmc_engineer'
     );
     const hasCarrier = selectedUnits.some(
-      (u) => ('type' in u) && (u.type === 'carrier' || u.type === 'cve' || u.type === 'cv63' || u.type === 'cvn' || u.type === 'lph')
+      (u) => ('type' in u) && (u.type === 'carrier' || u.type === 'cve' || u.type === 'cv63' || u.type === 'cvn' || u.type === 'lph' || u.type === 'lha_tarawa')
     );
     if (hasEngineer) {
       setBottomDeckTab('engineer_construction');

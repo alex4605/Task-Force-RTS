@@ -100,6 +100,21 @@ export const AIRCRAFT_CRUISE_KMH: Record<AircraftModel, number> = {
   f8f: 330,
   sb2c: 254,
   tbf: 241,
+  pby: 201,
+  beaufort: 320,
+  boomerang: 340,
+  seafire: 400,
+  barracuda: 280,
+  canberra: 780,
+  buccaneer: 900,
+  sea_harrier: 850,
+  rufe: 300, // A6M2-N cruise
+  ki84: 380, // Ki-84 cruise
+  ac47: 257, // C-47 cruise; orbits at ~190 km/h when firing
+  po2: 110,
+  f100: 900,
+  ch46: 241,
+  mig31: 1000, // PBY-5A cruise 125 mph
   b17: 293,
   b17_late: 293,
   b24: 346,
@@ -139,6 +154,8 @@ export const AIRCRAFT_CRUISE_KMH: Record<AircraftModel, number> = {
   kamikaze_judy: 425,
   // Korean War
   f86: 840,
+  f84: 770, // F-84G cruise
+
   f9f: 770,
   f2h: 740,
   ad1: 320,
@@ -222,6 +239,8 @@ export const AIRCRAFT_CRUISE_KMH: Record<AircraftModel, number> = {
   tu22m3: 900,
   a50: 750,
   il38: 600,
+  mig23: 950,
+  sh60b: 260,
   be12: 320,
   ka27: 205,
   mi24: 270,

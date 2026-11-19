@@ -664,7 +664,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
           lastLeftClickRef.current = { time: now, key: clickKey };
           onSelectUnits(engine.selectedUnitIds);
-          if (hitShip.type === 'carrier' || hitShip.type === 'cve' || hitShip.type === 'cv63' || hitShip.type === 'cvn' || hitShip.type === 'lph') {
+          if (hitShip.type === 'carrier' || hitShip.type === 'cve' || hitShip.type === 'cv63' || hitShip.type === 'cvn' || hitShip.type === 'lph' || hitShip.type === 'lha_tarawa') {
             onSelectAirfacility?.('carrier', hitShip.id);
           } else {
             onSelectAirfacility?.(null);
@@ -714,7 +714,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const hasCarrierInBox = engine.playerShips.some(
         (s) =>
           engine.selectedUnitIds.includes(s.id) &&
-          (s.type === 'carrier' || s.type === 'cve' || s.type === 'cv63' || s.type === 'cvn' || s.type === 'lph')
+          (s.type === 'carrier' || s.type === 'cve' || s.type === 'cv63' || s.type === 'cvn' || s.type === 'lph' || s.type === 'lha_tarawa')
       );
       if (hasEngineerInBox) {
         onSelectAirfacility?.('engineer_construction');

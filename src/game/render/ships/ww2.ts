@@ -207,7 +207,7 @@ export function drawBattleship(rc: RenderContext, ship: Ship, hullColor: string,
   const ctx = rc.ctx;
   const l = ship.length;
   const w = ship.width;
-  const isYamato = ship.name.includes('大和') || ship.name.includes('Yamato');
+  const isYamato = /大和|武藏|Yamato|Musashi/.test(ship.name);
 
   ctx.fillStyle = '#081726';
   ctx.strokeStyle = hullColor;

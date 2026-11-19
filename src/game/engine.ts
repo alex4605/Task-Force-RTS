@@ -2,6 +2,7 @@ import {
   Ship,
   Aircraft,
   AircraftModel,
+  AircraftNation,
   AircraftRole,
   AircraftPayloadType,
   PAYLOAD_CATALOG,
@@ -39,6 +40,7 @@ import { getNavalGunPerformance, getNavalLauncherRange } from './navalGuns';
 import { getCatalogRole } from './airWingCatalog';
 import { AIR_WEAPON_RANGE, getInstallationRange } from './rangeScale';
 import { getShipAshmFit, getShipSamSystem } from './navalMissileSalvos';
+import { barrierStation, isStriker, selectAirTarget } from './airMissions';
 import { getAircraftSpeed, isSupersonicMissile, MISSILE_SPEED, shipMapSpeed, SPECIAL_ATTACK_SPEED } from './speedScale';
 import { getAircraftBaseHealth, getAircraftBaseSpeed, getAircraftGunRounds } from './aircraftStats';
 import { carriesStores, getPayloadRounds, resolvePayload } from './aircraftLoadouts';
@@ -106,6 +108,7 @@ import {
   createSovietWhiskeySS,
   createSovietVictor3SSN,
   makeInstallation,
+  createKiloSS,
 } from './procedural';
 import { NavalNavigationGrid, computeShipSeparationSteering } from './navigation';
 import { soundEngine } from './audio';
@@ -116,6 +119,16 @@ export interface BattleAlertBanner {
   side: 'player' | 'enemy';
   type: 'sunk' | 'down' | 'capture' | 'winchester' | 'alert';
   duration: number;
+}
+
+/** Weighted pick from a small list of aircraft models, consuming one random draw. */
+function pickModel(models: readonly AircraftModel[], weights: readonly number[]): AircraftModel {
+  let r = Math.random();
+  for (let i = 0; i < models.length - 1; i++) {
+    if (r < weights[i]) return models[i];
+    r -= weights[i];
+  }
+  return models[models.length - 1];
 }
 
 export class GameEngine {
@@ -580,13 +593,13 @@ export class GameEngine {
     // Initialize friendly airbase planes & replenishment timers (包含水平轟炸機、陸基戰鬥機、陸基攻擊機)
     this.airbasePlanes =
       this.era === 'era1'
-        ? { b17: 6, b25: 6, p40: 8, p36a: 8, p39d: 6, a20: 6, f4f: 8, sbd: 8, tbd: 6, os2u: 2, c47: 4 }
+        ? { b17: 6, b25: 6, p40: 8, p36a: 8, p39d: 6, a20: 6, f4f: 8, sbd: 8, tbd: 6, os2u: 2, c47: 4, pby: 3 }
         : this.era === 'era2'
-        ? { b24: 6, b17_late: 6, p51: 8, p47: 6, p38: 4, f6f: 10, f4u: 8, sb2c: 8, tbf: 8, sc1: 2, c47: 4 }
+        ? { b24: 6, b17_late: 6, p51: 8, p47: 6, p38: 4, f6f: 10, f4u: 8, sb2c: 8, tbf: 8, sc1: 2, c47: 4, pby: 3 }
         : this.era === 'era3'
-        ? { b29: 6, f86: 8, f82: 6, a26: 6, f9f: 8, f2h: 6, ad1: 8, f4u4: 6, af_guardian: 4, ad3w: 2, ho3s1: 2, c47: 4 }
+        ? { b29: 6, f86: 8, f84: 8, f82: 6, a26: 6, f9f: 8, f2h: 6, ad1: 8, f4u4: 6, af_guardian: 4, ad3w: 2, ho3s1: 2, c47: 4 }
         : this.era === 'era4'
-        ? { b52: 4, f4e: 8, f105: 8, a7: 8, a1h: 6, a37b: 6, f5a: 6, f104g: 6, ov10: 6, uh1: 6, ah1: 6, f4j: 6, a6a: 6, e1: 2, c1: 4 }
+        ? { b52: 4, f4e: 8, f105: 8, f100: 6, ac47: 2, ch46: 4, a7: 8, a1h: 6, a37b: 6, f5a: 6, f104g: 6, ov10: 6, uh1: 6, ah1: 6, f4j: 6, a6a: 6, e1: 2, c1: 4 }
         : { b52: 4, f111: 4, a10a: 8, ah64a: 6, ah1w: 6, f15a: 8, f16a: 8, e3a: 2, c130: 4, f14a: 10, fa18a: 8, a6e: 6, s3a: 4, e2c: 2, ea6b: 4, av8b: 6, ch53: 4, sh3f: 4, c2a: 4 };
     this.airbaseReplenishTimer = this.airbaseReplenishMax;
     this.convoyReinforceTimer = this.convoyReinforceMax;
@@ -1986,14 +1999,14 @@ export class GameEngine {
     this.alliedSortieTimer -= effectiveDt;
     if (this.alliedSortieTimer <= 0) {
       this.spawnAlliedAirSortie();
-      this.alliedSortieTimer = 45 + Math.random() * 25; // 45 to 70 seconds
+      this.alliedSortieTimer = 35 + Math.random() * 20; // 35 to 55 seconds
     }
 
     // 跨時代盟軍水面打擊群支援 (Allied Surface Action Group - SAG Autonomous Patrol & Strike)
     this.alliedSagTimer -= effectiveDt;
     if (this.alliedSagTimer <= 0) {
       this.spawnAlliedSAG();
-      this.alliedSagTimer = 160 + Math.random() * 30; // 160 to 190 seconds
+      this.alliedSagTimer = 130 + Math.random() * 30; // 130 to 160 seconds
     }
 
     this.updateScheduledActions(effectiveDt);
@@ -2029,12 +2042,19 @@ export class GameEngine {
 
       // RTS Navigation Orders with A* Waypoint Progression & Dynamic Island Perimeter Avoidance
       if (ship.order.type === 'move' && ship.order.targetPos) {
+        if (ship.navStuck && this.navGrid) {
+          // No headway for several seconds: replan the sea lane from where the ship actually is
+          ship.order.waypoints = this.navGrid.findPath(ship.pos, ship.order.targetPos);
+          ship.order.activeWaypointIndex = 0;
+          ship.navStuck = false;
+        }
         const wps = ship.order.waypoints;
         let wpIdx = ship.order.activeWaypointIndex ?? 0;
         let activeTarget = ship.order.targetPos;
 
         if (wps && wps.length > 0 && wpIdx < wps.length) {
-          activeTarget = wps[wpIdx];
+          activeTarget = this.advanceSeaLane(ship, wps);
+          wpIdx = ship.order.activeWaypointIndex ?? wpIdx;
           const isFinalWp = wpIdx >= wps.length - 1;
           const arriveDist = isFinalWp ? 45 : 95;
           if (dist(ship.pos, activeTarget) < arriveDist) {
@@ -2132,6 +2152,7 @@ export class GameEngine {
         ship.vel.y = Math.sin(ship.heading) * mapSpeed;
         ship.pos.x += ship.vel.x * dt;
         ship.pos.y += ship.vel.y * dt;
+        this.checkNavigationProgress(ship, dt);
       } else {
         ship.vel.x = 0;
         ship.vel.y = 0;
@@ -2374,18 +2395,14 @@ export class GameEngine {
     if (!this.navGrid) return dest;
     const dTotal = dist(ship.pos, dest);
     if (dTotal < 520) return dest;
-    if (!ship.order.waypoints || ship.order.waypoints.length === 0 || (ship.repathCooldown || 0) <= 0) {
+    if (!ship.order.waypoints || ship.order.waypoints.length === 0 || (ship.repathCooldown || 0) <= 0 || ship.navStuck) {
       ship.order.waypoints = this.navGrid.findPath(ship.pos, dest);
       ship.order.activeWaypointIndex = 0;
       ship.repathCooldown = 3.5;
+      ship.navStuck = false;
     }
     const wps = ship.order.waypoints || [dest];
-    let idx = ship.order.activeWaypointIndex ?? 0;
-    while (idx < wps.length - 1 && dist(ship.pos, wps[idx]) < 110) {
-      idx += 1;
-      ship.order.activeWaypointIndex = idx;
-    }
-    return wps[Math.min(idx, wps.length - 1)] || dest;
+    return this.advanceSeaLane(ship, wps) || dest;
   }
 
   private updateEnemyShipAI(ship: Ship, _dt: number) {
@@ -2451,6 +2468,13 @@ export class GameEngine {
   // 透過多束前方偵測探針 (Forward Lookahead Whiskers) 提前偵測環礁陸地邊界，
   // 依據碰撞緊迫度向外側切線動態轉向並調節航速，徹底避免艦艇擱淺卡灘
   // ══════════════════════════════════════════════════════════
+  /**
+   * Local land avoidance. Probes ahead along the desired heading; if land is in the way, fans out
+   * to either side in 12.5-degree steps and takes the first heading whose probe is clear, keeping
+   * the side it chose until the way ahead is open again (so it does not dither left-right along a
+   * coast). Works for any coastline shape, unlike steering by the tangent to an island's centre,
+   * which sent ships the wrong way along the mainland's irregular shore.
+   */
   private calculateNavalSteeringAvoidance(
     ship: Ship,
     desiredHeading: number,
@@ -2461,75 +2485,79 @@ export class GameEngine {
     }
 
     // 依據航速與艦艇長度動態計算前視預測距離 (90m ~ 280m)
-    const lookaheadDist = Math.max(90, Math.min(280, ship.speed * 8.5 + ship.length * 1.6));
-
-    // 檢查六束前向航向探針：目標航向、當前航向、兩側觸鬚 (±26° 與 ±52°)
-    const rays: number[] = [
-      desiredHeading,
-      ship.heading,
-      ship.heading + 0.45,
-      ship.heading - 0.45,
-      ship.heading + 0.9,
-      ship.heading - 0.9,
-    ];
-
-    let closestIsland: Island | null = null;
-    let closestDist = Infinity;
-    let mostUrgentDist = Infinity;
-    let collisionDetected = false;
-
-    for (const island of this.islands) {
-      const dCenter = dist(ship.pos, island.center);
-      if (dCenter < island.radius + lookaheadDist + 120) {
-        if (dCenter < closestDist) {
-          closestDist = dCenter;
-          closestIsland = island;
-        }
-
-        // 沿每條探針取多個取樣點 (35%, 65%, 100% 距離)
-        for (const rayAngle of rays) {
-          for (let step = 0.35; step <= 1.0; step += 0.32) {
-            const probeDist = lookaheadDist * step;
-            const probePos = {
-              x: ship.pos.x + Math.cos(rayAngle) * probeDist,
-              y: ship.pos.y + Math.sin(rayAngle) * probeDist,
-            };
-            if (isPointOnIslandLand(probePos, island)) {
-              collisionDetected = true;
-              if (probeDist < mostUrgentDist) {
-                mostUrgentDist = probeDist;
-              }
-            }
-          }
-        }
-      }
-    }
-
-    if (!collisionDetected || !closestIsland) {
+    const lookahead = Math.max(90, Math.min(280, ship.speed * 8.5 + ship.length * 1.6));
+    const nearby = this.islands.filter((isl) => dist(ship.pos, isl.center) < isl.radius + lookahead + 120);
+    if (nearby.length === 0) {
+      ship.navAvoidSide = undefined;
       return { targetHeading: desiredHeading, speedScale: 1.0 };
     }
 
-    // 計算島嶼外向斥力角度
-    const islandAngle = Math.atan2(ship.pos.y - closestIsland.center.y, ship.pos.x - closestIsland.center.x);
-    // 依據目前目標航向與島嶼中心向量的叉積決定順時針或逆時針繞行切線
-    const cross = Math.sin(desiredHeading - islandAngle);
-    const tangentSign = cross >= 0 ? 1 : -1;
-    // 切線方向加上 15° 的向外偏移，確保繞行時持續遠離淺灘
-    const tangentHeading = islandAngle + tangentSign * (Math.PI * 0.5 + 0.26);
+    // Fraction of the probe at which land is first met, or > 1 when the probe is clear
+    const landAt = (heading: number): number => {
+      const cx = Math.cos(heading);
+      const cy = Math.sin(heading);
+      for (const f of [0.3, 0.55, 0.8, 1]) {
+        const p = { x: ship.pos.x + cx * lookahead * f, y: ship.pos.y + cy * lookahead * f };
+        if (nearby.some((isl) => isPointOnIslandLand(p, isl))) return f;
+      }
+      return 2;
+    };
 
-    // 緊迫度係數 (0.2 ~ 1.0)
-    const urgency = Math.max(0.2, Math.min(1.0, 1.0 - mostUrgentDist / lookaheadDist));
+    const ahead = landAt(desiredHeading);
+    if (ahead > 1) {
+      ship.navAvoidSide = undefined;
+      return { targetHeading: desiredHeading, speedScale: 1.0 };
+    }
 
-    // 平滑插值目標航向與切線避碰航向
-    let diff = tangentHeading - desiredHeading;
-    while (diff > Math.PI) diff -= Math.PI * 2;
-    while (diff < -Math.PI) diff += Math.PI * 2;
-    const blendedHeading = desiredHeading + diff * Math.min(1.0, urgency * 1.4);
+    // Prefer the side already being used, otherwise the side with more sea room
+    const side = ship.navAvoidSide ?? (landAt(desiredHeading + 0.6) >= landAt(desiredHeading - 0.6) ? 1 : -1);
+    // Closer land ahead means a harder turn is needed: slow down to keep rudder authority
+    const speedScale = Math.max(0.45, 0.35 + ahead * 0.65);
+    for (let k = 1; k <= 12; k++) {
+      for (const s of [side, -side]) {
+        const heading = desiredHeading + s * k * 0.22;
+        if (landAt(heading) > 1) {
+          ship.navAvoidSide = s;
+          return { targetHeading: heading, speedScale };
+        }
+      }
+    }
+    // Boxed in (a bay or a beach): back off the way we came
+    return { targetHeading: desiredHeading + Math.PI, speedScale: 0.4 };
+  }
 
-    // 緊迫時適當降速保證舵效轉向
-    const speedScale = Math.max(0.4, 1.0 - urgency * 0.45);
+  /**
+   * Waypoint to steer for: skips ahead to the furthest waypoint already in clear sight, so a ship
+   * that overshoots a turn (or was pushed off its lane) never circles back for a missed point.
+   */
+  private advanceSeaLane(ship: Ship, wps: Vector2D[]): Vector2D {
+    let idx = ship.order.activeWaypointIndex ?? 0;
+    while (
+      idx < wps.length - 1 &&
+      (dist(ship.pos, wps[idx]) < 110 || (this.navGrid?.hasClearWaterLine(ship.pos, wps[idx + 1], true) ?? false))
+    ) {
+      idx += 1;
+    }
+    ship.order.activeWaypointIndex = idx;
+    return wps[Math.min(idx, wps.length - 1)];
+  }
 
-    return { targetHeading: blendedHeading, speedScale };
+  /**
+   * Flags a ship that wanted to make way but covered under a quarter of the expected distance in
+   * the last four seconds; its next steering update replans its route and tries the other side.
+   */
+  private checkNavigationProgress(ship: Ship, dt: number): void {
+    ship.navCheckTimer = (ship.navCheckTimer ?? 4) - dt;
+    if (ship.navCheckTimer > 0) return;
+    if (ship.navCheckPos && ship.targetSpeed > 2) {
+      const expected = shipMapSpeed(ship.targetSpeed) * 4;
+      if (dist(ship.pos, ship.navCheckPos) < expected * 0.25) {
+        ship.navStuck = true;
+        ship.navAvoidSide = -(ship.navAvoidSide ?? 1);
+      }
+    }
+    ship.navCheckPos = { ...ship.pos };
+    ship.navCheckTimer = 4;
   }
 
   private updateShipCombat(ship: Ship, dt: number) {
@@ -2612,9 +2640,102 @@ export class GameEngine {
     }
   }
 
+  /** Lead striker of a friendly strike package of this side that has no escort yet. */
+  private findUnescortedPackage(side: Aircraft['side']): Aircraft | undefined {
+    const escorted = new Set(this.aircraft.filter((a) => a.airMission === 'escort' && a.state !== 'shot_down').map((a) => a.packageId));
+    return this.aircraft.find(
+      (a) => a.side === side && a.airMission === 'strike' && a.state !== 'shot_down' && a.hasPayload && !escorted.has(a.packageId)
+    );
+  }
+
+  /** Where enemy air raids come from: an intact enemy airfield, else an enemy carrier. */
+  private getEnemyAirThreatAxis(): Vector2D | undefined {
+    const airfield = this.islands
+      .flatMap((i) => i.installations)
+      .find((inst) => inst.type === 'airfield' && inst.side === 'enemy' && !inst.isDestroyed);
+    if (airfield) return airfield.pos;
+    return this.enemyShips.find((s) => !s.isSunk && (s.type === 'carrier' || s.type === 'cvhg_kiev'))?.pos;
+  }
+
+  /**
+   * Turns a freshly launched squadron into a strike package: aircraft carrying air-to-ground
+   * stores become strikers that fly together, air-to-air fighters become their escort.
+   */
+  private organizeStrikePackage(packageId: string): void {
+    const members = this.aircraft.filter((a) => a.squadronId === packageId && a.state !== 'shot_down');
+    const strikers = members.filter(isStriker);
+    if (strikers.length === 0) return;
+    for (const s of strikers) {
+      s.airMission = 'strike';
+      s.packageId = packageId;
+    }
+    members
+      .filter((a) => !isStriker(a))
+      .forEach((f, i) => {
+        f.airMission = 'escort';
+        f.packageId = packageId;
+        f.state = 'patrolling';
+        f.order = { type: 'patrol', patrolOrigin: { ...strikers[0].pos } };
+        // Escort elements weave either side of the package, the high cover a little ahead
+        f.wingmanOffset = { x: (i % 2 === 0 ? 1 : -1) * (110 + Math.floor(i / 2) * 70), y: (i % 2 === 0 ? -1 : 1) * 60 };
+      });
+  }
+
+  /**
+   * Per-tick mission upkeep: escorts take station on their package's lead, strike packages cruise
+   * at their slowest member's speed until they split for the attack, and sweeps go home once
+   * their time over the target area is spent.
+   */
+  private updateAirMissions(dt: number): void {
+    const packages = new Map<string, Aircraft[]>();
+    for (const a of this.aircraft) {
+      if (a.airMission === 'strike' && a.packageId && a.state !== 'shot_down' && a.hasPayload && a.order.type === 'attack') {
+        const list = packages.get(a.packageId);
+        if (list) list.push(a);
+        else packages.set(a.packageId, [a]);
+      }
+    }
+
+    for (const plane of this.aircraft) {
+      if (plane.state === 'shot_down') continue;
+      if (plane.airMission === 'escort') {
+        const strikers = plane.packageId ? packages.get(plane.packageId) : undefined;
+        if (!strikers || strikers.length === 0) {
+          // Package has attacked or been destroyed: the escort goes home with it
+          plane.airMission = undefined;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+          continue;
+        }
+        const lead = strikers[0];
+        const cos = Math.cos(lead.heading);
+        const sin = Math.sin(lead.heading);
+        plane.order.patrolOrigin = {
+          x: lead.pos.x + cos * 140 - sin * plane.wingmanOffset.x,
+          y: lead.pos.y + sin * 140 + cos * plane.wingmanOffset.x,
+        };
+      } else if (plane.airMission === 'strike' && plane.packageId && plane.state === 'cruising') {
+        const strikers = packages.get(plane.packageId);
+        const target = plane.order.targetPos;
+        if (strikers && strikers.length > 1 && target && dist(plane.pos, target) > 1500) {
+          const packageSpeed = Math.min(...strikers.map((s) => s.maxSpeed));
+          plane.speed = Math.min(plane.maxSpeed, packageSpeed);
+        }
+      } else if (plane.airMission === 'sweep' && plane.order.patrolOrigin) {
+        if (dist(plane.pos, plane.order.patrolOrigin) < 900) plane.missionTimer = (plane.missionTimer ?? 45) - dt;
+        if ((plane.missionTimer ?? 1) <= 0) {
+          plane.airMission = undefined;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+        }
+      }
+    }
+  }
+
   // 2. Update Aircraft with Air Warfare RTS Logic
   private updateAircraft(dt: number) {
     const flagship = this.getFlagship();
+    this.updateAirMissions(dt);
 
     for (let i = this.aircraft.length - 1; i >= 0; i--) {
       const plane = this.aircraft[i];
@@ -3275,8 +3396,8 @@ export class GameEngine {
         plane.shootCooldown -= dt;
         const targetPlane = targetEntity && 'role' in targetEntity ? (targetEntity as Aircraft) : null;
         if (targetPlane && targetPlane.state !== 'shot_down') {
-          if (plane.side === 'enemy' && (plane.model === 'su27' || plane.model === 'mig29a' || plane.model === 'mig21' || plane.model === 'mig17')) {
-            if (plane.model === 'su27' || plane.model === 'mig29a') {
+          if (plane.side === 'enemy' && (plane.model === 'su27' || plane.model === 'mig29a' || plane.model === 'mig23' || plane.model === 'mig31' || plane.model === 'mig21' || plane.model === 'mig17')) {
+            if (plane.model === 'su27' || plane.model === 'mig29a' || plane.model === 'mig23' || plane.model === 'mig31') {
               // Era 5 Soviet 4th Gen Fighters: R-27 BVR & R-73 High-Off-Boresight Dogfight
               if (d >= 1000 && d <= AIR_WEAPON_RANGE.r27er && plane.shootCooldown <= 0) {
                 this.fireAAMissile(plane, targetPlane, 'aim7'); // R-27ER Alamo BVR
@@ -3789,8 +3910,14 @@ export class GameEngine {
     const radarPerimeter = plane.model === 'f14a' ? 4800 : (this.era === 'era5' ? 3800 : isModernFighter ? 2400 : 420);
 
     // Find hostile aircraft within patrol radar
-    const hostile = this.aircraft.find(
-      (a) => this.isHostile(plane.side, a.side) && a.state !== 'shot_down' && dist(plane.pos, a.pos) < radarPerimeter
+    // Mission-aware intercept: CAP/BARCAP go for bombers and stay leashed to their station, a
+    // sweep hunts fighters, an escort fights only what threatens its package
+    const hostile = selectAirTarget(
+      plane,
+      this.aircraft.filter((a) => this.isHostile(plane.side, a.side)),
+      center,
+      radarPerimeter,
+      plane.airMission ?? 'cap'
     );
 
     if (hostile && plane.role === 'fighter') {
@@ -3799,8 +3926,8 @@ export class GameEngine {
       plane.shootCooldown -= dt;
 
       if (isModernFighter) {
-        if (plane.side === 'enemy' && (plane.model === 'su27' || plane.model === 'mig29a' || plane.model === 'mig21' || plane.model === 'mig17')) {
-          if (plane.model === 'su27' || plane.model === 'mig29a') {
+        if (plane.side === 'enemy' && (plane.model === 'su27' || plane.model === 'mig29a' || plane.model === 'mig23' || plane.model === 'mig31' || plane.model === 'mig21' || plane.model === 'mig17')) {
+          if (plane.model === 'su27' || plane.model === 'mig29a' || plane.model === 'mig23' || plane.model === 'mig31') {
             if (hDist >= 1000 && hDist <= 3600 && plane.shootCooldown <= 0) {
               this.fireAAMissile(plane, hostile, 'aim7'); // R-27ER Alamo
               plane.shootCooldown = 5.0;
@@ -3918,6 +4045,11 @@ export class GameEngine {
           });
           return true;
         }
+      }
+
+      if (plane.airMission === 'escort') {
+        plane.targetHeading = Math.atan2(center.y - plane.pos.y, center.x - plane.pos.x);
+        return false;
       }
 
       // Circular orbit (ASW planes sweep wider corridors)
@@ -5853,8 +5985,8 @@ export class GameEngine {
       : isEra3
       ? (Math.random() < 0.6 ? 'mig15' : 'yak9')
       : this.era === 'era1'
-      ? (Math.random() < 0.5 ? 'zero_a6m2' : 'zero')
-      : (Math.random() < 0.5 ? 'ki61' : 'george');
+      ? pickModel(['zero_a6m2', 'zero', 'rufe'], [0.4, 0.4, 0.2]) // Rufe floatplanes from Tulagi / Shortlands
+      : pickModel(['ki61', 'george', 'ki84'], [0.35, 0.35, 0.3]);
 
     const dbModel: AircraftModel = isEra5
       ? (Math.random() < 0.7 ? 'su25' : 'su7')
@@ -6014,7 +6146,8 @@ export class GameEngine {
         state: 'patrolling',
         health: cHealth,
         maxHealth: cHealth,
-        order: { type: 'patrol', patrolOrigin: { ...capCenter } },
+        order: { type: 'patrol', patrolOrigin: barrierStation(capCenter, this.getFlagship()?.pos, 1600) },
+        airMission: 'barcap',
         hasPayload: (isEra5 || isEra4) && (capModel === 'su27' || capModel === 'mig29a' || capModel === 'mig21'),
         payloadType: (isEra5 || isEra4) ? 'aim9_sidewinder' : undefined,
         shootCooldown: 0,
@@ -6059,7 +6192,7 @@ export class GameEngine {
       : (flagship ? flagship.pos : { x: 4000, y: 9000 });
 
     const heading = Math.atan2(targetPos.y - spawnPos.y, targetPos.x - spawnPos.x);
-    const casModel: AircraftModel = isEra5 ? (Math.random() < 0.6 ? 'su25' : 'mi24') : isEra4 ? (Math.random() < 0.6 ? 'su7' : 'mig17') : isEra3 ? 'il10' : dbModel;
+    const casModel: AircraftModel = isEra5 ? (Math.random() < 0.6 ? 'su25' : 'mi24') : isEra4 ? (Math.random() < 0.6 ? 'su7' : 'mig17') : isEra3 ? pickModel(['il10', 'po2'], [0.7, 0.3]) : dbModel;
     const casSpeed = getAircraftSpeed(casModel);
     const casHealth = isEra5 ? (casModel === 'su25' ? 850 : 750) : isEra4 ? 680 : isEra3 ? 620 : 145;
     const casCount = Math.min(6, this.calculateDynamicWaveSize(4));
@@ -6128,6 +6261,8 @@ export class GameEngine {
         ? `🛩️【灘頭密接支援 (CAS)】冷戰聯軍 ${casCount}架 IL-10 鐵獸強擊機實施超低空突防！俯衝壓制我方兩棲登陸艇與陸戰隊排！`
         : `🛩️【灘頭密接支援 (CAS)】敵 ${casCount}架 艦爆實施超低空突防！俯衝壓制我方兩棲登陸艇與陸戰隊排！海灘防空機槍全力還擊！`,
     });
+
+    this.organizeStrikePackage(sqId);
   }
 
   private launchEnemyAirbaseStrike(spawnPos: Vector2D, sqId: string, isEra3: boolean, isEra4: boolean, isEra5: boolean): void {
@@ -6207,6 +6342,8 @@ export class GameEngine {
         ? `💣【陸基前進基地遭襲！】冷戰聯軍 ${heavyCount}架 Tu-14 雙噴射轟炸機以高空編隊越境！意圖對前進空軍基地跑道與機庫實施毀滅性面狀轟炸！`
         : `💣【陸基前進基地遭襲！】敵 ${heavyCount}架 一式陸攻以高空編隊越境！意圖對 Henderson Field 機場跑道與機庫實施毀滅性面狀轟炸！`,
     });
+
+    this.organizeStrikePackage(sqId);
   }
 
   private launchEnemyFleetStrike(flagship: Ship | undefined, spawnPos: Vector2D, sqId: string, isEra3: boolean, isEra4: boolean, isEra5: boolean, dbModel: AircraftModel, tbModel: AircraftModel): void {
@@ -6335,6 +6472,8 @@ export class GameEngine {
         ? `⚠️【反艦動態編隊來襲】冷戰遠東聯軍 ${totalFleetCount}架 打擊機隊掠海飛來，Tu-14 噴射魚雷機與 IL-10 強擊機目標鎖定護航艦艇「${targetShip?.name || '巡洋艦'}」！`
         : `⚠️【反艦動態編隊來襲】敵 ${totalFleetCount}架 打擊機隊掠海飛來，目標鎖定護航艦艇「${targetShip?.name || '巡洋艦'}」！護航艦砲火全力攔截！`,
     });
+
+    this.organizeStrikePackage(sqId);
   }
 
   private launchEnemyFlagshipStrike(flagship: Ship | undefined, spawnPos: Vector2D, sqId: string, isEra3: boolean, isEra4: boolean, isEra5: boolean, fModel: AircraftModel, dbModel: AircraftModel, tbModel: AircraftModel): void {
@@ -6507,6 +6646,8 @@ export class GameEngine {
         ? `🚨【旗艦打擊編隊！】長程對空雷達警報大作！偵測到敵 ${totalStrikeCount}機 動態反艦打擊群 (Tu-14 噴射魚雷機 + IL-10 鐵獸強擊機 + MiG-15 噴射直衛) 全速直撲「${flagship?.name || '航空母艦'}」！`
         : `🚨【旗艦打擊編隊！】長程對空雷達警報大作！偵測到敵 ${totalStrikeCount}機 動態反艦打擊群 (魚雷機+俯衝艦爆+直衛零戰) 全速直撲「${flagship?.name || '航空母艦'}」！`,
     });
+
+    this.organizeStrikePackage(sqId);
   }
 
   private launchEnemyScramble(flagship: Ship | undefined, spawnPos: Vector2D, sqId: string, isEra3: boolean, isEra4: boolean, isEra5: boolean, fModel: AircraftModel): void {
@@ -6515,7 +6656,7 @@ export class GameEngine {
     const scrambleTarget = flagship ? { ...flagship.pos } : { x: 5000, y: 5000 };
     const heading = Math.atan2(scrambleTarget.y - spawnPos.y, scrambleTarget.x - spawnPos.x);
 
-    const scModel: AircraftModel = isEra5 ? (Math.random() < 0.5 ? 'su27' : 'mig29a') : isEra4 ? (Math.random() < 0.5 ? 'mig21' : 'mig19') : isEra3 ? 'mig15' : fModel;
+    const scModel: AircraftModel = isEra5 ? (() => { const r = Math.random(); return r < 0.34 ? 'su27' : r < 0.67 ? 'mig29a' : 'mig23'; })() : isEra4 ? (Math.random() < 0.5 ? 'mig21' : 'mig19') : isEra3 ? 'mig15' : fModel;
     const scSpeed = getAircraftSpeed(scModel);
     const scHealth = isEra5 ? 720 : scModel === 'mig21' ? 580 : scModel === 'mig19' ? 560 : isEra3 ? 540 : 150;
     const scrambleCount = Math.min(8, this.calculateDynamicWaveSize(4));
@@ -6527,7 +6668,7 @@ export class GameEngine {
         model: scModel,
         role: 'fighter',
         name: isEra5
-          ? (scModel === 'su27' ? `Su-27 側衛緊急迎擊噴射機 (#${i + 1})` : `MiG-29A 支點超音速迎擊機 (#${i + 1})`)
+          ? (scModel === 'su27' ? `Su-27 側衛緊急迎擊噴射機 (#${i + 1})` : scModel === 'mig23' ? `MiG-23ML 鞭撻者緊急迎擊機 (#${i + 1})` : `MiG-29A 支點超音速迎擊機 (#${i + 1})`)
           : isEra4
           ? (scModel === 'mig21' ? `MiG-21 緊急迎擊噴射機 (#${i + 1})` : `MiG-19 超音速迎擊機 (#${i + 1})`)
           : isEra3
@@ -6545,11 +6686,11 @@ export class GameEngine {
         health: scHealth,
         maxHealth: scHealth,
         order: { type: 'attack', targetPos: scrambleTarget },
-        hasPayload: (isEra5 || isEra4) && (scModel === 'su27' || scModel === 'mig29a' || scModel === 'mig21'),
+        hasPayload: (isEra5 || isEra4) && (scModel === 'su27' || scModel === 'mig29a' || scModel === 'mig23' || scModel === 'mig21'),
         payloadType: (isEra5 || isEra4) ? 'aim9_sidewinder' : undefined,
         shootCooldown: 0,
-        gunAmmo: scModel === 'su27' ? 250 : scModel === 'mig29a' ? 250 : scModel === 'mig21' ? 200 : scModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
-        maxGunAmmo: scModel === 'su27' ? 250 : scModel === 'mig29a' ? 250 : scModel === 'mig21' ? 200 : scModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
+        gunAmmo: scModel === 'su27' ? 250 : scModel === 'mig29a' ? 250 : scModel === 'mig23' ? 200 : scModel === 'mig21' ? 200 : scModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
+        maxGunAmmo: scModel === 'su27' ? 250 : scModel === 'mig29a' ? 250 : scModel === 'mig23' ? 200 : scModel === 'mig21' ? 200 : scModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
         wingmanOffset: { x: i * 22, y: 15 },
         missionType: 'scramble',
         chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
@@ -6627,10 +6768,12 @@ export class GameEngine {
         speed: sSpeed,
         maxSpeed: sSpeed,
         altitude: 0.92,
-        state: 'cruising',
+        state: 'patrolling',
         health: sHealth,
         maxHealth: sHealth,
-        order: { type: 'attack', targetPos: sweepTarget },
+        order: { type: 'patrol', patrolOrigin: sweepTarget },
+        airMission: 'sweep',
+        missionTimer: 45,
         hasPayload: (isEra5 || isEra4) && (sweepModel === 'su27' || sweepModel === 'mig29a' || sweepModel === 'mig21'),
         payloadType: (isEra5 || isEra4) ? 'aim9_sidewinder' : undefined,
         shootCooldown: 0,
@@ -6682,20 +6825,20 @@ export class GameEngine {
     const targetPos = targetPlane ? targetPlane.pos : (flagship ? flagship.pos : { x: 5000, y: 5000 });
     const heading = Math.atan2(targetPos.y - spawnPos.y, targetPos.x - spawnPos.x);
 
-    const dcaModel: AircraftModel = isEra5 ? (Math.random() < 0.5 ? 'su27' : 'mig29a') : isEra4 ? (Math.random() < 0.6 ? 'mig21' : 'mig19') : isEra3 ? 'mig15' : fModel;
+    const dcaModel: AircraftModel = isEra5 ? (() => { const r = Math.random(); return r < 0.34 ? 'su27' : r < 0.67 ? 'mig29a' : 'mig23'; })() : isEra4 ? (Math.random() < 0.6 ? 'mig21' : 'mig19') : isEra3 ? 'mig15' : fModel;
     const dcaSpeed = getAircraftSpeed(dcaModel);
     const dcaHealth = isEra5 ? 750 : dcaModel === 'mig21' ? 580 : dcaModel === 'mig19' ? 560 : isEra3 ? 540 : 160;
     const dcaCount = this.calculateDynamicWaveSize(5);
 
     for (let i = 0; i < dcaCount; i++) {
-      const thisModel: AircraftModel = isEra5 ? (i % 2 === 0 ? 'su27' : 'mig29a') : isEra4 ? (i % 2 === 0 ? 'mig21' : 'mig19') : dcaModel;
+      const thisModel: AircraftModel = isEra5 ? (['su27', 'mig29a', 'mig23', 'mig31'] as const)[i % 4] : isEra4 ? (i % 2 === 0 ? 'mig21' : 'mig19') : dcaModel;
       this.aircraft.push({
         id: `enemy-dca-${Date.now()}-${i}`,
         squadronId: sqId,
         model: thisModel,
         role: 'fighter',
         name: isEra5
-          ? (thisModel === 'su27' ? `Su-27 側衛超音速防空截擊機 (#${i + 1})` : `MiG-29A 支點全天候截擊機 (#${i + 1})`)
+          ? (thisModel === 'su27' ? `Su-27 側衛超音速防空截擊機 (#${i + 1})` : thisModel === 'mig23' ? `MiG-23ML 鞭撻者可變翼截擊機 (#${i + 1})` : thisModel === 'mig31' ? `MiG-31 獵狐犬遠程截擊機 (#${i + 1})` : `MiG-29A 支點全天候截擊機 (#${i + 1})`)
           : isEra4
           ? (thisModel === 'mig21' ? `MiG-21 魚窩超音速防空截擊機 (#${i + 1})` : `MiG-19 農夫超音速防空截擊機 (#${i + 1})`)
           : isEra3
@@ -6713,11 +6856,11 @@ export class GameEngine {
         health: dcaHealth,
         maxHealth: dcaHealth,
         order: targetPlane ? { type: 'attack', targetPos, targetId: targetPlane.id } : { type: 'patrol', patrolOrigin: spawnPos },
-        hasPayload: (isEra5 || isEra4) && (thisModel === 'su27' || thisModel === 'mig29a' || thisModel === 'mig21'),
+        hasPayload: (isEra5 || isEra4) && (thisModel === 'su27' || thisModel === 'mig29a' || thisModel === 'mig23' || thisModel === 'mig31' || thisModel === 'mig21'),
         payloadType: (isEra5 || isEra4) ? 'aim9_sidewinder' : undefined,
         shootCooldown: 0,
-        gunAmmo: thisModel === 'su27' ? 250 : thisModel === 'mig29a' ? 250 : thisModel === 'mig21' ? 200 : thisModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
-        maxGunAmmo: thisModel === 'su27' ? 250 : thisModel === 'mig29a' ? 250 : thisModel === 'mig21' ? 200 : thisModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
+        gunAmmo: thisModel === 'su27' ? 250 : thisModel === 'mig29a' ? 250 : thisModel === 'mig23' ? 200 : thisModel === 'mig21' ? 200 : thisModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
+        maxGunAmmo: thisModel === 'su27' ? 250 : thisModel === 'mig29a' ? 250 : thisModel === 'mig23' ? 200 : thisModel === 'mig21' ? 200 : thisModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
         wingmanOffset: { x: i * 25, y: (i - (dcaCount - 1) / 2) * 20 },
         missionType: 'dca',
         chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
@@ -7680,7 +7823,7 @@ export class GameEngine {
       const isMlrs = unit.type === 'us_m270_mlrs';
       const isAtgm = unit.type === 'us_dragon_atgm' || unit.type === 'us_m2_bradley';
       const isArty = unit.isArtillery || unit.isSPG || unit.type.includes('artillery') || unit.type.includes('howitzer') || unit.type === 'us_m198_155';
-      const isTank = unit.type.includes('armor') || unit.type.includes('tank') || unit.type === 'us_m1ip_abrams' || unit.type === 'us_m60a1_rise';
+      const isTank = unit.type.includes('armor') || unit.type.includes('tank') || unit.type === 'us_m1ip_abrams' || unit.type === 'us_m60a1_rise' || unit.type === 'us_m551_sheridan' || unit.type === 'us_m26_pershing' || unit.type === 'us_m1a1_abrams';
       const isShell = isTank || isArty || unit.type === 'usmc_lvt_45' || unit.type === 'usmc_lvtp5a1' || unit.type === 'usmc_aav7a1' || unit.type === 'usmc_lav25';
 
       if (isNuclearAtacms) {
@@ -9434,6 +9577,8 @@ export class GameEngine {
       gUnit = createGroundUnit(gId, 'usmc_air_assault_65', 'USMC 空中突擊/直升機機降突擊排 (1965)', 'player', this.era, spawnPos);
     } else if (item.typeTag === 'armor_m48') {
       gUnit = createGroundUnit(gId, 'usmc_armor_m48', 'USMC M48A3 巴頓主力戰車排', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'm551_sheridan') {
+      gUnit = createGroundUnit(gId, 'us_m551_sheridan', 'US Army M551 謝里登裝甲騎兵排', 'player', this.era, spawnPos);
     } else if (item.typeTag === 'ontos_m50') {
       gUnit = createGroundUnit(gId, 'usmc_ontos_m50', 'USMC M50 昂圖斯六聯無後座力砲戰車', 'player', this.era, spawnPos);
     } else if (item.typeTag === 'artillery') {
@@ -9501,6 +9646,10 @@ export class GameEngine {
       gUnit = createGroundUnit(gId, 'us_m4_calliope', 'M4A3 薛曼「管風琴」60聯裝火箭車', 'player', this.era, spawnPos);
     } else if (item.typeTag === 'us_m7_priest') {
       gUnit = createGroundUnit(gId, 'us_m7_priest', 'M7 牧師 105mm 自走榴彈砲 (反砲兵急速射擊)', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'us_m26_pershing') {
+      gUnit = createGroundUnit(gId, 'us_m26_pershing', 'US Army M26 潘興重戰車排', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'us_m1a1_abrams') {
+      gUnit = createGroundUnit(gId, 'us_m1a1_abrams', 'M1A1 艾布蘭主力戰車排', 'player', this.era, spawnPos);
     } else if (item.typeTag === 'us_m44_spg') {
       gUnit = createGroundUnit(gId, 'us_m44_spg', 'M44 155mm 自走榴彈砲 (反砲兵急速射擊)', 'player', this.era, spawnPos);
     } else if (item.typeTag === 'us_m109_spg') {
@@ -9977,7 +10126,7 @@ export class GameEngine {
     // 3e. 時代五 蘇聯/OPFOR 巡洋艦與核潛艦飽和反艦飛彈齊射 (依艦種分級：現代級 8 枚、基輔級 12 枚、基洛夫/奧斯卡 16 枚)
     for (const eShip of this.enemyShips) {
       if (eShip.isSunk) continue;
-      if (eShip.type === 'cgn_kirov' || eShip.type === 'ssgn_oscar' || eShip.type === 'dd_sovremenny' || eShip.type === 'cvhg_kiev') {
+      if (eShip.type === 'cgn_kirov' || eShip.type === 'ssgn_oscar' || eShip.type === 'dd_sovremenny' || eShip.type === 'cvhg_kiev' || eShip.type === 'cg_slava') {
         if (eShip.torpedoCooldown !== undefined && eShip.torpedoCooldown > 0) {
           eShip.torpedoCooldown = Math.max(0, eShip.torpedoCooldown - dt);
         }
@@ -10543,8 +10692,8 @@ export class GameEngine {
             // 奧斯卡級水下傾斜發射井分波齊射 16 枚 P-700 花崗岩 (領彈高空資料鏈)
             this.fireSovietSubSalvo(eShip, primaryTarget, 16, syncCandidates);
             eShip.torpedoCooldown = 62.0 + Math.random() * 10.0;
-          } else if (eShip.type === 'cgn_kirov' || eShip.type === 'cvhg_kiev' || eShip.type === 'dd_sovremenny') {
-            const shipSalvo = eShip.type === 'cgn_kirov' ? 16 : eShip.type === 'cvhg_kiev' ? 12 : 8;
+          } else if (eShip.type === 'cgn_kirov' || eShip.type === 'cvhg_kiev' || eShip.type === 'dd_sovremenny' || eShip.type === 'cg_slava') {
+            const shipSalvo = getShipAshmFit(eShip.type)?.salvo ?? 8;
             this.fireSovietSaturationSalvo(eShip, primaryTarget, shipSalvo, syncCandidates);
             eShip.torpedoCooldown = eShip.type === 'cgn_kirov' ? 58.0 : eShip.type === 'cvhg_kiev' ? 52.0 : 46.0;
           }
@@ -10569,7 +10718,7 @@ export class GameEngine {
       const coordStrikers = this.enemyShips.filter(
         (e) =>
           !e.isSunk &&
-          (e.type === 'ssgn_oscar' || e.type === 'cgn_kirov' || e.type === 'cvhg_kiev' || e.type === 'dd_sovremenny') &&
+          (e.type === 'ssgn_oscar' || e.type === 'cgn_kirov' || e.type === 'cvhg_kiev' || e.type === 'cg_slava' || e.type === 'dd_sovremenny') &&
           (e.torpedoCooldown || 0) <= 18.0 &&
           prioritizedFriendlies.some((f) => dist(e.pos, f.pos) <= 6400)
       );
@@ -10637,10 +10786,11 @@ export class GameEngine {
         const isSovremenny = eShip.type === 'dd_sovremenny';
         const isUdaloy = eShip.type === 'dd_udaloy';
         const isKiev = eShip.type === 'cvhg_kiev';
+        const isSlava = eShip.type === 'cg_slava';
 
-        if (isKirov || isSovremenny || isUdaloy || isKiev) {
-          const samRange = isKirov ? 4000 : isSovremenny ? 3500 : isKiev ? 3200 : 2800;
-          const samName = isKirov ? 'S-300F 堡壘 (SA-N-6 Fort VLS)' : isSovremenny ? 'SA-N-7 施基利 (Shtil)' : isUdaloy ? 'SA-N-9 匕首 (Kinzhal VLS)' : 'SA-N-3 戈布勒 (Goblet)';
+        if (isKirov || isSovremenny || isUdaloy || isKiev || isSlava) {
+          const samRange = isKirov || isSlava ? 4000 : isSovremenny ? 3500 : isKiev ? 3200 : 2800;
+          const samName = isKirov || isSlava ? 'S-300F 堡壘 (SA-N-6 Fort VLS)' : isSovremenny ? 'SA-N-7 施基利 (Shtil)' : isUdaloy ? 'SA-N-9 匕首 (Kinzhal VLS)' : 'SA-N-3 戈布勒 (Goblet)';
 
           // 優先攔截來襲之敵方反艦飛彈、巡弋飛彈與戰術/潛射彈道飛彈 (ATACMS / Trident II D5)
           const incomingBluforMissiles = this.projectiles.filter(
@@ -12420,7 +12570,9 @@ export class GameEngine {
         ship.type === 'dd_sovremenny' ||
         ship.type === 'dd_udaloy' ||
         ship.type === 'cvn' ||
-        ship.type === 'cvhg_kiev';
+        ship.type === 'cvhg_kiev' ||
+        ship.type === 'cg_slava' ||
+        ship.type === 'lha_tarawa';
 
       const pdRange = isCiwsCapable ? (ship.ciwsRange || 1100) : 800;
 
@@ -12703,6 +12855,7 @@ export class GameEngine {
           s.type === 'dd_sovremenny' ||
           s.type === 'dd_udaloy' ||
           s.type === 'cvhg_kiev' ||
+          s.type === 'cg_slava' ||
           s.type === 'destroyer' ||
           s.type === 'cruiser')
     );
@@ -13120,7 +13273,7 @@ export class GameEngine {
     }
 
     const isGranit = 'isSunk' in eShip && (eShip.type === 'cgn_kirov' || eShip.type === 'ssgn_oscar');
-    const isBazalt = 'isSunk' in eShip && eShip.type === 'cvhg_kiev';
+    const isBazalt = 'isSunk' in eShip && (eShip.type === 'cvhg_kiev' || eShip.type === 'cg_slava');
     const isMoskit = 'isSunk' in eShip && eShip.type === 'dd_sovremenny';
     const isCoastal = !('isSunk' in eShip);
 
@@ -14507,6 +14660,7 @@ export class GameEngine {
           health: baseHealth,
           maxHealth: baseHealth,
           order: { type: 'patrol', patrolOrigin: { ...patrolCenter } },
+          airMission: 'barcap',
           hasPayload: true,
           payloadType: pType,
           payloadName: pName,
@@ -14602,7 +14756,6 @@ export class GameEngine {
     const baseCenter = this.friendlyBase?.center || { x: 2000, y: 12400 };
     const heading = -Math.PI / 4;
     const sqId = `sq-allied-${Date.now()}`;
-    const count = 2; // 2-ship tactical element
 
     type AlliedOption = {
       model: AircraftModel;
@@ -14614,6 +14767,8 @@ export class GameEngine {
       payloadName: string;
       ammo: number;
       affiliation: string;
+      /** Air arm whose insignia it wears when the airframe is flown by another nation. */
+      nation?: AircraftNation;
     };
 
     let pool: AlliedOption[] = [];
@@ -14624,6 +14779,10 @@ export class GameEngine {
         { model: 'spitfire_v', role: 'fighter', modelName: '噴火式 Mk.V 戰鬥機', speed: getAircraftSpeed('spitfire_v'), baseHealth: 420, payloadType: 'clean_guns', payloadName: '2x 20mm 機砲 + 4x .303', ammo: 1800, affiliation: '英國皇家空軍 (RAF)' },
         { model: 'beaufighter', role: 'attacker', modelName: '雙頭怪 (Beaufighter) 打擊機', speed: getAircraftSpeed('beaufighter'), baseHealth: 620, payloadType: 'aerial_torpedo', payloadName: 'Mk 13 航空魚雷 / 4x 20mm', ammo: 1200, affiliation: '皇家空軍岸防司令部' },
         { model: 'swordfish', role: 'torpedo_bomber', modelName: '劍魚魚雷轟炸機', speed: getAircraftSpeed('swordfish'), baseHealth: 340, payloadType: 'aerial_torpedo', payloadName: '18吋航空重型魚雷', ammo: 600, affiliation: '皇家海軍航空隊 (FAA)' },
+        { model: 'p40', role: 'fighter', modelName: 'P-40E 小鷹式 (Kittyhawk)', speed: getAircraftSpeed('p40'), baseHealth: 420, payloadType: 'clean_guns', payloadName: '6x .50 白朗寧機槍', ammo: 1440, affiliation: '澳洲皇家空軍第75中隊 (RAAF)', nation: 'australia' },
+        { model: 'a20', role: 'attacker', modelName: 'A-20C 波士頓 (Boston) 攻擊機', speed: getAircraftSpeed('a20'), baseHealth: 520, payloadType: 'bombs_dual_500', payloadName: '機首機槍群 + 500lb 航彈', ammo: 2000, affiliation: '澳洲皇家空軍第22中隊 (RAAF)', nation: 'australia' },
+        { model: 'beaufort', role: 'torpedo_bomber', modelName: '蒲福式 Mk.VIII (DAP Beaufort) 魚雷轟炸機', speed: getAircraftSpeed('beaufort'), baseHealth: 700, payloadType: 'aerial_torpedo', payloadName: '18吋 Mk XII 航空魚雷', ammo: 1500, affiliation: '澳洲皇家空軍第100中隊 (RAAF)', nation: 'australia' },
+        { model: 'boomerang', role: 'fighter', modelName: 'CA-12 回力鏢 (Boomerang) 戰鬥機', speed: getAircraftSpeed('boomerang'), baseHealth: 460, payloadType: 'clean_guns', payloadName: '2x 20mm 機砲 + 4x .303 機槍', ammo: 1600, affiliation: '澳洲皇家空軍第84中隊 (RAAF)', nation: 'australia' },
       ];
     } else if (this.era === 'era2') {
       pool = [
@@ -14631,6 +14790,11 @@ export class GameEngine {
         { model: 'tempest', role: 'fighter', modelName: '暴風式 Mk.V 戰鬥機', speed: getAircraftSpeed('tempest'), baseHealth: 520, payloadType: 'hvar_rockets', payloadName: '8x 航空火箭 / 4x 20mm', ammo: 1600, affiliation: '英國皇家空軍 (RAF)' },
         { model: 'mosquito', role: 'attacker', modelName: '蚊式 (Mosquito FB.VI) 轟炸機', speed: getAircraftSpeed('mosquito'), baseHealth: 580, payloadType: 'bombs_dual_500', payloadName: '雙聯 500lb 航彈 + 4x 20mm', ammo: 1400, affiliation: '英國皇家空軍 (RAF)' },
         { model: 'lancaster', role: 'level_bomber', modelName: '蘭開斯特重型轟炸機', speed: getAircraftSpeed('lancaster'), baseHealth: 980, payloadType: 'bombs_carpet_250', payloadName: '16枚連環地毯航彈', ammo: 1800, affiliation: '皇家空軍轟炸司令部' },
+        { model: 'f4u', role: 'fighter', modelName: '海盜 Mk.II (Corsair) 艦載戰鬥機', speed: getAircraftSpeed('f4u'), baseHealth: 480, payloadType: 'clean_guns', payloadName: '6x .50 機槍', ammo: 2400, affiliation: '英國太平洋艦隊 艦隊航空隊 (FAA)', nation: 'british_pacific' },
+        { model: 'f6f', role: 'fighter', modelName: '地獄貓 Mk.II (Hellcat) 艦載戰鬥機', speed: getAircraftSpeed('f6f'), baseHealth: 440, payloadType: 'clean_guns', payloadName: '6x .50 機槍', ammo: 2400, affiliation: '英國太平洋艦隊 艦隊航空隊 (FAA)', nation: 'british_pacific' },
+        { model: 'tbf', role: 'torpedo_bomber', modelName: '復仇者 Mk.I (Avenger) 魚雷轟炸機', speed: getAircraftSpeed('tbf'), baseHealth: 460, payloadType: 'aerial_torpedo', payloadName: 'Mk 13 航空魚雷', ammo: 600, affiliation: '英國太平洋艦隊 艦隊航空隊 (FAA)', nation: 'british_pacific' },
+        { model: 'seafire', role: 'fighter', modelName: '海火式 F.III (Seafire) 艦載戰鬥機', speed: getAircraftSpeed('seafire'), baseHealth: 420, payloadType: 'clean_guns', payloadName: '2x 20mm 機砲 + 4x .303 機槍', ammo: 1200, affiliation: '英國太平洋艦隊 第887中隊 (FAA)', nation: 'british_pacific' },
+        { model: 'barracuda', role: 'attacker', modelName: '梭魚式 Mk.II (Barracuda) 俯衝/魚雷轟炸機', speed: getAircraftSpeed('barracuda'), baseHealth: 540, payloadType: 'bombs_dual_500', payloadName: '2x 500lb 航彈 (沙璜/巨港空襲)', ammo: 600, affiliation: '英國東方艦隊 第827中隊 (FAA)', nation: 'british_pacific' },
       ];
     } else if (this.era === 'era3') {
       pool = [
@@ -14638,6 +14802,11 @@ export class GameEngine {
         { model: 'rokaf_p51', role: 'fighter', modelName: 'F-51D 野馬式戰鬥機', speed: getAircraftSpeed('rokaf_p51'), baseHealth: 460, payloadType: 'clean_guns', payloadName: '6x .50 M2 機槍', ammo: 1800, affiliation: '大韓民國空軍 (ROKAF)' },
         { model: 'sea_fury', role: 'attacker', modelName: '海怒 (Sea Fury FB.11) 艦載機', speed: getAircraftSpeed('sea_fury'), baseHealth: 500, payloadType: 'hvar_rockets', payloadName: '8x 60lb 火箭 + 4x 20mm', ammo: 1600, affiliation: '英聯邦特遣艦隊航空隊' },
         { model: 'firefly_as5', role: 'attacker', modelName: '螢火蟲 (Firefly AS.5) 攻擊機', speed: getAircraftSpeed('firefly_as5'), baseHealth: 490, payloadType: 'hvar_rockets', payloadName: 'ASH雷達 + 8x 火箭', ammo: 1200, affiliation: '英聯邦海軍特遣隊' },
+        { model: 'p51', role: 'attacker', modelName: 'F-51D 野馬 (飛豹中隊)', speed: getAircraftSpeed('p51'), baseHealth: 450, payloadType: 'hvar_rockets', payloadName: '6x HVAR 火箭 + 6x .50 機槍', ammo: 1880, affiliation: '南非空軍第2中隊「飛豹」(SAAF)', nation: 'south_africa' },
+        { model: 'f4u4', role: 'attacker', modelName: 'F4U-4 海盜 (Corsair) 對地攻擊', speed: getAircraftSpeed('f4u4'), baseHealth: 500, payloadType: 'napalm_canister', payloadName: '凝固汽油彈 + HVAR', ammo: 1800, affiliation: '美國海軍陸戰隊第1陸戰航空聯隊 (1st MAW)' },
+        { model: 'p51', role: 'fighter', modelName: 'P-51D 野馬 (韓戰首月)', speed: getAircraftSpeed('p51'), baseHealth: 450, payloadType: 'hvar_rockets', payloadName: '6x HVAR + 6x .50 機槍', ammo: 1880, affiliation: '澳洲皇家空軍第77中隊 (RAAF)', nation: 'australia' },
+        { model: 'sea_fury', role: 'attacker', modelName: '海怒 FB.11 (雪梨號航艦)', speed: getAircraftSpeed('sea_fury'), baseHealth: 500, payloadType: 'hvar_rockets', payloadName: '8x 60lb 火箭 + 4x 20mm', ammo: 1600, affiliation: '澳洲皇家海軍 第805中隊 (RAN FAA)', nation: 'australia' },
+        { model: 'firefly_as5', role: 'attacker', modelName: '螢火蟲 FR.5 (雪梨號航艦)', speed: getAircraftSpeed('firefly_as5'), baseHealth: 490, payloadType: 'bombs_dual_500', payloadName: '2x 500lb 航彈 + 4x 20mm', ammo: 1200, affiliation: '澳洲皇家海軍 第817中隊 (RAN FAA)', nation: 'australia' },
       ];
     } else if (this.era === 'era4') {
       pool = [
@@ -14647,6 +14816,10 @@ export class GameEngine {
         { model: 'a1h', role: 'attacker', modelName: 'A-1H 天襲者密接打擊機', speed: getAircraftSpeed('a1h'), baseHealth: 680, payloadType: 'bombs_snakeye_retarded', payloadName: '重裝航彈 + 4x 20mm 機砲', ammo: 1200, affiliation: '盟軍戰術空軍聯隊' },
         { model: 'a37b', role: 'attacker', modelName: 'A-37B 蜻蜓式輕型攻擊機', speed: getAircraftSpeed('a37b'), baseHealth: 500, payloadType: 'bombs_snakeye_retarded', payloadName: 'GAU-2B 米尼岡機槍 + 航彈', ammo: 1500, affiliation: '南越空軍 (VNAF)' },
         { model: 'hunter_fga9', role: 'attacker', modelName: '獵手 (Hunter FGA.9) 攻擊機', speed: getAircraftSpeed('hunter_fga9'), baseHealth: 580, payloadType: 'bombs_snakeye_retarded', payloadName: '4x 30mm 亞丁機砲 + 航彈', ammo: 1000, affiliation: '英國皇家空軍 (RAF)' },
+        { model: 'f4e', role: 'fighter', modelName: 'F-4E 幽靈II (租借機)', speed: getAircraftSpeed('f4e'), baseHealth: 740, payloadType: 'aim7_aim9_combo', payloadName: '4x AIM-7 + 4x AIM-9', ammo: 1000, affiliation: '澳洲皇家空軍第1/6中隊 (RAAF)', nation: 'australia' },
+        { model: 'f100', role: 'attacker', modelName: 'F-100D 超級軍刀', speed: getAircraftSpeed('f100'), baseHealth: 640, payloadType: 'bombs_snakeye_retarded', payloadName: '蛇眼減速彈 + 4x 20mm', ammo: 800, affiliation: '美國空軍第3戰術戰鬥聯隊 (邊和空軍基地)' },
+        { model: 'canberra', role: 'level_bomber', modelName: '坎培拉 B.20 (Canberra) 轟炸機', speed: getAircraftSpeed('canberra'), baseHealth: 900, payloadType: 'bombs_carpet_250', payloadName: '6x 750lb 航彈 (藩朗 1967-71)', ammo: 0, affiliation: '澳洲皇家空軍第2中隊 (RAAF)', nation: 'australia' },
+        { model: 'a4', role: 'attacker', modelName: 'A-4G 天鷹 (墨爾本號航艦)', speed: getAircraftSpeed('a4'), baseHealth: 580, payloadType: 'bombs_snakeye_retarded', payloadName: 'Mk 82 蛇眼 + 2x 20mm', ammo: 400, affiliation: '澳洲皇家海軍 第805中隊 (RAN FAA)', nation: 'australia' },
       ];
     } else {
       // Era 5 Cold War NATO Coalition (Ceiling is SARH, AMRAAM not yet deployed)
@@ -14658,34 +14831,85 @@ export class GameEngine {
         { model: 'tornado_ids', role: 'attacker', modelName: '龍捲風 IDS 跑道壓制戰轟機', speed: getAircraftSpeed('tornado_ids'), baseHealth: 760, payloadType: 'bombs_snakeye_retarded', payloadName: 'JP233 跑道集束子母彈藥撒佈器', ammo: 800, affiliation: '英國皇家空軍 (RAF)' },
         { model: 'jaguar_gr1', role: 'attacker', modelName: '美洲豹 GR.1 戰術攻擊機', speed: getAircraftSpeed('jaguar_gr1'), baseHealth: 650, payloadType: 'bombs_snakeye_retarded', payloadName: '翼上響尾蛇 + 蛇眼減速炸彈', ammo: 900, affiliation: '英法聯合特遣隊' },
         { model: 'viggen_ja37', role: 'attacker', modelName: 'JA 37 雷式戰鬥攻擊機', speed: getAircraftSpeed('viggen_ja37'), baseHealth: 780, payloadType: 'rgm84_harpoon', payloadName: 'RBS-15F 重型反艦飛彈 + 30mm砲', ammo: 700, affiliation: '瑞典空軍 (Flygvapnet)' },
+        { model: 'f15a', role: 'fighter', modelName: 'F-15J 鷹式 (三菱授權生產)', speed: getAircraftSpeed('f15a'), baseHealth: 850, payloadType: 'aim7_aim9_combo', payloadName: '4x AIM-7F + 4x AIM-9L', ammo: 940, affiliation: '日本航空自衛隊 第2航空團 (JASDF)', nation: 'japan' },
+        { model: 'f4e', role: 'fighter', modelName: 'F-4EJ 改 幽靈II', speed: getAircraftSpeed('f4e'), baseHealth: 740, payloadType: 'aim7_aim9_combo', payloadName: '4x AIM-7E + 4x AIM-9', ammo: 1000, affiliation: '日本航空自衛隊 第8航空團 (JASDF)', nation: 'japan' },
+        { model: 'av8b', role: 'attacker', modelName: '獵鷹 GR.3 (Harrier) 垂直起降攻擊機', speed: getAircraftSpeed('av8b'), baseHealth: 720, payloadType: 'cbu_cluster_bombs', payloadName: 'BL755 集束炸彈 + 30mm 亞丁砲莢', ammo: 300, affiliation: '英國皇家空軍第1中隊 (RAF)', nation: 'uk' },
+        { model: 'buccaneer', role: 'attacker', modelName: '海盜式 S.2B (Buccaneer) 海上打擊機', speed: getAircraftSpeed('buccaneer'), baseHealth: 900, payloadType: 'rgm84_harpoon', payloadName: '2x 海鷹 (Sea Eagle) 反艦飛彈', ammo: 0, affiliation: '英國皇家空軍第12中隊 (RAF)', nation: 'uk' },
+        { model: 'sea_harrier', role: 'fighter', modelName: '海獵鷹 FRS.1 (Sea Harrier)', speed: getAircraftSpeed('sea_harrier'), baseHealth: 640, payloadType: 'aim9_sidewinder', payloadName: '2x AIM-9L + 2x 30mm 亞丁', ammo: 300, affiliation: '英國皇家海軍 第800中隊 (FAA)', nation: 'uk' },
+        { model: 'fa18a', role: 'fighter', modelName: 'CF-18A 大黃蜂', speed: getAircraftSpeed('fa18a'), baseHealth: 800, payloadType: 'aim7_aim9_combo', payloadName: '4x AIM-7M + 2x AIM-9L', ammo: 940, affiliation: '加拿大空軍第409中隊 (CAF, 西德巴登)', nation: 'canada' },
+        { model: 'f16a', role: 'fighter', modelName: 'F-16A 戰隼 (MLU 前)', speed: getAircraftSpeed('f16a'), baseHealth: 760, payloadType: 'aim9_sidewinder', payloadName: '4x AIM-9 + M61', ammo: 940, affiliation: '荷蘭皇家空軍第322中隊 (RNLAF)', nation: 'netherlands' },
       ];
     }
 
-    const choice = pool[Math.floor(Math.random() * pool.length)];
+    const fighters = pool.filter((p) => p.role === 'fighter');
+    const strikers = pool.filter((p) => p.role !== 'fighter');
+    const pick = <T,>(list: T[]): T => list[Math.floor(Math.random() * list.length)];
 
-    // Target finding
     const hostilePlanes = this.aircraft.filter((a) => this.isHostile('allied', a.side) && a.state !== 'shot_down');
     const hostileShips = this.enemyShips.filter((s) => !s.isSunk);
     const hostileGround = this.groundUnits.filter((u) => this.isHostile('allied', u.side) && !u.isDestroyed);
+    const fleetPos = this.getFlagship()?.pos ?? baseCenter;
 
-    let order: UnitOrder;
-    if (choice.role === 'fighter' && hostilePlanes.length > 0) {
-      const nearestP = hostilePlanes[0];
-      order = { type: 'patrol', patrolOrigin: { ...nearestP.pos } };
-    } else if ((choice.role === 'attacker' || choice.role === 'torpedo_bomber') && hostileShips.length > 0) {
-      order = { type: 'attack', targetPos: { ...hostileShips[0].pos } };
-    } else if (hostileGround.length > 0) {
-      order = { type: 'attack', targetPos: { ...hostileGround[0].pos } };
-    } else if (hostileShips.length > 0) {
-      order = { type: 'patrol', patrolOrigin: { ...hostileShips[0].pos } };
+    // Three sortie types: escort an allied strike already airborne without cover, a strike package
+    // (2-4 strikers of one type with a 2-ship escort), or a 2-4 ship barrier CAP on the threat axis
+    const unescorted = this.findUnescortedPackage('allied');
+    let banner: string;
+    if (unescorted && fighters.length > 0) {
+      const f = pick(fighters);
+      this.launchAlliedFlight(f, 2, sqId, baseCenter, heading, { type: 'patrol', patrolOrigin: { ...unescorted.pos } }, 'escort', unescorted.packageId);
+      banner = `${f.affiliation} 2架 ${f.modelName} 升空，為空中的盟軍打擊編隊擔任護航`;
+    } else if (strikers.length > 0 && (hostileShips.length > 0 || hostileGround.length > 0) && Math.random() < 0.6) {
+      const s = pick(strikers);
+      const strikeCount = s.role === 'level_bomber' ? 2 + Math.floor(Math.random() * 3) : 2 + Math.floor(Math.random() * 4);
+      const target =
+        (s.role === 'attacker' || s.role === 'torpedo_bomber') && hostileShips.length > 0
+          ? hostileShips[0].pos
+          : hostileGround.length > 0
+          ? hostileGround[0].pos
+          : hostileShips[0].pos;
+      this.launchAlliedFlight(s, strikeCount, sqId, baseCenter, heading, { type: 'attack', targetPos: { ...target } });
+      if (fighters.length > 0) {
+        const f = fighters.find((x) => x.affiliation === s.affiliation) ?? pick(fighters);
+        // Escort scales with the package: a pair for a small strike, a division for a big one
+        this.launchAlliedFlight(f, strikeCount >= 4 ? 4 : 2, sqId, baseCenter, heading, { type: 'patrol', patrolOrigin: { ...baseCenter } });
+      }
+      this.organizeStrikePackage(sqId);
+      banner = `${s.affiliation} ${strikeCount}架 ${s.modelName} 打擊編隊${fighters.length > 0 ? `（含 ${strikeCount >= 4 ? 4 : 2} 架護航戰鬥機）` : ''}出擊`;
     } else {
-      order = { type: 'patrol', patrolOrigin: { x: baseCenter.x + 2500, y: baseCenter.y - 2500 } };
+      const f = fighters.length > 0 ? pick(fighters) : pick(pool);
+      const capCount = 2 + Math.floor(Math.random() * 3);
+      const threat = this.getEnemyAirThreatAxis() ?? hostilePlanes[0]?.pos;
+      this.launchAlliedFlight(f, capCount, sqId, baseCenter, heading, { type: 'patrol', patrolOrigin: barrierStation(fleetPos, threat, 1800) }, 'barcap');
+      banner = `${f.affiliation} ${capCount}架 ${f.modelName} 於艦隊與敵機場之間建立阻絕戰鬥空中巡邏 (BARCAP)`;
     }
 
+    soundEngine.playPlaneSortie();
+    this.addBannerAlert(`✈️【盟軍航空特遣隊出擊】${banner}！`, 'player', 'alert', 6.0);
+    this.addCombatLog({
+      category: 'air',
+      sourceSide: 'allied',
+      sourceName: '盟軍航空部隊',
+      targetName: '戰區空域',
+      actionType: 'recon_spotted',
+      text: `✈️【盟軍航空出擊】${banner}。`,
+    });
+  }
+
+  /** Puts one allied flight in the air from the friendly base. */
+  private launchAlliedFlight(
+    choice: { model: AircraftModel; role: AircraftRole; modelName: string; speed: number; baseHealth: number; payloadType: AircraftPayloadType; payloadName: string; ammo: number; affiliation: string; nation?: AircraftNation },
+    count: number,
+    sqId: string,
+    baseCenter: Vector2D,
+    heading: number,
+    order: UnitOrder,
+    airMission?: 'escort' | 'barcap',
+    packageId?: string
+  ): void {
+    const ts = Date.now();
     for (let i = 0; i < count; i++) {
-      const pId = `allied-${choice.model}-${Date.now()}-${i}`;
       this.aircraft.push({
-        id: pId,
+        id: `allied-${choice.model}-${ts}-${i}-${Math.floor(Math.random() * 1e6)}`,
         squadronId: sqId,
         model: choice.model,
         role: choice.role,
@@ -14698,10 +14922,10 @@ export class GameEngine {
         speed: choice.speed,
         maxSpeed: choice.speed,
         altitude: choice.role === 'level_bomber' ? 0.95 : 0.82,
-        state: 'cruising',
+        state: airMission ? 'patrolling' : 'cruising',
         health: choice.baseHealth,
         maxHealth: choice.baseHealth,
-        order,
+        order: { ...order },
         hasPayload: true,
         payloadType: choice.payloadType,
         payloadName: choice.payloadName,
@@ -14710,25 +14934,13 @@ export class GameEngine {
         maxGunAmmo: choice.ammo,
         wingmanOffset: { x: (i - (count - 1) / 2) * 32, y: i * 22 },
         flightName: `${choice.affiliation} · 盟軍特遣航空隊 (${choice.model.toUpperCase()})`,
+        airMission,
+        packageId,
+        nation: choice.nation,
       });
     }
-
-    soundEngine.playPlaneSortie();
-    this.addBannerAlert(
-      `✈️【盟軍航空特遣隊出擊】${choice.affiliation} 2架 ${choice.modelName} 自前進基地緊急起飛，自主執行協同作戰！`,
-      'player',
-      'alert',
-      6.0
-    );
-    this.addCombatLog({
-      category: 'air',
-      sourceSide: 'allied',
-      sourceName: choice.affiliation,
-      targetName: '戰區空域',
-      actionType: 'recon_spotted',
-      text: `✈️【盟軍航空出擊】${choice.affiliation} 2機編隊 ${choice.modelName} 掛載「${choice.payloadName}」滑行起飛，受命前往戰區實施自主空戰與打擊！`,
-    });
   }
+
 
   // ══════════════════════════════════════════════════════════
   // 跨時代盟軍水面打擊群 (Allied Surface Action Group - SAG)
@@ -14742,7 +14954,7 @@ export class GameEngine {
   private spawnAlliedSAG() {
     // 限制戰場上存活的盟軍艦艇總數，避免畫面過度壅塞
     const activeAllied = this.alliedShips.filter((s) => !s.isSunk);
-    if (activeAllied.length >= 6) return;
+    if (activeAllied.length >= 9) return;
 
     const spawnX = 350;
     const centerY = this.worldSize / 2;
@@ -14902,20 +15114,17 @@ export class GameEngine {
         const needNewPath =
           !ship.order.waypoints ||
           ship.order.waypoints.length === 0 ||
-          (ship.repathCooldown || 0) <= 0;
+          (ship.repathCooldown || 0) <= 0 ||
+          ship.navStuck;
         if (needNewPath) {
           ship.order.waypoints = this.navGrid.findPath(ship.pos, navDestination);
           ship.order.activeWaypointIndex = 0;
           ship.order.targetPos = navDestination;
           ship.repathCooldown = 3.5;
+          ship.navStuck = false;
         }
         const wps = ship.order.waypoints || [navDestination];
-        let wpIdx = ship.order.activeWaypointIndex ?? 0;
-        while (wpIdx < wps.length - 1 && dist(ship.pos, wps[wpIdx]) < 110) {
-          wpIdx += 1;
-          ship.order.activeWaypointIndex = wpIdx;
-        }
-        const activeWp = wps[Math.min(wpIdx, wps.length - 1)] || navDestination;
+        const activeWp = this.advanceSeaLane(ship, wps) || navDestination;
         ship.targetHeading = Math.atan2(activeWp.y - ship.pos.y, activeWp.x - ship.pos.x);
       } else {
         ship.targetHeading = Math.atan2(navDestination.y - ship.pos.y, navDestination.x - ship.pos.x);
@@ -15324,8 +15533,11 @@ export class GameEngine {
         if (i === 0 && Math.random() < 0.35) {
           sub = createOscarSSGN(`wolfpack-oscar-${ts}-${i}`, `蘇聯 Project 949A 奧斯卡 II 級巡弋核潛艦 K-${132 + i}`, subPos);
         } else {
-          const isAkula = Math.random() < 0.45;
-          sub = createSovietVictor3SSN(
+          const r = Math.random();
+          const isAkula = r < 0.35;
+          if (r > 0.75) {
+            sub = createKiloSS(`wolfpack-kilo-${ts}-${i}`, `蘇聯 Project 877 Kilo 基洛級靜音柴電潛艦 B-${400 + i}`, subPos);
+          } else sub = createSovietVictor3SSN(
             `wolfpack-ssn-${ts}-${i}`,
             isAkula ? `蘇聯 Project 971 Akula 阿庫拉級核動力攻擊潛艦 K-${284 + i}` : `蘇聯 Project 671RTM Victor III 核動力攻擊潛艦 K-${255 + i}`,
             subPos,
@@ -17640,7 +17852,7 @@ export class GameEngine {
       'opfor_zsu57_2', 'opfor_sa6_kub', 'opfor_sa9_strela1', 'opfor_sa8_osa', 'opfor_sa11_buk', 'opfor_sa15_tor', 'opfor_btr_zd',
       'opfor_tunguska', 'opfor_strela10', 'opfor_t72b', 'opfor_t80b', 'opfor_bmp2',
       'usmc_armor_m3', 'usmc_armor_m4', 'usmc_patton_m46', 'us_army_armor_korea',
-      'usmc_duster_m42', 'usmc_armor_m48', 'usmc_ontos_m50', 'us_army_m113_mech', 'us_army_chaparral_sam'
+      'usmc_duster_m42', 'usmc_armor_m48', 'usmc_ontos_m50', 'us_m551_sheridan', 'us_m26_pershing', 'us_m1a1_abrams', 'us_army_m113_mech', 'us_army_chaparral_sam'
     ];
     const armorUnits = validGround.filter((u) => armorTypes.includes(u.type));
     if (armorUnits.length > 0) {

@@ -402,7 +402,7 @@ function drawSelectionOverlay(rc: RenderContext, ship: Ship, isSelected: boolean
     const cy = frameY + frameH / 2;
     const cx = ship.pos.x;
 
-    if (ship.type === 'carrier' || ship.type === 'cve' || ship.type === 'cv63' || ship.type === 'cvn' || ship.type === 'cvhg_kiev' || ship.type === 'lph') {
+    if (ship.type === 'carrier' || ship.type === 'cve' || ship.type === 'cv63' || ship.type === 'cvn' || ship.type === 'cvhg_kiev' || ship.type === 'lph' || ship.type === 'lha_tarawa') {
       // 航空母艦 (Aircraft Carrier): 水平水線 + 上方雙翼飛翼折角 (Aviation Chevron)
       ctx.beginPath();
       ctx.moveTo(cx - 9, cy + 3);
@@ -568,7 +568,10 @@ export { drawShipTurrets } from './mounts';
 // ══════════════════════════════════════════════════════════
 // 盟軍水面打擊群 (Allied SAG) 專屬考證艦艇外觀與動態軍艦旗
 // ══════════════════════════════════════════════════════════
-export function drawNavalEnsign(rc: RenderContext, ensignType: 'white_ensign' | 'rising_sun' | 'de_bundesmarine' | 'fr_marine', x: number, y: number, length: number = 13, height: number = 8.5) {
+/** Naval ensigns drawn on allied ships. */
+export type NavalEnsign = 'white_ensign' | 'rising_sun' | 'de_bundesmarine' | 'fr_marine' | 'au_white_ensign' | 'ca_ensign' | 'nl_ensign' | 'rok_ensign';
+
+export function drawNavalEnsign(rc: RenderContext, ensignType: NavalEnsign, x: number, y: number, length: number = 13, height: number = 8.5) {
   const ctx = rc.ctx;
   ctx.save();
   ctx.translate(x, y);
@@ -691,6 +694,72 @@ export function drawNavalEnsign(rc: RenderContext, ensignType: 'white_ensign' | 
     ctx.fillRect(w1, 0, w2, height);
     ctx.fillStyle = '#D32F2F';
     ctx.fillRect(w1 + w2, 0, w3, height);
+  } else if (ensignType === 'au_white_ensign') {
+    // 🇦🇺 Australian White Ensign (from 1967): Union canton, blue Southern Cross on white
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, length, height);
+    ctx.fillStyle = '#0D47A1';
+    ctx.fillRect(0, 0, length * 0.44, height * 0.5);
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(length * 0.44, height * 0.5);
+    ctx.moveTo(length * 0.44, 0); ctx.lineTo(0, height * 0.5);
+    ctx.stroke();
+    ctx.fillStyle = '#D32F2F';
+    ctx.fillRect(length * 0.19, 0, length * 0.06, height * 0.5);
+    ctx.fillRect(0, height * 0.22, length * 0.44, height * 0.06);
+    ctx.fillStyle = '#0D47A1';
+    for (const [sx, sy] of [[0.75, 0.2], [0.62, 0.5], [0.88, 0.45], [0.75, 0.8], [0.22, 0.78]] as const) {
+      ctx.beginPath();
+      ctx.arc(length * sx, height * sy, height * 0.07, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (ensignType === 'ca_ensign') {
+    // 🇨🇦 Canadian flag, flown as the naval ensign from 1965: red-white-red with the maple leaf
+    ctx.fillStyle = '#D32F2F';
+    ctx.fillRect(0, 0, length, height);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(length * 0.25, 0, length * 0.5, height);
+    ctx.fillStyle = '#D32F2F';
+    ctx.beginPath();
+    ctx.moveTo(length * 0.5, height * 0.18);
+    ctx.lineTo(length * 0.62, height * 0.55);
+    ctx.lineTo(length * 0.52, height * 0.5);
+    ctx.lineTo(length * 0.52, height * 0.82);
+    ctx.lineTo(length * 0.48, height * 0.82);
+    ctx.lineTo(length * 0.48, height * 0.5);
+    ctx.lineTo(length * 0.38, height * 0.55);
+    ctx.closePath();
+    ctx.fill();
+  } else if (ensignType === 'nl_ensign') {
+    // 🇳🇱 Dutch tricolour
+    const h3 = height / 3;
+    ctx.fillStyle = '#C62828';
+    ctx.fillRect(0, 0, length, h3);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, h3, length, h3);
+    ctx.fillStyle = '#1565C0';
+    ctx.fillRect(0, h3 * 2, length, h3);
+  } else if (ensignType === 'rok_ensign') {
+    // 🇰🇷 Taegukgi: red-over-blue taeguk with the four trigrams
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, length, height);
+    const cx = length * 0.5;
+    const cy = height * 0.5;
+    const rr = height * 0.24;
+    ctx.fillStyle = '#C62828';
+    ctx.beginPath();
+    ctx.arc(cx, cy, rr, Math.PI, 0);
+    ctx.fill();
+    ctx.fillStyle = '#1565C0';
+    ctx.beginPath();
+    ctx.arc(cx, cy, rr, 0, Math.PI);
+    ctx.fill();
+    ctx.fillStyle = '#212121';
+    for (const [tx, ty] of [[0.18, 0.2], [0.82, 0.2], [0.18, 0.8], [0.82, 0.8]] as const) {
+      ctx.fillRect(length * tx - 1.2, height * ty - 1, 2.4, 2);
+    }
   }
 
   ctx.restore();
@@ -735,7 +804,7 @@ function drawShipUniversalDetails(rc: RenderContext, ship: Ship, hullColor: stri
     ship.type === 'cv63' ||
     ship.type === 'cvn' ||
     ship.type === 'cvhg_kiev' ||
-    ship.type === 'lph';
+    ship.type === 'lph' || ship.type === 'lha_tarawa';
   const isLandingCraft = ship.type === 'lcvp' || ship.type === 'lcm8' || ship.type === 'lcac';
 
   // 1. Bow Breakwater V-Shield & Subtle Deck Centerline on Surface Warships
