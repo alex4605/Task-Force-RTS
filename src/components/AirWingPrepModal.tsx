@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Era, AirWingLoadout, SectorIntel, AircraftPayloadType, PAYLOAD_CATALOG } from '../types/game';
+import { Era, AirWingLoadout, SectorIntel, AircraftPayloadType, AircraftRole, PAYLOAD_CATALOG } from '../types/game';
+import { getRolePayloadOptions } from '../game/aircraftLoadouts';
 import { Plane, Shield, Target, Eye, Play, Crosshair, Wrench, X } from 'lucide-react';
 import { soundEngine } from '../game/audio';
 import { UnitPreviewCanvas } from './hud/UnitPreviewCanvas';
@@ -12,17 +13,13 @@ interface AirWingPrepModalProps {
   onConfirmLoadout: (loadout: AirWingLoadout) => void;
 }
 
-const getEraDefaults = (era: Era) => {
+const getEraCounts = (era: Era) => {
   if (era === 'era5') {
     return {
       fighters: 24,
       diveBombers: 18,
       torpedoBombers: 14,
       scouts: 8,
-      fighterPayload: 'aim54_phoenix' as AircraftPayloadType,
-      diveBomberPayload: 'agm65_maverick' as AircraftPayloadType,
-      torpedoBomberPayload: 'asw_acoustic_torpedo' as AircraftPayloadType,
-      scoutPayload: 'scout_fuel' as AircraftPayloadType,
     };
   }
   if (era === 'era4') {
@@ -31,10 +28,6 @@ const getEraDefaults = (era: Era) => {
       diveBombers: 14,
       torpedoBombers: 10,
       scouts: 6,
-      fighterPayload: 'aim7_aim9_combo' as AircraftPayloadType,
-      diveBomberPayload: 'gbu10_laser_paveway' as AircraftPayloadType,
-      torpedoBomberPayload: 'asw_acoustic_torpedo' as AircraftPayloadType,
-      scoutPayload: 'scout_fuel' as AircraftPayloadType,
     };
   }
   if (era === 'era3') {
@@ -43,10 +36,6 @@ const getEraDefaults = (era: Era) => {
       diveBombers: 12,
       torpedoBombers: 8,
       scouts: 4,
-      fighterPayload: 'hvar_rockets' as AircraftPayloadType,
-      diveBomberPayload: 'tiny_tim_rocket' as AircraftPayloadType,
-      torpedoBomberPayload: 'asw_torpedo' as AircraftPayloadType,
-      scoutPayload: 'scout_fuel' as AircraftPayloadType,
     };
   }
   if (era === 'era2') {
@@ -55,10 +44,6 @@ const getEraDefaults = (era: Era) => {
       diveBombers: 10,
       torpedoBombers: 8,
       scouts: 4,
-      fighterPayload: 'clean_guns' as AircraftPayloadType,
-      diveBomberPayload: 'bomb_1000' as AircraftPayloadType,
-      torpedoBomberPayload: 'aerial_torpedo' as AircraftPayloadType,
-      scoutPayload: 'scout_fuel' as AircraftPayloadType,
     };
   }
   return {
@@ -66,12 +51,28 @@ const getEraDefaults = (era: Era) => {
     diveBombers: 8,
     torpedoBombers: 6,
     scouts: 2,
-    fighterPayload: 'clean_guns' as AircraftPayloadType,
-    diveBomberPayload: 'bomb_1000' as AircraftPayloadType,
-    torpedoBomberPayload: 'aerial_torpedo' as AircraftPayloadType,
-    scoutPayload: 'scout_fuel' as AircraftPayloadType,
   };
 };
+
+/** Catalog roles each pre-battle slot covers (era 3+ attack aircraft fill the dive-bomber deck spots). */
+const SLOT_ROLES = {
+  fighter: ['fighter'],
+  diveBomber: ['dive_bomber', 'attacker'],
+  torpedoBomber: ['torpedo_bomber'],
+  scout: ['scout', 'aew'],
+} as const satisfies Record<string, readonly AircraftRole[]>;
+
+/** Each slot starts on the historical default store of its first airframe. */
+const slotDefault = (roles: readonly AircraftRole[], era: Era): AircraftPayloadType =>
+  getRolePayloadOptions(roles, era)[0] ?? 'clean_guns';
+
+const getEraDefaults = (era: Era) => ({
+  ...getEraCounts(era),
+  fighterPayload: slotDefault(SLOT_ROLES.fighter, era),
+  diveBomberPayload: slotDefault(SLOT_ROLES.diveBomber, era),
+  torpedoBomberPayload: slotDefault(SLOT_ROLES.torpedoBomber, era),
+  scoutPayload: slotDefault(SLOT_ROLES.scout, era),
+});
 
 export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
   isOpen,
@@ -141,42 +142,10 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
     onClose();
   };
 
-  const fighterOptions: AircraftPayloadType[] =
-    era === 'era5'
-      ? ['aim54_phoenix', 'aim7_aim9_combo', 'rgm84_harpoon', 'agm88_harm', 'agm65_maverick', 'aim7_sparrow', 'aim9_sidewinder', 'clean_guns']
-      : era === 'era4'
-      ? ['aim7_aim9_combo', 'aim7_sparrow', 'aim9_sidewinder', 'clean_guns', 'blu27_napalm', 'bombs_snakeye_retarded', 'agm12_bullpup']
-      : era === 'era3'
-      ? ['clean_guns', 'hvar_rockets', 'bomb_500', 'bomb_1000', 'napalm_canister']
-      : era === 'era2'
-      ? ['clean_guns', 'bomb_500', 'bombs_dual_500', 'hvar_rockets']
-      : ['clean_guns', 'bomb_500'];
-  const diveBomberOptions: AircraftPayloadType[] =
-    era === 'era5'
-      ? ['agm65_maverick', 'rgm84_harpoon', 'agm88_harm', 'gbu10_laser_paveway', 'cbu_cluster_bombs', 'mer_iron_bombs', 'bombs_snakeye_retarded']
-      : era === 'era4'
-      ? ['gbu10_laser_paveway', 'cbu_cluster_bombs', 'blu27_napalm', 'mer_iron_bombs', 'agm62_walleye', 'bombs_snakeye_retarded', 'agm12_bullpup', 'bomb_2000', 'bomb_1000']
-      : era === 'era3'
-      ? ['tiny_tim_rocket', 'napalm_canister', 'bomb_2000', 'bomb_1000', 'bombs_dual_500']
-      : era === 'era2'
-      ? ['bomb_1000', 'bombs_dual_500', 'bomb_1600']
-      : ['bomb_1000', 'bombs_dual_500'];
-  const torpedoBomberOptions: AircraftPayloadType[] =
-    era === 'era5'
-      ? ['asw_acoustic_torpedo', 'rgm84_harpoon', 'asw_torpedo', 'gbu10_laser_paveway', 'depth_bombs']
-      : era === 'era4'
-      ? ['asw_acoustic_torpedo', 'asw_torpedo', 'gbu10_laser_paveway', 'depth_bombs', 'aerial_torpedo', 'bomb_1000']
-      : era === 'era3'
-      ? ['asw_torpedo', 'aerial_torpedo', 'depth_bombs', 'bomb_1000']
-      : ['aerial_torpedo', 'bomb_1000', 'bombs_dual_500', 'depth_bombs'];
-  const scoutOptions: AircraftPayloadType[] =
-    era === 'era5'
-      ? ['scout_fuel', 'clean_guns', 'agm88_harm', 'ffar_rockets_pod']
-      : era === 'era4'
-      ? ['scout_fuel', 'clean_guns', 'blu27_napalm', 'ffar_rockets_pod']
-      : era === 'era3'
-      ? ['scout_fuel', 'clean_guns', 'bomb_500']
-      : ['scout_fuel', 'bomb_500', 'scout_depth_charge'];
+  const fighterOptions = getRolePayloadOptions(SLOT_ROLES.fighter, era);
+  const diveBomberOptions = getRolePayloadOptions(SLOT_ROLES.diveBomber, era);
+  const torpedoBomberOptions = getRolePayloadOptions(SLOT_ROLES.torpedoBomber, era);
+  const scoutOptions = getRolePayloadOptions(SLOT_ROLES.scout, era);
 
   const carrierName =
     era === 'era5'
