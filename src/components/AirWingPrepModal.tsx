@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Era, AirWingLoadout, SectorIntel, AircraftPayloadType, PAYLOAD_CATALOG } from '../types/game';
-import { Language, getTranslation } from '../game/i18n';
 import { Plane, Shield, Target, Eye, Play, Crosshair, Wrench, X } from 'lucide-react';
 import { soundEngine } from '../game/audio';
 import { UnitPreviewCanvas } from './hud/UnitPreviewCanvas';
@@ -11,7 +10,6 @@ interface AirWingPrepModalProps {
   era: Era;
   intel: SectorIntel | null;
   onConfirmLoadout: (loadout: AirWingLoadout) => void;
-  lang?: Language;
 }
 
 const getEraDefaults = (era: Era) => {
@@ -81,10 +79,8 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
   era,
   intel: _intel,
   onConfirmLoadout,
-  lang = 'zh',
 }) => {
   const maxCapacity = era === 'era5' ? 64 : era === 'era4' ? 48 : era === 'era3' ? 40 : era === 'era2' ? 36 : 24;
-  const t = getTranslation(lang);
   const initial = getEraDefaults(era);
 
   // Plane count state
@@ -213,10 +209,10 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
             </div>
             <div>
               <div className="text-[10px] text-[#90CAF9] tracking-widest uppercase font-bold flex items-center gap-2">
-                <span>{lang === 'zh' ? '航母飛行甲板預發進配置' : 'FLIGHT DECK PRE-SORTIE ALLOCATION'}</span>
+                <span>航母飛行甲板預發進配置</span>
               </div>
               <h2 className="text-sm sm:text-base font-bold text-[#E0F7FA]">
-                {t.prepTitle}
+                戰前航空隊編制與掛載配置
               </h2>
               <div className="text-[11px] text-[#FFD54F]">
                 {carrierName}
@@ -226,7 +222,7 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
 
           <div className="flex items-center gap-3">
             <div className="text-right">
-              <span className="text-[10px] text-[#90CAF9] block">{t.prepCapacity}</span>
+              <span className="text-[10px] text-[#90CAF9] block">機庫容量</span>
               <span
                 className={`font-mono font-bold text-base tabular-nums ${
                   isOverCapacity ? 'text-red-400' : 'text-[#00E5FF]'
@@ -240,7 +236,7 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
               type="button"
               onClick={onClose}
               className="p-1.5 hover:bg-slate-800/80 rounded-lg text-slate-400 hover:text-white border border-[#1E3A5F] transition-colors"
-              title={lang === 'zh' ? '關閉甲板選單 (ESC)' : 'Close modal (ESC)'}
+              title="關閉甲板選單 (ESC)"
             >
               <X className="w-4 h-4" />
             </button>
@@ -262,10 +258,10 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
             />
           </div>
           <div className="flex justify-between text-[10px] text-slate-400">
-            <span>{t.prepIntro}</span>
+            <span>依據戰場情報調整航空母艦各機種的編制比例，並指派開戰預發進空優戰巡 (CAP) 與偵察機巡邏。</span>
             {isOverCapacity && (
               <span className="text-red-400 font-bold">
-                {lang === 'zh' ? '已超額！請減少戰機數量' : 'EXCEEDED MAX HANGAR CAPACITY!'}
+                已超額！請減少戰機數量
               </span>
             )}
           </div>
@@ -313,7 +309,7 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
             <div className="pt-1 border-t border-[#1E3A5F]/60">
               <div className="text-[10px] text-slate-400 mb-1 flex items-center gap-1">
                 <Wrench className="w-3 h-3 text-[#80DEEA]" />
-                <span>{lang === 'zh' ? '戰鬥機掛載配置：' : 'Fighter Ordnance:'}</span>
+                <span>戰鬥機掛載配置：</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 {fighterOptions.map((opt) => {
@@ -332,7 +328,7 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
                     >
                       <div className="font-bold text-[10px] text-[#E0F7FA]">{item.badge}</div>
                       <div className="text-[9px] text-slate-400 truncate">
-                        {lang === 'zh' ? item.nameZh : item.name}
+                        {item.name}
                       </div>
                     </button>
                   );
@@ -381,7 +377,7 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
             <div className="pt-1 border-t border-[#1E3A5F]/60">
               <div className="text-[10px] text-slate-400 mb-1 flex items-center gap-1">
                 <Wrench className="w-3 h-3 text-[#FFD54F]" />
-                <span>{lang === 'zh' ? '轟炸/攻擊機外掛彈藥：' : 'Bomber Ordnance:'}</span>
+                <span>轟炸/攻擊機外掛彈藥：</span>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-1.5">
                 {diveBomberOptions.map((opt) => {
@@ -400,7 +396,7 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
                     >
                       <div className="font-bold text-[10px] text-[#FFE082]">{item.badge}</div>
                       <div className="text-[9px] text-slate-400 truncate">
-                        {lang === 'zh' ? item.nameZh : item.name}
+                        {item.name}
                       </div>
                     </button>
                   );
@@ -449,7 +445,7 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
             <div className="pt-1 border-t border-[#1E3A5F]/60">
               <div className="text-[10px] text-slate-400 mb-1 flex items-center gap-1">
                 <Wrench className="w-3 h-3 text-[#80DEEA]" />
-                <span>{lang === 'zh' ? '魚雷/反潛外掛武裝：' : 'Torpedo & ASW Ordnance:'}</span>
+                <span>魚雷/反潛外掛武裝：</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                 {torpedoBomberOptions.map((opt) => {
@@ -468,7 +464,7 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
                     >
                       <div className="font-bold text-[10px] text-[#80DEEA]">{item.badge}</div>
                       <div className="text-[9px] text-slate-400 truncate">
-                        {lang === 'zh' ? item.nameZh : item.name}
+                        {item.name}
                       </div>
                     </button>
                   );
@@ -517,7 +513,7 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
             <div className="pt-1 border-t border-[#1E3A5F]/60">
               <div className="text-[10px] text-slate-400 mb-1 flex items-center gap-1">
                 <Wrench className="w-3 h-3 text-[#A7FFEB]" />
-                <span>{lang === 'zh' ? '偵察機觀測設備與輕航彈：' : 'Scout Optics & Fuel:'}</span>
+                <span>偵察機觀測設備與輕航彈：</span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                 {scoutOptions.map((opt) => {
@@ -536,7 +532,7 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
                     >
                       <div className="font-bold text-[10px] text-[#A7FFEB]">{item.badge}</div>
                       <div className="text-[9px] text-slate-400 truncate">
-                        {lang === 'zh' ? item.nameZh : item.name}
+                        {item.name}
                       </div>
                     </button>
                   );
@@ -555,7 +551,7 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
               onChange={(e) => setPreLaunchCAP(e.target.checked)}
               className="w-4 h-4 rounded border-slate-700 text-[#1976D2] accent-[#1976D2]"
             />
-            <span className="font-semibold text-xs">{t.preLaunchCap}</span>
+            <span className="font-semibold text-xs">開戰自動彈射 2 架戰鬥機執行 CAP 空優警戒</span>
           </label>
 
           <label className="flex items-center gap-2.5 cursor-pointer text-slate-200">
@@ -565,7 +561,7 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
               onChange={(e) => setPreLaunchScout(e.target.checked)}
               className="w-4 h-4 rounded border-slate-700 text-[#1976D2] accent-[#1976D2]"
             />
-            <span className="font-semibold text-xs">{t.preLaunchScout}</span>
+            <span className="font-semibold text-xs">開戰自動彈射 1 架偵察機展開前向索敵</span>
           </label>
         </div>
 
@@ -577,7 +573,7 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
             className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#0B1E34] hover:bg-[#153252] border border-[#1E3A5F] hover:border-slate-400 rounded text-slate-300 hover:text-white font-mono font-bold text-xs transition-colors shadow"
           >
             <X className="w-4 h-4" />
-            <span>{lang === 'zh' ? '取消' : 'Cancel'}</span>
+            <span>取消</span>
           </button>
 
           <button
@@ -591,7 +587,7 @@ export const AirWingPrepModal: React.FC<AirWingPrepModalProps> = ({
             }`}
           >
             <Play className="w-4 h-4 fill-current" />
-            <span>{t.confirmLoadout}</span>
+            <span>{'確認配置並出發 (CONFIRM & COMMENCE)'}</span>
           </button>
         </div>
       </div>

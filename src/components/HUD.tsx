@@ -60,11 +60,8 @@ import {
   MapPin,
   Hammer,
 } from 'lucide-react';
-import { Language, getTranslation } from '../game/i18n';
 
 interface HUDProps {
-  lang?: Language;
-  onSetLang?: (lang: Language) => void;
   flagship?: Ship;
   playerShips: Ship[];
   enemyShips: Ship[];
@@ -239,8 +236,6 @@ export const HUD: React.FC<HUDProps> = ({
   onLaunchModel,
   onOrderSelected,
   onStopUnits,
-  onSetSpeed,
-  onSteer,
   onTriggerFlak,
   intel: _intel,
   score,
@@ -294,14 +289,11 @@ export const HUD: React.FC<HUDProps> = ({
   onStartSonobuoyDesignation,
   onCancelSonobuoy,
   onSelectUnitIds,
-  lang = 'zh',
-  onSetLang,
 }) => {
-  const t = getTranslation(lang);
   const planes = flagship?.carrierPlanes?.ready || {};
   const currentCatalog = useMemo(() => getRequisitionCatalog(era), [era]);
 
-  const flightModels = useMemo(() => getCarrierModelsForEra(era, lang), [era, lang]);
+  const flightModels = useMemo(() => getCarrierModelsForEra(era), [era]);
 
   // Per-model formation count state: e.g. 1, 2, 4, or max available
   const [formationCounts, setFormationCounts] = React.useState<Partial<Record<AircraftModel, number>>>(
@@ -321,22 +313,6 @@ export const HUD: React.FC<HUDProps> = ({
   const [isBottomDeckExpanded, setIsBottomDeckExpanded] = useState<boolean>(true);
   const [requisitionTab, setRequisitionTab] = useState<RequisitionCategory>('ground');
   const [selectedBuildIslandId, setSelectedBuildIslandId] = useState<string>('');
-
-  // 1. 工兵部隊選中判定
-  const _isEngineerSelected = selectedUnits.some(
-    (u) => ('type' in u) && u.type === 'usmc_engineer'
-  ) || (selectedAirfacility !== null && (typeof selectedAirfacility === 'object' ? selectedAirfacility.type === 'engineer_construction' : selectedAirfacility === 'engineer_construction'));
-
-  // 2. 營指揮所選中判定 (專屬呼叫支援選單)
-  const _isBattalionCpSelected = selectedAirfacility !== null && (typeof selectedAirfacility === 'object' ? selectedAirfacility.type === 'battalion_cp' : selectedAirfacility === 'battalion_cp');
-
-  // 3. 機場選中判定 (只能打開陸基飛機選單)
-  const _isAirbaseSelected = !_isEngineerSelected && !_isBattalionCpSelected && (selectedAirfacility !== null && (typeof selectedAirfacility === 'object' ? selectedAirfacility.type === 'airbase' : selectedAirfacility === 'airbase'));
-
-  // 4. 航母選中判定 (只能顯示從該艦起飛的飛機) - 支援 CV-6 / CV-9 / CV-34 / CV-63 / CVN-68 與 LPH-2
-  const _isCarrierSelected = !_isEngineerSelected && !_isBattalionCpSelected && !_isAirbaseSelected && (selectedUnits.some(
-    (u) => ('type' in u) && (u.type === 'carrier' || u.type === 'cve' || u.type === 'cv63' || u.type === 'cvn' || u.type === 'lph')
-  ) || (selectedAirfacility !== null && (typeof selectedAirfacility === 'object' ? (selectedAirfacility.type === 'carrier' || selectedAirfacility.type === 'cve' || selectedAirfacility.type === 'cv63' || selectedAirfacility.type === 'lph') : selectedAirfacility === 'carrier')));
 
   // 取得當前活耀的營指揮所 (若有)
   const activeBattalionCp = React.useMemo(() => {
@@ -515,47 +491,19 @@ export const HUD: React.FC<HUDProps> = ({
     }));
   }, [activePayloads]);
 
-  const afbModels = useMemo(() => getAfbModelsForEra(era, lang), [era, lang]);
+  const afbModels = useMemo(() => getAfbModelsForEra(era), [era]);
 
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-3 pb-2 z-20 select-none overflow-hidden">
       {/* Top Bar (3 Zones) */}
       <header className="shrink-0 z-30 pointer-events-auto bg-[#071322]/95 backdrop-blur-md border border-[#1E3A5F] rounded-lg px-4 py-2 flex items-center justify-between gap-3 sm:gap-4 shadow-2xl">
-        {/* Zone 1: Wordmark, Era Indicator & Language Toggle */}
+        {/* Zone 1: Wordmark & Era Indicator */}
         <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
           <div className="flex items-center gap-2">
             <Compass className="w-5 h-5 text-[#80DEEA]" />
             <span className="font-mono font-bold tracking-wider text-sm text-[#E0F7FA] whitespace-nowrap">
-              {t.gameTitle}
+              特遣艦隊 RTS
             </span>
-          </div>
-
-          <div className="h-4 w-px bg-[#1E3A5F]" />
-
-          {/* Language Switcher Toggle */}
-          <div className="flex items-center bg-[#0B1E34] border border-[#1E3A5F] rounded p-0.5 text-xs font-mono shadow-inner">
-            <button
-              onClick={() => onSetLang?.('zh')}
-              className={`px-2 py-0.5 rounded transition-all whitespace-nowrap font-bold text-[10.5px] ${
-                lang === 'zh'
-                  ? 'bg-[#1976D2] text-white shadow-sm'
-                  : 'text-[#90CAF9] hover:text-white'
-              }`}
-              title="切換繁體中文介面"
-            >
-              繁中
-            </button>
-            <button
-              onClick={() => onSetLang?.('en')}
-              className={`px-2 py-0.5 rounded transition-all whitespace-nowrap font-bold text-[10.5px] ${
-                lang === 'en'
-                  ? 'bg-[#1976D2] text-white shadow-sm'
-                  : 'text-[#90CAF9] hover:text-white'
-              }`}
-              title="Switch to English UI"
-            >
-              EN
-            </button>
           </div>
 
           <div className="h-4 w-px bg-[#1E3A5F]" />
@@ -569,9 +517,9 @@ export const HUD: React.FC<HUDProps> = ({
                   ? 'bg-[#1976D2] text-white shadow-sm'
                   : 'text-[#90CAF9] hover:text-white'
               }`}
-              title={t.era1Tooltip}
+              title="時代一：二戰太平洋開戰 (珊瑚海／中途島／瓜達康納爾)"
             >
-              {t.era1}
+              時代一 (1942)
             </button>
             <button
               onClick={() => onSetEra('era2')}
@@ -580,9 +528,9 @@ export const HUD: React.FC<HUDProps> = ({
                   ? 'bg-[#1976D2] text-white shadow-sm'
                   : 'text-[#90CAF9] hover:text-white'
               }`}
-              title={t.era2Tooltip}
+              title="時代二：快速航母特遣艦隊 (馬里亞納／雷伊泰灣／沖繩決戰)"
             >
-              {t.era2}
+              時代二 (1944-45)
             </button>
             <button
               onClick={() => onSetEra('era3')}
@@ -591,9 +539,9 @@ export const HUD: React.FC<HUDProps> = ({
                   ? 'bg-gradient-to-r from-cyan-600 to-blue-700 text-white shadow-sm border border-cyan-400/60'
                   : 'text-[#90CAF9] hover:text-white'
               }`}
-              title={t.era3Tooltip}
+              title="時代三：冷戰與噴射時代 (第七艦隊／米格走廊／興南撤退)"
             >
-              {t.era3}
+              時代三 (1950-53)
             </button>
             <button
               onClick={() => onSetEra('era4')}
@@ -602,9 +550,9 @@ export const HUD: React.FC<HUDProps> = ({
                   ? 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-sm border border-emerald-400/60 ring-1 ring-emerald-400'
                   : 'text-[#90CAF9] hover:text-white'
               }`}
-              title={t.era4Tooltip}
+              title="時代四：冷戰超音速與越戰風暴 (東京灣／小鷹號超級航母／空空反輻射飛彈／直升機垂直包圍)"
             >
-              {t.era4}
+              時代四 (1965-73)
             </button>
             <button
               onClick={() => onSetEra('era5')}
@@ -613,9 +561,9 @@ export const HUD: React.FC<HUDProps> = ({
                   ? 'bg-gradient-to-r from-red-700 via-rose-700 to-amber-700 text-white shadow-sm border border-amber-300 ring-1 ring-amber-400'
                   : 'text-[#90CAF9] hover:text-white'
               }`}
-              title={t.era5Tooltip}
+              title="時代五：冷戰終局與大洋決戰 (尼米茲核航母／神盾巡洋艦／CIWS近迫防禦／魚叉與花崗岩超音速反艦／反飛彈攔截)"
             >
-              {t.era5}
+              時代五 (1973-91)
             </button>
           </div>
         </div>
@@ -631,10 +579,10 @@ export const HUD: React.FC<HUDProps> = ({
                   ? 'bg-[#D32F2F] text-white ring-1 ring-rose-300/70 shadow-[0_0_10px_rgba(244,63,94,0.45)]'
                   : 'text-slate-300 hover:text-white'
               }`}
-              title={t.pause}
+              title="暫停 (Backspace)"
             >
               {isPaused ? <Play className="w-3 h-3 fill-white" /> : <Pause className="w-3 h-3 fill-white" />}
-              <span>{isPaused ? t.paused : t.pause}</span>
+              <span>{isPaused ? '已暫停' : '暫停 (Backspace)'}</span>
             </button>
             <button
               onClick={() => onSetGameSpeed(0.5)}
@@ -643,7 +591,7 @@ export const HUD: React.FC<HUDProps> = ({
                   ? 'bg-[#1976D2] text-white font-bold'
                   : 'text-slate-400 hover:text-white'
               }`}
-              title={t.speedSlow}
+              title="0.5x 慢速推演"
             >
               0.5x
             </button>
@@ -654,7 +602,7 @@ export const HUD: React.FC<HUDProps> = ({
                   ? 'bg-[#1976D2] text-white font-bold'
                   : 'text-slate-400 hover:text-white'
               }`}
-              title={t.speedNormal}
+              title="1.0x 實時速度"
             >
               1.0x
             </button>
@@ -665,7 +613,7 @@ export const HUD: React.FC<HUDProps> = ({
                   ? 'bg-[#1976D2] text-white font-bold'
                   : 'text-slate-400 hover:text-white'
               }`}
-              title={t.speedFast}
+              title="2.0x 快速前進"
             >
               2.0x
             </button>
@@ -676,7 +624,7 @@ export const HUD: React.FC<HUDProps> = ({
                   ? 'bg-[#1976D2] text-white font-bold'
                   : 'text-slate-400 hover:text-white'
               }`}
-              title={lang === 'zh' ? '3倍速戰術推進 (快捷鍵 ] )' : '3.0x Fast Forward ( ] )'}
+              title="3倍速戰術推進 (快捷鍵 ] )"
             >
               3.0x
             </button>
@@ -685,7 +633,7 @@ export const HUD: React.FC<HUDProps> = ({
           {/* Live Objective Progress Readout (Interactive Camera Focus) */}
           <div
             className="hidden md:flex items-center gap-1.5 px-2 py-1 bg-[#0B1E34] border border-[#1E3A5F] rounded text-[11px] font-mono tabular-nums whitespace-nowrap"
-            title={lang === 'zh' ? '點擊目標可直接跳轉鏡頭至最近未解放據點或敵艦' : 'Click objectives to pan camera to nearest stronghold or enemy carrier'}
+            title="點擊目標可直接跳轉鏡頭至最近未解放據點或敵艦"
           >
             <button
               type="button"
@@ -715,7 +663,7 @@ export const HUD: React.FC<HUDProps> = ({
                 remainingEnemyCarriers === 0 ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'
               }`}
             >
-              🚢 {lang === 'zh' ? '敵航母' : 'CV'} {remainingEnemyCarriers}
+              🚢 敵航母 {remainingEnemyCarriers}
             </button>
             {sonobuoys.length > 0 && (
               <>
@@ -737,37 +685,37 @@ export const HUD: React.FC<HUDProps> = ({
           <button
             onClick={onOpenArmament}
             className="flex items-center gap-1.5 px-3 py-1 bg-[#0B1E34] hover:bg-[#1A3353] border border-[#FFD54F]/80 rounded text-xs font-mono text-[#FFD54F] font-bold transition-all shadow-sm active:scale-95"
-            title={t.btnArmamentTooltip}
+            title="重置艦載機掛載武裝 (HVAR火箭、穿甲航彈、凝固汽油彈、聲導魚雷)"
           >
             <Zap className="w-3.5 h-3.5 text-[#FFD54F]" />
-            <span>{t.btnArmament}</span>
+            <span>戰機掛載 (ARM)</span>
           </button>
 
           <button
             onClick={onOpenAirPrep}
             className="flex items-center gap-1.5 px-3 py-1 bg-[#0B1E34] hover:bg-[#153252] border border-[#80DEEA]/50 rounded text-xs font-mono text-[#80DEEA] font-semibold transition-colors"
-            title={t.btnAirPrepTooltip}
+            title="調整戰鬥機、俯衝轟炸機與魚雷機數量比例"
           >
             <Sliders className="w-3.5 h-3.5 text-[#80DEEA]" />
-            <span>{t.btnAirPrep}</span>
+            <span>機隊編制</span>
           </button>
 
           <button
             onClick={onOpenMap}
             className="flex items-center gap-1.5 px-3 py-1 bg-[#0B1E34] hover:bg-[#153252] border border-[#1E3A5F] rounded text-xs font-mono text-[#E0F7FA] transition-colors"
-            title={t.btnMapTooltip}
+            title="開啟全戰區大比例海圖與情報疊層"
           >
             <MapIcon className="w-3.5 h-3.5 text-[#80DEEA]" />
-            <span>{t.btnMap}</span>
+            <span>戰區全圖 (M)</span>
           </button>
 
           <button
             onClick={onOpenBriefing}
             className="flex items-center gap-1.5 px-3 py-1 bg-[#0B1E34] hover:bg-[#153252] border border-[#1E3A5F] rounded text-xs font-mono text-[#E0F7FA] transition-colors"
-            title={t.btnBriefingTooltip}
+            title="檢視司令部作戰訓令與戰術指引"
           >
             <HelpCircle className="w-3.5 h-3.5 text-[#80DEEA]" />
-            <span>{t.btnBriefing}</span>
+            <span>作戰情報</span>
           </button>
 
           {/* 戰地設施戳記模式快速開關 (Facility Stamping Toggle Button) */}
@@ -787,19 +735,19 @@ export const HUD: React.FC<HUDProps> = ({
                 ? 'bg-gradient-to-r from-cyan-600 to-blue-700 text-white border-cyan-300 ring-2 ring-cyan-400 shadow-[0_0_12px_rgba(0,229,255,0.65)]'
                 : 'bg-[#0B1E34] hover:bg-[#153252] border-cyan-500/80 text-cyan-300'
             }`}
-            title={t.btnStampTooltip}
+            title="開啟/關閉設施自由建造戳記盤 (可在任意位置建造碼頭、船塢與要塞)"
           >
             <MapPin className="w-3.5 h-3.5 text-cyan-300" />
-            <span>{activePlacementItem ? t.btnStampActive : t.btnStampInactive}</span>
+            <span>{activePlacementItem ? '正在戳記中' : '工事建築 (F3)'}</span>
           </button>
 
           <button
             onClick={onOpenDockyard}
             className="flex items-center gap-1.5 px-3 py-1 bg-[#0B1E34] hover:bg-[#153252] border border-[#1E3A5F] rounded text-xs font-mono text-[#FFD54F] transition-colors"
-            title={t.btnDockyardTooltip}
+            title="珍珠港海軍造船廠：艦隊大修、科技研發與時代跨越"
           >
             <Wrench className="w-3.5 h-3.5 text-[#FFD54F]" />
-            <span>{t.btnDockyard}</span>
+            <span>艦隊修護改裝</span>
           </button>
 
           {/* Tactical Battle Log Button with count badge */}
@@ -807,10 +755,10 @@ export const HUD: React.FC<HUDProps> = ({
             <button
               onClick={onOpenBattleLog}
               className="flex items-center gap-1.5 px-3 py-1 bg-[#0B1E34] hover:bg-[#153252] border border-[#80DEEA]/70 rounded text-xs font-mono text-[#80DEEA] font-bold transition-all shadow-sm active:scale-95"
-              title={t.btnBattleLogTooltip}
+              title="檢視全域交戰報告、擊沉紀錄與傷亡統計"
             >
               <ScrollText className="w-3.5 h-3.5 text-[#80DEEA]" />
-              <span>{t.btnBattleLog}</span>
+              <span>作戰日誌 (LOG)</span>
               {combatLogs.length > 0 && (
                 <span className="px-1.5 py-0.2 bg-[#1976D2] text-white rounded-full text-[10px] font-bold">
                   {combatLogs.length}
@@ -822,7 +770,7 @@ export const HUD: React.FC<HUDProps> = ({
           <button
             onClick={onToggleMute}
             className="p-1.5 bg-[#0B1E34] hover:bg-[#153252] border border-[#1E3A5F] rounded text-[#80DEEA] transition-colors"
-            title={isMuted ? t.unmute : t.mute}
+            title={isMuted ? '解除靜音' : '靜音'}
           >
             {isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
           </button>
@@ -835,10 +783,10 @@ export const HUD: React.FC<HUDProps> = ({
             <span className="tabular-nums font-bold">
               {aircraft.filter((a) => a.side === 'player' && a.state !== 'shot_down').length}
             </span>
-            <span className="text-[#90CAF9]/70 text-[10px]">{t.airborne}</span>
+            <span className="text-[#90CAF9]/70 text-[10px]">空中在航</span>
           </div>
 
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-[#040C16] border border-amber-500/70 rounded text-xs font-mono font-bold text-amber-300 shadow-sm" title={t.commandPoints}>
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-[#040C16] border border-amber-500/70 rounded text-xs font-mono font-bold text-amber-300 shadow-sm" title="指揮點數 (CP)">
             <Layers className="w-3.5 h-3.5 text-amber-400" />
             <span>{Math.floor(resourcePoints)} CP</span>
             <span className="text-[10px] text-emerald-400 font-normal">
@@ -849,11 +797,11 @@ export const HUD: React.FC<HUDProps> = ({
           <div className="flex items-center gap-1 text-[#FFD54F]">
             <span>★</span>
             <span className="tabular-nums font-bold">{score.stars}</span>
-            <span className="text-[#90CAF9]/70 text-[10px]">{t.stars}</span>
+            <span className="text-[#90CAF9]/70 text-[10px]">功勳星徽</span>
           </div>
 
           <div className="flex items-center gap-1 text-[#E0F7FA]">
-            <span className="text-[#90CAF9]/70 text-[10px]">{t.score}</span>
+            <span className="text-[#90CAF9]/70 text-[10px]">戰果總分</span>
             <span className="tabular-nums font-bold">{score.totalScore}</span>
           </div>
         </div>
@@ -866,9 +814,7 @@ export const HUD: React.FC<HUDProps> = ({
             <div className="flex items-center gap-2 text-cyan-300">
               <MapPin className="w-4 h-4 text-cyan-400" />
               <span className="font-extrabold text-sm text-[#E0F7FA]">
-                {lang === 'zh'
-                  ? '🏗️【戰地設施自由戳記盤】點擊海圖任意位置即可立即戳記落成'
-                  : '🏗️ Facility Stamping Palette — Click map to construct instantly'}
+                🏗️【戰地設施自由戳記盤】點擊海圖任意位置即可立即戳記落成
               </span>
             </div>
             <div className="flex items-center gap-2.5">
@@ -878,11 +824,7 @@ export const HUD: React.FC<HUDProps> = ({
                     ? 'bg-emerald-950/90 text-emerald-300 border-emerald-400 ring-1 ring-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
                     : 'bg-[#071322] hover:bg-[#0c1f36] text-slate-300 border-[#1E3A5F]'
                 }`}
-                title={
-                  lang === 'zh'
-                    ? '開啟後戳記建造設施完全不扣除 CP 資源點數，可無限制自由測試與佈防'
-                    : 'Build facilities without spending CP (Sandbox Mode)'
-                }
+                title="開啟後戳記建造設施完全不扣除 CP 資源點數，可無限制自由測試與佈防"
               >
                 <input
                   type="checkbox"
@@ -890,7 +832,7 @@ export const HUD: React.FC<HUDProps> = ({
                   onChange={() => onToggleSandboxStamp?.()}
                   className="rounded text-emerald-400 focus:ring-0 cursor-pointer"
                 />
-                <span>{lang === 'zh' ? '✨ 免CP沙盒自由建造' : '✨ Sandbox Free Build'}</span>
+                <span>✨ 免CP沙盒自由建造</span>
               </label>
 
               <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-amber-300 bg-amber-950/60 px-2 py-1 rounded border border-amber-600/40">
@@ -900,7 +842,7 @@ export const HUD: React.FC<HUDProps> = ({
                   onChange={() => onToggleContinuousStamp?.()}
                   className="rounded text-amber-500 focus:ring-0 cursor-pointer"
                 />
-                <span>{lang === 'zh' ? '連續戳記模式' : 'Continuous Stamp'}</span>
+                <span>連續戳記模式</span>
               </label>
               <div className="flex items-center gap-1 font-bold text-amber-300 text-xs px-2 py-0.5 bg-[#071322] border border-amber-500/60 rounded">
                 <Layers className="w-3.5 h-3.5 text-amber-400" />
@@ -911,7 +853,7 @@ export const HUD: React.FC<HUDProps> = ({
                 onClick={() => onCancelPlacement?.()}
                 className="px-2.5 py-1 bg-rose-950 hover:bg-rose-900 border border-rose-500 text-rose-200 rounded font-bold transition-all shadow active:scale-95 text-xs"
               >
-                {lang === 'zh' ? '✖ 結束戳記 (ESC)' : '✖ Exit Stamp (ESC)'}
+                ✖ 結束戳記 (ESC)
               </button>
             </div>
           </div>
@@ -933,7 +875,7 @@ export const HUD: React.FC<HUDProps> = ({
                       ? 'bg-[#071526] hover:bg-[#102A45] border-[#1E3A5F] text-slate-200 hover:border-amber-400'
                       : 'bg-slate-900 border-slate-800 text-slate-500 opacity-60'
                   }`}
-                  title={`${lang === 'zh' ? fac.nameZh : fac.name} (${fac.cost} CP)\n${fac.desc}`}
+                  title={`${fac.name} (${fac.cost} CP)\n${fac.desc}`}
                 >
                   <UnitPreviewCanvas
                     kind="installation"
@@ -942,7 +884,7 @@ export const HUD: React.FC<HUDProps> = ({
                     height={16}
                     compact
                   />
-                  <span className="font-bold">{lang === 'zh' ? fac.nameZh.split(' ')[0] : fac.name}</span>
+                  <span className="font-bold">{fac.name.split(' ')[0]}</span>
                   <span className={`tabular-nums text-[10px] px-1 rounded font-bold ${isSelected ? 'bg-black/40 text-amber-300' : 'text-amber-400'}`}>
                     {fac.cost} CP
                   </span>
@@ -953,14 +895,14 @@ export const HUD: React.FC<HUDProps> = ({
 
           <div className="text-[10.5px] text-slate-300 text-center pt-0.5 flex items-center justify-center gap-2">
             <span className="text-cyan-300 font-bold">
-              👉 {lang === 'zh' ? `目前選定:【${activePlacementItem.nameZh}】` : `Selected: ${activePlacementItem.name}`}
+              👉 {`目前選定:【${activePlacementItem.name}】`}
             </span>
             <span className="text-slate-400">
-              {lang === 'zh' ? '在海圖任意沿岸或海面點擊【滑鼠左鍵】完成戳記' : 'Left-click shore or sea on map to place'}
+              在海圖任意沿岸或海面點擊【滑鼠左鍵】完成戳記
             </span>
             <span className="text-slate-500">|</span>
             <span className="text-amber-300">
-              {lang === 'zh' ? '按【ESC】或【滑鼠右鍵】取消退出' : 'ESC or Right-click to exit'}
+              按【ESC】或【滑鼠右鍵】取消退出
             </span>
           </div>
         </div>
@@ -973,10 +915,10 @@ export const HUD: React.FC<HUDProps> = ({
             <div className="flex items-center gap-2">
               <Shield className="w-4 h-4 text-cyan-300" />
               <span className="font-bold text-white tracking-wide text-[12px]">
-                {lang === 'zh' ? '🛡️【CAP 戰鬥空巡指定模式】' : '🛡️ CAP Air Patrol Designation'}
+                🛡️【CAP 戰鬥空巡指定模式】
               </span>
               <span className="text-[10px] bg-cyan-950 text-cyan-300 px-2 py-0.5 rounded border border-cyan-600/50">
-                {lang === 'zh' ? '半徑 250m 空巡警戒防護圈' : '250m CAP Patrol Zone'}
+                半徑 250m 空巡警戒防護圈
               </span>
             </div>
             <button
@@ -984,17 +926,15 @@ export const HUD: React.FC<HUDProps> = ({
               onClick={onCancelCap}
               className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[10px] border border-slate-600"
             >
-              {lang === 'zh' ? '取消退出 (ESC)' : 'Cancel (ESC)'}
+              取消退出 (ESC)
             </button>
           </div>
           <div className="text-[11px] text-cyan-100 flex items-center justify-between">
             <span>
-              {lang === 'zh'
-                ? '👉 請在海圖任意海域點擊【滑鼠左鍵】建立 CAP 空巡核心區！'
-                : '👉 Left-click anywhere on the map to assign CAP orbit center!'}
+              👉 請在海圖任意海域點擊【滑鼠左鍵】建立 CAP 空巡核心區！
             </span>
             <span className="text-amber-300 font-bold">
-              {lang === 'zh' ? '右鍵或 ESC 取消' : 'Right-click or ESC to cancel'}
+              右鍵或 ESC 取消
             </span>
           </div>
         </div>
@@ -1027,7 +967,7 @@ export const HUD: React.FC<HUDProps> = ({
                 <span className="font-bold text-xs tracking-wide">{banner.text}</span>
               </div>
               <span className="text-[10px] text-slate-300 hover:text-white uppercase font-bold shrink-0">
-                {lang === 'zh' ? '查看戰報 ➔' : 'View Log ➔'}
+                查看戰報 ➔
               </span>
             </div>
           ))}
@@ -1038,8 +978,6 @@ export const HUD: React.FC<HUDProps> = ({
       <div className="flex-1 min-h-0 pointer-events-none flex justify-between items-start my-1 overflow-hidden">
         {/* Left: 單位選擇列表 / Controls Guide */}
         <SelectedUnitsPanel
-          lang={lang}
-          t={t}
           era={era}
           selectedUnits={selectedUnits}
           isGuideCollapsed={isGuideCollapsed}
@@ -1066,8 +1004,7 @@ export const HUD: React.FC<HUDProps> = ({
         <div className="flex flex-col items-end gap-1.5">
           {/* Interactive Mini-Radar Widget (Click to Jump Camera) */}
           <MiniRadar
-            title={t.miniMapTitle}
-            lang={lang}
+            title="戰術雷達海圖"
             islands={islands}
             playerShips={playerShips}
             enemyShips={enemyShips}
@@ -1089,7 +1026,7 @@ export const HUD: React.FC<HUDProps> = ({
               }`}
             >
               <Plane className="w-3 h-3 text-[#80DEEA]" />
-              <span>{lang === 'zh' ? '機隊' : 'Flights'}({playerFlights.length})</span>
+              <span>機隊({playerFlights.length})</span>
             </button>
             <button
               onClick={() => setRightPanelTab('cps')}
@@ -1098,10 +1035,10 @@ export const HUD: React.FC<HUDProps> = ({
                   ? 'bg-[#C2185B] text-white shadow'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
-              title={lang === 'zh' ? "島嶼多據點指揮所與守軍狀況" : "Island Command Posts and Garrison status"}
+              title="島嶼多據點指揮所與守軍狀況"
             >
               <Flag className="w-3 h-3 text-[#FF80AB]" />
-              <span>{lang === 'zh' ? '據點' : 'CPs'}({capturedStrongholdsCount}/{allStrongholds.length})</span>
+              <span>據點({capturedStrongholdsCount}/{allStrongholds.length})</span>
             </button>
           </div>
 
@@ -1112,21 +1049,21 @@ export const HUD: React.FC<HUDProps> = ({
               <div className="border-b border-[#1E3A5F] pb-1.5 flex justify-between items-center text-[#FF80AB] font-bold">
                 <span className="flex items-center gap-1.5 text-[11px]">
                   <Flag className="w-3.5 h-3.5 text-[#FF80AB]" />
-                  <span>{lang === 'zh' ? '島嶼作戰據點 (CP)' : 'Island Strongholds (CP)'}</span>
+                  <span>島嶼作戰據點 (CP)</span>
                 </span>
                 <span className="text-[9.5px] px-1.5 py-0.2 bg-[#880E4F] text-[#F8BBD0] rounded font-bold">
-                  {lang === 'zh' ? '收復:' : 'Captured:'} {capturedStrongholdsCount}/{allStrongholds.length}
+                  收復: {capturedStrongholdsCount}/{allStrongholds.length}
                 </span>
               </div>
 
               <div className="text-[9.5px] text-slate-400">
-                {lang === 'zh' ? '部隊進入 380m 據點圈肅清守軍 · 點擊直接跳轉視角' : 'Enter 380m radius to eliminate garrisons · Click to focus camera'}
+                部隊進入 380m 據點圈肅清守軍 · 點擊直接跳轉視角
               </div>
 
               {/* Stronghold Cards */}
               <div className="space-y-1.5">
                 {allStrongholds.length === 0 ? (
-                  <div className="text-[10px] text-slate-500 py-2 text-center">{lang === 'zh' ? '本海域暫無據點' : 'No strongholds in this sector'}</div>
+                  <div className="text-[10px] text-slate-500 py-2 text-center">本海域暫無據點</div>
                 ) : (
                   allStrongholds.map((sh) => {
                     const isContested = sh.captureProgress > 0 && !sh.isCaptured;
@@ -1149,7 +1086,7 @@ export const HUD: React.FC<HUDProps> = ({
                             ? 'bg-[#1A1608] border-[#FFD54F]/80 hover:border-[#FFD54F]'
                             : 'bg-[#150A0E] border-[#EF5350]/60 hover:border-[#EF5350]'
                         }`}
-                        title={lang === 'zh' ? "點擊跳轉視角至此據點" : "Click to center camera on stronghold"}
+                        title="點擊跳轉視角至此據點"
                       >
                         <div className="flex justify-between items-center text-[10.5px]">
                           <span className="font-bold text-white truncate max-w-[155px]">
@@ -1165,18 +1102,18 @@ export const HUD: React.FC<HUDProps> = ({
                             }`}
                           >
                             {sh.isCaptured
-                              ? (lang === 'zh' ? '已收復 100%' : 'Captured 100%')
+                              ? ('已收復 100%')
                               : isContested
-                              ? `${lang === 'zh' ? '交戰中' : 'Contested'} ${Math.round(sh.captureProgress)}%`
-                              : `${lang === 'zh' ? '守軍:' : 'Garrison:'} ${sh.garrisonIds.length}${lang === 'zh' ? '員' : ''}`}
+                              ? `交戰中 ${Math.round(sh.captureProgress)}%`
+                              : `守軍: ${sh.garrisonIds.length}員`}
                           </span>
                         </div>
 
                         {/* Location and friendly troops */}
                         <div className="flex justify-between items-center text-[9px] text-slate-300">
-                          <span className="text-slate-400">{lang === 'zh' ? '所屬:' : 'Island:'} {sh.islandName}</span>
+                          <span className="text-slate-400">所屬: {sh.islandName}</span>
                           <span className={friendlyInZone.length > 0 ? 'text-[#80DEEA] font-bold' : 'text-slate-500'}>
-                            {lang === 'zh' ? '圈內友軍:' : 'Allies in Zone:'} {friendlyInZone.length} {lang === 'zh' ? '隊' : 'units'}
+                            圈內友軍: {friendlyInZone.length} 隊
                           </span>
                         </div>
 
@@ -1193,12 +1130,12 @@ export const HUD: React.FC<HUDProps> = ({
                         {/* Alerts */}
                         {sh.hasTriggeredAmbush && (
                           <div className="text-[8.5px] text-amber-300 flex items-center gap-1">
-                            <span>⚠️ {lang === 'zh' ? '敵地下坑道伏擊部隊已湧出' : 'Enemy underground tunnel ambushes emerging!'}</span>
+                            <span>⚠️ 敵地下坑道伏擊部隊已湧出</span>
                           </div>
                         )}
                         {sh.hasTriggeredBanzai && (
                           <div className="text-[8.5px] text-red-400 font-bold flex items-center gap-1">
-                            <span>🔥 {lang === 'zh' ? '敵軍正發動決死萬歲衝鋒 (Banzai Charge)!' : 'Enemy launching desperate Banzai Charge!'}</span>
+                            <span>🔥 敵軍正發動決死萬歲衝鋒 (Banzai Charge)!</span>
                           </div>
                         )}
                       </div>
@@ -1215,16 +1152,16 @@ export const HUD: React.FC<HUDProps> = ({
               <div className="flex justify-between items-center text-[#80DEEA] font-semibold border-b border-[#1E3A5F] pb-1 shrink-0">
                 <span className="flex items-center gap-1 font-bold text-[11px]">
                   <Plane className="w-3.5 h-3.5 text-[#80DEEA]" />
-                  <span>{lang === 'zh' ? '飛行中隊欄 (FLIGHTS)' : 'Air Squadrons (FLIGHTS)'}</span>
+                  <span>飛行中隊欄 (FLIGHTS)</span>
                 </span>
                 <span className="tabular-nums font-bold text-emerald-400 text-[10px]">
-                  {playerFlights.length} {lang === 'zh' ? '機隊在空' : 'Airborne'}
+                  {playerFlights.length} 機隊在空
                 </span>
               </div>
 
               {playerFlights.length === 0 ? (
                 <div className="text-[10px] text-slate-500 py-1 text-center">
-                  {lang === 'zh' ? '暫無在空飛行中隊 · 可在下方甲板出擊' : 'No active air squadrons · Launch sorties from carrier deck below'}
+                  暫無在空飛行中隊 · 可在下方甲板出擊
                 </div>
               ) : (
                 <div className="space-y-1.5 overflow-y-auto pr-0.5 flex-1">
@@ -1232,14 +1169,14 @@ export const HUD: React.FC<HUDProps> = ({
                     const hpPct = Math.max(0, flight.health / Math.max(1, flight.maxHealth));
                     const stateLabel =
                       flight.state === 'patrolling'
-                        ? (lang === 'zh' ? '巡邏 PATROL' : 'PATROL')
+                        ? ('巡邏 PATROL')
                         : flight.state === 'attacking'
-                        ? (lang === 'zh' ? '空襲 ATTACK' : 'ATTACK')
+                        ? ('空襲 ATTACK')
                         : flight.state === 'diving'
-                        ? (lang === 'zh' ? '俯衝 DIVING' : 'DIVING')
+                        ? ('俯衝 DIVING')
                         : flight.state === 'returning'
-                        ? (lang === 'zh' ? '返航 RTB' : 'RTB')
-                        : (lang === 'zh' ? '飛行 CRUISING' : 'CRUISING');
+                        ? ('返航 RTB')
+                        : ('飛行 CRUISING');
 
                     return (
                       <div
@@ -1251,7 +1188,7 @@ export const HUD: React.FC<HUDProps> = ({
                           }
                         }}
                         className="p-1.5 bg-[#040C16] hover:bg-[#0A1E35] border border-[#1E3A5F]/70 hover:border-[#80DEEA]/60 rounded cursor-pointer transition-colors space-y-1"
-                        title={lang === 'zh' ? "點擊選取此中隊並鎖定鏡頭" : "Click to select squadron and focus camera"}
+                        title="點擊選取此中隊並鎖定鏡頭"
                       >
                         <div className="flex justify-between items-center text-[10.5px]">
                           <span className="font-bold text-[#E0F7FA] truncate max-w-[150px]">
@@ -1268,7 +1205,7 @@ export const HUD: React.FC<HUDProps> = ({
                             {flight.planes.map((p) => p.name.split(' ')[0]).join(' · ')}
                           </span>
                           <span className="text-slate-400 tabular-nums">
-                            {flight.planes.length} {lang === 'zh' ? '架/編隊' : 'planes/flt'}
+                            {flight.planes.length} 架/編隊
                           </span>
                         </div>
 
@@ -1284,18 +1221,18 @@ export const HUD: React.FC<HUDProps> = ({
                         <div className="flex justify-between items-center text-[9px]">
                           {flight.role === 'fighter' && (!flight.hasPayload || flight.payloadName === 'Clean Guns') ? (
                             <span className="text-amber-300 font-bold flex items-center gap-1 truncate">
-                              <span>💥 {lang === 'zh' ? '機槍殘彈:' : 'MG Ammo:'}</span>
-                              <span className="text-[#FFE082] tabular-nums">{flight.totalGunAmmo} {lang === 'zh' ? '發' : 'rds'}</span>
+                              <span>💥 機槍殘彈:</span>
+                              <span className="text-[#FFE082] tabular-nums">{flight.totalGunAmmo} 發</span>
                             </span>
                           ) : flight.hasPayload && flight.ammoRemaining > 0 ? (
                             <span className="text-amber-300 font-bold flex items-center gap-1 truncate">
-                              <span>💥 {lang === 'zh' ? '航彈:' : 'Bombs:'}</span>
+                              <span>💥 航彈:</span>
                               <span className="text-[#FFE082]">[{flight.payloadName}] x{flight.ammoRemaining}</span>
                               <span className="text-emerald-400 text-[8.5px]">· MG:{flight.totalGunAmmo}</span>
                             </span>
                           ) : (
                             <span className="text-slate-400 flex items-center gap-1">
-                              <span>⚠️ {lang === 'zh' ? '彈藥已投罄 (返航中)' : 'Payload Expended (RTB)'}</span>
+                              <span>⚠️ 彈藥已投罄 (返航中)</span>
                             </span>
                           )}
                         </div>
@@ -1310,10 +1247,10 @@ export const HUD: React.FC<HUDProps> = ({
                                 onStartCapDesignation?.();
                               }}
                               className="px-2 py-0.5 rounded bg-cyan-950/80 hover:bg-cyan-800 border border-cyan-500/60 text-cyan-200 text-[8.5px] font-bold flex items-center gap-1 shadow-sm transition-colors active:scale-95"
-                              title={lang === 'zh' ? "指派此戰鬥機編隊進行指定區域 CAP 戰鬥空巡" : "Order fighter squadron into Combat Air Patrol (CAP) orbit"}
+                              title="指派此戰鬥機編隊進行指定區域 CAP 戰鬥空巡"
                             >
                               <Shield className="w-2.5 h-2.5 text-cyan-300" />
-                              <span>{lang === 'zh' ? '設定 CAP 空巡 (C)' : 'Set CAP Orbit (C)'}</span>
+                              <span>設定 CAP 空巡 (C)</span>
                             </button>
                           </div>
                         )}
@@ -1336,15 +1273,15 @@ export const HUD: React.FC<HUDProps> = ({
           <div
             onClick={onOpenBattleLog}
             className="pointer-events-auto bg-[#071322]/90 backdrop-blur-md border border-[#1E3A5F] hover:border-[#80DEEA]/60 rounded-lg px-2.5 py-1.5 max-w-xl shadow-xl cursor-pointer transition-all space-y-0.5 group"
-            title={lang === 'zh' ? "點擊打開完整作戰日誌與戰果統計" : "Click to open full Combat Log & Casualty Statistics"}
+            title="點擊打開完整作戰日誌與戰果統計"
           >
             <div className="flex items-center justify-between text-[10px] text-[#90CAF9] font-mono border-b border-[#1E3A5F]/70 pb-0.5">
               <span className="flex items-center gap-1.5 font-bold text-[#80DEEA]">
                 <ScrollText className="w-3 h-3 text-[#80DEEA]" />
-                <span>{lang === 'zh' ? '最新即時戰報 (LIVE BATTLE FEED)' : 'Live Battle Feed'}</span>
+                <span>最新即時戰報 (LIVE BATTLE FEED)</span>
               </span>
               <span className="text-[9.5px] text-slate-400 group-hover:text-white transition-colors">
-                {lang === 'zh' ? '展開完整戰報' : 'Expand Full Log'} ({combatLogs.length}) ➔
+                展開完整戰報 ({combatLogs.length}) ➔
               </span>
             </div>
             <div className="space-y-0.5">
@@ -1377,12 +1314,10 @@ export const HUD: React.FC<HUDProps> = ({
             <div className="flex items-center gap-2">
               <div className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#FBBF24]" />
               <span className="font-bold text-amber-300">
-                {lang === 'zh' ? '【戰術推演暫停中】' : '【TACTICAL PAUSE】'}
+                【戰術推演暫停中】
               </span>
               <span className="text-slate-300 text-[11px]">
-                {lang === 'zh'
-                  ? '可在下方飛行甲板自由設定「幾機編隊」與「更換掛載」，配置完成後隨時開戰！'
-                  : 'Configure flight formations and payloads on the deck below, then resume to commence combat!'}
+                可在下方飛行甲板自由設定「幾機編隊」與「更換掛載」，配置完成後隨時開戰！
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -1391,7 +1326,7 @@ export const HUD: React.FC<HUDProps> = ({
                 className="px-3 py-1 bg-[#00E676] hover:bg-[#00C853] text-[#06101E] font-bold rounded flex items-center gap-1.5 text-xs shadow-lg transition-transform active:scale-95"
               >
                 <Play className="w-3.5 h-3.5 fill-current" />
-                <span>{lang === 'zh' ? '進入戰鬥 · 開始推演 (SPACE)' : 'Commence Battle · Play (SPACE)'}</span>
+                <span>進入戰鬥 · 開始推演 (SPACE)</span>
               </button>
             </div>
           </div>
@@ -1413,7 +1348,7 @@ export const HUD: React.FC<HUDProps> = ({
                     bottomDeckTab === 'carrier' ? 'bg-[#1565C0] text-white shadow' : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  ⚓ {lang === 'zh' ? '航母甲板' : 'Carrier'}
+                  ⚓ 航母甲板
                 </button>
               )}
               <button
@@ -1423,7 +1358,7 @@ export const HUD: React.FC<HUDProps> = ({
                   bottomDeckTab === 'airbase' ? 'bg-[#00695C] text-white shadow' : 'text-slate-400 hover:text-white'
                 }`}
               >
-                ✈️ {lang === 'zh' ? '航空站' : 'AFB'}
+                ✈️ 航空站
               </button>
               <button
                 type="button"
@@ -1441,7 +1376,7 @@ export const HUD: React.FC<HUDProps> = ({
                 }`}
               >
                 <ShieldAlert className="w-3 h-3 text-emerald-400" />
-                <span>🎖️ {lang === 'zh' ? '營指揮所' : 'Battalion CP'}</span>
+                <span>🎖️ 營指揮所</span>
               </button>
               <button
                 type="button"
@@ -1450,14 +1385,14 @@ export const HUD: React.FC<HUDProps> = ({
                   bottomDeckTab === 'engineer_construction' ? 'bg-amber-600 text-white shadow' : 'text-amber-300 hover:text-white'
                 }`}
               >
-                🏗️ {lang === 'zh' ? '工兵建造' : 'Engineer'}
+                🏗️ 工兵建造
               </button>
             </div>
             <span
               onClick={() => setIsBottomDeckExpanded(true)}
               className="text-[10px] text-amber-300 font-bold bg-[#0D2235] px-2 py-0.5 rounded-full border border-amber-500/30"
             >
-              {lang === 'zh' ? '展開 ▲' : 'Open ▲'}
+              展開 ▲
             </span>
           </div>
         ) : (
@@ -1477,7 +1412,7 @@ export const HUD: React.FC<HUDProps> = ({
                     }`}
                   >
                     <Plane className="w-4 h-4 text-[#80DEEA]" />
-                    <span>{lang === 'zh' ? '⚓ 航母甲板' : 'Carrier Deck'}</span>
+                    <span>⚓ 航母甲板</span>
                     <span className="text-[10px] text-emerald-300 font-normal hidden sm:inline">
                       ({era === 'era1' ? 'CV-6' : era === 'era2' ? 'CV-9' : era === 'era3' ? 'CV-34' : era === 'era5' ? 'CVN-68' : 'CV-63'})
                     </span>
@@ -1495,7 +1430,7 @@ export const HUD: React.FC<HUDProps> = ({
                   }`}
                 >
                   <Radio className="w-4 h-4 text-[#80CBC4]" />
-                  <span>{lang === 'zh' ? '✈️ 陸基航空站' : 'Forward AFB'}</span>
+                  <span>✈️ 陸基航空站</span>
                 </button>
 
                 {/* Tab 3: Battalion CP (Support / Reinforcements) */}
@@ -1509,7 +1444,7 @@ export const HUD: React.FC<HUDProps> = ({
                   }`}
                 >
                   <ShieldAlert className="w-4 h-4 text-emerald-300" />
-                  <span>{lang === 'zh' ? '🎖️ 營指揮所 (呼叫支援)' : 'Battalion CP (Support)'}</span>
+                  <span>🎖️ 營指揮所 (呼叫支援)</span>
                 </button>
 
                 {/* Tab 4: Combat Engineer Construction */}
@@ -1523,7 +1458,7 @@ export const HUD: React.FC<HUDProps> = ({
                   }`}
                 >
                   <Hammer className="w-4 h-4 text-amber-300" />
-                  <span>{lang === 'zh' ? '🏗️ 工兵急造' : 'Seabees Engr'}</span>
+                  <span>🏗️ 工兵急造</span>
                 </button>
 
                 {/* Focus Battalion CP button if active */}
@@ -1535,15 +1470,15 @@ export const HUD: React.FC<HUDProps> = ({
                       setBottomDeckTab('battalion_cp');
                     }}
                     className="px-2 py-1 rounded bg-[#071F1A] hover:bg-[#0A2E26] border border-emerald-500/50 text-[10px] text-emerald-300 font-mono flex items-center gap-1 transition-colors"
-                    title={lang === 'zh' ? '地圖鏡頭移至營指揮所所在位置' : 'Focus camera on Battalion CP'}
+                    title="地圖鏡頭移至營指揮所所在位置"
                   >
                     <MapPin className="w-3 h-3 text-emerald-400" />
-                    <span className="hidden md:inline">{lang === 'zh' ? '定位指揮所' : 'Locate CP'}</span>
+                    <span className="hidden md:inline">定位指揮所</span>
                   </button>
                 )}
 
                 <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#040C16] border border-amber-500/40 rounded-lg text-xs font-mono ml-1">
-                  <span className="text-[10px] text-slate-400">{lang === 'zh' ? '戰術點數:' : 'CP:'}</span>
+                  <span className="text-[10px] text-slate-400">戰術點數:</span>
                   <span className="text-amber-300 font-bold tabular-nums">
                     {Math.floor(resourcePoints)} CP
                   </span>
@@ -1555,10 +1490,10 @@ export const HUD: React.FC<HUDProps> = ({
                 <button
                   onClick={onTriggerFlak}
                   className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-[#D32F2F] to-[#C2185B] hover:from-[#E53935] hover:to-[#D81B60] border border-[#FF8A80] rounded text-xs font-mono font-bold text-white shadow-lg transition-transform active:scale-95 whitespace-nowrap"
-                  title={t.flakBarrageDesc}
+                  title="觸發艦隊周邊所有高射砲密集防空彈幕阻截敵機"
                 >
                   <ShieldAlert className="w-3.5 h-3.5 text-white" />
-                  <span>{t.flakBarrage} (SPACE)</span>
+                  <span>防空全彈齊射 (SPACE)</span>
                 </button>
 
                 <button
@@ -1567,7 +1502,7 @@ export const HUD: React.FC<HUDProps> = ({
                   className="px-2 py-1 bg-[#0B1E34] hover:bg-[#153252] border border-[#1E3A5F] rounded text-[10px] text-slate-300 hover:text-white font-mono"
                   title="收合出擊列"
                 >
-                  {lang === 'zh' ? '收合 ▼' : 'Minimize ▼'}
+                  收合 ▼
                 </button>
               </div>
             </div>
@@ -1581,15 +1516,15 @@ export const HUD: React.FC<HUDProps> = ({
               <div className="flex items-center justify-between gap-2 flex-wrap text-xs font-mono">
                 <div className="flex items-center gap-1 bg-[#051322] p-1 rounded-lg border border-[#1E3A5F]">
                   <span className="text-[10px] text-slate-400 px-1 font-bold">
-                    {lang === 'zh' ? '機型篩選:' : 'Role Filter:'}
+                    機型篩選:
                   </span>
                   {[
-                    { id: 'all', label: lang === 'zh' ? '全部' : 'All' },
-                    { id: 'fighter', label: lang === 'zh' ? '空優戰機 🛡️' : 'Fighters 🛡️' },
-                    { id: 'dive_bomber', label: lang === 'zh' ? '俯衝轟炸 🎯' : 'Dive Bombers 🎯' },
-                    { id: 'torpedo_bomber', label: lang === 'zh' ? '魚雷轟炸 🌊' : 'Torpedo 🌊' },
-                    { id: 'attacker', label: lang === 'zh' ? '重型攻擊 💥' : 'Attackers 💥' },
-                    { id: 'special', label: lang === 'zh' ? '偵察/特種 📡' : 'Recon/SAR 📡' },
+                    { id: 'all', label: '全部' },
+                    { id: 'fighter', label: '空優戰機 🛡️' },
+                    { id: 'dive_bomber', label: '俯衝轟炸 🎯' },
+                    { id: 'torpedo_bomber', label: '魚雷轟炸 🌊' },
+                    { id: 'attacker', label: '重型攻擊 💥' },
+                    { id: 'special', label: '偵察/特種 📡' },
                   ].map((f) => (
                     <button
                       key={f.id}
@@ -1610,13 +1545,13 @@ export const HUD: React.FC<HUDProps> = ({
                   <button
                     onClick={onOpenArmament}
                     className="px-2.5 py-1 bg-[#0B1E34] hover:bg-[#153252] border border-[#FFD54F]/70 rounded text-[10px] text-[#FFD54F] font-bold flex items-center gap-1 transition-colors"
-                    title={lang === 'zh' ? "開啟母艦全軍械庫彈藥庫" : "Open carrier ordnance armament catalog"}
+                    title="開啟母艦全軍械庫彈藥庫"
                   >
                     <Zap className="w-3.5 h-3.5" />
-                    <span>{lang === 'zh' ? '母艦全裝備庫' : 'Carrier Armory'}</span>
+                    <span>母艦全裝備庫</span>
                   </button>
                   <span className="text-[10px] text-slate-400">
-                    {lang === 'zh' ? 'Backspace 暫停 · Space 防空' : 'Backspace: Pause · Space: Flak'}
+                    Backspace 暫停 · Space 防空
                   </span>
                 </div>
               </div>
@@ -1644,20 +1579,20 @@ export const HUD: React.FC<HUDProps> = ({
 
                     const roleBadge =
                       role === 'fighter'
-                        ? (lang === 'zh' ? '【空優戰機】' : '【Fighter】')
+                        ? ('【空優戰機】')
                         : role === 'dive_bomber'
-                        ? (lang === 'zh' ? '【俯衝轟炸】' : '【Dive Bomber】')
+                        ? ('【俯衝轟炸】')
                         : role === 'torpedo_bomber'
-                        ? (lang === 'zh' ? '【魚雷反艦】' : '【Torpedo】')
+                        ? ('【魚雷反艦】')
                         : role === 'attacker'
-                        ? (lang === 'zh' ? '【重型攻擊】' : '【Attacker】')
+                        ? ('【重型攻擊】')
                         : role === 'aew'
-                        ? (lang === 'zh' ? '【預警機】' : '【AEW】')
+                        ? ('【預警機】')
                         : role === 'rescue'
-                        ? (lang === 'zh' ? '【搜救直升機】' : '【SAR Heli】')
+                        ? ('【搜救直升機】')
                         : role === 'transport'
-                        ? (lang === 'zh' ? '【戰術空投】' : '【Air Drop】')
-                        : (lang === 'zh' ? '【艦載偵察】' : '【Scout】');
+                        ? ('【戰術空投】')
+                        : ('【艦載偵察】');
 
                     return (
                       <div
@@ -1678,7 +1613,7 @@ export const HUD: React.FC<HUDProps> = ({
                                   : 'bg-red-950/60 text-red-400 border border-red-800/40'
                               }`}
                             >
-                              {readyCount}{lang === 'zh' ? '架' : 'Rdy'}
+                              {readyCount}架
                             </span>
                           </div>
 
@@ -1698,7 +1633,7 @@ export const HUD: React.FC<HUDProps> = ({
 
                           {/* Formation Selector */}
                           <div className="flex items-center justify-between mt-1 gap-1">
-                            <span className="text-[9px] text-slate-400 shrink-0">{lang === 'zh' ? '編隊:' : 'Form:'}</span>
+                            <span className="text-[9px] text-slate-400 shrink-0">編隊:</span>
                             <div className="flex items-center gap-0.5 bg-[#040C16] p-0.5 rounded border border-[#1E3A5F]">
                               {[1, 2, 4].map((cnt) => (
                                 <button
@@ -1723,9 +1658,9 @@ export const HUD: React.FC<HUDProps> = ({
                                     ? 'bg-[#1976D2] text-white shadow-sm'
                                     : 'text-slate-400 hover:text-slate-200'
                                 }`}
-                                title={lang === 'zh' ? "全部在艦飛機出擊" : "All ready"}
+                                title="全部在艦飛機出擊"
                               >
-                                {lang === 'zh' ? '全' : 'A'}
+                                全
                               </button>
                             </div>
                           </div>
@@ -1734,7 +1669,7 @@ export const HUD: React.FC<HUDProps> = ({
                           <div className="mt-1.5 bg-[#040E1B] p-1.5 rounded border border-[#1E3A5F]/80 flex flex-col gap-0.5">
                             <div className="flex items-center justify-between gap-1">
                               <span className="text-[8px] font-bold text-emerald-400 bg-[#004D40]/60 px-1 py-0.2 rounded truncate">
-                                {payloadData.purposeBadge || (lang === 'zh' ? '作戰' : 'Tac')}
+                                {payloadData.purposeBadge || ('作戰')}
                               </span>
                               <span className="text-[8.5px] text-amber-300 font-bold tabular-nums">
                                 {payloadData.damage > 0 ? `${payloadData.damage}D` : 'CAP'}
@@ -1760,7 +1695,7 @@ export const HUD: React.FC<HUDProps> = ({
                               className="mt-0.5 w-full py-0.5 px-1 bg-[#0B1E34] hover:bg-[#153252] border border-[#42A5F5]/60 hover:border-[#42A5F5] rounded text-[8.5px] text-[#80DEEA] hover:text-white font-bold flex items-center justify-center gap-0.5 transition-colors"
                             >
                               <Sliders className="w-2.5 h-2.5 text-[#80DEEA]" />
-                              <span>{lang === 'zh' ? '更換掛載' : 'Payload'}</span>
+                              <span>更換掛載</span>
                             </button>
                           </div>
                         </div>
@@ -1781,7 +1716,7 @@ export const HUD: React.FC<HUDProps> = ({
                           }`}
                         >
                           <Plane className="w-3 h-3 shrink-0" />
-                          <span className="truncate">{hasReady ? (lang === 'zh' ? `出擊 ${effectiveCount}機` : `Sortie ${effectiveCount}`) : (lang === 'zh' ? '整備中' : 'Prepping')}</span>
+                          <span className="truncate">{hasReady ? (`出擊 ${effectiveCount}機`) : ('整備中')}</span>
                         </button>
                       </div>
                     );
@@ -1798,32 +1733,30 @@ export const HUD: React.FC<HUDProps> = ({
               {/* Header Info & Category Filter Bar */}
               <div className="flex items-center justify-between text-xs font-mono text-[#80CBC4] bg-[#051A18] px-3 py-1.5 rounded border border-[#00695C]">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold">{lang === 'zh' ? '前進野戰陸基航空站 (FORWARD AIRBASE)' : 'FORWARD AIRBASE (AFB)'}</span>
+                  <span className="font-bold">前進野戰陸基航空站 (FORWARD AIRBASE)</span>
                   <span className="text-[10px] text-slate-300">
-                    {lang === 'zh'
-                      ? era === 'era5'
+                    {era === 'era5'
                         ? '支援 B-52G / F-111 現代長程戰轟、A-10A / AH-64A / F-15A / F-16A 陸空主力與海軍陸基戰備分隊！'
                         : era === 'era4'
                         ? '支援 B-52 戰略重轟、F-4E / F-105D 超音速戰機與海軍陸基分隊！'
-                        : '支援 B-17 / B-24 / B-29 重型水平轟炸機、雙發重攻擊機與陸航空優戰機！'
-                      : 'Supports strategic bombers, tactical strike attackers & airbase interceptors!'}
+                        : '支援 B-17 / B-24 / B-29 重型水平轟炸機、雙發重攻擊機與陸航空優戰機！'}
                   </span>
                 </div>
                 <div className="text-[10px] text-amber-300 font-bold bg-[#004D40] px-2 py-0.5 rounded border border-[#80CBC4]/50">
-                  {lang === 'zh' ? '基地補給倒數:' : 'Airbase Supply In:'} {Math.ceil(airbaseReplenishTimer)}s
+                  基地補給倒數: {Math.ceil(airbaseReplenishTimer)}s
                 </div>
               </div>
 
               {/* AFB Category Filter Bar */}
               <div className="flex items-center justify-between gap-2 flex-wrap text-xs font-mono">
                 <div className="flex items-center gap-1 bg-[#03151D] p-1 rounded-lg border border-[#00695C]">
-                  <span className="text-[10px] text-slate-400 px-1 font-bold">{lang === 'zh' ? '機型分類:' : 'Role Filter:'}</span>
+                  <span className="text-[10px] text-slate-400 px-1 font-bold">機型分類:</span>
                   {[
-                    { id: 'all', label: lang === 'zh' ? '全部' : 'All' },
-                    { id: 'level_bomber', label: lang === 'zh' ? '水平重轟 💣' : 'Bombers 💣' },
-                    { id: 'fighter', label: lang === 'zh' ? '陸航空優 🛡️' : 'Fighters 🛡️' },
-                    { id: 'attacker', label: lang === 'zh' ? '強襲攻擊 🎯' : 'Attackers 🎯' },
-                    { id: 'navy', label: lang === 'zh' ? '海軍分隊 ⚓' : 'Navy Det. ⚓' },
+                    { id: 'all', label: '全部' },
+                    { id: 'level_bomber', label: '水平重轟 💣' },
+                    { id: 'fighter', label: '陸航空優 🛡️' },
+                    { id: 'attacker', label: '強襲攻擊 🎯' },
+                    { id: 'navy', label: '海軍分隊 ⚓' },
                   ].map((f) => (
                     <button
                       key={f.id}
@@ -1844,12 +1777,12 @@ export const HUD: React.FC<HUDProps> = ({
                   <button
                     onClick={onOpenArmament}
                     className="px-2.5 py-1 bg-[#051A18] hover:bg-[#004D40] border border-[#80CBC4]/70 rounded text-[10px] text-[#80CBC4] font-bold flex items-center gap-1 transition-colors"
-                    title={lang === 'zh' ? "開啟軍械庫彈藥庫" : "Open airbase armory"}
+                    title="開啟軍械庫彈藥庫"
                   >
                     <Wrench className="w-3.5 h-3.5" />
-                    <span>{lang === 'zh' ? '戰地軍械庫' : 'Field Armory'}</span>
+                    <span>戰地軍械庫</span>
                   </button>
-                  <span className="text-[10px] text-slate-400">{lang === 'zh' ? '長程出擊可隨時返降基地' : 'Long-range sorties RTB to airbase'}</span>
+                  <span className="text-[10px] text-slate-400">長程出擊可隨時返降基地</span>
                 </div>
               </div>
 
@@ -1882,18 +1815,18 @@ export const HUD: React.FC<HUDProps> = ({
 
                     const roleBadge =
                       role === 'level_bomber'
-                        ? (lang === 'zh' ? '【水平重轟】' : '【Level Bomber】')
+                        ? ('【水平重轟】')
                         : role === 'attacker'
-                        ? (lang === 'zh' ? '【陸基強襲】' : '【Strike Attacker】')
+                        ? ('【陸基強襲】')
                         : role === 'fighter'
                         ? isNavy
-                          ? (lang === 'zh' ? '【海軍陸基】' : '【Navy Land-Based】')
-                          : (lang === 'zh' ? '【陸航空優】' : '【AAF Fighter】')
+                          ? ('【海軍陸基】')
+                          : ('【陸航空優】')
                         : role === 'transport'
-                        ? (lang === 'zh' ? '【戰術空投】' : '【Air Drop】')
+                        ? ('【戰術空投】')
                         : role === 'rescue'
-                        ? (lang === 'zh' ? '【直升突擊】' : '【Airmobile】')
-                        : (lang === 'zh' ? '【海軍分隊】' : '【Navy Detachment】');
+                        ? ('【直升突擊】')
+                        : ('【海軍分隊】');
 
                     return (
                       <div
@@ -1917,7 +1850,7 @@ export const HUD: React.FC<HUDProps> = ({
                                 : 'bg-slate-900 text-slate-500 border border-slate-700'
                             }`}
                           >
-                            {mCount}{lang === 'zh' ? '架' : 'Rdy'}
+                            {mCount}架
                           </span>
                         </div>
 
@@ -1941,7 +1874,7 @@ export const HUD: React.FC<HUDProps> = ({
 
                         {/* Formation Selector */}
                         <div className="flex items-center justify-between mt-1.5 gap-1">
-                          <span className="text-[10px] text-slate-400 shrink-0">{lang === 'zh' ? '編隊:' : 'Form:'}</span>
+                          <span className="text-[10px] text-slate-400 shrink-0">編隊:</span>
                           <div className="flex items-center gap-0.5 bg-[#031017] p-0.5 rounded border border-[#004D40]">
                             {[1, 2, 4].map((cnt) => (
                               <button
@@ -1955,7 +1888,7 @@ export const HUD: React.FC<HUDProps> = ({
                                 }`}
                                 title={`${cnt} 機編隊出擊`}
                               >
-                                {cnt}{lang === 'zh' ? '機' : ''}
+                                {cnt}機
                               </button>
                             ))}
                             <button
@@ -1966,9 +1899,9 @@ export const HUD: React.FC<HUDProps> = ({
                                   ? 'bg-[#00897B] text-white shadow-sm'
                                   : 'text-slate-400 hover:text-slate-200'
                               }`}
-                              title={lang === 'zh' ? "全部在基地的飛機出擊" : "All planes at base"}
+                              title="全部在基地的飛機出擊"
                             >
-                              {lang === 'zh' ? '全' : 'ALL'}
+                              全
                             </button>
                           </div>
                         </div>
@@ -1989,10 +1922,10 @@ export const HUD: React.FC<HUDProps> = ({
                                   : 'bg-[#004D40]/80 text-[#80CBC4]'
                               }`}
                             >
-                              {payloadData.purposeBadge || (lang === 'zh' ? '【戰術作戰】' : '【Tactical】')}
+                              {payloadData.purposeBadge || ('【戰術作戰】')}
                             </span>
                             <span className="text-[9px] text-slate-400 truncate font-mono">
-                              {payloadData.visualTag || (lang === 'zh' ? '[標準機載]' : '[Standard]')}
+                              {payloadData.visualTag || ('[標準機載]')}
                             </span>
                           </div>
 
@@ -2001,15 +1934,15 @@ export const HUD: React.FC<HUDProps> = ({
                           </div>
 
                           <div className="flex items-center justify-between text-[9px] text-slate-300">
-                            <span>💥 {lang === 'zh' ? '半徑:' : 'Radius:'} {payloadData.blastRadius ? `${payloadData.blastRadius}m` : (lang === 'zh' ? '直擊' : 'Direct')}</span>
+                            <span>💥 半徑: {payloadData.blastRadius ? `${payloadData.blastRadius}m` : ('直擊')}</span>
                             <span className="text-amber-300 font-bold tabular-nums">
-                              {payloadData.damage > 0 ? `${payloadData.damage.toLocaleString()} DMG` : (lang === 'zh' ? '空戰' : 'Air Combat')}
+                              {payloadData.damage > 0 ? `${payloadData.damage.toLocaleString()} DMG` : ('空戰')}
                             </span>
                           </div>
 
                           {payloadData.cpCost ? (
                             <div className="text-[9px] font-bold flex items-center justify-between pt-0.5 border-t border-red-900/40">
-                              <span className="text-amber-400">☢️ {lang === 'zh' ? '戰略授權 CP:' : 'Auth Cost CP:'}</span>
+                              <span className="text-amber-400">☢️ 戰略授權 CP:</span>
                               <span className={canAffordNuke ? 'text-amber-300' : 'text-red-400'}>
                                 {payloadData.cpCost} CP
                               </span>
@@ -2031,7 +1964,7 @@ export const HUD: React.FC<HUDProps> = ({
                             className="mt-1 w-full py-1 px-1.5 bg-[#07242B] hover:bg-[#004D40] border border-[#80CBC4]/60 hover:border-[#80CBC4] rounded text-[10px] text-[#80CBC4] hover:text-white font-bold flex items-center justify-center gap-1 transition-colors"
                           >
                             <Sliders className="w-3 h-3 text-[#80CBC4]" />
-                            <span>{lang === 'zh' ? '更換掛載' : 'Swap Payload'}</span>
+                            <span>更換掛載</span>
                           </button>
                         </div>
 
@@ -2047,13 +1980,13 @@ export const HUD: React.FC<HUDProps> = ({
                                   ? 'bg-[#0B1E34] hover:bg-[#153252] text-[#80DEEA] border border-[#1E3A5F]'
                                   : 'bg-[#031017] text-slate-600 border border-slate-800 cursor-not-allowed'
                               }`}
-                              title={lang === 'zh' ? "轉場至旗艦航空母艦機庫" : "Ferry aircraft to carrier flight deck"}
+                              title="轉場至旗艦航空母艦機庫"
                             >
-                              <span>🛫 {lang === 'zh' ? '轉場CV' : 'Ferry CV'}</span>
+                              <span>🛫 轉場CV</span>
                             </button>
                           ) : (
                             <div className="text-[9px] text-slate-400 flex items-center justify-center bg-[#031017] rounded border border-slate-800/60 text-center font-bold">
-                              {lang === 'zh' ? '陸航專用' : 'AAF Only'}
+                              陸航專用
                             </div>
                           )}
 
@@ -2078,12 +2011,10 @@ export const HUD: React.FC<HUDProps> = ({
                               {hasReady
                                 ? isNukeEquipped
                                   ? canAffordNuke
-                                    ? (lang === 'zh' ? '☢️ 核打擊出擊' : '☢️ Launch Nuke')
-                                    : (lang === 'zh'
-                                        ? `☢️ 差${Math.max(0, requiredNukeCp - Math.floor(resourcePoints))} CP`
-                                        : `☢️ Need ${Math.max(0, requiredNukeCp - Math.floor(resourcePoints))} CP`)
-                                  : (lang === 'zh' ? `出擊 ${effectiveCount}機` : `Sortie (${effectiveCount})`)
-                                : (lang === 'zh' ? '無機' : 'Empty')}
+                                    ? ('☢️ 核打擊出擊')
+                                    : (`☢️ 差${Math.max(0, requiredNukeCp - Math.floor(resourcePoints))} CP`)
+                                  : (`出擊 ${effectiveCount}機`)
+                                : ('無機')}
                             </span>
                           </button>
                         </div>
@@ -2105,14 +2036,14 @@ export const HUD: React.FC<HUDProps> = ({
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-amber-300 font-bold flex items-center gap-1 mr-1 text-[11px]">
                     <Hammer className="w-3.5 h-3.5 text-amber-400" />
-                    <span>{lang === 'zh' ? '工事分類:' : 'Category:'}</span>
+                    <span>工事分類:</span>
                   </span>
                   {[
-                    { id: 'all', label: lang === 'zh' ? '全部工事' : 'All Works' },
-                    { id: 'aviation', label: lang === 'zh' ? '✈️ 航空野戰基地' : '✈️ Aviation Bases' },
-                    { id: 'air_defense', label: lang === 'zh' ? '🛡️ 防空飛彈/火砲' : '🛡️ SAM & AAA' },
-                    { id: 'naval', label: lang === 'zh' ? '⚓ 海軍軍港浮塢' : '⚓ Naval & Docks' },
-                    { id: 'fortification', label: lang === 'zh' ? '🏰 防衛堡壘/指揮所' : '🏰 Forts & CPs' },
+                    { id: 'all', label: '全部工事' },
+                    { id: 'aviation', label: '✈️ 航空野戰基地' },
+                    { id: 'air_defense', label: '🛡️ 防空飛彈/火砲' },
+                    { id: 'naval', label: '⚓ 海軍軍港浮塢' },
+                    { id: 'fortification', label: '🏰 防衛堡壘/指揮所' },
                   ].map((tab) => (
                     <button
                       key={tab.id}
@@ -2131,14 +2062,14 @@ export const HUD: React.FC<HUDProps> = ({
 
                 {/* Target island selector */}
                 <div className="flex items-center gap-1.5 text-xs font-mono">
-                  <span className="text-slate-400 text-[10px]">{lang === 'zh' ? '所屬島嶼:' : 'Island:'}</span>
+                  <span className="text-slate-400 text-[10px]">所屬島嶼:</span>
                   <select
                     value={selectedBuildIslandId}
                     onChange={(e) => setSelectedBuildIslandId(e.target.value)}
                     className="bg-[#040C16] border border-[#1E3A5F] rounded px-2 py-0.5 text-amber-300 text-xs font-mono focus:outline-none"
                   >
                     <option value="">
-                      {lang === 'zh' ? '預設友軍登陸島嶼' : 'Default Base Island'}
+                      預設友軍登陸島嶼
                     </option>
                     {islands
                       .filter((isl) => isl.isFriendlyBase || isl.isFullyCaptured || isl.installations.some((i) => i.side === 'player' && !i.isDestroyed))
@@ -2155,26 +2086,26 @@ export const HUD: React.FC<HUDProps> = ({
               <div className="bg-[#051322] border border-amber-500/30 rounded-lg p-1.5 flex items-center justify-between gap-1.5 flex-wrap text-xs font-mono">
                 <span className="text-[10px] text-amber-300 font-bold flex items-center gap-1 shrink-0">
                   <Zap className="w-3.5 h-3.5 text-amber-400" />
-                  <span>{lang === 'zh' ? (era === 'era4' ? '冷戰工事快捷建造:' : '戰地工事快捷建造:') : 'Quick Construction Bar:'}</span>
+                  <span>{(era === 'era4' ? '冷戰工事快捷建造:' : '戰地工事快捷建造:')}</span>
                 </span>
 
                 <div className="flex items-center gap-1.5 overflow-x-auto max-w-full py-0.5">
                   {(era === 'era4' || era === 'era5'
                     ? [
-                        { id: 'req-fac-sam-hawk', label: lang === 'zh' ? '⚡ 霍克SAM飛彈' : '⚡ HAWK SAM', cost: '380 CP' },
-                        { id: 'req-fac-airfield', label: lang === 'zh' ? '⚡ 前進野戰跑道' : '⚡ Forward Airfield', cost: '320 CP' },
-                        { id: 'req-fac-fob', label: lang === 'zh' ? '⚡ 前進基地(FOB)' : '⚡ Forward FOB', cost: '450 CP' },
-                        { id: 'req-fac-radar', label: lang === 'zh' ? '⚡ SPS-40長程雷達' : '⚡ SPS-40 Radar', cost: '220 CP' },
-                        { id: 'req-fac-dockyard', label: lang === 'zh' ? '⚡ 應急修護浮塢' : '⚡ Repair Dockyard', cost: '260 CP' },
-                        { id: 'req-fac-m1-240mm', label: lang === 'zh' ? '⚡ M1 240mm重砲' : '⚡ M1 240mm Howitzer', cost: '360 CP' },
+                        { id: 'req-fac-sam-hawk', label: '⚡ 霍克SAM飛彈', cost: '380 CP' },
+                        { id: 'req-fac-airfield', label: '⚡ 前進野戰跑道', cost: '320 CP' },
+                        { id: 'req-fac-fob', label: '⚡ 前進基地(FOB)', cost: '450 CP' },
+                        { id: 'req-fac-radar', label: '⚡ SPS-40長程雷達', cost: '220 CP' },
+                        { id: 'req-fac-dockyard', label: '⚡ 應急修護浮塢', cost: '260 CP' },
+                        { id: 'req-fac-m1-240mm', label: '⚡ M1 240mm重砲', cost: '360 CP' },
                       ]
                     : [
-                        { id: 'req-fac-forward-airfield', label: lang === 'zh' ? '⚡ 前進野戰跑道' : '⚡ Forward Strip', cost: '320 CP' },
-                        { id: 'req-fac-heavy-aa', label: lang === 'zh' ? '⚡ 雙聯重型防空砲' : '⚡ Heavy AA Battery', cost: '220 CP' },
-                        { id: 'req-fac-battalion-cp', label: lang === 'zh' ? '⚡ 營前進指揮所' : '⚡ Battalion CP', cost: '250 CP' },
-                        { id: 'req-fac-dockyard', label: lang === 'zh' ? '⚡ 戰地修護浮塢' : '⚡ Field Dockyard', cost: '220 CP' },
-                        { id: 'req-fac-coastal-gun', label: lang === 'zh' ? '⚡ 岸防重砲' : '⚡ Coastal Battery', cost: '350 CP' },
-                        { id: 'req-fac-m1-240mm', label: lang === 'zh' ? '⚡ M1 240mm重砲' : '⚡ M1 240mm Howitzer', cost: '340 CP' },
+                        { id: 'req-fac-forward-airfield', label: '⚡ 前進野戰跑道', cost: '320 CP' },
+                        { id: 'req-fac-heavy-aa', label: '⚡ 雙聯重型防空砲', cost: '220 CP' },
+                        { id: 'req-fac-battalion-cp', label: '⚡ 營前進指揮所', cost: '250 CP' },
+                        { id: 'req-fac-dockyard', label: '⚡ 戰地修護浮塢', cost: '220 CP' },
+                        { id: 'req-fac-coastal-gun', label: '⚡ 岸防重砲', cost: '350 CP' },
+                        { id: 'req-fac-m1-240mm', label: '⚡ M1 240mm重砲', cost: '340 CP' },
                       ]
                   ).map((qItem) => {
                     const matchedItem = currentCatalog.find((c) => c.id === qItem.id);
@@ -2194,7 +2125,7 @@ export const HUD: React.FC<HUDProps> = ({
                             ? 'bg-[#0B2138] hover:bg-[#12365D] border-amber-400/60 text-amber-200 hover:text-white shadow-sm'
                             : 'bg-slate-900 border-slate-800 text-slate-500 cursor-not-allowed'
                         }`}
-                        title={`${matchedItem.nameZh} — ${matchedItem.desc} (${matchedItem.cost} CP)`}
+                        title={`${matchedItem.name} — ${matchedItem.desc} (${matchedItem.cost} CP)`}
                       >
                         <UnitPreviewCanvas
                           kind="installation"
@@ -2242,13 +2173,13 @@ export const HUD: React.FC<HUDProps> = ({
                     return (
                       <div
                         key={item.id}
-                        title={`${lang === 'zh' ? item.nameZh : item.name} (${item.cost} CP)\n${item.desc}\n${item.statsDesc}`}
+                        title={`${item.name} (${item.cost} CP)\n${item.desc}\n${item.statsDesc}`}
                         className="flex flex-col justify-between bg-[#071526] border border-amber-500/40 hover:border-amber-400 rounded-lg p-2 text-xs font-mono shadow-md min-w-[162px] max-w-[172px] transition-all shrink-0"
                       >
                         <div>
                           <div className="flex items-center justify-between gap-1 pb-1 border-b border-[#1E3A5F]/70">
                             <span className="font-bold text-[#E0F7FA] text-[10.5px] truncate">
-                              {lang === 'zh' ? item.nameZh : item.name}
+                              {item.name}
                             </span>
                           </div>
                           <div className="relative mt-1">
@@ -2288,14 +2219,14 @@ export const HUD: React.FC<HUDProps> = ({
                               title={
                                 canAfford
                                   ? isPierFacility
-                                    ? `在海圖上指定「${item.nameZh}」突堤碼頭建造座標`
+                                    ? `在海圖上指定「${item.name}」突堤碼頭建造座標`
                                     : `在海圖上指定建造座標`
                                   : `資源不足 (尚欠 ${shortCp} CP)`
                               }
                             >
                               <MapPin className="w-2.5 h-2.5 text-cyan-200 shrink-0" />
                               <span className="truncate">
-                                {isPierFacility ? (lang === 'zh' ? '落點指定' : 'Stamp') : t.stampBuild}
+                                {isPierFacility ? ('落點指定') : '指定位置建造'}
                               </span>
                             </button>
 
@@ -2310,9 +2241,9 @@ export const HUD: React.FC<HUDProps> = ({
                                   ? 'bg-[#0B1E34] hover:bg-[#153252] text-amber-300 border border-amber-500/50'
                                   : 'bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed'
                               }`}
-                              title={lang === 'zh' ? "快捷在工兵身旁或目標島建造" : "Quick construct"}
+                              title="快捷在工兵身旁或目標島建造"
                             >
-                              <span>{t.quickBuild}</span>
+                              <span>快捷建造</span>
                             </button>
                           </div>
                         </div>
@@ -2334,13 +2265,13 @@ export const HUD: React.FC<HUDProps> = ({
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-emerald-400 font-bold flex items-center gap-1 mr-1 text-[11px]">
                     <Layers className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>{lang === 'zh' ? '支援類別:' : 'Category:'}</span>
+                    <span>支援類別:</span>
                   </span>
                   {(
                     [
-                      { key: 'ground', label: `🪖 ${t.catGroundUnits}` },
-                      { key: 'ships', label: `⚓ ${t.catShips}` },
-                      { key: 'aircraft', label: `✈️ ${t.catAircraft}` },
+                      { key: 'ground', label: `🪖 陸戰隊與裝甲部隊` },
+                      { key: 'ships', label: `⚓ 水面艦艇支援` },
+                      { key: 'aircraft', label: `✈️ 航空戰力增援` },
                     ] as const
                   ).map((cat) => (
                     <button
@@ -2359,7 +2290,7 @@ export const HUD: React.FC<HUDProps> = ({
 
                 <div className="flex items-center gap-2 text-[10px] text-emerald-300 font-mono">
                   <span className="bg-emerald-950/80 border border-emerald-700/60 px-2 py-0.5 rounded">
-                    {t.reinforceSpawnNote}
+                    增援規則：陸地單位自本營指揮所旁集結；海軍艦艇自地圖南緣入役；飛機進駐航空基地
                   </span>
                 </div>
               </div>
@@ -2380,13 +2311,13 @@ export const HUD: React.FC<HUDProps> = ({
                   return (
                     <div
                       key={item.id}
-                      title={`${lang === 'zh' ? item.nameZh : item.name} (${item.cost} CP)\n${item.desc}\n${item.statsDesc}`}
+                      title={`${item.name} (${item.cost} CP)\n${item.desc}\n${item.statsDesc}`}
                       className="flex flex-col justify-between bg-[#071526] border border-[#1E3A5F] hover:border-emerald-400/80 rounded-lg p-2 text-xs font-mono shadow-md min-w-[162px] max-w-[172px] transition-all shrink-0"
                     >
                       <div>
                         <div className="flex items-center justify-between gap-1 pb-1 border-b border-[#1E3A5F]/70">
                           <span className="font-bold text-[#E0F7FA] text-[10.5px] truncate">
-                            {lang === 'zh' ? item.nameZh : item.name}
+                            {item.name}
                           </span>
                         </div>
                         <div className="relative mt-1">
@@ -2426,10 +2357,10 @@ export const HUD: React.FC<HUDProps> = ({
                               ? 'bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white border border-emerald-400/80 shadow'
                               : 'bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed'
                           }`}
-                          title={canAfford ? `呼叫支援 ${item.nameZh}` : `資源點數不足 (尚欠 ${shortCp} CP)`}
+                          title={canAfford ? `呼叫支援 ${item.name}` : `資源點數不足 (尚欠 ${shortCp} CP)`}
                         >
                           <ShoppingCart className="w-2.5 h-2.5 shrink-0" />
-                          <span className="truncate">{canAfford ? (lang === 'zh' ? '呼叫支援' : 'Call Reinforce') : `差 ${shortCp} CP`}</span>
+                          <span className="truncate">{canAfford ? ('呼叫支援') : `差 ${shortCp} CP`}</span>
                         </button>
                       </div>
                     </div>
@@ -2445,7 +2376,6 @@ export const HUD: React.FC<HUDProps> = ({
       {/* 戰地軍械庫掛載選擇盤 (Tactical Armament Selector Tray Modal) */}
       <ArmamentTrayModal
         tray={activeArmamentTray}
-        lang={lang}
         resourcePoints={resourcePoints}
         onClose={() => setActiveArmamentTray(null)}
         onSelectPayload={(pid) => {

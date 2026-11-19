@@ -1,6 +1,5 @@
 import React from 'react';
 import { GameScore, SectorIntel } from '../types/game';
-import { Language, getTranslation } from '../game/i18n';
 import { Trophy, Skull, RotateCcw, ArrowRight, Award, Star } from 'lucide-react';
 
 interface GameOverModalProps {
@@ -9,7 +8,6 @@ interface GameOverModalProps {
   intel: SectorIntel | null;
   onNextSector: () => void;
   onRestart: () => void;
-  lang?: Language;
 }
 
 export const GameOverModal: React.FC<GameOverModalProps> = ({
@@ -18,9 +16,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   intel,
   onNextSector,
   onRestart,
-  lang = 'zh',
 }) => {
-  const t = getTranslation(lang);
 
   return (
     <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
@@ -44,16 +40,12 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               isVictory ? 'text-[#81C784]' : 'text-[#E57373]'
             }`}
           >
-            {isVictory ? t.victoryTitle : t.defeatTitle}
+            {isVictory ? '作戰大捷 · 戰區肅清成功' : '戰區作戰失利 · 旗艦傾覆沉沒'}
           </h2>
           <div className="text-[11px] text-[#90CAF9] max-w-md mx-auto leading-relaxed">
             {isVictory
-              ? lang === 'zh'
-                ? `第 ${intel?.sectorNumber || 1} 戰區敵方主力水面艦隊與島嶼防空要塞已遭全面瓦解肅清！`
-                : `Hostile surface forces and fortified island bases successfully neutralized in Sector ${intel?.sectorNumber || 1}.`
-              : lang === 'zh'
-                ? '旗艦蒙受致命毀滅性重創傾覆沉沒，特遣作戰中斷。'
-                : 'Task force flagship sustained catastrophic structural trauma and sank beneath the waves.'}
+              ? `第 ${intel?.sectorNumber || 1} 戰區敵方主力水面艦隊與島嶼防空要塞已遭全面瓦解肅清！`
+              : '旗艦蒙受致命毀滅性重創傾覆沉沒，特遣作戰中斷。'}
           </div>
         </div>
 
@@ -62,44 +54,44 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           <div className="text-[#80DEEA] font-semibold text-[11px] border-b border-[#1E3A5F] pb-1.5 flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <Award className="w-4 h-4 text-amber-400" />
-              <span>{t.totalScoreBreakdown}</span>
+              <span>戰鬥效益評估與積分結算</span>
             </span>
             <span className="text-amber-300 flex items-center gap-1 font-bold">
               <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-              <span>+{isVictory ? 4 : 0} {t.stars}</span>
+              <span>+{isVictory ? 4 : 0} 功勳星徽</span>
             </span>
           </div>
 
           <div className="flex justify-between text-slate-300">
-            <span>{lang === 'zh' ? '擊沉敵水面戰艦：' : 'Enemy Warships Sunk:'}</span>
+            <span>擊沉敵水面戰艦：</span>
             <span className="tabular-nums font-bold text-white">
-              {score.enemyShipsSunk}{lang === 'zh' ? ' 艘' : ''}
+              {score.enemyShipsSunk}{' 艘'}
             </span>
           </div>
 
           <div className="flex justify-between text-slate-300">
-            <span>{lang === 'zh' ? '擊落敵戰備戰機：' : 'Enemy Aircraft Downed:'}</span>
+            <span>擊落敵戰備戰機：</span>
             <span className="tabular-nums font-bold text-white">
-              {score.enemyPlanesDowned}{lang === 'zh' ? ' 架' : ''}
+              {score.enemyPlanesDowned}{' 架'}
             </span>
           </div>
 
           <div className="flex justify-between text-slate-300">
-            <span>{lang === 'zh' ? '摧毀要塞砲台／岸防設施：' : 'Shore Forts Destroyed:'}</span>
+            <span>摧毀要塞砲台／岸防設施：</span>
             <span className="tabular-nums font-bold text-white">
-              {score.installationsDestroyed}{lang === 'zh' ? ' 座' : ''}
+              {score.installationsDestroyed}{' 座'}
             </span>
           </div>
 
           <div className="flex justify-between text-slate-300">
-            <span>{lang === 'zh' ? '累計肅清戰區海域：' : 'Sectors Cleared:'}</span>
+            <span>累計肅清戰區海域：</span>
             <span className="tabular-nums font-bold text-white">
-              {score.sectorsCleared}{lang === 'zh' ? ' 區' : ''}
+              {score.sectorsCleared}{' 區'}
             </span>
           </div>
 
           <div className="pt-2 border-t border-[#1E3A5F] flex justify-between text-[#FFD54F] font-bold text-sm">
-            <span>{t.score}:</span>
+            <span>戰果總分:</span>
             <span className="tabular-nums text-base">{score.totalScore} PTS</span>
           </div>
         </div>
@@ -111,7 +103,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               onClick={onNextSector}
               className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-[#1976D2] to-[#00E676] hover:from-[#2196F3] hover:to-[#00C853] text-[#06101E] font-mono font-bold rounded shadow-lg transition-transform active:scale-95"
             >
-              <span>{t.nextSector}</span>
+              <span>晉級下一作戰分區 (NEXT SECTOR)</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           ) : (
@@ -120,7 +112,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               className="flex items-center gap-2 px-6 py-2.5 bg-[#C62828] hover:bg-[#B71C1C] text-white font-mono font-bold rounded shadow-lg transition-transform active:scale-95"
             >
               <RotateCcw className="w-4 h-4" />
-              <span>{t.restartMission}</span>
+              <span>重新啟動本關作戰 (RETRY SECTOR)</span>
             </button>
           )}
         </div>

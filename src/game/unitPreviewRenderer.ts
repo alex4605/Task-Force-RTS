@@ -23,6 +23,774 @@ function normalizeKey(raw: string): string {
  * Shared physical top-down silhouette renderer for Ground Units.
  * Used both on the tactical canvas (`VectorRenderer.drawGroundUnits`) and in build menu preview cards.
  */
+interface TankSpec {
+  match: RegExp;
+  hullL: number;
+  hullW: number;
+  /** Chamfer of the sloped glacis plate in plan view. */
+  glacis?: number;
+  turret: 'round' | 'boxy' | 'needle';
+  turretX: number;
+  /** Lateral turret offset: Type 95 Ha-Go (left), Type 97 Chi-Ha (right). */
+  turretY: number;
+  turretRx: number;
+  turretRy: number;
+  gunLen: number;
+  gunW: number;
+  /** Bore evacuator position as a fraction of the gun length. */
+  evacuatorAt?: number;
+  muzzleBrake?: boolean;
+}
+
+// Plan-view proportions per tank (silhouette units, nose along +x). Matched against the unit type.
+const TANK_SPECS: TankSpec[] = [
+  // M3 Stuart: small riveted hull, small boxy turret, short 37mm
+  { match: /armor_m3/, hullL: 17, hullW: 9.5, glacis: 1.5, turret: 'boxy', turretX: 0.5, turretY: 0, turretRx: 3.2, turretRy: 3, gunLen: 7, gunW: 1.2 },
+  // M4 Sherman: rounded cast turret, 75mm
+  { match: /armor_m4/, hullL: 20, hullW: 10.5, glacis: 2.5, turret: 'round', turretX: 0.5, turretY: 0, turretRx: 4.8, turretRy: 4.2, gunLen: 10, gunW: 1.6 },
+  // Korea: M4A3E8 / M46 mix -> M46 Patton proportions with 90mm and bore evacuator
+  { match: /patton_m46|armor_korea/, hullL: 22, hullW: 11.5, glacis: 2, turret: 'round', turretX: 0, turretY: 0, turretRx: 5.6, turretRy: 4.8, gunLen: 13, gunW: 1.8, evacuatorAt: 0.75, muzzleBrake: true },
+  // M48 Patton: big egg-shaped cast turret
+  { match: /m48/, hullL: 23, hullW: 12, glacis: 2.5, turret: 'round', turretX: -0.5, turretY: 0, turretRx: 6.2, turretRy: 5.2, gunLen: 13.5, gunW: 1.9, evacuatorAt: 0.72, muzzleBrake: true },
+  // M60A1: needle-nose turret, 105mm M68 with bore evacuator
+  { match: /m60/, hullL: 24, hullW: 12, glacis: 3, turret: 'needle', turretX: 0, turretY: 0, turretRx: 7, turretRy: 5, gunLen: 14, gunW: 2, evacuatorAt: 0.6 },
+  // Type 95 Ha-Go: tiny light tank, turret offset to the left
+  { match: /type95/, hullL: 15, hullW: 8, glacis: 1.5, turret: 'boxy', turretX: 0.5, turretY: -1.2, turretRx: 2.8, turretRy: 2.4, gunLen: 6, gunW: 1.1 },
+  // Type 97 Chi-Ha: turret offset to the right, short 57mm / 47mm
+  { match: /type97/, hullL: 17.5, hullW: 9, glacis: 1.5, turret: 'boxy', turretX: 0, turretY: 1.3, turretRx: 3.4, turretRy: 2.8, gunLen: 7.5, gunW: 1.4 },
+  // T-34-85: sloped hull, turret set well forward, 85mm
+  { match: /t34/, hullL: 21, hullW: 11, glacis: 3, turret: 'round', turretX: 2, turretY: 0, turretRx: 5.2, turretRy: 4.6, gunLen: 13, gunW: 1.8 },
+  // T-54/55: hemispherical turret forward, 100mm with bore evacuator near the muzzle
+  { match: /t54|t55/, hullL: 22, hullW: 11.5, glacis: 3, turret: 'round', turretX: 1.5, turretY: 0, turretRx: 5.5, turretRy: 5.5, gunLen: 14, gunW: 1.9, evacuatorAt: 0.85 },
+  // IS-3: flattened dome turret, 122mm D-25T with muzzle brake
+  { match: /is3/, hullL: 21, hullW: 11.5, turret: 'round', turretX: 0, turretY: 0, turretRx: 6, turretRy: 5.4, gunLen: 15, gunW: 2.1, muzzleBrake: true },
+  // PT-76: long boat hull, small turret forward, 76mm with muzzle brake
+  { match: /pt76/, hullL: 21, hullW: 10, turret: 'round', turretX: 3, turretY: 0, turretRx: 4.2, turretRy: 3.8, gunLen: 9, gunW: 1.4, muzzleBrake: true },
+  // T-72 / T-80: low cast dome, long 125mm smoothbore
+  { match: /t72|t80/, hullL: 23, hullW: 11.5, glacis: 3, turret: 'round', turretX: 0.5, turretY: 0, turretRx: 5.4, turretRy: 5, gunLen: 16, gunW: 2, evacuatorAt: 0.45 },
+];
+
+const DEFAULT_TANK: TankSpec = { match: /./, hullL: 22, hullW: 11, glacis: 2, turret: 'round', turretX: -0.5, turretY: 0, turretRx: 5.4, turretRy: 4.4, gunLen: 11, gunW: 2 };
+
+interface VehiclePalette {
+  hullFill: string;
+  hullHighlight: string;
+  hullStroke: string;
+  turretFill: string;
+  trackColor: string;
+  barrelColor: string;
+}
+
+function drawTrackRuns(ctx: CanvasRenderingContext2D, hl: number, hw: number, color: string) {
+  ctx.fillStyle = color;
+  ctx.fillRect(-hl / 2 - 1, -hw / 2 - 2.5, hl + 2, 3);
+  ctx.fillRect(-hl / 2 - 1, hw / 2 - 0.5, hl + 2, 3);
+  ctx.strokeStyle = 'rgba(176, 190, 197, 0.35)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  for (let x = -hl / 2; x <= hl / 2; x += 2.4) {
+    ctx.moveTo(x, -hw / 2 - 2.5);
+    ctx.lineTo(x, -hw / 2 + 0.5);
+    ctx.moveTo(x, hw / 2 - 0.5);
+    ctx.lineTo(x, hw / 2 + 2.5);
+  }
+  ctx.stroke();
+}
+
+function drawMuzzle(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, kind: 'single' | 'double' | undefined, color: string) {
+  if (!kind) return;
+  ctx.fillStyle = color;
+  ctx.fillRect(x - 1.2, y - w * 0.9, 1.6, w * 1.8);
+  if (kind === 'double') ctx.fillRect(x - 3.4, y - w * 0.9, 1.4, w * 1.8);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Self-propelled guns
+// ════════════════════════════════════════════════════════════════════════════
+interface SpgSpec {
+  match: RegExp;
+  hullL: number;
+  hullW: number;
+  /** Fighting compartment: open-topped (WWII / M44) or fully enclosed turret. */
+  compartment: 'open' | 'turret';
+  compX: number;
+  compL: number;
+  compW: number;
+  gunY: number;
+  gunLen: number;
+  gunW: number;
+  muzzle?: 'single' | 'double';
+  /** Fume extractor position as a fraction of gun length. */
+  fumeAt?: number;
+  /** Turret rear bustle (Paladin, Msta-S). */
+  bustle?: number;
+  /** M7 Priest's round anti-aircraft MG "pulpit". */
+  pulpit?: boolean;
+  /** Boat-shaped amphibious bow (2S1 on the MT-LB chassis). */
+  boatBow?: boolean;
+  spades?: boolean;
+}
+
+const SPG_SPECS: SpgSpec[] = [
+  { match: /priest/, hullL: 19, hullW: 10, compartment: 'open', compX: 0, compL: 12, compW: 8.4, gunY: 1.6, gunLen: 9, gunW: 1.6, pulpit: true },
+  { match: /m44/, hullL: 20, hullW: 10.5, compartment: 'open', compX: -4, compL: 11, compW: 9.4, gunY: 0, gunLen: 13, gunW: 1.9, muzzle: 'single', spades: true },
+  { match: /paladin/, hullL: 21, hullW: 11, compartment: 'turret', compX: -2.5, compL: 12, compW: 9.6, gunY: 0, gunLen: 17, gunW: 1.9, muzzle: 'double', fumeAt: 0.45, bustle: 2.5 },
+  { match: /m109/, hullL: 21, hullW: 11, compartment: 'turret', compX: -2.5, compL: 12, compW: 9.6, gunY: 0, gunLen: 11, gunW: 2, muzzle: 'double', fumeAt: 0.5 },
+  { match: /hummel/, hullL: 20, hullW: 10, compartment: 'open', compX: -3, compL: 10, compW: 8.6, gunY: 0, gunLen: 13, gunW: 1.9 },
+  { match: /2s1/, hullL: 19, hullW: 10, compartment: 'turret', compX: -2, compL: 8, compW: 7, gunY: 0, gunLen: 12, gunW: 1.6, muzzle: 'double', fumeAt: 0.5, boatBow: true },
+  { match: /2s3/, hullL: 22, hullW: 11.5, compartment: 'turret', compX: -1.5, compL: 11, compW: 9.4, gunY: 0, gunLen: 14, gunW: 1.9, muzzle: 'double', fumeAt: 0.55 },
+  { match: /2s19/, hullL: 23, hullW: 12, compartment: 'turret', compX: -1, compL: 13, compW: 10.4, gunY: 0, gunLen: 18, gunW: 2, muzzle: 'double', fumeAt: 0.5, bustle: 2.5 },
+];
+const DEFAULT_SPG: SpgSpec = { match: /./, hullL: 20, hullW: 10, compartment: 'turret', compX: -2, compL: 11, compW: 8, gunY: 0, gunLen: 14, gunW: 2, muzzle: 'single' };
+
+function drawSpg(ctx: CanvasRenderingContext2D, sp: SpgSpec, pal: VehiclePalette) {
+  const { hullL: hl, hullW: hw } = sp;
+  drawTrackRuns(ctx, hl, hw, pal.trackColor);
+  ctx.fillStyle = pal.hullFill;
+  ctx.strokeStyle = pal.hullStroke;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  if (sp.boatBow) {
+    ctx.moveTo(hl / 2 + 2, 0);
+    ctx.lineTo(hl / 2 - 2, -hw / 2);
+    ctx.lineTo(-hl / 2, -hw / 2);
+    ctx.lineTo(-hl / 2, hw / 2);
+    ctx.lineTo(hl / 2 - 2, hw / 2);
+  } else {
+    ctx.moveTo(hl / 2, -hw / 2 + 2);
+    ctx.lineTo(hl / 2 - 2, -hw / 2);
+    ctx.lineTo(-hl / 2, -hw / 2);
+    ctx.lineTo(-hl / 2, hw / 2);
+    ctx.lineTo(hl / 2 - 2, hw / 2);
+    ctx.lineTo(hl / 2, hw / 2 - 2);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Rear recoil spades (M44)
+  if (sp.spades) {
+    ctx.fillStyle = '#455A64';
+    ctx.fillRect(-hl / 2 - 2, -hw / 2 + 0.5, 1.8, 2.6);
+    ctx.fillRect(-hl / 2 - 2, hw / 2 - 3.1, 1.8, 2.6);
+  }
+
+  // Fighting compartment
+  const cx = sp.compX;
+  if (sp.compartment === 'open') {
+    // Open-topped armoured box: thin walls with the crew space and ammunition racks visible
+    ctx.fillStyle = '#1E272E';
+    ctx.strokeStyle = pal.hullStroke;
+    ctx.lineWidth = 1.1;
+    ctx.fillRect(cx - sp.compL / 2, -sp.compW / 2, sp.compL, sp.compW);
+    ctx.strokeRect(cx - sp.compL / 2, -sp.compW / 2, sp.compL, sp.compW);
+    ctx.strokeStyle = 'rgba(255, 213, 79, 0.45)';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    for (let y = -sp.compW / 2 + 1.4; y < sp.compW / 2 - 1; y += 1.4) {
+      ctx.moveTo(cx - sp.compL / 2 + 1, y);
+      ctx.lineTo(cx - sp.compL / 2 + 3, y);
+    }
+    ctx.stroke();
+  } else {
+    // Enclosed turret, slab-sided, with optional rear bustle
+    ctx.fillStyle = pal.turretFill;
+    ctx.strokeStyle = pal.hullStroke;
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(cx + sp.compL / 2, -sp.compW / 2 + 1.4);
+    ctx.lineTo(cx + sp.compL / 2 - 1.4, -sp.compW / 2);
+    ctx.lineTo(cx - sp.compL / 2, -sp.compW / 2);
+    ctx.lineTo(cx - sp.compL / 2, sp.compW / 2);
+    ctx.lineTo(cx + sp.compL / 2 - 1.4, sp.compW / 2);
+    ctx.lineTo(cx + sp.compL / 2, sp.compW / 2 - 1.4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    if (sp.bustle) {
+      ctx.fillStyle = pal.hullHighlight;
+      ctx.fillRect(cx - sp.compL / 2 - sp.bustle, -sp.compW * 0.35, sp.bustle, sp.compW * 0.7);
+    }
+    // Commander's cupola with MG
+    ctx.fillStyle = pal.hullHighlight;
+    ctx.beginPath();
+    ctx.arc(cx - sp.compL * 0.15, -sp.compW * 0.28, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // M7 Priest pulpit (ring-mounted .50 cal at the right front)
+  if (sp.pulpit) {
+    ctx.strokeStyle = pal.hullStroke;
+    ctx.fillStyle = pal.turretFill;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx + sp.compL / 2 - 1.5, sp.compW / 2 - 1, 2.4, 0, Math.PI * 2); // right front (+y = starboard)
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  // Howitzer
+  const gx = cx + sp.compL / 2 - 0.5;
+  ctx.strokeStyle = pal.barrelColor;
+  ctx.lineWidth = sp.gunW;
+  ctx.beginPath();
+  ctx.moveTo(gx - 1, sp.gunY);
+  ctx.lineTo(gx + sp.gunLen, sp.gunY);
+  ctx.stroke();
+  if (sp.fumeAt !== undefined) {
+    ctx.fillStyle = pal.barrelColor;
+    ctx.fillRect(gx + sp.gunLen * sp.fumeAt - 1.2, sp.gunY - sp.gunW * 0.8, 2.4, sp.gunW * 1.6);
+  }
+  drawMuzzle(ctx, gx + sp.gunLen, sp.gunY, sp.gunW, sp.muzzle, pal.barrelColor);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// APCs, IFVs and amphibious tractors
+// ════════════════════════════════════════════════════════════════════════════
+interface IfvSpec {
+  match: RegExp;
+  hullL: number;
+  hullW: number;
+  /** 0 = tracked; otherwise wheels per side. */
+  wheels: number;
+  nose: 'box' | 'wedge' | 'boat';
+  amphib?: boolean;
+  /** Turret centre / radius, or none (MG cupola only). */
+  turret?: { x: number; y: number; r: number };
+  gunLen?: number;
+  gunW?: number;
+  /** Twin parallel barrels (BTR-ZD's ZU-23-2). */
+  twinGun?: boolean;
+  /** Bradley's TOW box on the turret's left side. */
+  towBox?: boolean;
+  /** BMP-2's Konkurs ATGM tube on the turret roof. */
+  roofAtgm?: boolean;
+  /** LAV-AD Blazer: Stinger pods both sides of the turret. */
+  stingerPods?: boolean;
+  /** Open-topped cargo well (LVT-2). */
+  openCargo?: boolean;
+  /** Open-topped howitzer turret (LVT(A)-4). */
+  openTurret?: boolean;
+  /** Commander's cupola MG position when there is no turret. */
+  cupola?: { x: number; y: number };
+  rearRamp?: boolean;
+  /** Number of parallel gun barrels (Shilka 4, Duster / ZSU-57-2 / Tunguska 2). */
+  barrels?: number;
+  /** Missile rails / tubes: centre x, count, length; 'sides' splits them either side of the turret. */
+  missiles?: { x: number; count: number; len: number; sides?: boolean };
+  /** Vertical launch cells in the turret (Tor). */
+  vls?: number;
+  /** Fire-control / search radar dish. */
+  radar?: { x: number; y: number; r: number };
+}
+
+const IFV_SPECS: IfvSpec[] = [
+  { match: /m113/, hullL: 19, hullW: 10, wheels: 0, nose: 'wedge', cupola: { x: 2, y: -1.5 }, rearRamp: true },
+  { match: /lvt_42/, hullL: 21, hullW: 12, wheels: 0, nose: 'boat', amphib: true, openCargo: true, cupola: { x: 6, y: 0 } },
+  { match: /lvt_45/, hullL: 21, hullW: 12, wheels: 0, nose: 'boat', amphib: true, openTurret: true, turret: { x: 0, y: 0, r: 4.2 }, gunLen: 8, gunW: 1.6 },
+  { match: /lvtp5/, hullL: 24, hullW: 13, wheels: 0, nose: 'boat', amphib: true, turret: { x: 7, y: 0, r: 2.6 }, gunLen: 5, gunW: 1, rearRamp: true },
+  { match: /aav7/, hullL: 22, hullW: 11.5, wheels: 0, nose: 'boat', amphib: true, turret: { x: 3.5, y: 3, r: 2.4 }, gunLen: 6, gunW: 1.2, rearRamp: true },
+  { match: /lav_ad/, hullL: 20, hullW: 9.5, wheels: 4, nose: 'wedge', turret: { x: -1, y: 0, r: 3.4 }, gunLen: 8, gunW: 1.6, stingerPods: true },
+  { match: /lav25/, hullL: 20, hullW: 9.5, wheels: 4, nose: 'wedge', turret: { x: 0, y: 0, r: 3.2 }, gunLen: 10, gunW: 1.3 },
+  { match: /bradley/, hullL: 21, hullW: 11.5, wheels: 0, nose: 'wedge', turret: { x: 0.5, y: 0.8, r: 3.8 }, gunLen: 9, gunW: 1.3, towBox: true, rearRamp: true },
+  { match: /bmp/, hullL: 20, hullW: 10.5, wheels: 0, nose: 'wedge', turret: { x: 1, y: 0, r: 3.6 }, gunLen: 11, gunW: 1.1, roofAtgm: true },
+  { match: /btr_zd/, hullL: 17, hullW: 9, wheels: 0, nose: 'wedge', turret: { x: -1, y: 0, r: 3 }, gunLen: 8, gunW: 1, twinGun: true },
+];
+// Self-propelled air defence vehicles, drawn with the same plan-view vocabulary as APCs / IFVs
+const AD_SPECS: IfvSpec[] = [
+  { match: /chaparral/, hullL: 19, hullW: 10, wheels: 0, nose: 'box', missiles: { x: -3, count: 4, len: 7 }, cupola: { x: 6, y: -2 } },
+  { match: /duster|zsu57/, hullL: 21, hullW: 11, wheels: 0, nose: 'wedge', openTurret: true, turret: { x: -2, y: 0, r: 4.4 }, gunLen: 11, gunW: 1.4, barrels: 2 },
+  { match: /vads|m163/, hullL: 19, hullW: 10, wheels: 0, nose: 'wedge', turret: { x: -1, y: 0, r: 3.4 }, gunLen: 9, gunW: 2, radar: { x: -1, y: 4, r: 1.8 } },
+  { match: /shilka/, hullL: 20, hullW: 10.5, wheels: 0, nose: 'wedge', turret: { x: 0, y: 0, r: 4.6 }, gunLen: 9, gunW: 0.9, barrels: 4, radar: { x: -4, y: 0, r: 2.2 } },
+  { match: /tunguska/, hullL: 22, hullW: 11.5, wheels: 0, nose: 'wedge', turret: { x: -1, y: 0, r: 4.8 }, gunLen: 8, gunW: 1.1, barrels: 2, missiles: { x: -1, count: 4, len: 6, sides: true }, radar: { x: -4, y: 0, r: 2.4 } },
+  { match: /sa6|kub/, hullL: 21, hullW: 10.5, wheels: 0, nose: 'wedge', missiles: { x: -2, count: 3, len: 9 } },
+  { match: /sa9|strela/, hullL: 16, hullW: 8.5, wheels: 2, nose: 'wedge', missiles: { x: -2, count: 4, len: 6 } },
+  { match: /sa8|osa/, hullL: 21, hullW: 10, wheels: 3, nose: 'boat', amphib: true, missiles: { x: -2, count: 6, len: 7, sides: true }, radar: { x: -2, y: 0, r: 2.6 } },
+  { match: /sa11|buk/, hullL: 22, hullW: 11, wheels: 0, nose: 'wedge', missiles: { x: -3, count: 4, len: 9 }, radar: { x: 5, y: 0, r: 2.2 } },
+  { match: /sa15|(^|_)tor(_|$)/, hullL: 21, hullW: 11, wheels: 0, nose: 'wedge', turret: { x: -2, y: 0, r: 5 }, vls: 8, radar: { x: 2, y: 0, r: 2.4 } },
+];
+
+const DEFAULT_IFV: IfvSpec = { match: /./, hullL: 20, hullW: 10, wheels: 0, nose: 'wedge', turret: { x: 1, y: 0, r: 3.4 }, gunLen: 9, gunW: 1.4 };
+
+function drawArmoredCarrier(ctx: CanvasRenderingContext2D, sp: IfvSpec, pal: VehiclePalette) {
+  const { hullL: hl, hullW: hw } = sp;
+  if (sp.wheels > 0) {
+    ctx.fillStyle = pal.trackColor;
+    const step = (hl - 4) / (sp.wheels - 1);
+    for (let i = 0; i < sp.wheels; i++) {
+      const wx = -hl / 2 + 2 + i * step;
+      ctx.fillRect(wx - 1.5, -hw / 2 - 2, 3, 2.2);
+      ctx.fillRect(wx - 1.5, hw / 2 - 0.2, 3, 2.2);
+    }
+  } else {
+    drawTrackRuns(ctx, hl, hw, pal.trackColor);
+  }
+
+  ctx.fillStyle = sp.amphib ? '#173A4A' : pal.hullFill;
+  ctx.strokeStyle = sp.amphib ? '#4FC3F7' : pal.hullStroke;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  if (sp.nose === 'boat') {
+    ctx.moveTo(hl / 2, -hw * 0.3);
+    ctx.quadraticCurveTo(hl / 2 + 2.5, 0, hl / 2, hw * 0.3);
+    ctx.lineTo(hl / 2 - 3, hw / 2);
+  } else if (sp.nose === 'wedge') {
+    ctx.moveTo(hl / 2 + 1.5, 0);
+    ctx.lineTo(hl / 2 - 2.5, -hw / 2);
+    ctx.moveTo(hl / 2 + 1.5, 0);
+    ctx.lineTo(hl / 2 - 2.5, hw / 2);
+  } else {
+    ctx.moveTo(hl / 2, -hw / 2);
+    ctx.lineTo(hl / 2, hw / 2);
+  }
+  ctx.lineTo(-hl / 2, hw / 2);
+  ctx.lineTo(-hl / 2, -hw / 2);
+  ctx.lineTo(sp.nose === 'boat' ? hl / 2 - 3 : hl / 2 - 2.5, -hw / 2);
+  if (sp.nose === 'boat') ctx.lineTo(hl / 2, -hw * 0.3);
+  else if (sp.nose === 'wedge') ctx.lineTo(hl / 2 + 1.5, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  if (sp.amphib) {
+    // Rear waterjet / track-propulsion shrouds
+    ctx.fillStyle = '#263238';
+    ctx.fillRect(-hl / 2 - 1.2, -hw * 0.3, 1.4, 2.2);
+    ctx.fillRect(-hl / 2 - 1.2, hw * 0.3 - 2.2, 1.4, 2.2);
+  }
+  if (sp.rearRamp) {
+    ctx.strokeStyle = pal.hullHighlight;
+    ctx.lineWidth = 0.8;
+    ctx.strokeRect(-hl / 2 + 0.5, -hw * 0.3, 2.2, hw * 0.6);
+  }
+  if (sp.openCargo) {
+    ctx.fillStyle = '#1E272E';
+    ctx.fillRect(-hl / 2 + 2, -hw / 2 + 1.6, hl * 0.6, hw - 3.2);
+    ctx.strokeStyle = 'rgba(176, 190, 197, 0.4)';
+    ctx.strokeRect(-hl / 2 + 2, -hw / 2 + 1.6, hl * 0.6, hw - 3.2);
+  }
+  if (sp.cupola) {
+    ctx.fillStyle = pal.turretFill;
+    ctx.strokeStyle = pal.hullStroke;
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.arc(sp.cupola.x, sp.cupola.y, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = pal.barrelColor;
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(sp.cupola.x + 1.2, sp.cupola.y);
+    ctx.lineTo(sp.cupola.x + 5, sp.cupola.y);
+    ctx.stroke();
+  }
+
+  const tr = sp.turret;
+  if (tr) {
+    ctx.fillStyle = sp.openTurret ? '#1E272E' : pal.turretFill;
+    ctx.strokeStyle = sp.amphib ? '#4FC3F7' : pal.hullStroke;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(tr.x, tr.y, tr.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    if (sp.towBox) {
+      ctx.fillStyle = '#5D6D3A';
+      ctx.fillRect(tr.x - tr.r * 0.8, tr.y - tr.r - 2.4, tr.r * 1.6, 2.2);
+      ctx.strokeRect(tr.x - tr.r * 0.8, tr.y - tr.r - 2.4, tr.r * 1.6, 2.2);
+    }
+    if (sp.stingerPods) {
+      ctx.fillStyle = '#80DEEA';
+      ctx.fillRect(tr.x - 1.5, tr.y - tr.r - 1.8, 4, 1.6);
+      ctx.fillRect(tr.x - 1.5, tr.y + tr.r + 0.2, 4, 1.6);
+    }
+    if (sp.roofAtgm) {
+      ctx.strokeStyle = '#FFD54F';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(tr.x - 2, tr.y - 1.2);
+      ctx.lineTo(tr.x + 3, tr.y - 1.2);
+      ctx.stroke();
+    }
+    if (sp.vls) {
+      // Vertical launch cells in the turret roof (two rows)
+      ctx.fillStyle = '#263238';
+      ctx.strokeStyle = 'rgba(176, 190, 197, 0.7)';
+      ctx.lineWidth = 0.5;
+      const cols = sp.vls / 2;
+      for (let c = 0; c < cols; c++) {
+        for (const row of [-1, 1]) {
+          const cx2 = tr.x - tr.r * 0.6 + c * (tr.r * 1.2 / Math.max(1, cols - 1));
+          ctx.beginPath();
+          ctx.arc(cx2, tr.y + row * tr.r * 0.4, 0.9, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+    }
+    if (sp.gunLen) {
+      ctx.strokeStyle = pal.barrelColor;
+      ctx.lineWidth = sp.gunW ?? 1.2;
+      ctx.beginPath();
+      const n = sp.barrels ?? (sp.twinGun ? 2 : 1);
+      const gap = n >= 4 ? 0.9 : 1.8;
+      const gy = Array.from({ length: n }, (_, i) => tr.y + (i - (n - 1) / 2) * gap);
+      for (const y of gy) {
+        ctx.moveTo(tr.x + tr.r * 0.6, y);
+        ctx.lineTo(tr.x + tr.r * 0.6 + sp.gunLen, y);
+      }
+      ctx.stroke();
+    }
+  }
+
+  // Missile rails / tubes, trained forward (white body, red seeker head)
+  if (sp.missiles) {
+    const m = sp.missiles;
+    const groups = m.sides ? [-(hw / 2) + 1.2, hw / 2 - 1.2] : [0];
+    const perGroup = m.sides ? m.count / 2 : m.count;
+    for (const gy0 of groups) {
+      for (let i = 0; i < perGroup; i++) {
+        const y = gy0 + (i - (perGroup - 1) / 2) * (m.sides ? 1 : 1.5);
+        ctx.strokeStyle = '#ECEFF1';
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.moveTo(m.x - m.len / 2, y);
+        ctx.lineTo(m.x + m.len / 2, y);
+        ctx.stroke();
+        ctx.fillStyle = '#FF5252';
+        ctx.fillRect(m.x + m.len / 2 - 1, y - 0.55, 1.2, 1.1);
+      }
+    }
+  }
+
+  // Radar dish
+  if (sp.radar) {
+    ctx.fillStyle = '#90A4AE';
+    ctx.strokeStyle = '#ECEFF1';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.ellipse(sp.radar.x, sp.radar.y, sp.radar.r * 0.45, sp.radar.r, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Towed artillery
+// ════════════════════════════════════════════════════════════════════════════
+interface TowedSpec {
+  match: RegExp;
+  /** split = two trails in a V (M101, M114, M198, Type 91); star3 = three-legged base (ZU-23);
+   *  cross4 = four outriggers (KS-19). */
+  carriage: 'split' | 'star3' | 'cross4';
+  trailLen: number;
+  /** Wheel half-track and wheel size. */
+  track: number;
+  wheel: number;
+  spokedWheels?: boolean;
+  shield?: number;
+  gunLen: number;
+  gunW: number;
+  barrels?: number;
+  muzzle?: 'single' | 'double';
+}
+
+const TOWED_SPECS: TowedSpec[] = [
+  // M2A1 / M101 105mm: split trail, small shield, plain muzzle
+  { match: /artillery_105/, carriage: 'split', trailLen: 12, track: 5.5, wheel: 2.6, shield: 5, gunLen: 11, gunW: 1.6 },
+  // M114 155mm: heavier split trail, no shield
+  { match: /howitzer_155/, carriage: 'split', trailLen: 15, track: 6.5, wheel: 3.2, gunLen: 13, gunW: 2 },
+  // M198 155mm: long trails and tube with a double-baffle muzzle brake
+  { match: /m198/, carriage: 'split', trailLen: 17, track: 6.5, wheel: 3.2, gunLen: 18, gunW: 2, muzzle: 'double' },
+  // IJA Type 91 10cm howitzer: split trail, spoked wheels, gun shield
+  { match: /field_artillery/, carriage: 'split', trailLen: 12, track: 5.5, wheel: 2.8, spokedWheels: true, shield: 5.5, gunLen: 11, gunW: 1.7 },
+  // KS-19 100mm AA gun: cruciform firing platform, long tube with muzzle brake
+  { match: /ks19/, carriage: 'cross4', trailLen: 11, track: 0, wheel: 0, shield: 4, gunLen: 18, gunW: 1.8, muzzle: 'single' },
+  // ZU-23-2: light three-legged mount, twin 23mm
+  { match: /zu23/, carriage: 'star3', trailLen: 9, track: 0, wheel: 0, gunLen: 13, gunW: 1, barrels: 2 },
+];
+const DEFAULT_TOWED: TowedSpec = { match: /./, carriage: 'split', trailLen: 12, track: 5.5, wheel: 2.6, gunLen: 13, gunW: 1.8 };
+
+function drawTowedGun(ctx: CanvasRenderingContext2D, sp: TowedSpec, pal: VehiclePalette) {
+  // Carriage / trails
+  ctx.strokeStyle = pal.hullStroke;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  if (sp.carriage === 'split') {
+    for (const side of [-1, 1]) {
+      ctx.moveTo(0, side * 1.2);
+      ctx.lineTo(-sp.trailLen, side * sp.trailLen * 0.42);
+    }
+  } else {
+    const legs = sp.carriage === 'star3' ? [Math.PI, Math.PI / 3, -Math.PI / 3] : [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4];
+    for (const a of legs) {
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(a) * sp.trailLen, Math.sin(a) * sp.trailLen);
+    }
+  }
+  ctx.stroke();
+  // Spades / outrigger pads
+  ctx.fillStyle = '#455A64';
+  if (sp.carriage === 'split') {
+    for (const side of [-1, 1]) ctx.fillRect(-sp.trailLen - 1.5, side * sp.trailLen * 0.42 - 1.2, 2, 2.4);
+  } else {
+    const legs = sp.carriage === 'star3' ? [Math.PI, Math.PI / 3, -Math.PI / 3] : [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4];
+    for (const a of legs) ctx.fillRect(Math.cos(a) * sp.trailLen - 1.2, Math.sin(a) * sp.trailLen - 1.2, 2.4, 2.4);
+  }
+  // Road wheels on the axle
+  if (sp.wheel > 0) {
+    for (const side of [-1, 1]) {
+      ctx.fillStyle = pal.trackColor;
+      ctx.fillRect(-sp.wheel, side * sp.track - 1.2, sp.wheel * 2, 2.4);
+      if (sp.spokedWheels) {
+        ctx.strokeStyle = 'rgba(176, 190, 197, 0.5)';
+        ctx.lineWidth = 0.5;
+        ctx.beginPath();
+        for (let k = -2; k <= 2; k++) {
+          ctx.moveTo(k * sp.wheel * 0.4, side * sp.track - 1.2);
+          ctx.lineTo(k * sp.wheel * 0.4, side * sp.track + 1.2);
+        }
+        ctx.stroke();
+      }
+    }
+    ctx.strokeStyle = pal.hullStroke;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, -sp.track);
+    ctx.lineTo(0, sp.track);
+    ctx.stroke();
+  }
+  // Cradle / breech block
+  ctx.fillStyle = pal.turretFill;
+  ctx.strokeStyle = pal.hullStroke;
+  ctx.lineWidth = 0.9;
+  ctx.fillRect(-3, -1.8, 5, 3.6);
+  ctx.strokeRect(-3, -1.8, 5, 3.6);
+  // Gun shield
+  if (sp.shield) {
+    ctx.fillStyle = pal.hullHighlight;
+    ctx.fillRect(2, -sp.shield, 1.2, sp.shield * 2);
+  }
+  // Barrel(s) and recuperator
+  const n = sp.barrels ?? 1;
+  ctx.strokeStyle = pal.barrelColor;
+  ctx.lineWidth = sp.gunW;
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const y = (i - (n - 1) / 2) * 1.8;
+    ctx.moveTo(1, y);
+    ctx.lineTo(1 + sp.gunLen, y);
+  }
+  ctx.stroke();
+  if (n === 1) {
+    ctx.strokeStyle = pal.hullHighlight;
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(2, sp.gunW * 0.9);
+    ctx.lineTo(1 + sp.gunLen * 0.45, sp.gunW * 0.9);
+    ctx.stroke();
+    drawMuzzle(ctx, 1 + sp.gunLen, 0, sp.gunW, sp.muzzle, pal.barrelColor);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Infantry
+// ════════════════════════════════════════════════════════════════════════════
+type InfantryWeapon = 'rifle' | 'long_rifle' | 'smg' | 'bar' | 'lmg' | 'rpg' | 'at4' | 'm79' | 'flame' | 'satchel' | 'radio' | 'knee_mortar';
+
+interface InfantrySpec {
+  match: RegExp;
+  /** Helmet / headgear colour: M1, IJA Type 90, Soviet SSh-40/68, PASGT, NVA pith helmet. */
+  helmet: 'm1' | 'ija' | 'soviet' | 'pasgt' | 'pith';
+  men: { x: number; y: number; w: InfantryWeapon }[];
+  /** Concealment foliage (ambush) and prone / crawling posture (sappers). */
+  foliage?: boolean;
+  prone?: boolean;
+  /** Air assault: helicopter-landing marker arc. */
+  airAssault?: boolean;
+}
+
+const HELMET_COLORS: Record<InfantrySpec['helmet'], string> = {
+  m1: '#556B2F',
+  ija: '#8D7B4A',
+  soviet: '#4E5B31',
+  pasgt: '#5D5A3A',
+  pith: '#A1887F',
+};
+
+const WEDGE4 = (a: InfantryWeapon, b: InfantryWeapon, c: InfantryWeapon, d: InfantryWeapon) => [
+  { x: 4, y: 0, w: a }, { x: 0, y: -4.2, w: b }, { x: 0, y: 4.2, w: c }, { x: -4.5, y: 0, w: d },
+];
+
+const INFANTRY_SPECS: InfantrySpec[] = [
+  // USMC 1944-45 fireteam: leader, BAR man, two riflemen (1945 adds an M2 flamethrower)
+  { match: /usmc_rifle_42/, helmet: 'm1', men: WEDGE4('rifle', 'bar', 'rifle', 'rifle') },
+  { match: /usmc_rifle_45/, helmet: 'm1', men: WEDGE4('rifle', 'bar', 'flame', 'rifle') },
+  // Korea: M1 Garand / BAR / radio
+  { match: /korea/, helmet: 'm1', men: WEDGE4('rifle', 'bar', 'rifle', 'radio') },
+  // 1965: M14/M16, M60 machine gun, M79 grenadier
+  { match: /air_assault_65/, helmet: 'm1', airAssault: true, men: WEDGE4('rifle', 'lmg', 'm79', 'radio') },
+  { match: /platoon_65/, helmet: 'm1', men: WEDGE4('rifle', 'lmg', 'm79', 'rifle') },
+  // 1983: PASGT, M16A2, M249 SAW, AT4
+  { match: /rifle_83/, helmet: 'pasgt', men: WEDGE4('rifle', 'lmg', 'at4', 'rifle') },
+  // IJA: Arisaka rifles, Type 96 LMG, Type 89 knee mortar
+  { match: /opfor_infantry_42/, helmet: 'ija', men: WEDGE4('long_rifle', 'lmg', 'long_rifle', 'long_rifle') },
+  { match: /opfor_infantry_45/, helmet: 'ija', men: WEDGE4('long_rifle', 'lmg', 'knee_mortar', 'long_rifle') },
+  // Soviet / Warsaw Pact: AK, PK machine gun, RPG-7
+  { match: /coldwar_infantry|motor_rifle/, helmet: 'soviet', men: WEDGE4('rifle', 'lmg', 'rpg', 'rifle') },
+  // NVA / VC sappers: prone, satchel charges, AK
+  { match: /sapper/, helmet: 'pith', prone: true, men: [{ x: 4, y: -2.5, w: 'satchel' }, { x: 2, y: 3, w: 'satchel' }, { x: -3, y: 0, w: 'rifle' }] },
+  // Ambush: concealed, RPG and rifles
+  { match: /ambush/, helmet: 'pith', foliage: true, men: [{ x: 3, y: -3, w: 'rpg' }, { x: 3, y: 3, w: 'rifle' }, { x: -2, y: 0, w: 'lmg' }] },
+  // Patrol: file formation
+  { match: /patrol/, helmet: 'pith', men: [{ x: 6, y: 0, w: 'rifle' }, { x: 1.5, y: 0.8, w: 'smg' }, { x: -3, y: -0.6, w: 'rifle' }, { x: -7.5, y: 0.4, w: 'rpg' }] },
+];
+const DEFAULT_SQUAD: InfantrySpec = { match: /./, helmet: 'm1', men: [{ x: 3.8, y: 0, w: 'rifle' }, { x: -2.4, y: -3.9, w: 'rifle' }, { x: -2.4, y: 3.9, w: 'rifle' }] };
+
+function drawSoldier(ctx: CanvasRenderingContext2D, x: number, y: number, w: InfantryWeapon, helmet: string, prone: boolean, pal: VehiclePalette) {
+  ctx.save();
+  ctx.translate(x, y);
+  // Weapon first (under the body), pointing forward (+x) from the right shoulder
+  const wy = 0.9;
+  ctx.strokeStyle = pal.barrelColor;
+  ctx.fillStyle = pal.barrelColor;
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  switch (w) {
+    case 'rifle': ctx.moveTo(0.5, wy); ctx.lineTo(5, wy); break;
+    case 'long_rifle': ctx.moveTo(0.5, wy); ctx.lineTo(6, wy); break;
+    case 'smg': ctx.moveTo(0.5, wy); ctx.lineTo(3.6, wy); break;
+    case 'bar':
+    case 'lmg':
+      ctx.lineWidth = 1.3;
+      ctx.moveTo(0.5, wy); ctx.lineTo(w === 'lmg' ? 6.2 : 5.6, wy);
+      // bipod
+      ctx.moveTo(4.6, wy); ctx.lineTo(5.4, wy - 1.2);
+      ctx.moveTo(4.6, wy); ctx.lineTo(5.4, wy + 1.2);
+      break;
+    case 'rpg':
+      ctx.lineWidth = 1.2;
+      ctx.moveTo(-2.5, wy); ctx.lineTo(3.5, wy);
+      ctx.stroke();
+      ctx.beginPath();
+      // conical PG-7 warhead
+      ctx.moveTo(3.5, wy - 1.2); ctx.lineTo(6, wy); ctx.lineTo(3.5, wy + 1.2); ctx.closePath();
+      ctx.fill();
+      break;
+    case 'at4':
+      ctx.lineWidth = 1.6;
+      ctx.moveTo(-2, wy); ctx.lineTo(4, wy);
+      break;
+    case 'm79':
+      ctx.lineWidth = 1.7;
+      ctx.moveTo(0.5, wy); ctx.lineTo(3.4, wy);
+      break;
+    case 'flame':
+      ctx.moveTo(0.5, wy); ctx.lineTo(4.6, wy);
+      break;
+    case 'knee_mortar':
+      ctx.lineWidth = 1.5;
+      ctx.moveTo(0.5, wy); ctx.lineTo(2.8, wy);
+      break;
+    case 'radio':
+    case 'satchel':
+      ctx.moveTo(0.5, wy); ctx.lineTo(4.2, wy);
+      break;
+  }
+  ctx.stroke();
+  // Body: shoulders (prone soldiers are stretched out behind)
+  ctx.fillStyle = pal.hullFill;
+  ctx.strokeStyle = pal.hullStroke;
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  if (prone) ctx.ellipse(-1.6, 0, 3.2, 1.6, 0, 0, Math.PI * 2);
+  else ctx.ellipse(-0.3, 0, 1.4, 2.6, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // Back-mounted equipment
+  if (w === 'flame') {
+    ctx.fillStyle = '#8D6E63';
+    ctx.fillRect(-2.6, -1.4, 1.2, 1.2);
+    ctx.fillRect(-2.6, 0.2, 1.2, 1.2);
+  } else if (w === 'radio') {
+    ctx.fillStyle = '#455A64';
+    ctx.fillRect(-2.6, -1, 1.4, 2);
+    ctx.strokeStyle = '#CFD8DC';
+    ctx.lineWidth = 0.4;
+    ctx.beginPath();
+    ctx.moveTo(-2.2, -0.8);
+    ctx.lineTo(-5.5, -2.6);
+    ctx.stroke();
+  } else if (w === 'satchel') {
+    ctx.fillStyle = '#795548';
+    ctx.fillRect(-1, 1.8, 1.8, 1.4);
+  }
+  // Head / helmet
+  ctx.fillStyle = helmet;
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.arc(prone ? 1.2 : 0, 0, 1.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawSquad(ctx: CanvasRenderingContext2D, sp: InfantrySpec, _isPlayer: boolean, pal: VehiclePalette) {
+  if (sp.foliage) {
+    // Concealment: brush and palm fronds around the team
+    ctx.fillStyle = 'rgba(46, 125, 50, 0.55)';
+    for (const [fx, fy, fr] of [[-5, -5, 3.4], [5, -6, 3], [-6, 5, 3.2], [6, 5.5, 3.6], [0, -8, 2.6], [0, 8, 2.8]] as const) {
+      ctx.beginPath();
+      ctx.arc(fx, fy, fr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else if (sp.airAssault) {
+    ctx.strokeStyle = '#80DEEA';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(1, 0, 8, -Math.PI * 0.55, Math.PI * 0.55);
+    ctx.stroke();
+  } else if (!sp.prone) {
+    // Hasty fighting position: sandbag / earth arc facing the enemy
+    ctx.strokeStyle = 'rgba(188, 170, 164, 0.75)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(2.5, 0, 8, -Math.PI * 0.5, Math.PI * 0.5);
+    ctx.stroke();
+  }
+  const helmet = HELMET_COLORS[sp.helmet];
+  for (const m of sp.men) drawSoldier(ctx, m.x, m.y, m.w, helmet, !!sp.prone, pal);
+}
+
+function drawMortarTeam(ctx: CanvasRenderingContext2D, _isPlayer: boolean, pal: VehiclePalette) {
+  // Baseplate, tube on its bipod, ammunition boxes and a two-man crew
+  ctx.fillStyle = '#37474F';
+  ctx.beginPath();
+  ctx.arc(-1, 0, 2.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = pal.barrelColor;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(-1, 0);
+  ctx.lineTo(5, 0);
+  ctx.stroke();
+  ctx.strokeStyle = '#90A4AE';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(3.2, 0);
+  ctx.lineTo(4.4, -2.6);
+  ctx.moveTo(3.2, 0);
+  ctx.lineTo(4.4, 2.6);
+  ctx.stroke();
+  ctx.fillStyle = '#6D4C41';
+  ctx.fillRect(-7, -6.5, 3, 2);
+  ctx.fillRect(-7, 4.5, 3, 2);
+  const helmet = HELMET_COLORS.soviet;
+  drawSoldier(ctx, -3.5, -3.6, 'smg', helmet, false, pal);
+  drawSoldier(ctx, -3.5, 3.6, 'smg', helmet, false, pal);
+}
+
 export function drawGroundSilhouette(
   ctx: CanvasRenderingContext2D,
   unitType: string,
@@ -74,8 +842,9 @@ export function drawGroundSilhouette(
     t.includes('pt76') ||
     t.includes('type95') ||
     t.includes('type97') ||
-    t.includes('m4') ||
-    t.includes('m3') ||
+    // Exact model tags: a bare 'm4' / 'm3' also matched the M44 SPG, M42 Duster and others
+    t.includes('armor_m4') ||
+    t.includes('armor_m3') ||
     t.includes('ontos') ||
     t.includes('su100') ||
     t.includes('su_100');
@@ -97,7 +866,8 @@ export function drawGroundSilhouette(
     t.includes('howitzer') ||
     t.includes('155') ||
     t.includes('105') ||
-    t.includes('zu23');
+    t.includes('zu23') ||
+    t.includes('ks19');
 
   const isIfvApc =
     t.includes('lav') ||
@@ -112,11 +882,13 @@ export function drawGroundSilhouette(
 
   const isAirDefense =
     t.includes('chaparral') ||
+    t.includes('duster') ||
     t.includes('sam') ||
     t.includes('vads') ||
     t.includes('m163') ||
     t.includes('flak') ||
-    t.includes('aa') ||
+    // 'aa' as a whole word only: 'aav7a1' (amphibious tractor) must not count as air defence
+    /(^|_)aa(_|$)/.test(t) ||
     t.includes('shilka') ||
     t.includes('tunguska') ||
     t.includes('zsu') ||
@@ -127,7 +899,8 @@ export function drawGroundSilhouette(
     t.includes('sa15') ||
     t.includes('kub') ||
     t.includes('buk') ||
-    t.includes('tor') ||
+    // whole-word 'tor': 'opfor_motor_rifle_83' (motorised infantry) contains 'tor'
+    /(^|_)tor(_|$)/.test(t) ||
     t.includes('osa') ||
     t.includes('strela');
 
@@ -273,10 +1046,24 @@ export function drawGroundSilhouette(
     const isOntos = t.includes('ontos');
     const isPatton = t.includes('m60') || t.includes('m48') || t.includes('patton');
 
-    // Tracks
+    const spec = TANK_SPECS.find((sp) => sp.match.test(t));
+    const hl = spec?.hullL ?? 22;
+    const hw = spec?.hullW ?? 11;
+
+    // Tracks with road-wheel / track-link ticks
     ctx.fillStyle = trackColor;
-    ctx.fillRect(-12, -8, 24, 3);
-    ctx.fillRect(-12, 5, 24, 3);
+    ctx.fillRect(-hl / 2 - 1, -hw / 2 - 2.5, hl + 2, 3);
+    ctx.fillRect(-hl / 2 - 1, hw / 2 - 0.5, hl + 2, 3);
+    ctx.strokeStyle = 'rgba(176, 190, 197, 0.35)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    for (let x = -hl / 2; x <= hl / 2; x += 2.4) {
+      ctx.moveTo(x, -hw / 2 - 2.5);
+      ctx.lineTo(x, -hw / 2 + 0.5);
+      ctx.moveTo(x, hw / 2 - 0.5);
+      ctx.lineTo(x, hw / 2 + 2.5);
+    }
+    ctx.stroke();
 
     // Hull geometry
     ctx.fillStyle = hullFill;
@@ -285,20 +1072,30 @@ export function drawGroundSilhouette(
     if (isIs3 || isPt76) {
       // Pike-nose IS-3 or pointed boat bow PT-76
       ctx.beginPath();
-      ctx.moveTo(13.5, 0);
-      ctx.lineTo(8.5, -5.4);
-      ctx.lineTo(-11, -5.4);
-      ctx.lineTo(-11, 5.4);
-      ctx.lineTo(8.5, 5.4);
+      ctx.moveTo(hl / 2 + 2.5, 0);
+      ctx.lineTo(hl / 2 - 2.5, -hw / 2);
+      ctx.lineTo(-hl / 2, -hw / 2);
+      ctx.lineTo(-hl / 2, hw / 2);
+      ctx.lineTo(hl / 2 - 2.5, hw / 2);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
     } else {
-      ctx.fillRect(-11, -5.5, 22, 11);
-      ctx.strokeRect(-11, -5.5, 22, 11);
+      // Sloped glacis (T-34 / Sherman / postwar MBTs) shown as a chamfered front
+      const ch = spec?.glacis ?? 0;
+      ctx.beginPath();
+      ctx.moveTo(hl / 2, -hw / 2 + ch);
+      ctx.lineTo(hl / 2 - ch, -hw / 2);
+      ctx.lineTo(-hl / 2, -hw / 2);
+      ctx.lineTo(-hl / 2, hw / 2);
+      ctx.lineTo(hl / 2 - ch, hw / 2);
+      ctx.lineTo(hl / 2, hw / 2 - ch);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
       // Engine deck louver accent
       ctx.fillStyle = hullHighlight;
-      ctx.fillRect(-9.5, -3.6, 5.5, 7.2);
+      ctx.fillRect(-hl / 2 + 1.5, -hw / 2 + 1.9, hl * 0.25, hw - 3.8);
     }
 
     // Soviet external rear fuel drums (T-34 / T-55 / T-72 / T-80)
@@ -368,116 +1165,87 @@ export function drawGroundSilhouette(
       ctx.fillStyle = barrelColor;
       ctx.fillRect(10, -1.4, 3, 2.8);
     } else {
-      // Cast dome turret (T-72/T-80 ERA, M60 RISE, T-34, Sherman)
+      // Turret from the historical spec table (shape, position, size, gun)
+      const sp = spec ?? DEFAULT_TANK;
       if (isSovietEra || t.includes('rise')) {
         // Glacis Kontakt-1 / RISE ERA armor bricks
         ctx.fillStyle = turretFill;
-        ctx.fillRect(8.5, -4.5, 2.2, 9);
+        ctx.fillRect(hl / 2 - 2.5, -hw / 2 + 1, 2.2, hw - 2);
       }
       ctx.fillStyle = turretFill;
       ctx.strokeStyle = hullStroke;
+      ctx.lineWidth = 1.1;
       ctx.beginPath();
-      ctx.ellipse(-0.5, 0, isPt76 ? 4.4 : 5.4, isPt76 ? 3.8 : 4.4, 0, 0, Math.PI * 2);
+      if (sp.turret === 'needle') {
+        // M60A1 long needle-nose turret
+        ctx.moveTo(sp.turretX + sp.turretRx, 0);
+        ctx.quadraticCurveTo(sp.turretX + sp.turretRx * 0.4, -sp.turretRy, sp.turretX - sp.turretRx * 0.7, -sp.turretRy);
+        ctx.lineTo(sp.turretX - sp.turretRx, -sp.turretRy * 0.7);
+        ctx.lineTo(sp.turretX - sp.turretRx, sp.turretRy * 0.7);
+        ctx.lineTo(sp.turretX - sp.turretRx * 0.7, sp.turretRy);
+        ctx.quadraticCurveTo(sp.turretX + sp.turretRx * 0.4, sp.turretRy, sp.turretX + sp.turretRx, 0);
+      } else if (sp.turret === 'boxy') {
+        // Riveted / welded box turret (Type 95, Type 97, M3)
+        ctx.rect(sp.turretX - sp.turretRx, sp.turretY - sp.turretRy, sp.turretRx * 2, sp.turretRy * 2);
+      } else {
+        // Cast round / egg / flat-dome turret
+        ctx.ellipse(sp.turretX, sp.turretY, sp.turretRx, sp.turretRy, 0, 0, Math.PI * 2);
+      }
       ctx.fill();
       ctx.stroke();
+      // Commander's cupola
+      ctx.fillStyle = hullHighlight;
+      ctx.beginPath();
+      ctx.arc(sp.turretX - sp.turretRx * 0.35, sp.turretY + (sp.turretY ? 0 : -sp.turretRy * 0.35), Math.max(1, sp.turretRy * 0.32), 0, Math.PI * 2);
+      ctx.fill();
+
       if (isSovietEra) {
         // Turret front ERA wedge blocks
         ctx.strokeStyle = '#FFB300';
         ctx.lineWidth = 1.2;
         ctx.beginPath();
-        ctx.arc(0, 0, 5.2, -0.75, 0.75);
+        ctx.arc(sp.turretX, 0, sp.turretRx * 0.95, -0.75, 0.75);
         ctx.stroke();
       } else if (isPatton) {
-        // M60 / M48 xenon IR searchlight box on mantlet
+        // M48 / M60 xenon IR searchlight box on mantlet
         ctx.fillStyle = '#FFE082';
-        ctx.fillRect(3.2, -3.2, 2.2, 1.8);
+        ctx.fillRect(sp.turretX + sp.turretRx * 0.5, sp.turretY - sp.turretRy * 0.75, 2.2, 1.8);
       }
-      // Cannon barrel + bore evacuator / muzzle brake
+
+      // Gun: length and thickness from caliber; bore evacuator / muzzle brake where fitted
+      const gx = sp.turretX + sp.turretRx * 0.8;
       ctx.strokeStyle = barrelColor;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = sp.gunW;
       ctx.beginPath();
-      ctx.moveTo(4, 0);
-      ctx.lineTo(isSovietEra || isIs3 ? 16.8 : 15.2, 0);
+      ctx.moveTo(gx, sp.turretY);
+      ctx.lineTo(gx + sp.gunLen, sp.turretY);
       ctx.stroke();
-      ctx.fillStyle = isIs3 ? '#FFD54F' : barrelColor;
-      ctx.fillRect(isSovietEra ? 9.5 : 13.8, -1.2, 2.2, 2.4);
+      ctx.fillStyle = barrelColor;
+      if (sp.evacuatorAt !== undefined) {
+        ctx.fillRect(gx + sp.gunLen * sp.evacuatorAt - 1, sp.turretY - sp.gunW * 0.75, 2.2, sp.gunW * 1.5);
+      }
+      if (sp.muzzleBrake) {
+        ctx.fillStyle = isIs3 ? '#FFD54F' : barrelColor;
+        ctx.fillRect(gx + sp.gunLen - 1.2, sp.turretY - sp.gunW * 0.85, 1.8, sp.gunW * 1.7);
+      }
     }
   } else if (isSpg) {
-    const isOpenTop = t.includes('priest') || t.includes('hummel');
-    ctx.fillStyle = trackColor;
-    ctx.fillRect(-11, -7.5, 22, 2.8);
-    ctx.fillRect(-11, 4.7, 22, 2.8);
-    ctx.fillStyle = hullFill;
-    ctx.strokeStyle = hullStroke;
-    ctx.lineWidth = 1.2;
-    ctx.fillRect(-10, -5, 20, 10);
-    ctx.strokeRect(-10, -5, 20, 10);
-    // Turret / Fighting compartment
-    ctx.fillStyle = isOpenTop ? '#1E272E' : turretFill;
-    ctx.strokeStyle = hullStroke;
-    ctx.fillRect(-8.5, -4, 11.5, 8);
-    ctx.strokeRect(-8.5, -4, 11.5, 8);
-    // Recoil spades at rear
-    ctx.fillStyle = '#455A64';
-    ctx.fillRect(-11.5, -4.5, 1.5, 2.2);
-    ctx.fillRect(-11.5, 2.3, 1.5, 2.2);
-    // Long heavy howitzer barrel + muzzle brake
-    ctx.strokeStyle = '#FFD54F';
-    ctx.lineWidth = 2.2;
-    ctx.beginPath();
-    ctx.moveTo(2, 0);
-    ctx.lineTo(17.5, 0);
-    ctx.stroke();
-    ctx.fillStyle = '#FFE082';
-    ctx.fillRect(15.6, -1.5, 2.4, 3);
+    drawSpg(ctx, SPG_SPECS.find((sp) => sp.match.test(t)) ?? DEFAULT_SPG, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
   } else if (isTowed) {
-    const isZu23 = t.includes('zu23');
-    ctx.fillStyle = trackColor;
-    ctx.fillRect(-2, -7.5, 5, 2.5);
-    ctx.fillRect(-2, 5, 5, 2.5);
-    ctx.strokeStyle = hullStroke;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(-12, -5.5);
-    ctx.moveTo(0, 0);
-    ctx.lineTo(-12, 5.5);
-    ctx.stroke();
-    ctx.strokeStyle = '#B0BEC5';
-    ctx.lineWidth = 2.2;
-    ctx.beginPath();
-    ctx.moveTo(2, -5.5);
-    ctx.lineTo(2, 5.5);
-    ctx.stroke();
-    if (isZu23) {
-      ctx.strokeStyle = '#80DEEA';
-      ctx.lineWidth = 1.4;
-      ctx.beginPath();
-      ctx.moveTo(1, -1.6);
-      ctx.lineTo(14, -1.6);
-      ctx.moveTo(1, 1.6);
-      ctx.lineTo(14, 1.6);
-      ctx.stroke();
-    } else {
-      ctx.strokeStyle = '#FFD54F';
-      ctx.lineWidth = 2.2;
-      ctx.beginPath();
-      ctx.moveTo(1, 0);
-      ctx.lineTo(16.5, 0);
-      ctx.stroke();
-      ctx.fillStyle = '#FFE082';
-      ctx.fillRect(15, -1.3, 2, 2.6);
-    }
+    drawTowedGun(ctx, TOWED_SPECS.find((sp) => sp.match.test(t)) ?? DEFAULT_TOWED, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
+  } else if (AD_SPECS.some((sp) => sp.match.test(t))) {
+    drawArmoredCarrier(ctx, AD_SPECS.find((sp) => sp.match.test(t))!, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
   } else if (isAirDefense) {
     const isTunguska = t.includes('tunguska');
     const isShilka = t.includes('shilka');
-    const isZsu57 = t.includes('zsu57');
+    // M42 Duster shares the ZSU-57-2 layout: open-topped turret with twin AA guns on a light-tank chassis
+    const isZsu57 = t.includes('zsu57') || t.includes('duster');
     const isVads = t.includes('vads') || t.includes('m163');
     const isOsa = t.includes('sa8') || t.includes('osa');
     const isStrela = t.includes('sa9') || t.includes('strela');
     const isKub = t.includes('sa6') || t.includes('kub');
     const isBuk = t.includes('sa11') || t.includes('buk');
-    const isTor = t.includes('sa15') || t.includes('tor');
+    const isTor = t.includes('sa15') || /(^|_)tor(_|$)/.test(t);
     const isSamRails = t.includes('chaparral') || (!isTunguska && !isShilka && !isZsu57 && !isVads && (t.includes('sam') || isKub || isBuk || isOsa || isStrela || isTor));
 
     if (isOsa || isStrela) {
@@ -605,66 +1373,7 @@ export function drawGroundSilhouette(
       }
     }
   } else if (isIfvApc) {
-    const isWheeled = t.includes('lav') || t.includes('btr');
-    const isAmphib = t.includes('lvt') || t.includes('aav') || t.includes('lvtp');
-    const isSamAd = t.includes('lav_ad');
-    const isBmp = t.includes('bmp');
-
-    if (isWheeled) {
-      ctx.fillStyle = trackColor;
-      for (const wx of [-8, -2.8, 2.8, 8]) {
-        ctx.fillRect(wx - 1.6, -7.2, 3.2, 2);
-        ctx.fillRect(wx - 1.6, 5.2, 3.2, 2);
-      }
-    } else {
-      ctx.fillStyle = trackColor;
-      ctx.fillRect(-11, -7.2, 22, 2.6);
-      ctx.fillRect(-11, 4.6, 22, 2.6);
-    }
-
-    ctx.fillStyle = isAmphib ? '#173A4A' : hullFill;
-    ctx.strokeStyle = isAmphib ? '#4FC3F7' : hullStroke;
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(11, -4.5);
-    ctx.lineTo(13.5, 0);
-    ctx.lineTo(11, 4.5);
-    ctx.lineTo(-11, 4.8);
-    ctx.lineTo(-11, -4.8);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    if (isAmphib) {
-      // Bow wave-deflector trim vane + rear waterjet shrouds
-      ctx.strokeStyle = '#80DEEA';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(11.5, -4);
-      ctx.lineTo(11.5, 4);
-      ctx.stroke();
-      ctx.fillStyle = '#263238';
-      ctx.fillRect(-12, -3.5, 1.8, 2.2);
-      ctx.fillRect(-12, 1.3, 1.8, 2.2);
-    }
-
-    // Turret / Autocannon / Stinger or TOW Pod
-    ctx.fillStyle = turretFill;
-    ctx.beginPath();
-    ctx.arc(isBmp ? 2 : 1, 0, 3.4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.strokeStyle = isSamAd ? '#80DEEA' : barrelColor;
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.moveTo(3, 0);
-    ctx.lineTo(isBmp ? 12.5 : 11, 0);
-    ctx.stroke();
-    if (isSamAd || t.includes('bradley') || isBmp) {
-      ctx.fillStyle = '#FFD54F';
-      ctx.fillRect(-0.5, 3, 4.5, 2.1);
-    }
+    drawArmoredCarrier(ctx, IFV_SPECS.find((sp) => sp.match.test(t)) ?? DEFAULT_IFV, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
   } else if (t.includes('engineer')) {
     ctx.fillStyle = trackColor;
     ctx.fillRect(-9, -6.5, 18, 2.5);
@@ -701,57 +1410,10 @@ export function drawGroundSilhouette(
     ctx.arc(-2, 3.5, 2.2, 0, Math.PI * 2);
     ctx.fill();
   } else if (t.includes('mortar')) {
-    ctx.strokeStyle = '#BCAAA4';
-    ctx.lineWidth = 1.8;
-    ctx.beginPath();
-    ctx.arc(1, 0, 6.5, -Math.PI * 0.6, Math.PI * 0.6);
-    ctx.stroke();
-    ctx.fillStyle = '#37474F';
-    ctx.beginPath();
-    ctx.arc(0, 0, 2.8, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#FFD54F';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(7, 0);
-    ctx.stroke();
-    ctx.fillStyle = hullStroke;
-    ctx.beginPath();
-    ctx.arc(-3.5, -3.2, 2.1, 0, Math.PI * 2);
-    ctx.arc(-3.5, 3.2, 2.1, 0, Math.PI * 2);
-    ctx.fill();
+    drawMortarTeam(ctx, isPlayer, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
   } else {
-    // Infantry / Air Assault / Recon Squad: 3-man directional fireteam + packs + sandbag arc
-    ctx.strokeStyle = t.includes('air_assault') ? '#80DEEA' : '#BCAAA4';
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.arc(2.5, 0, 7.2, -Math.PI * 0.55, Math.PI * 0.55);
-    ctx.stroke();
-    const soldiers: Array<[number, number]> = [
-      [3.8, 0],
-      [-2.4, -3.9],
-      [-2.4, 3.9],
-    ];
-    for (const [sx, sy] of soldiers) {
-      ctx.strokeStyle = barrelColor;
-      ctx.lineWidth = 1.15;
-      ctx.beginPath();
-      ctx.moveTo(sx, sy);
-      ctx.lineTo(sx + 5, sy);
-      ctx.stroke();
-      ctx.fillStyle = hullHighlight;
-      ctx.fillRect(sx - 3.2, sy - 1.3, 1.5, 2.6);
-      ctx.fillStyle = hullFill;
-      ctx.strokeStyle = hullStroke;
-      ctx.lineWidth = 1.1;
-      ctx.beginPath();
-      ctx.arc(sx, sy, 2.3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-    }
+    drawSquad(ctx, INFANTRY_SPECS.find((sp) => sp.match.test(t)) ?? DEFAULT_SQUAD, isPlayer, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
   }
-
   ctx.restore();
 }
 
@@ -1240,6 +1902,7 @@ function drawAircraftPreview(
     m === 'f4b' ||
     m === 'f4j' ||
     m === 'f4e' ||
+    m === 'f4f_phantom' ||
     m === 'f8' ||
     m === 'a7' ||
     m === 'f105' ||

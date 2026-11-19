@@ -7,7 +7,6 @@ import {
   PAYLOAD_CATALOG,
   AirWingLoadout,
   Island,
-  IslandStronghold,
   Installation,
   InstallationType,
   Projectile,
@@ -35,6 +34,23 @@ import {
   AshmFlightProfile,
   FleetUpgrades,
 } from '../types/game';
+import { getAlliedSagFleet } from './alliedSagFleets';
+import { getNavalGunPerformance, getNavalLauncherRange } from './navalGuns';
+import { getCatalogRole } from './airWingCatalog';
+import { AIR_WEAPON_RANGE, getInstallationRange } from './rangeScale';
+import { getAircraftSpeed, isSupersonicMissile, MISSILE_SPEED, shipMapSpeed, SPECIAL_ATTACK_SPEED } from './speedScale';
+import { getAircraftBaseHealth, getAircraftBaseSpeed, getAircraftGunRounds } from './aircraftStats';
+
+/** Piston and early-jet fighters that count as fighters even when flagged with another role. */
+const GUN_FIGHTER_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>(['f4f', 'f6f', 'f4u', 'f8f', 'f9f', 'f2h', 'p51', 'p47', 'p38', 'p40', 'f86']);
+/** Bombers and strike aircraft with a defensive rear / tail gunner. */
+const TAIL_GUNNER_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>(['b17', 'b24', 'b29', 'a20', 'a26', 'sbd', 'sb2c', 'tbd', 'tbf', 'val', 'kate', 'judy', 'jill', 'g4m', 'tu14', 'il10']);
+/** BLUFOR / allied fighters that engage with air-to-air missiles. */
+const FRIENDLY_MISSILE_FIGHTER_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>(['f14a', 'f15a', 'f16a', 'fa18a', 'f4e', 'f4b', 'f4j', 'f8', 'tornado_adv', 'f4f_phantom', 'mirage2000', 'mirage3', 'hunter_fga9']);
+/** Aircraft armed with a rotary / high-rate internal cannon. */
+const ROTARY_CANNON_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>(['f14a', 'f15a', 'f16a', 'fa18a', 'su27', 'mig29a', 'f4e', 'f105', 'a7', 'ah1', 'f8', 'mig21']);
+/** Attack / support aircraft able to strafe ground targets at low level. */
+const GROUND_STRAFING_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>(['ah1', 'ov10', 'a4', 'a6a', 'a7', 'f105', 'ad1', 'a20', 'a26', 'su7', 'il10', 'p47']);
 
 type CombatTargetEntity = Ship | Aircraft | GroundUnit | Installation;
 type RadarTargetEntity = Installation | Ship | GroundUnit;
@@ -47,8 +63,6 @@ import {
   createGroundUnit,
   createLCVP,
   createLST,
-  createLSMR,
-  createCVE,
   createTokyoExpressDD,
   createConvoyEscortShip,
   createPlayerBattleship,
@@ -80,7 +94,6 @@ import {
   createAustinLPD,
   createLCAC,
   createNewportLST,
-  createKievCVHG,
   createKirovCGN,
   createSovremennyDD,
   createUdaloyDD,
@@ -208,7 +221,7 @@ export class GameEngine {
   private navGrid: NavalNavigationGrid | null = null;
   private sonarLogCooldowns: Record<string, number> = {};
 
-  private getAshmStructuralHealth(variant?: AshmVariant, speed: number = 500): number {
+  private getAshmStructuralHealth(variant?: AshmVariant, speed?: number): number {
     switch (variant) {
       case 'p700_granit':
         return 225;
@@ -230,7 +243,7 @@ export class GameEngine {
       case 'harpoon_agm84':
         return 130;
       default:
-        return speed > 600 ? 185 : 130;
+        return isSupersonicMissile(speed) ? 185 : 130;
     }
   }
 
@@ -244,7 +257,7 @@ export class GameEngine {
     if (v === 'exocet_mm40' || v === 'exocet_mm38') return 0.52;
     if (v === 'harpoon_rgm84' || v === 'harpoon_ugm84' || v === 'harpoon_agm84') return 0.60;
     if (v === 'p15_styx' || v === 'ksr5_kelt') return 0.78;
-    return (proj.speed || 500) > 580 ? 0.45 : 0.72;
+    return isSupersonicMissile(proj.speed) ? 0.45 : 0.72;
   }
 
   private handleAshmLeaderDestroyed(leader: Projectile) {
@@ -514,6 +527,7 @@ export class GameEngine {
     const generated = generateSector(sectorNum, era);
     this.worldSize = generated.worldSize;
     this.islands = generated.islands;
+    this.applyHistoricalInstallationRanges();
     this.friendlyBase = generated.friendlyBase;
     this.playerShips = generated.playerShips;
     this.alliedShips = [];
@@ -1526,14 +1540,14 @@ export class GameEngine {
     const ids = specificUnitIds || this.selectedUnitIds;
     let targetFighters = this.aircraft.filter(
       (a) => a.side === 'player' && a.state !== 'shot_down' && ids.includes(a.id) &&
-        (a.role === 'fighter' || ['f4f', 'f6f', 'f4u', 'f8f', 'f9f', 'f2h', 'p51', 'p47', 'p38', 'p40', 'f86'].includes(a.model))
+        (a.role === 'fighter' || GUN_FIGHTER_MODELS.has(a.model))
     );
 
     // If no specific fighters selected, command all friendly fighters currently airborne
     if (targetFighters.length === 0) {
       targetFighters = this.aircraft.filter(
         (a) => a.side === 'player' && a.state !== 'shot_down' &&
-          (a.role === 'fighter' || ['f4f', 'f6f', 'f4u', 'f8f', 'f9f', 'f2h', 'p51', 'p47', 'p38', 'p40', 'f86'].includes(a.model))
+          (a.role === 'fighter' || GUN_FIGHTER_MODELS.has(a.model))
       );
     }
 
@@ -1542,7 +1556,7 @@ export class GameEngine {
       return;
     }
 
-    targetFighters.forEach((plane, idx) => {
+    targetFighters.forEach((plane) => {
       plane.order = {
         type: 'patrol',
         patrolOrigin: { ...origin },
@@ -1616,26 +1630,7 @@ export class GameEngine {
     flagship.carrierPlanes.ready[model] -= actualCount;
 
     const sqId = `sq-${model}-${Date.now()}`;
-    const role: AircraftRole =
-      model === 'ad3w' || model === 'e1'
-        ? 'aew'
-        : model === 'ho3s1' || model === 'uh2'
-        ? 'rescue'
-        : model === 'ad1' || model === 'a4' || model === 'a6a' || model === 'a6b_weasel' || model === 'a1h' || model === 'a37b' || model === 'p39d'
-        ? 'attacker'
-        : model === 'b17_late' || model === 'b25'
-        ? 'level_bomber'
-        : model === 'af_guardian' || model === 's2'
-        ? 'torpedo_bomber'
-        : model === 'c1' || model === 'c2a' || model === 'c130' || model === 'c47'
-        ? 'transport'
-        : model === 'f4f' || model === 'f6f' || model === 'f4u' || model === 'f8f' || model === 'f9f' || model === 'f2h' || model === 'f4u4' || model === 'mig15' || model === 'f8' || model === 'f4b' || model === 'f4j' || model === 'mig21' || model === 'mig17' || model === 'p36a' || model === 'f82' || model === 'f5a' || model === 'f104g'
-        ? 'fighter'
-        : model === 'sbd' || model === 'sb2c'
-        ? 'dive_bomber'
-        : model === 'tbd' || model === 'tbf' || model === 'tu14' || model === 'il28'
-        ? 'torpedo_bomber'
-        : 'scout';
+    const role: AircraftRole = getCatalogRole(model, 'carrier', this.era);
 
     // Allow overriding payload on sortie, and persist as current active payload for role
     const payloadType = specificPayload || this.activePayloads[role];
@@ -1667,161 +1662,14 @@ export class GameEngine {
     }
 
     // High-performance naval and land-based aviation speeds (Supersonic Mach 1.8~2.5+ in Era 5)
-    const rawSpeed =
-      model === 'f15a' ? 230 :
-      model === 'su27' ? 225 :
-      model === 'f14a' ? 220 :
-      model === 'mig29a' ? 218 :
-      model === 'f111' ? 215 :
-      model === 'f16a' ? 210 :
-      model === 'tu22m3' ? 205 :
-      model === 'fa18a' ? 198 :
-      model === 'f104g' ? 185 :
-      model === 'mig21' ? 175 :
-      model === 'av8b' ? 170 :
-      model === 'mig19' ? 168 :
-      model === 'f4b' || model === 'f4j' || model === 'f4e' ? 165 :
-      model === 'yak38' ? 165 :
-      model === 'mig15' ? 160 :
-      model === 'f5a' ? 160 :
-      model === 'su7' ? 158 :
-      model === 'f8' ? 155 :
-      model === 'f105' ? 155 :
-      model === 'a6e' ? 155 :
-      model === 'ea6b' ? 152 :
-      model === 'f9f' ? 150 :
-      model === 's3a' ? 148 :
-      model === 'f2h' ? 145 :
-      model === 'mig17' ? 145 :
-      model === 'su25' ? 145 :
-      model === 'tu16' ? 142 :
-      model === 'a10a' ? 140 :
-      model === 'a7' ? 140 :
-      model === 'f86' ? 138 :
-      model === 'a4' ? 135 :
-      model === 'e3a' || model === 'a50' ? 135 :
-      model === 'b52' ? 135 :
-      model === 'yak9' ? 132 :
-      model === 'a6a' || model === 'a6b_weasel' ? 130 :
-      model === 'a37b' ? 130 :
-      model === 'tu14' ? 130 :
-      model === 'tu95' ? 130 :
-      model === 'il28' ? 128 :
-      model === 'e2c' || model === 'c2a' || model === 'c130' ? 125 :
-      model === 'p51' || model === 'f82' ? 124 :
-      model === 'mi24' ? 120 :
-      model === 'a26' ? 120 :
-      model === 'f8f' ? 118 :
-      model === 'il10' ? 116 :
-      model === 'p38' ? 116 :
-      model === 'f4u4' ? 115 :
-      model === 'ad1' || model === 'p3' || model === 'a1h' ? 115 :
-      model === 'ah64a' || model === 'ah1w' ? 115 :
-      model === 'p47' ? 114 :
-      model === 'f4u' ? 112 :
-      model === 'b29' ? 108 :
-      model === 'b25' ? 108 :
-      model === 'a20' ? 108 :
-      model === 'f6f' ? 105 :
-      model === 'ka27' || model === 'sh3f' || model === 'ch53' ? 105 :
-      model === 'p40' ? 104 :
-      model === 'c1' || model === 's2' || model === 'e1' ? 100 :
-      model === 'p36a' ? 100 :
-      model === 'f4f' ? 98 :
-      model === 'p39d' ? 98 :
-      model === 'b24' ? 96 :
-      model === 'ov10' || model === 'ah1' ? 95 :
-      model === 'sh2' ? 92 :
-      model === 'sb2c' || model === 'uh1' ? 90 :
-      model === 'af_guardian' ? 90 :
-      model === 'b17' || model === 'b17_late' ? 88 :
-      model === 'tbf' ? 86 :
-      model === 'ad3w' || model === 'uh2' ? 85 :
-      model === 'sbd' ? 84 :
-      model === 'tbd' ? 76 :
-      model === 'ho3s1' ? 65 : 120;
+    const rawSpeed = getAircraftBaseSpeed(model);
 
     const catalogItem = PAYLOAD_CATALOG[payloadType];
     const speedModifier = catalogItem ? catalogItem.speedModifier : 1.0;
     const baseSpeed = Math.round(rawSpeed * speedModifier);
 
     // Resilient, battle-hardened health pools for carrier and land-based air groups
-    const baseHealth =
-      model === 'b52' ? 3200 :
-      model === 'tu95' ? 2200 :
-      model === 'tu22m3' ? 1800 :
-      model === 'c130' ? 1600 :
-      model === 'e3a' || model === 'a50' ? 1500 :
-      model === 'a10a' ? 1400 :
-      model === 'b29' ? 1350 :
-      model === 'f111' ? 1350 :
-      model === 'tu16' ? 1350 :
-      model === 'su25' ? 1350 :
-      model === 'ch53' ? 980 :
-      model === 'a6e' ? 950 :
-      model === 'il28' ? 950 :
-      model === 'b24' ? 920 :
-      model === 'ea6b' ? 920 :
-      model === 's3a' ? 900 :
-      model === 'su27' ? 880 :
-      model === 'mi24' ? 880 :
-      model === 'c2a' ? 880 :
-      model === 'f14a' ? 860 :
-      model === 'f15a' ? 850 :
-      model === 'b17_late' ? 850 :
-      model === 'e2c' ? 850 :
-      model === 'sh3f' ? 820 :
-      model === 'b17' ? 820 :
-      model === 'fa18a' ? 800 :
-      model === 'ka27' ? 800 :
-      model === 'a6a' || model === 'a6b_weasel' ? 780 :
-      model === 'mig29a' ? 780 :
-      model === 'f16a' ? 760 :
-      model === 'ah64a' ? 750 :
-      model === 'f4b' || model === 'f4j' || model === 'f4e' ? 740 :
-      model === 'c1' ? 720 :
-      model === 'f105' ? 720 :
-      model === 'av8b' ? 720 :
-      model === 'b25' ? 720 :
-      model === 'su7' ? 700 :
-      model === 'yak38' ? 700 :
-      model === 'ah1w' ? 680 :
-      model === 'tu14' ? 680 :
-      model === 'ad1' || model === 'a1h' ? 680 :
-      model === 'a26' ? 660 :
-      model === 's2' ? 650 :
-      model === 'a7' ? 640 :
-      model === 'il10' ? 620 :
-      model === 'e1' ? 620 :
-      model === 'p47' ? 620 :
-      model === 'f8' ? 600 :
-      model === 'f2h' ? 580 :
-      model === 'a4' ? 580 :
-      model === 'f9f' ? 560 :
-      model === 'mig19' ? 560 :
-      model === 'f5a' ? 560 :
-      model === 'f104g' ? 550 :
-      model === 'af_guardian' ? 540 :
-      model === 'mig15' ? 540 :
-      model === 'mig21' ? 520 :
-      model === 'ad3w' ? 520 :
-      model === 'f8f' ? 520 :
-      model === 'uh2' ? 500 :
-      model === 'f4u4' ? 500 :
-      model === 'sb2c' ? 500 :
-      model === 'a37b' ? 500 :
-      model === 'f4u' ? 480 :
-      model === 'p39d' ? 480 :
-      model === 'f82' ? 480 :
-      model === 'tbf' ? 460 :
-      model === 'mig17' ? 450 :
-      model === 'yak9' ? 440 :
-      model === 'f6f' ? 440 :
-      model === 'sbd' ? 420 :
-      model === 'ho3s1' ? 420 :
-      model === 'p36a' ? 400 :
-      model === 'f4f' ? 360 :
-      model === 'tbd' ? 360 : 500;
+    const baseHealth = getAircraftBaseHealth(model);
 
     const hasPayload =
       payloadType === 'hvar_rockets' ||
@@ -1879,36 +1727,7 @@ export class GameEngine {
     const flightName = `${callsign} Flight (${actualCount}x ${model.toUpperCase()})`;
 
     // 戰鬥機機槍彈殘彈數量
-    let gunRounds = 1440;
-    if (model === 'f8') gunRounds = 840; // 4x 20mm Colt Mk 12
-    else if (model === 'f4b' || model === 'f4j') gunRounds = 0; // Pure missile interceptors
-    else if (model === 'a4') gunRounds = 400; // 2x 20mm Colt Mk 12
-    else if (model === 'a6a' || model === 'a6b_weasel') gunRounds = 0;
-    else if (model === 'mig21') gunRounds = 200;
-    else if (model === 'mig19') gunRounds = 210; // 3x 30mm NR-30
-    else if (model === 'tu16') gunRounds = 600; // 2x 23mm AM-23 tail turret
-    else if (model === 'su7') gunRounds = 320; // 2x 30mm NR-30
-    else if (model === 'mig17') gunRounds = 240;
-    else if (model === 'f4f') gunRounds = 1440;
-    else if (model === 'f6f' || model === 'f4u') gunRounds = 2400;
-    else if (model === 'f4u4') gunRounds = 1800;
-    else if (model === 'f8f') gunRounds = 800;
-    else if (model === 'f9f' || model === 'f2h') gunRounds = 800;
-    else if (model === 'mig15') gunRounds = 300;
-    else if (model === 'yak9') gunRounds = 340;
-    else if (model === 'il10') gunRounds = 600;
-    else if (model === 'ad1') gunRounds = 800;
-    else if (model === 'af_guardian') gunRounds = 600;
-    else if (model === 'ad3w' || model === 'ho3s1' || model === 'uh2' || model === 'e1') gunRounds = 0;
-    else if (model === 'sbd' || model === 'sb2c') gunRounds = 720;
-    else if (model === 'tbd' || model === 'tbf') gunRounds = 600;
-    else if (model === 'os2u') gunRounds = 500;
-    else if (model === 'zero') gunRounds = 1000;
-    else if (model === 'george') gunRounds = 900;
-    else if (model === 'val' || model === 'judy') gunRounds = 600;
-    else if (model === 'kate' || model === 'jill') gunRounds = 500;
-    else if (model === 'tu14') gunRounds = 400;
-    else if (model === 's2' || model === 'c1') gunRounds = 0;
+    const gunRounds = getAircraftGunRounds(model);
 
     let initialAmmo = 0;
     if (payloadType === 'clean_guns') initialAmmo = gunRounds;
@@ -1999,7 +1818,7 @@ export class GameEngine {
       sourceName: flagship.codeName || flagship.name,
       targetName: flightName,
       actionType: 'recon_spotted',
-      text: `🛫【機隊起飛出擊】「${flightName}」從飛行甲板彈射出擊！掛載: ${catalogItem?.nameZh || payloadName} (儲存彈藥: ${initialAmmo})`,
+      text: `🛫【機隊起飛出擊】「${flightName}」從飛行甲板彈射出擊！掛載: ${catalogItem?.name || payloadName} (儲存彈藥: ${initialAmmo})`,
     });
 
     // 不取消航母選取：保持航母/旗艦選中狀態，讓下方飛行甲板出擊選單保持開啟，方便連續派遣多批次機隊
@@ -2256,71 +2075,7 @@ export class GameEngine {
     const allShips = [...this.playerShips, ...this.enemyShips, ...this.alliedShips];
 
     for (const ship of allShips) {
-      if (ship.isSunk) {
-        ship.sinkProgress = Math.min(1, ship.sinkProgress + dt * 0.08);
-
-        if (ship.magazineFlashTimer && ship.magazineFlashTimer > 0) {
-          ship.magazineFlashTimer -= dt;
-        }
-
-        if (ship.isBrokenInTwo) {
-          ship.breakProgress = Math.min(1, (ship.breakProgress || 0) + dt * 0.15);
-          ship.bowAngleOffset = Math.min(0.28, (ship.bowAngleOffset || 0) + dt * 0.04);
-          ship.sternAngleOffset = Math.max(-0.35, (ship.sternAngleOffset || 0) - dt * 0.05);
-
-          const fracX = ship.pos.x + Math.cos(ship.heading) * (ship.length * (ship.breakLineOffset || 0));
-          const fracY = ship.pos.y + Math.sin(ship.heading) * (ship.length * (ship.breakLineOffset || 0));
-
-          // 斷裂處滾滾黑煙 (Heavy billowing oil smoke)
-          if (Math.random() < 0.75) {
-            this.particles.push({
-              id: `sink-smoke-${Date.now()}-${Math.random()}`,
-              x: fracX + (Math.random() - 0.5) * (ship.width * 0.8),
-              y: fracY + (Math.random() - 0.5) * (ship.width * 0.8),
-              vx: (Math.random() - 0.5) * 6,
-              vy: -10 - Math.random() * 16,
-              life: 1.8 + Math.random() * 0.8,
-              maxLife: 2.6,
-              radius: 14 + Math.random() * 16,
-              color: 'rgba(16, 20, 26, 0.85)',
-              type: 'smoke',
-            });
-          }
-
-          // 燃燒火光 (Fracture combustion fire)
-          if (Math.random() < 0.45) {
-            this.particles.push({
-              id: `sink-fire-${Date.now()}-${Math.random()}`,
-              x: fracX + (Math.random() - 0.5) * (ship.width * 0.5),
-              y: fracY + (Math.random() - 0.5) * (ship.width * 0.5),
-              vx: (Math.random() - 0.5) * 10,
-              vy: (Math.random() - 0.5) * 10 - 5,
-              life: 0.5 + Math.random() * 0.4,
-              maxLife: 0.9,
-              radius: 5 + Math.random() * 6,
-              color: Math.random() > 0.4 ? '#FF3D00' : '#FFAB00',
-              type: 'fire',
-            });
-          }
-
-          // 水面油污與浮沫 (Oil slick & foam)
-          if (Math.random() < 0.35) {
-            this.particles.push({
-              id: `sink-oil-${Date.now()}-${Math.random()}`,
-              x: fracX + (Math.random() - 0.5) * ship.width * 1.5,
-              y: fracY + (Math.random() - 0.5) * ship.width * 1.5,
-              vx: (Math.random() - 0.5) * 2,
-              vy: (Math.random() - 0.5) * 2,
-              life: 3.0,
-              maxLife: 3.0,
-              radius: 10 + Math.random() * 14,
-              color: 'rgba(5, 10, 18, 0.6)',
-              type: 'oil_slick',
-            });
-          }
-        }
-        continue;
-      }
+      if (this.updateSinkingShip(dt, ship)) continue;
 
       if (ship.repathCooldown !== undefined && ship.repathCooldown > 0) {
         ship.repathCooldown = Math.max(0, ship.repathCooldown - dt);
@@ -2425,10 +2180,12 @@ export class GameEngine {
 
       // Realistic Deliberate Naval Warship Movement (Noticeably slower than high-speed aircraft)
       if (ship.speed !== 0) {
-        ship.vel.x = Math.cos(ship.heading) * ship.speed;
-        ship.vel.y = Math.sin(ship.heading) * ship.speed;
-        ship.pos.x += ship.vel.x * dt * 1.6;
-        ship.pos.y += ship.vel.y * dt * 1.6;
+        // speed is in knots; vel is the true map velocity on the shared speed scale
+        const mapSpeed = shipMapSpeed(ship.speed);
+        ship.vel.x = Math.cos(ship.heading) * mapSpeed;
+        ship.vel.y = Math.sin(ship.heading) * mapSpeed;
+        ship.pos.x += ship.vel.x * dt;
+        ship.pos.y += ship.vel.y * dt;
       } else {
         ship.vel.x = 0;
         ship.vel.y = 0;
@@ -2522,76 +2279,149 @@ export class GameEngine {
         }
       }
 
-      // ══════════════════════════════════════════════════════════
-      // 友軍船舶維修設施 (Ship Repair Docks) 緊急搶修至綠色安全生命值
-      // ══════════════════════════════════════════════════════════
-      if (ship.side === 'player') {
-        const repairDocks = this.islands
-          .flatMap((i) => i.installations)
-          .filter((inst) => inst.type === 'ship_repair_dock' && !inst.isDestroyed && inst.side === 'player');
+      this.updateShipRepairAtDocks(dt, ship);
 
-        for (const dock of repairDocks) {
-          const d = dist(ship.pos, dock.pos);
-          if (d <= (dock.range || 750)) {
-            // Can emergency repair ship back up to safe green health (>= 85% up to 100%)
-            const greenHealthTarget = ship.maxHealth * 0.90;
-            if (ship.health < greenHealthTarget) {
-              const repairAmount = 55 * dt; // +55 HP/s per dock
-              ship.hullCrewHealth = Math.min(ship.maxHullCrewHealth || ship.maxHealth, (ship.hullCrewHealth || ship.health) + repairAmount);
-              ship.weaponControlHealth = Math.min(ship.maxWeaponControlHealth || ship.maxHealth, (ship.weaponControlHealth || ship.health) + repairAmount * 1.5);
-              ship.health = ship.hullCrewHealth;
+      this.updateShipCombat(ship, dt);
+    }
+  }
 
-              // Periodic announcement log
-              const now = this.gameTime;
-              const lastLog = (ship as { lastRepairLogTime?: number }).lastRepairLogTime || 0;
-              if (now - lastLog > 16) {
-                (ship as { lastRepairLogTime?: number; wasRepairing?: boolean }).lastRepairLogTime = now;
-                (ship as { lastRepairLogTime?: number; wasRepairing?: boolean }).wasRepairing = true;
-                this.addCombatLog({
-                  category: 'naval',
-                  sourceSide: 'player',
-                  sourceName: dock.name,
-                  targetName: ship.name,
-                  actionType: 'recon_spotted',
-                  text: `⚓🔧【船舶維修設施緊急搶修】「${ship.name}」進駐「${dock.name}」泊位！工兵與損管隊全力抽水排澇焊接破洞，緊急修補船身至綠色安全狀態！`,
-                });
-              }
+  // ══════════════════════════════════════════════════════════
+  // 友軍船舶維修設施 (Ship Repair Docks) 緊急搶修至綠色安全生命值
+  // ══════════════════════════════════════════════════════════
+  private updateShipRepairAtDocks(dt: number, ship: Ship): void {
+    if (ship.side === 'player') {
+      const repairDocks = this.islands
+        .flatMap((i) => i.installations)
+        .filter((inst) => inst.type === 'ship_repair_dock' && !inst.isDestroyed && inst.side === 'player');
 
-              // Visual damage control welding spark particles
-              if (Math.random() < 0.32) {
-                const sparkOffset = (Math.random() - 0.5) * ship.width;
-                this.particles.push({
-                  id: `repair-spark-${Date.now()}-${Math.random()}`,
-                  x: ship.pos.x + Math.cos(ship.heading + Math.PI / 2) * sparkOffset,
-                  y: ship.pos.y + Math.sin(ship.heading + Math.PI / 2) * sparkOffset,
-                  vx: (Math.random() - 0.5) * 25,
-                  vy: (Math.random() - 0.5) * 25,
-                  life: 0.5,
-                  maxLife: 0.5,
-                  radius: 3.5,
-                  color: '#00E676',
-                  type: 'spark',
-                });
-              }
+      for (const dock of repairDocks) {
+        const d = dist(ship.pos, dock.pos);
+        if (d <= (dock.range || 750)) {
+          // Can emergency repair ship back up to safe green health (>= 85% up to 100%)
+          const greenHealthTarget = ship.maxHealth * 0.90;
+          if (ship.health < greenHealthTarget) {
+            const repairAmount = 55 * dt; // +55 HP/s per dock
+            ship.hullCrewHealth = Math.min(ship.maxHullCrewHealth || ship.maxHealth, (ship.hullCrewHealth || ship.health) + repairAmount);
+            ship.weaponControlHealth = Math.min(ship.maxWeaponControlHealth || ship.maxHealth, (ship.weaponControlHealth || ship.health) + repairAmount * 1.5);
+            ship.health = ship.hullCrewHealth;
 
-              if (ship.health >= greenHealthTarget && (ship as { wasRepairing?: boolean }).wasRepairing) {
-                (ship as { wasRepairing?: boolean }).wasRepairing = false;
-                this.addCombatLog({
-                  category: 'naval',
-                  sourceSide: 'player',
-                  sourceName: dock.name,
-                  targetName: ship.name,
-                  actionType: 'recon_spotted',
-                  text: `✅【搶修達標】「${ship.name}」已成功修復至綠色安全生命值 (${Math.round((ship.health / ship.maxHealth) * 100)}%)！戰備良好可重新出戰！`,
-                });
-              }
+            // Periodic announcement log
+            const now = this.gameTime;
+            const lastLog = (ship as { lastRepairLogTime?: number }).lastRepairLogTime || 0;
+            if (now - lastLog > 16) {
+              (ship as { lastRepairLogTime?: number; wasRepairing?: boolean }).lastRepairLogTime = now;
+              (ship as { lastRepairLogTime?: number; wasRepairing?: boolean }).wasRepairing = true;
+              this.addCombatLog({
+                category: 'naval',
+                sourceSide: 'player',
+                sourceName: dock.name,
+                targetName: ship.name,
+                actionType: 'recon_spotted',
+                text: `⚓🔧【船舶維修設施緊急搶修】「${ship.name}」進駐「${dock.name}」泊位！工兵與損管隊全力抽水排澇焊接破洞，緊急修補船身至綠色安全狀態！`,
+              });
+            }
+
+            // Visual damage control welding spark particles
+            if (Math.random() < 0.32) {
+              const sparkOffset = (Math.random() - 0.5) * ship.width;
+              this.particles.push({
+                id: `repair-spark-${Date.now()}-${Math.random()}`,
+                x: ship.pos.x + Math.cos(ship.heading + Math.PI / 2) * sparkOffset,
+                y: ship.pos.y + Math.sin(ship.heading + Math.PI / 2) * sparkOffset,
+                vx: (Math.random() - 0.5) * 25,
+                vy: (Math.random() - 0.5) * 25,
+                life: 0.5,
+                maxLife: 0.5,
+                radius: 3.5,
+                color: '#00E676',
+                type: 'spark',
+              });
+            }
+
+            if (ship.health >= greenHealthTarget && (ship as { wasRepairing?: boolean }).wasRepairing) {
+              (ship as { wasRepairing?: boolean }).wasRepairing = false;
+              this.addCombatLog({
+                category: 'naval',
+                sourceSide: 'player',
+                sourceName: dock.name,
+                targetName: ship.name,
+                actionType: 'recon_spotted',
+                text: `✅【搶修達標】「${ship.name}」已成功修復至綠色安全生命值 (${Math.round((ship.health / ship.maxHealth) * 100)}%)！戰備良好可重新出戰！`,
+              });
             }
           }
         }
       }
-
-      this.updateShipCombat(ship, dt);
     }
+  }
+
+  private updateSinkingShip(dt: number, ship: Ship): boolean {
+    if (ship.isSunk) {
+      ship.sinkProgress = Math.min(1, ship.sinkProgress + dt * 0.08);
+
+      if (ship.magazineFlashTimer && ship.magazineFlashTimer > 0) {
+        ship.magazineFlashTimer -= dt;
+      }
+
+      if (ship.isBrokenInTwo) {
+        ship.breakProgress = Math.min(1, (ship.breakProgress || 0) + dt * 0.15);
+        ship.bowAngleOffset = Math.min(0.28, (ship.bowAngleOffset || 0) + dt * 0.04);
+        ship.sternAngleOffset = Math.max(-0.35, (ship.sternAngleOffset || 0) - dt * 0.05);
+
+        const fracX = ship.pos.x + Math.cos(ship.heading) * (ship.length * (ship.breakLineOffset || 0));
+        const fracY = ship.pos.y + Math.sin(ship.heading) * (ship.length * (ship.breakLineOffset || 0));
+
+        // 斷裂處滾滾黑煙 (Heavy billowing oil smoke)
+        if (Math.random() < 0.75) {
+          this.particles.push({
+            id: `sink-smoke-${Date.now()}-${Math.random()}`,
+            x: fracX + (Math.random() - 0.5) * (ship.width * 0.8),
+            y: fracY + (Math.random() - 0.5) * (ship.width * 0.8),
+            vx: (Math.random() - 0.5) * 6,
+            vy: -10 - Math.random() * 16,
+            life: 1.8 + Math.random() * 0.8,
+            maxLife: 2.6,
+            radius: 14 + Math.random() * 16,
+            color: 'rgba(16, 20, 26, 0.85)',
+            type: 'smoke',
+          });
+        }
+
+        // 燃燒火光 (Fracture combustion fire)
+        if (Math.random() < 0.45) {
+          this.particles.push({
+            id: `sink-fire-${Date.now()}-${Math.random()}`,
+            x: fracX + (Math.random() - 0.5) * (ship.width * 0.5),
+            y: fracY + (Math.random() - 0.5) * (ship.width * 0.5),
+            vx: (Math.random() - 0.5) * 10,
+            vy: (Math.random() - 0.5) * 10 - 5,
+            life: 0.5 + Math.random() * 0.4,
+            maxLife: 0.9,
+            radius: 5 + Math.random() * 6,
+            color: Math.random() > 0.4 ? '#FF3D00' : '#FFAB00',
+            type: 'fire',
+          });
+        }
+
+        // 水面油污與浮沫 (Oil slick & foam)
+        if (Math.random() < 0.35) {
+          this.particles.push({
+            id: `sink-oil-${Date.now()}-${Math.random()}`,
+            x: fracX + (Math.random() - 0.5) * ship.width * 1.5,
+            y: fracY + (Math.random() - 0.5) * ship.width * 1.5,
+            vx: (Math.random() - 0.5) * 2,
+            vy: (Math.random() - 0.5) * 2,
+            life: 3.0,
+            maxLife: 3.0,
+            radius: 10 + Math.random() * 14,
+            color: 'rgba(5, 10, 18, 0.6)',
+            type: 'oil_slick',
+          });
+        }
+      }
+      return true;
+    }
+    return false;
   }
 
   private getEnemySteerPoint(ship: Ship, dest: Vector2D): Vector2D {
@@ -2612,7 +2442,7 @@ export class GameEngine {
     return wps[Math.min(idx, wps.length - 1)] || dest;
   }
 
-  private updateEnemyShipAI(ship: Ship, dt: number) {
+  private updateEnemyShipAI(ship: Ship, _dt: number) {
     const flagship = this.getFlagship();
     const hostiles = [...this.playerShips, ...this.alliedShips].filter(
       (s) => !s.isSunk && (!this.isSubmarine(s) || Boolean(s.isSpottedByEnemy))
@@ -2678,7 +2508,7 @@ export class GameEngine {
   private calculateNavalSteeringAvoidance(
     ship: Ship,
     desiredHeading: number,
-    targetDist: number
+    _targetDist: number
   ): { targetHeading: number; speedScale: number } {
     if (this.islands.length === 0) {
       return { targetHeading: desiredHeading, speedScale: 1.0 };
@@ -2843,1349 +2673,32 @@ export class GameEngine {
     for (let i = this.aircraft.length - 1; i >= 0; i--) {
       const plane = this.aircraft[i];
 
-      if (plane.state === 'shot_down') {
-        plane.deathTimer = (plane.deathTimer || 0) - dt;
-        const mode = plane.crashMode || 'smoke';
+      if (this.updateShotDownAircraft(dt, i, plane)) continue;
 
-        // Dynamic flight physics according to crash mode
-        if (mode === 'spin') {
-          plane.heading += (plane.crashSpinSpeed || 4) * dt;
-          plane.speed = Math.max(35, plane.speed * 0.96);
-          plane.pos.x += Math.cos(plane.heading) * plane.speed * dt * 0.4;
-          plane.pos.y += Math.sin(plane.heading) * plane.speed * dt * 0.4;
-          plane.altitude = Math.max(0, plane.altitude - dt * 0.55);
-        } else if (mode === 'breakup') {
-          plane.heading += (plane.crashSpinSpeed || 2) * dt * 0.4;
-          plane.pos.x += plane.vel.x * dt * 0.5;
-          plane.pos.y += plane.vel.y * dt * 0.5;
-          plane.altitude = Math.max(0, plane.altitude - dt * 0.65);
+      if (this.updateOhkaRocket(dt, plane)) continue;
 
-          // Update detached debris pieces (flying wings & tail)
-          if (plane.crashDebris) {
-            for (const deb of plane.crashDebris) {
-              deb.x += deb.vx * dt;
-              deb.y += deb.vy * dt;
-              deb.rot += deb.rotSpeed * dt;
-            }
-          }
-        } else if (mode === 'burn') {
-          plane.heading += (Math.sin(this.gameTime * 4) * 0.5) * dt;
-          plane.pos.x += plane.vel.x * dt * 0.65;
-          plane.pos.y += plane.vel.y * dt * 0.65;
-          plane.altitude = Math.max(0, plane.altitude - dt * 0.5);
-        } else {
-          // Smoke & Yaw Glide
-          plane.pos.x += plane.vel.x * dt * 0.7;
-          plane.pos.y += plane.vel.y * dt * 0.7;
-          plane.altitude = Math.max(0, plane.altitude - dt * 0.45);
-        }
+      this.updateOhkaCarrierRelease(plane);
 
-        // Spawn dynamic crash fire particles
-        if (mode === 'burn') {
-          if (Math.random() < 0.75) {
-            this.particles.push({
-              id: `crash-fire-${Date.now()}-${Math.random()}`,
-              x: plane.pos.x + (Math.random() - 0.5) * 6,
-              y: plane.pos.y + (Math.random() - 0.5) * 6,
-              vx: (Math.random() - 0.5) * 10,
-              vy: (Math.random() - 0.5) * 10 - 5,
-              life: 0.45,
-              maxLife: 0.45,
-              radius: 5 + Math.random() * 5,
-              color: Math.random() > 0.4 ? '#FF3D00' : '#FFD54F',
-              type: 'fire',
-            });
-          }
-        }
-
-        // Heavy dark smoke trails for all crashing planes
-        if (Math.random() < 0.8) {
-          this.particles.push({
-            id: `crash-smoke-${Date.now()}-${Math.random()}`,
-            x: plane.pos.x - Math.cos(plane.heading) * 10 + (Math.random() - 0.5) * 6,
-            y: plane.pos.y - Math.sin(plane.heading) * 10 + (Math.random() - 0.5) * 6,
-            vx: (Math.random() - 0.5) * 6,
-            vy: (Math.random() - 0.5) * 6 - 8,
-            life: 1.2 + Math.random() * 0.6,
-            maxLife: 1.8,
-            radius: 8 + Math.random() * 10,
-            color: 'rgba(20, 24, 30, 0.82)',
-            type: 'smoke',
-          });
-        }
-
-        // Terminal crash impact when altitude reaches sea level or timer expires
-        if (plane.altitude <= 0.04 || (plane.deathTimer || 0) <= 0) {
-          soundEngine.playExplosion(true);
-          soundEngine.playWaterSplash();
-
-          // Check if crashing into island land or ocean water
-          const onIsland = this.islands.some((isl) => isPointInPolygon(plane.pos, isl.points));
-
-          if (onIsland) {
-            // Ground impact explosion & shockwave
-            this.particles.push({
-              id: `crash-impact-blast-${Date.now()}`,
-              x: plane.pos.x,
-              y: plane.pos.y,
-              vx: 0,
-              vy: 0,
-              life: 0.8,
-              maxLife: 0.8,
-              radius: 45,
-              color: '#FF5722',
-              type: 'shockwave',
-              shape: 'ring',
-            });
-          } else {
-            // Soaring Ocean Geyser Splash Water Column!
-            this.particles.push({
-              id: `crash-geyser-${Date.now()}`,
-              x: plane.pos.x,
-              y: plane.pos.y,
-              vx: 0,
-              vy: 0,
-              life: 1.0,
-              maxLife: 1.0,
-              radius: 42,
-              color: '#E0F7FA',
-              type: 'geyser',
-            });
-            // Foam ring
-            this.particles.push({
-              id: `crash-foam-${Date.now()}`,
-              x: plane.pos.x,
-              y: plane.pos.y,
-              vx: 0,
-              vy: 0,
-              life: 1.6,
-              maxLife: 1.6,
-              radius: 35,
-              color: 'rgba(255, 255, 255, 0.8)',
-              type: 'splash',
-              shape: 'ring',
-            });
-          }
-
-          this.aircraft.splice(i, 1);
-        }
-        continue;
-      }
-
-      // ══════════════════════════════════════════════════════════
-      // SPECIAL ERA 2 THREATS: OHKA ROCKET, G4M BETTY, & KAMIKAZE
-      // ══════════════════════════════════════════════════════════
-
-      // 1. MXY-7 櫻花特攻火箭反艦飛彈 (Rocket-Propelled Anti-Ship Suicide Missile)
-      if (plane.model === 'ohka') {
-        plane.speed = 380;
-        // 噴射火尾與推進煙幕粒子 (Flaring rocket trail)
-        if (Math.random() < 0.65) {
-          this.particles.push({
-            id: `ohka-smoke-${Date.now()}-${Math.random()}`,
-            x: plane.pos.x - Math.cos(plane.heading) * 14,
-            y: plane.pos.y - Math.sin(plane.heading) * 14,
-            vx: (Math.random() - 0.5) * 6,
-            vy: (Math.random() - 0.5) * 6,
-            life: 0.35,
-            maxLife: 0.35,
-            radius: 4.5,
-            color: Math.random() < 0.5 ? '#FF3D00' : 'rgba(255, 235, 150, 0.8)',
-            type: 'smoke',
-          });
-        }
-
-        const targetShip =
-          [...this.playerShips, ...this.alliedShips]
-            .filter((s) => !s.isSunk && !this.isSubmarine(s) && (s.id === plane.order.targetId || dist(plane.pos, s.pos) < 3200))
-            .sort((a, b) => (a.id === plane.order.targetId ? -1 : b.id === plane.order.targetId ? 1 : dist(plane.pos, a.pos) - dist(plane.pos, b.pos)))[0] ||
-          this.getFlagship();
-
-        if (targetShip) {
-          const d = dist(plane.pos, targetShip.pos);
-          plane.targetHeading = Math.atan2(targetShip.pos.y - plane.pos.y, targetShip.pos.x - plane.pos.x);
-          plane.altitude = Math.max(0.08, plane.altitude - dt * 0.45);
-
-          if (d < 45 || (d < 85 && plane.altitude <= 0.12)) {
-            // 直擊命中！1200kg特裝穿甲彈頭巨爆
-            soundEngine.playExplosion(true);
-            const warheadDmg = 2200;
-            const safeArmor = Math.min(0.85, Math.max(0, targetShip.armor || 0));
-            const actualDmg = Math.round(warheadDmg * (1 - safeArmor * 0.35));
-            targetShip.health = Math.max(0, targetShip.health - actualDmg);
-            if (targetShip.hullCrewHealth !== undefined) {
-              targetShip.hullCrewHealth = Math.max(0, targetShip.hullCrewHealth - actualDmg);
-              targetShip.health = targetShip.hullCrewHealth;
-            }
-
-            this.particles.push({
-              id: `ohka-blast-${Date.now()}`,
-              x: targetShip.pos.x,
-              y: targetShip.pos.y,
-              vx: 0,
-              vy: 0,
-              life: 0.9,
-              maxLife: 0.9,
-              radius: 85,
-              color: '#FF1744',
-              type: 'shockwave',
-              shape: 'ring',
-            });
-
-            this.addCombatLog({
-              category: 'naval',
-              sourceSide: 'enemy',
-              sourceName: 'MXY-7 櫻花特攻火箭反艦飛彈',
-              targetName: targetShip.name,
-              actionType: 'bomb_crit',
-              isCrit: true,
-              damage: actualDmg,
-              diceRoll: {
-                dieType: 'd100',
-                roll: 99,
-                targetScore: 40,
-                result: 'crit',
-                rollDesc: '櫻花1200kg特裝彈頭以400節極速貫穿裝甲甲板',
-              },
-              text: `💥【櫻花火箭撞擊引爆！】1200kg特裝穿甲彈頭高速撞擊「${targetShip.name}」！造成毀滅性重創 (-${actualDmg} HP)！全艦陷入火海！`,
-            });
-
-            if (targetShip.health <= 0) {
-              targetShip.isSunk = true;
-            }
-            this.killPlane(plane);
-            continue;
-          }
-        }
-      }
-
-      // 2. 一式陸攻 (G4M "Betty") 投放櫻花特攻火箭
-      if (plane.model === 'g4m' && plane.hasOhkaAttached) {
-        const targetShip =
-          [...this.playerShips, ...this.alliedShips]
-            .filter((s) => !s.isSunk && !this.isSubmarine(s) && (s.id === plane.order.targetId || dist(plane.pos, s.pos) < 3800))
-            .sort((a, b) => (a.id === plane.order.targetId ? -1 : b.id === plane.order.targetId ? 1 : dist(plane.pos, a.pos) - dist(plane.pos, b.pos)))[0] ||
-          this.getFlagship();
-
-        if (targetShip) {
-          const d = dist(plane.pos, targetShip.pos);
-          plane.targetHeading = Math.atan2(targetShip.pos.y - plane.pos.y, targetShip.pos.x - plane.pos.x);
-
-          // 於1800米外或受創重傷時脫離投放櫻花
-          if (d < 1800 || plane.health < 260) {
-            plane.hasOhkaAttached = false;
-            plane.order = { type: 'rtb' };
-            plane.state = 'returning';
-
-            soundEngine.playRocketIgnition();
-            const ohkaHeading = Math.atan2(targetShip.pos.y - plane.pos.y, targetShip.pos.x - plane.pos.x);
-            this.aircraft.push({
-              id: `ohka-${Date.now()}`,
-              squadronId: `sq-ohka-${Date.now()}`,
-              model: 'ohka',
-              role: 'dive_bomber',
-              name: 'MXY-7 櫻花火箭反艦飛彈 (一式陸攻投擲)',
-              side: 'enemy',
-              pos: { ...plane.pos },
-              vel: { x: Math.cos(ohkaHeading) * 380, y: Math.sin(ohkaHeading) * 380 },
-              heading: ohkaHeading,
-              targetHeading: ohkaHeading,
-              speed: 380,
-              maxSpeed: 380,
-              altitude: 0.75,
-              state: 'kamikaze_dive',
-              health: 180,
-              maxHealth: 180,
-              order: { type: 'attack', targetPos: targetShip.pos, targetId: targetShip.id },
-              hasPayload: false,
-              shootCooldown: 0,
-              wingmanOffset: { x: 0, y: 0 },
-              isKamikaze: true,
-            });
-
-            this.addCombatLog({
-              category: 'air',
-              sourceSide: 'enemy',
-              sourceName: '一式陸攻 (神雷部隊)',
-              targetName: targetShip.name,
-              actionType: 'recon_spotted',
-              text: `🚀【櫻花特攻火箭點火出擊！】一式陸攻於1800米空域投下 MXY-7 櫻花火箭！火箭發動機全開，以近400節極速直撲「${targetShip.name}」！`,
-            });
-          }
-        }
-      }
-
-      // 3. 一般神風特攻機 (A6M5 / Suisei Suicide Attack)
-      if (plane.isKamikaze || plane.model === 'kamikaze_zero' || plane.model === 'kamikaze_judy') {
-        const targetShip =
-          [...this.playerShips, ...this.alliedShips]
-            .filter((s) => !s.isSunk && !this.isSubmarine(s) && (s.id === plane.order.targetId || dist(plane.pos, s.pos) < 3200))
-            .sort((a, b) => (a.id === plane.order.targetId ? -1 : b.id === plane.order.targetId ? 1 : dist(plane.pos, a.pos) - dist(plane.pos, b.pos)))[0] ||
-          this.getFlagship();
-
-        if (targetShip) {
-          const d = dist(plane.pos, targetShip.pos);
-          plane.targetHeading = Math.atan2(targetShip.pos.y - plane.pos.y, targetShip.pos.x - plane.pos.x);
-
-          // 距離小於 950米 時進入特攻俯衝
-          if (d < 950 && plane.state !== 'kamikaze_dive') {
-            plane.state = 'kamikaze_dive';
-            plane.speed = 220;
-            soundEngine.playDiveBomberWhistle();
-            this.addCombatLog({
-              category: 'air',
-              sourceSide: 'enemy',
-              sourceName: plane.name,
-              targetName: targetShip.name,
-              actionType: 'bomb_hit',
-              text: `⚠️【神風特攻俯衝啟動】敵「${plane.name}」鎖定「${targetShip.name}」進入自殺俯衝航線！防空火網集火截擊！`,
-            });
-          }
-
-          if (plane.state === 'kamikaze_dive') {
-            plane.altitude = Math.max(0.05, plane.altitude - dt * 0.55);
-            if (Math.random() < 0.6) {
-              this.particles.push({
-                id: `kami-trail-${Date.now()}-${Math.random()}`,
-                x: plane.pos.x,
-                y: plane.pos.y,
-                vx: (Math.random() - 0.5) * 5,
-                vy: (Math.random() - 0.5) * 5,
-                life: 0.35,
-                maxLife: 0.35,
-                radius: 4,
-                color: 'rgba(255, 87, 34, 0.7)',
-                type: 'smoke',
-              });
-            }
-
-            if (d < 45 || (d < 75 && plane.altitude <= 0.08)) {
-              // 自殺撞擊引爆
-              soundEngine.playExplosion(true);
-              const suicideDmg = 1200;
-              const safeArmor = Math.min(0.85, Math.max(0, targetShip.armor || 0));
-              const actualDmg = Math.round(suicideDmg * (1 - safeArmor * 0.3));
-              targetShip.health = Math.max(0, targetShip.health - actualDmg);
-              if (targetShip.hullCrewHealth !== undefined) {
-                targetShip.hullCrewHealth = Math.max(0, targetShip.hullCrewHealth - actualDmg);
-                targetShip.health = targetShip.hullCrewHealth;
-              }
-
-              this.particles.push({
-                id: `kami-hit-${Date.now()}`,
-                x: targetShip.pos.x,
-                y: targetShip.pos.y,
-                vx: 0,
-                vy: 0,
-                life: 0.8,
-                maxLife: 0.8,
-                radius: 65,
-                color: '#FF5722',
-                type: 'shockwave',
-                shape: 'ring',
-              });
-
-              this.addCombatLog({
-                category: 'naval',
-                sourceSide: 'enemy',
-                sourceName: '神風特別攻擊隊 (自殺撞擊)',
-                targetName: targetShip.name,
-                actionType: 'bomb_crit',
-                isCrit: true,
-                damage: actualDmg,
-                diceRoll: {
-                  dieType: 'd100',
-                  roll: 95,
-                  targetScore: 50,
-                  result: 'crit',
-                  rollDesc: '神風特攻機攜帶250kg航彈撞入甲板',
-                },
-                text: `💥【神風特攻撞擊命中！】敵機直接撞擊「${targetShip.name}」引爆250kg航彈！造成重創 (-${actualDmg} HP)！`,
-              });
-
-              if (targetShip.health <= 0) targetShip.isSunk = true;
-              this.killPlane(plane);
-              continue;
-            }
-          }
-        }
-      }
+      if (this.updateKamikazeAttack(dt, plane)) continue;
 
       // RTS Orders Execution
       // ══════════════════════════════════════════════════════════
       // 蘇聯/北越 GCI「一擊脫離 (Hit & Run)」超音速掠殺與脫離狀態機
       // ══════════════════════════════════════════════════════════
       if (plane.isHitAndRunActive) {
-        plane.disengageTimer = (plane.disengageTimer || 5.0) - dt;
-        plane.targetHeading = plane.bugOutHeading ?? plane.heading;
-
-        if (plane.model === 'mig21') {
-          // MiG-21: Mach 1.5+ supersonic afterburner climb & high-speed sprint
-          plane.speed = plane.maxSpeed * 1.55;
-          plane.altitude = Math.min(0.98, plane.altitude + dt * 0.22);
-
-          // Supersonic afterburner flame & shock diamond particles
-          if (Math.random() < 0.85) {
-            const exhaustX = plane.pos.x - Math.cos(plane.heading) * 16;
-            const exhaustY = plane.pos.y - Math.sin(plane.heading) * 16;
-            this.particles.push({
-              id: `ab-flame-${Date.now()}-${Math.random()}`,
-              x: exhaustX,
-              y: exhaustY,
-              vx: -Math.cos(plane.heading) * 60 + (Math.random() - 0.5) * 8,
-              vy: -Math.sin(plane.heading) * 60 + (Math.random() - 0.5) * 8,
-              life: 0.28,
-              maxLife: 0.28,
-              radius: 4.5,
-              color: Math.random() < 0.6 ? '#00E5FF' : '#FF6D00',
-              type: 'fire',
-            });
-          }
-        } else if (plane.model === 'mig17') {
-          // MiG-17: Low-altitude terrain masking egress to drop below radar horizon
-          plane.speed = plane.maxSpeed * 1.25;
-          plane.altitude = Math.max(0.12, plane.altitude - dt * 0.28);
-          if (Math.random() < 0.5) {
-            const exhaustX = plane.pos.x - Math.cos(plane.heading) * 12;
-            const exhaustY = plane.pos.y - Math.sin(plane.heading) * 12;
-            this.particles.push({
-              id: `mig17-smoke-${Date.now()}-${Math.random()}`,
-              x: exhaustX,
-              y: exhaustY,
-              vx: -Math.cos(plane.heading) * 25,
-              vy: -Math.sin(plane.heading) * 25,
-              life: 0.4,
-              maxLife: 0.4,
-              radius: 3.5,
-              color: 'rgba(90, 100, 110, 0.6)',
-              type: 'smoke',
-            });
-          }
-        } else {
-          plane.speed = plane.maxSpeed * 1.3;
-        }
-
-        if (plane.disengageTimer <= 0) {
-          plane.isHitAndRunActive = false;
-          plane.hitAndRunStage = 'ingress';
-          plane.speed = plane.maxSpeed;
-          // Re-target nearest hostile aircraft or naval ship to begin next slashing pass
-          const nextTarget = this.aircraft.find((a) => this.isHostile(plane.side, a.side) && a.state !== 'shot_down');
-          if (nextTarget) {
-            plane.order = { type: 'attack', targetPos: nextTarget.pos, targetId: nextTarget.id };
-          } else {
-            plane.order = { type: 'patrol' };
-          }
-        }
-        // While disengaging, skip normal attack turning to maintain breakaway trajectory
+        this.updateHitAndRunPass(dt, plane);
       } else if (plane.state === 'bombing_run') {
-        // 保持直線穩定平飛穿越目標，沿航線直線投下串列炸彈後再脫離
-        this.updateBombingRunCorridor(plane, dt);
+        this.updateBombingRun(dt, plane);
       } else if (plane.state === 'pullout') {
-        // 俯衝投彈後大G值拉起脫離 (High-G Pullout with wingtip vortex)
-        plane.pulloutTimer = (plane.pulloutTimer || 1.3) - dt;
-        plane.altitude = Math.min(0.85, plane.altitude + dt * 0.65);
-        if (Math.random() < 0.65) {
-          const perpX = -Math.sin(plane.heading) * 14;
-          const perpY = Math.cos(plane.heading) * 14;
-          for (const dir of [-1, 1]) {
-            this.particles.push({
-              id: `vortex-${Date.now()}-${Math.random()}`,
-              x: plane.pos.x + perpX * dir,
-              y: plane.pos.y + perpY * dir,
-              vx: -Math.cos(plane.heading) * 12,
-              vy: -Math.sin(plane.heading) * 12,
-              life: 0.35,
-              maxLife: 0.35,
-              radius: 2.2,
-              color: 'rgba(255, 255, 255, 0.75)',
-              type: 'smoke',
-            });
-          }
-        }
-        if (plane.pulloutTimer <= 0) {
-          plane.state = 'returning';
-          plane.order = { type: 'rtb' };
-          plane.speed = plane.maxSpeed;
-        }
+        this.updateDivePullout(dt, plane);
       } else if (plane.order.type === 'attack') {
-        // Find designated target
-        const allShips = [...this.playerShips, ...this.alliedShips, ...this.enemyShips];
-        const rawShipTarget = allShips.find((s) => s.id === plane.order.targetId && !s.isSunk && this.isHostile(plane.side, s.side));
-        const canSeeShipTarget =
-          rawShipTarget &&
-          (!this.isSubmarine(rawShipTarget) ||
-            (rawShipTarget.side === 'enemy' ? Boolean(rawShipTarget.isSpotted) : Boolean(rawShipTarget.isSpottedByEnemy)));
-
-        let targetEntity =
-          (canSeeShipTarget ? rawShipTarget : undefined) ||
-          this.aircraft.find((a) => a.id === plane.order.targetId && a.state !== 'shot_down' && this.isHostile(plane.side, a.side)) ||
-          (() => {
-            const inst = this.findTargetInstallation(plane.order.targetId || '');
-            return inst && this.isHostile(plane.side, inst.side) ? inst : null;
-          })() ||
-          this.groundUnits.find((u) => u.id === plane.order.targetId && !u.isDestroyed && !u.embarkedInShipId && this.isHostile(plane.side, u.side));
-
-        // 時代一~時代四 CAS 近接支援自動索敵: 若無指定目標或原目標已遭殲滅，自動搜尋周邊敵方地面裝甲與部隊
-        if (!targetEntity && this.isCasAircraft(plane)) {
-          const autoGround = this.acquireCasGroundTarget(plane);
-          if (autoGround) {
-            targetEntity = autoGround;
-            plane.order.targetId = autoGround.id;
-            plane.order.targetPos = autoGround.pos;
-          }
-        }
-
-        // 若為 ASW 反潛機失去已下潛目標 (Fog of War)，恢復反潛巡邏而非直接浪費返航
-        const isAswPlane =
-          plane.missionType === 'asw_patrol' ||
-          plane.payloadType === 'asw_torpedo' ||
-          plane.payloadType === 'asw_acoustic_torpedo' ||
-          plane.model === 'be12' ||
-          plane.model === 'il38' ||
-          plane.model === 'ka27';
-
-        if (plane.order.targetId && !targetEntity) {
-          if (isAswPlane && plane.hasPayload) {
-            plane.order = { type: 'patrol', patrolOrigin: plane.order.patrolOrigin || { ...plane.pos } };
-            plane.state = 'patrolling';
-            continue;
-          }
-          // 指定目標已遭殲滅或並非敵對目標！終止無效空襲任務返航
-          plane.order = { type: 'rtb' };
-          plane.state = 'returning';
-          continue;
-        }
-
-        const targetPos = targetEntity ? targetEntity.pos : plane.order.targetPos;
-        if (!targetPos) {
-          plane.order = { type: 'rtb' };
-          plane.state = 'returning';
-          continue;
-        }
-
-        if (targetPos) {
-          const dx = targetPos.x - plane.pos.x;
-          const dy = targetPos.y - plane.pos.y;
-          const d = Math.hypot(dx, dy);
-          plane.targetHeading = Math.atan2(dy, dx);
-
-          if (plane.hasPayload) {
-            // ════ 優先判定超視距/遠程導引飛彈（確保 B-52G / Tu-22 等戰略轟炸機掛載魚叉/暴風反艦飛彈時能在 4000m 外實施遠程獵殺，不誤入近距離地毯投彈）════
-            if (plane.payloadType === 'rgm84_harpoon') {
-              // ════ 魚叉超視距反艦飛彈 (AGM-84 Harpoon AShM): 4000m 掠海主動雷達導引 ════
-              if (d < 4000) {
-                this.fireAirLaunchedHarpoon(plane, targetPos, targetEntity);
-                plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
-                if ((plane.ammoRemaining || 0) <= 0) {
-                  plane.hasPayload = false;
-                  plane.order = { type: 'rtb' };
-                  plane.state = 'returning';
-                }
-              }
-            } else if (plane.payloadType === 'kh22_burya') {
-              // ════ Kh-22 暴風超音速高空俯衝重型反艦飛彈 (Mach 4.0): 4600m ════
-              if (d < 4600) {
-                this.fireKh22Missile(plane, targetPos, targetEntity);
-                plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
-                if ((plane.ammoRemaining || 0) <= 0) {
-                  plane.hasPayload = false;
-                  plane.order = { type: 'rtb' };
-                  plane.state = 'returning';
-                }
-              }
-            } else if (plane.payloadType === 'p700_granit') {
-              // ════ P-700 花崗岩超音速飽和掠海反艦群: 4600m ════
-              if (d < 4600) {
-                this.fireGranitMissile(plane, targetPos, targetEntity);
-                plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
-                if ((plane.ammoRemaining || 0) <= 0) {
-                  plane.hasPayload = false;
-                  plane.order = { type: 'rtb' };
-                  plane.state = 'returning';
-                }
-              }
-            } else if (plane.payloadType === 'agm88_harm') {
-              // ════ AGM-88 HARM 高速反輻射飛彈 (SEAD 獵殺雷達與防空陣地): 4200m ════
-              if (d < 4200) {
-                this.fireHARMMissile(plane, targetPos, targetEntity);
-                plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
-                if ((plane.ammoRemaining || 0) <= 0) {
-                  plane.hasPayload = false;
-                  plane.order = { type: 'rtb' };
-                  plane.state = 'returning';
-                }
-              }
-            } else if (plane.role === 'level_bomber') {
-              // ════ 水平重型轟炸機 (Level Bomber - B-17 / B-24 / B-29 / B-52 地毯走廊): 保持平流層萬米平飛航線，直線穿透投彈走廊 ════
-              plane.altitude = (plane.model === 'b29' || plane.model === 'b52') ? 0.98 : 0.95;
-              if (d < 520) {
-                this.initiateBombingRun(plane, targetPos);
-              }
-            } else if (plane.payloadType === 'tiny_tim_rocket') {
-              // ════ 11.75" 小蒂姆重型穿甲火箭 (Tiny Tim Heavy Standoff Rocket): 500m 遠程直線齊射 ════
-              if (d < 500) {
-                this.fireTinyTimRocket(plane, targetPos);
-                plane.hasPayload = false;
-                plane.heading += (Math.random() > 0.5 ? 1 : -1) * 0.65;
-                plane.targetHeading = plane.heading;
-                plane.breakawayTimer = 1.6;
-              }
-            } else if (plane.payloadType === 'napalm_canister') {
-              // ════ 凝固汽油燃燒彈 (Napalm Firebomb Canister): 低空滑翔投擲，地面化為焦土火海 ════
-              plane.altitude = Math.max(0.22, plane.altitude - dt * 0.55);
-              if (d < 260) {
-                this.dropNapalmCanisters(plane, targetPos);
-                plane.hasPayload = false;
-                plane.state = 'pullout';
-                plane.pulloutTimer = 1.3;
-              }
-            } else if (
-              plane.payloadType === 'aerial_torpedo' ||
-              plane.payloadType === 'asw_torpedo' ||
-              plane.payloadType === 'asw_acoustic_torpedo' ||
-              plane.role === 'torpedo_bomber'
-            ) {
-              // ════ 掠海低空魚雷 / 反潛聲自導魚雷攻擊 (Torpedo Run) ════
-              if (d < 560) {
-                plane.altitude = Math.max(0.12, plane.altitude - dt * 0.6);
-              }
-              if (d < 320) {
-                this.dropAircraftTorpedo(plane, targetPos);
-                const isAswTorp = plane.payloadType === 'asw_torpedo' || plane.payloadType === 'asw_acoustic_torpedo';
-                if (isAswTorp && (plane.ammoRemaining ?? 1) > 1) {
-                  plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
-                  plane.order = { type: 'patrol', patrolOrigin: { ...targetPos } };
-                  plane.state = 'patrolling';
-                } else {
-                  plane.ammoRemaining = 0;
-                  plane.hasPayload = false;
-                  // Immediate 45-degree evasive breakaway turn to dodge ship anti-aircraft fire
-                  plane.heading += (Math.random() > 0.5 ? 1 : -1) * 0.78;
-                  plane.targetHeading = plane.heading;
-                  plane.breakawayTimer = 1.8;
-                }
-              }
-            } else if (plane.payloadType === 'mixed_bombs_rockets') {
-              // ════ 攻擊機三段式強襲 (Mixed Attack): 500m火箭壓制 -> 360m機槍掃射 -> 180m精準俯衝投彈 ════
-              plane.altitude = Math.max(0.26, plane.altitude - dt * 0.45);
-              if (d < 500 && !plane.hasFiredRockets) {
-                this.fireRockets(plane, targetPos, 4);
-                plane.hasFiredRockets = true;
-              }
-              if (d < 360 && plane.shootCooldown <= 0) {
-                this.fireAircraftGuns(plane, targetPos);
-                plane.shootCooldown = 0.16;
-              }
-              if (d < 180) {
-                this.dropBomb(plane, targetPos);
-                plane.hasPayload = false;
-                plane.hasFiredRockets = undefined;
-                plane.state = 'pullout';
-                plane.pulloutTimer = 1.3;
-              }
-            } else if (plane.payloadType === 'hvar_rockets') {
-              // ════ HVAR 5吋航空火箭彈 (HVAR Rockets Salvo): 520m 遠程連環齊射 ════
-              if (d < 520) {
-                this.fireRockets(plane, targetPos, 8);
-                plane.hasPayload = false;
-                plane.order = { type: 'rtb' };
-                plane.state = 'returning';
-                plane.altitude = 0.75;
-              }
-            } else if (plane.payloadType === 'aim54_phoenix') {
-              // ════ AIM-54 鳳凰超遠程空空/反飛彈攔截 (AWG-9 Mach 4.3): 4800m BVR ════
-              if (d < 4800) {
-                this.firePhoenixMissile(plane, targetPos, targetEntity);
-                plane.ammoRemaining = (plane.ammoRemaining || 6) - 1;
-                if ((plane.ammoRemaining || 0) <= 0) {
-                  plane.hasPayload = false;
-                  plane.order = { type: 'rtb' };
-                  plane.state = 'returning';
-                }
-              }
-            } else if (plane.payloadType === 'agm65_maverick') {
-              // ════ AGM-65 小牛精確電視/紅外導引反裝甲飛彈: 2400m ════
-              if (d < 2400) {
-                this.fireMaverickMissile(plane, targetPos, targetEntity);
-                plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
-                if ((plane.ammoRemaining || 0) <= 0) {
-                  plane.hasPayload = false;
-                  plane.order = { type: 'rtb' };
-                  plane.state = 'returning';
-                }
-              }
-            } else if (plane.payloadType === 'hellfire_missiles' || plane.payloadType === 'tow_missiles') {
-              // ════ AGM-114 地獄火 / BGM-71 拖式 反戰車導引飛彈: 2000m ════
-              if (d < 2000) {
-                this.fireHellfireMissile(plane, targetPos, targetEntity);
-                plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
-                if ((plane.ammoRemaining || 0) <= 0) {
-                  plane.hasPayload = false;
-                  plane.order = { type: 'rtb' };
-                  plane.state = 'returning';
-                }
-              }
-            } else if (plane.payloadType === 'aim9_sidewinder') {
-              if (d < 1600) {
-                const targetHostile = targetEntity || { pos: targetPos, id: plane.order.targetId || '' };
-                this.fireAAMissile(plane, targetHostile as Aircraft, 'aim9');
-                plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
-                if ((plane.ammoRemaining || 0) <= 0) {
-                  plane.hasPayload = false;
-                  plane.order = { type: 'rtb' };
-                  plane.state = 'returning';
-                }
-              }
-            } else if (plane.payloadType === 'aim7_sparrow') {
-              if (d < 2400) {
-                const targetHostile = targetEntity || { pos: targetPos, id: plane.order.targetId || '' };
-                this.fireAAMissile(plane, targetHostile as Aircraft, 'aim7');
-                plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
-                if ((plane.ammoRemaining || 0) <= 0) {
-                  plane.hasPayload = false;
-                  plane.order = { type: 'rtb' };
-                  plane.state = 'returning';
-                }
-              }
-            } else if (plane.payloadType === 'agm45_shrike') {
-              if (d < 2600) {
-                let radarTarget = targetEntity && 'type' in targetEntity ? targetEntity as Installation : null;
-                if (!radarTarget) {
-                  for (const isl of this.islands) {
-                    const rInst = isl.installations.find(
-                      (i) => !i.isDestroyed && this.isHostile(plane.side, i.side) && (i.type === 'fan_song_radar' || i.type === 'radar_station')
-                    );
-                    if (rInst) {
-                      radarTarget = rInst;
-                      break;
-                    }
-                  }
-                }
-                if (radarTarget) {
-                  this.fireARMShrike(plane, radarTarget);
-                } else {
-                  this.fireBullpupMissile(plane, targetPos);
-                }
-                plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
-                if ((plane.ammoRemaining || 0) <= 0) {
-                  plane.hasPayload = false;
-                  plane.order = { type: 'rtb' };
-                  plane.state = 'returning';
-                }
-              }
-            } else if (plane.payloadType === 'agm12_bullpup') {
-              if (d < 2000) {
-                this.fireBullpupMissile(plane, targetPos);
-                plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
-                if ((plane.ammoRemaining || 0) <= 0) {
-                  plane.hasPayload = false;
-                  plane.order = { type: 'rtb' };
-                  plane.state = 'returning';
-                }
-              }
-            } else if (plane.payloadType === 'agm62_walleye') {
-              if (d < 1600) {
-                this.dropWalleyeGlideBomb(plane, targetPos);
-                plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
-                if ((plane.ammoRemaining || 0) <= 0) {
-                  plane.hasPayload = false;
-                  plane.order = { type: 'rtb' };
-                  plane.state = 'returning';
-                }
-              }
-            } else if (plane.payloadType === 'tactical_b61_nuke') {
-              plane.altitude = Math.max(0.24, plane.altitude - dt * 0.5);
-              if (d < 300) {
-                this.dropBomb(plane, targetPos);
-                plane.hasPayload = false;
-                plane.state = 'pullout';
-                plane.pulloutTimer = 1.5;
-                plane.speed = plane.maxSpeed * 1.35;
-              }
-            } else if (plane.payloadType === 'opfor_tactical_nuke') {
-              if (d < 450) {
-                this.dropSingleCorridorBomb(plane, targetPos, 0, 1, 0);
-                plane.hasPayload = false;
-                plane.state = 'returning';
-                plane.order = { type: 'rtb' };
-              }
-            } else if (plane.payloadType === 'bombs_snakeye_retarded') {
-              plane.altitude = Math.max(0.2, plane.altitude - dt * 0.6);
-              if (d < 260) {
-                this.dropSnakeyeBombs(plane, targetPos);
-                plane.hasPayload = false;
-                plane.state = 'pullout';
-                plane.pulloutTimer = 1.3;
-              }
-            } else if (plane.payloadType === 'ffar_rockets_pod') {
-              if (d < 520) {
-                this.fireRockets(plane, targetPos, 16);
-                plane.hasPayload = false;
-                plane.order = { type: 'rtb' };
-                plane.state = 'returning';
-              }
-            } else if (plane.payloadType === 'helo_assault_troops') {
-              plane.altitude = Math.max(0.12, plane.altitude - dt * 0.4);
-              if (d < 150) {
-                this.dropHeloAssaultTroops(plane, targetPos);
-                plane.ammoRemaining = 0;
-                plane.hasPayload = false;
-                plane.order = { type: 'rtb' };
-                plane.state = 'returning';
-              }
-            } else if (plane.payloadType === 'c1_paratroopers') {
-              plane.altitude = 0.5;
-              if (d < 220) {
-                this.dropParatroopers(plane, targetPos);
-                plane.ammoRemaining = 0;
-                plane.hasPayload = false;
-                plane.order = { type: 'rtb' };
-                plane.state = 'returning';
-              }
-            } else if (plane.model === 'tu16') {
-              // ════ 蘇聯海航 Tu-16 獾式長程飛彈轟炸機: 2800m 發射 KSR-5 超音速反艦飛彈 ════
-              if (d < 2800) {
-                this.fireTu16KSR5Missile(plane, targetPos);
-                plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
-                if ((plane.ammoRemaining || 0) <= 0) {
-                  plane.hasPayload = false;
-                  plane.order = { type: 'rtb' };
-                  plane.state = 'returning';
-                }
-              }
-            } else if (plane.payloadType === 'aim7_aim9_combo') {
-              // ════ AIM-7 麻雀 + AIM-9 響尾蛇 雙重空優混編 (遠程半主動雷達 + 近距紅外格鬥) ════
-              const targetHostile = targetEntity || { pos: targetPos, id: plane.order.targetId || '' };
-              const targetPlane = 'role' in targetHostile ? targetHostile : null;
-              if (d >= 1200 && d <= 2500 && (plane.ammoRemaining || 4) > 2) {
-                this.fireAAMissile(plane, targetPlane || targetHostile, 'aim7');
-                plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
-              } else if (d < 1600) {
-                this.fireAAMissile(plane, targetPlane || targetHostile, 'aim9');
-                plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
-                if ((plane.ammoRemaining || 0) <= 0) {
-                  plane.hasPayload = false;
-                  plane.order = { type: 'rtb' };
-                  plane.state = 'returning';
-                }
-              }
-            } else if (plane.payloadType === 'gbu10_laser_paveway') {
-              // ════ GBU-10 鋪路雷射導引穿甲炸彈 (外科手術式精確破障) ════
-              if (d < 1800) {
-                this.dropLaserGuidedBomb(plane, targetPos);
-                plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
-                if ((plane.ammoRemaining || 0) <= 0) {
-                  plane.hasPayload = false;
-                  plane.order = { type: 'rtb' };
-                  plane.state = 'returning';
-                }
-              }
-            } else if (plane.payloadType === 'cbu_cluster_bombs') {
-              // ════ CBU-24 / Rockeye 廣域集束子母彈群 (80m 防空陣地粉碎) ════
-              plane.altitude = Math.max(0.28, plane.altitude - dt * 0.45);
-              if (d < 380) {
-                this.dropClusterBombs(plane, targetPos);
-                plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
-                if ((plane.ammoRemaining || 0) <= 0) {
-                  plane.hasPayload = false;
-                  plane.state = 'pullout';
-                  plane.pulloutTimer = 1.3;
-                }
-              }
-            } else if (plane.payloadType === 'blu27_napalm') {
-              // ════ BLU-27 凝固汽油燃燒彈 (75m 叢林火海持續灼燒) ════
-              plane.altitude = Math.max(0.2, plane.altitude - dt * 0.55);
-              if (d < 280) {
-                this.dropNapalmCanisters(plane, targetPos);
-                plane.ammoRemaining = (plane.ammoRemaining || 4) - 2;
-                if ((plane.ammoRemaining || 0) <= 0) {
-                  plane.hasPayload = false;
-                  plane.state = 'pullout';
-                  plane.pulloutTimer = 1.4;
-                }
-              }
-            } else if (plane.payloadType === 'agm78_standard_arm') {
-              // ════ AGM-78 標準長程反輻射飛彈 (3600m SEAD 野鼬超遠程獵殺) ════
-              if (d < 3600) {
-                let radarTarget = targetEntity && 'type' in targetEntity ? targetEntity as Installation : null;
-                if (!radarTarget) {
-                  for (const isl of this.islands) {
-                    const rInst = isl.installations.find(
-                      (i) => !i.isDestroyed && this.isHostile(plane.side, i.side) && (i.type === 'fan_song_radar' || i.type === 'radar_station')
-                    );
-                    if (rInst) {
-                      radarTarget = rInst;
-                      break;
-                    }
-                  }
-                }
-                if (radarTarget) {
-                  this.fireStandardARM(plane, radarTarget);
-                } else {
-                  this.fireBullpupMissile(plane, targetPos);
-                }
-                plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
-                if ((plane.ammoRemaining || 0) <= 0) {
-                  plane.hasPayload = false;
-                  plane.order = { type: 'rtb' };
-                  plane.state = 'returning';
-                }
-              }
-            } else if (plane.payloadType === 'mer_iron_bombs') {
-              // ════ MER 多聯掛架 18-24枚 500lb 通用高爆彈群 (密集連環彈幕走廊) ════
-              plane.altitude = Math.max(0.26, plane.altitude - dt * 0.4);
-              if (d < 340) {
-                this.dropMERIronBombStick(plane, targetPos);
-                plane.hasPayload = false;
-                plane.state = 'pullout';
-                plane.pulloutTimer = 1.5;
-              }
-            } else if (
-              plane.payloadType === 'asw_depth_bombs' ||
-              plane.payloadType === 'depth_bombs' ||
-              plane.payloadType === 'scout_depth_charge'
-            ) {
-              // ════ 航空深水炸彈群 (ASW Depth Bomb Attack): 低空震盪獵潛 ════
-              plane.altitude = Math.max(0.22, plane.altitude - dt * 0.45);
-              if (d < 220) {
-                this.dropDepthBombs(plane, targetPos);
-                plane.hasPayload = false;
-                plane.order = { type: 'rtb' };
-                plane.state = 'returning';
-                plane.altitude = 0.75;
-              }
-            } else if (
-              plane.payloadType === 'bomb_500' ||
-              plane.payloadType === 'bomb_1000' ||
-              plane.payloadType === 'bomb_1600' ||
-              plane.payloadType === 'bomb_2000' ||
-              plane.payloadType === 'bombs_dual_500' ||
-              plane.role === 'dive_bomber'
-            ) {
-              // ════ 高空垂直呼嘯俯衝轟炸 (High-Angle Screaming Dive Bombing) ════
-              if (d < 480 && plane.state !== 'diving') {
-                plane.state = 'diving';
-                soundEngine.playDiveBomberWhistle();
-                plane.speed = plane.maxSpeed * 1.35;
-              }
-
-              if (plane.state === 'diving') {
-                plane.altitude = Math.max(0.18, plane.altitude - dt * 1.05);
-              }
-
-              // Release bomb at point-blank altitude (120m distance or altitude <= 0.22)
-              if (d < 120 || (plane.state === 'diving' && plane.altitude <= 0.22)) {
-                this.dropBomb(plane, targetPos);
-                plane.hasPayload = false;
-                plane.state = 'pullout';
-                plane.pulloutTimer = 1.3;
-              }
-            } else {
-              // 通用對地/對艦投彈
-              plane.altitude = Math.max(0.28, plane.altitude - dt * 0.45);
-              if (d < 360 && plane.shootCooldown <= 0) {
-                this.fireAircraftGuns(plane, targetPos);
-                plane.shootCooldown = 0.16;
-              }
-              if (d < 180) {
-                this.dropBomb(plane, targetPos);
-                plane.hasPayload = false;
-                plane.state = 'pullout';
-                plane.pulloutTimer = 1.2;
-              }
-            }
-          } else {
-            // Dogfight intercept & strafe
-            plane.shootCooldown -= dt;
-            const targetPlane = targetEntity && 'role' in targetEntity ? (targetEntity as Aircraft) : null;
-            if (targetPlane && targetPlane.state !== 'shot_down') {
-              if (plane.side === 'enemy' && (plane.model === 'su27' || plane.model === 'mig29a' || plane.model === 'mig21' || plane.model === 'mig17')) {
-                if (plane.model === 'su27' || plane.model === 'mig29a') {
-                  // Era 5 Soviet 4th Gen Fighters: R-27 BVR & R-73 High-Off-Boresight Dogfight
-                  if (d >= 1000 && d <= 3600 && plane.shootCooldown <= 0) {
-                    this.fireAAMissile(plane, targetPlane, 'aim7'); // R-27ER Alamo BVR
-                    plane.shootCooldown = 5.0;
-                  } else if (d < 1000 && d > 200 && plane.shootCooldown <= 0) {
-                    this.fireAAMissile(plane, targetPlane, 'aim9'); // R-73 Archer All-Aspect Dogfight
-                    plane.shootCooldown = 4.0;
-                  } else if (d <= 250 && plane.shootCooldown <= 0) {
-                    this.fireAircraftGuns(plane, targetPos);
-                    plane.shootCooldown = 0.15;
-                  }
-                } else if (plane.model === 'mig21') {
-                  if (d >= 320 && d <= 1800 && plane.shootCooldown <= 0) {
-                    this.fireAAMissile(plane, targetPlane, 'k13');
-                    plane.shootCooldown = 4.2;
-                    this.triggerSovietHitAndRun(plane, targetPlane.pos);
-                  } else if (d < 320 && plane.shootCooldown <= 0) {
-                    this.fireAircraftGuns(plane, targetPos);
-                    plane.shootCooldown = 0.18;
-                    this.triggerSovietHitAndRun(plane, targetPos);
-                  }
-                } else {
-                  // MiG-17 37mm/23mm heavy cannon pass
-                  if (d < 360 && plane.shootCooldown <= 0) {
-                    this.fireAircraftGuns(plane, targetPos);
-                    plane.shootCooldown = 0.22;
-                    this.triggerSovietHitAndRun(plane, targetPos);
-                  }
-                }
-              } else if ((plane.side === 'player' || plane.side === 'allied') && (['f14a', 'f15a', 'f16a', 'fa18a', 'f4e', 'f4b', 'f4j', 'f8', 'tornado_adv', 'f4f', 'mirage2000', 'mirage3', 'hunter_fga9'].includes(plane.model))) {
-                if (plane.model === 'f14a' && d >= 1600 && d <= 4800 && plane.shootCooldown <= 0) {
-                  this.firePhoenixMissile(plane, targetPlane.pos, targetPlane);
-                  plane.shootCooldown = 7.0;
-                } else if (d >= 800 && d <= 3200 && (plane.sarhHoldTimer || 0) <= 0 && plane.shootCooldown <= 0) {
-                  this.fireAAMissile(plane, targetPlane, 'aim7');
-                  plane.shootCooldown = 5.5;
-                } else if (d < 800 && d > 200 && plane.shootCooldown <= 0) {
-                  this.fireAAMissile(plane, targetPlane, 'aim9');
-                  plane.shootCooldown = 4.0;
-                } else if (d <= 250 && plane.shootCooldown <= 0) {
-                  this.fireAircraftGuns(plane, targetPos);
-                  plane.shootCooldown = 0.16;
-                }
-              } else {
-                if (plane.shootCooldown <= 0 && d < 240) {
-                  this.fireAircraftGuns(plane, targetPos);
-                  plane.shootCooldown = 0.2;
-                }
-              }
-            } else {
-              // 對地或對艦無彈藥俯衝低空掃射 (僅在確認目標敵對存在時擊發)
-              if (plane.shootCooldown <= 0 && d < 240 && targetEntity && this.isHostile(plane.side, targetEntity.side)) {
-                this.fireAircraftGuns(plane, targetPos);
-                plane.shootCooldown = 0.2;
-              }
-            }
-          }
-        }
+        if (this.updateAttackOrder(dt, plane)) continue;
       } else if (plane.order.type === 'patrol' || plane.state === 'patrolling') {
-        // Orbit patrol area & auto-intercept hostile planes entering perimeter
-        const center = plane.order.patrolOrigin || (flagship ? flagship.pos : plane.pos);
-
-        // SARH continuous radar illumination lock
-        if (plane.sarhHoldTimer !== undefined && plane.sarhHoldTimer > 0 && plane.sarhIlluminatingTargetId) {
-          plane.sarhHoldTimer -= dt;
-          const illTarget = this.aircraft.find((a) => a.id === plane.sarhIlluminatingTargetId && a.state !== 'shot_down');
-          if (illTarget) {
-            plane.targetHeading = Math.atan2(illTarget.pos.y - plane.pos.y, illTarget.pos.x - plane.pos.x);
-          } else {
-            plane.sarhIlluminatingTargetId = undefined;
-            plane.sarhHoldTimer = 0;
-          }
-        }
-
-        // In Era 4 & 5 or with modern radar, fighters have extended radar search range (up to 4800m for F-14 AWG-9)!
-        const isModernFighter = this.era === 'era4' || this.era === 'era5' || plane.payloadType === 'aim7_sparrow' || plane.payloadType === 'aim9_sidewinder' || plane.payloadType === 'aim54_phoenix';
-        const radarPerimeter = plane.model === 'f14a' ? 4800 : (this.era === 'era5' ? 3800 : isModernFighter ? 2400 : 420);
-
-        // Find hostile aircraft within patrol radar
-        const hostile = this.aircraft.find(
-          (a) => this.isHostile(plane.side, a.side) && a.state !== 'shot_down' && dist(plane.pos, a.pos) < radarPerimeter
-        );
-
-        if (hostile && plane.role === 'fighter') {
-          const hDist = dist(plane.pos, hostile.pos);
-          plane.targetHeading = Math.atan2(hostile.pos.y - plane.pos.y, hostile.pos.x - plane.pos.x);
-          plane.shootCooldown -= dt;
-
-          if (isModernFighter) {
-            if (plane.side === 'enemy' && (plane.model === 'su27' || plane.model === 'mig29a' || plane.model === 'mig21' || plane.model === 'mig17')) {
-              if (plane.model === 'su27' || plane.model === 'mig29a') {
-                if (hDist >= 1000 && hDist <= 3600 && plane.shootCooldown <= 0) {
-                  this.fireAAMissile(plane, hostile, 'aim7'); // R-27ER Alamo
-                  plane.shootCooldown = 5.0;
-                } else if (hDist < 1000 && hDist > 200 && plane.shootCooldown <= 0) {
-                  this.fireAAMissile(plane, hostile, 'aim9'); // R-73 Archer
-                  plane.shootCooldown = 4.0;
-                } else if (hDist <= 250 && plane.shootCooldown <= 0) {
-                  this.fireAircraftGuns(plane, hostile.pos);
-                  plane.shootCooldown = 0.15;
-                }
-              } else if (plane.model === 'mig21') {
-                if (hDist >= 320 && hDist <= 1800 && plane.shootCooldown <= 0) {
-                  this.fireAAMissile(plane, hostile, 'k13');
-                  plane.shootCooldown = 4.2;
-                  this.triggerSovietHitAndRun(plane, hostile.pos);
-                } else if (hDist < 320 && plane.shootCooldown <= 0) {
-                  this.fireAircraftGuns(plane, hostile.pos);
-                  plane.shootCooldown = 0.18;
-                  this.triggerSovietHitAndRun(plane, hostile.pos);
-                }
-              } else {
-                if (hDist < 360 && plane.shootCooldown <= 0) {
-                  this.fireAircraftGuns(plane, hostile.pos);
-                  plane.shootCooldown = 0.22;
-                  this.triggerSovietHitAndRun(plane, hostile.pos);
-                }
-              }
-            } else {
-              // F-14A Phoenix ultra long range (1600m - 4800m)
-              if (plane.model === 'f14a' && hDist >= 1600 && hDist <= 4800 && plane.shootCooldown <= 0) {
-                this.firePhoenixMissile(plane, hostile.pos, hostile);
-                plane.shootCooldown = 7.0;
-              }
-              // BVR Engagement (800m - 3200m): AIM-7 Sparrow SARH
-              else if (hDist >= 800 && hDist <= 3200 && (plane.sarhHoldTimer || 0) <= 0 && plane.shootCooldown <= 0) {
-                this.fireAAMissile(plane, hostile, 'aim7');
-                plane.shootCooldown = 5.5;
-              }
-              // Dogfight Salvo (< 800m): Dual AIM-9 Sidewinder Salvo (ripple 2 missiles)
-              else if (hDist < 800 && hDist > 200 && plane.shootCooldown <= 0) {
-                this.fireAAMissile(plane, hostile, 'aim9');
-                this.scheduleAction(0.25, () => {
-                  if (plane.state !== 'shot_down') {
-                    this.fireAAMissile(plane, hostile, 'aim9');
-                  }
-                });
-                plane.shootCooldown = 4.5;
-              }
-              // Close Guns (< 250m): M61 Vulcan stream
-              else if (hDist <= 250 && plane.shootCooldown <= 0) {
-                this.fireAircraftGuns(plane, hostile.pos);
-                plane.shootCooldown = 0.16;
-              }
-            }
-          } else {
-            // Era 1 - 3 WWII/Korea machine guns
-            if (plane.shootCooldown <= 0 && hDist < 220) {
-              this.fireAircraftGuns(plane, hostile.pos);
-              plane.shootCooldown = 0.22;
-            }
-          }
-        } else {
-          // 反潛機主動巡邏：定時投放聲吶浮標 / 吊放聲吶脈衝，並自動獵殺已被定位之敵方潛艦
-          const aswRange = this.getAircraftAswSonarRange(plane);
-          if (aswRange > 0) {
-            plane.sonarPingCooldown = (plane.sonarPingCooldown ?? 2.5) - dt;
-            if (plane.sonarPingCooldown <= 0) {
-              plane.sonarPingCooldown = 3.8;
-              this.particles.push({
-                id: `air-sonar-${Date.now()}-${Math.random()}`,
-                x: plane.pos.x,
-                y: plane.pos.y,
-                vx: 0,
-                vy: 0,
-                life: 0.9,
-                maxLife: 0.9,
-                radius: 45,
-                color: plane.side === 'enemy' ? '#FF5252' : '#00E5FF',
-                type: 'shockwave',
-                shape: 'ring',
-              });
-            }
-
-            if (plane.hasPayload) {
-              const spottedSub =
-                plane.side === 'enemy'
-                  ? [...this.playerShips, ...this.alliedShips].find(
-                      (s) => !s.isSunk && this.isSubmarine(s) && s.isSpottedByEnemy && dist(plane.pos, s.pos) < 2200
-                    )
-                  : this.enemyShips.find(
-                      (s) => !s.isSunk && this.isSubmarine(s) && s.isSpotted && dist(plane.pos, s.pos) < 2200
-                    );
-              if (spottedSub) {
-                plane.order = { type: 'attack', targetId: spottedSub.id, targetPos: { ...spottedSub.pos }, patrolOrigin: center };
-                plane.state = 'attacking';
-                continue;
-              }
-            }
-          }
-
-          // 時代一~時代四 CAS 戰機常態空巡自動索敵地面部隊 (Auto-engage ground troops when patrolling)
-          if (this.isCasAircraft(plane) && (plane.hasPayload || (plane.gunAmmo ?? 0) > 0)) {
-            const autoCasTarget = this.acquireCasGroundTarget(plane);
-            if (autoCasTarget) {
-              plane.order = { type: 'attack', targetId: autoCasTarget.id, targetPos: autoCasTarget.pos };
-              plane.state = 'attacking';
-              plane.shootCooldown = 0.4;
-              this.addCombatLog({
-                category: 'air',
-                sourceSide: plane.side,
-                sourceName: plane.name,
-                targetName: autoCasTarget.name,
-                actionType: 'recon_spotted',
-                text: `🎯【CAS 密接空中支援索敵】「${plane.name}」在空巡巡邏空域偵測到敵「${autoCasTarget.name}」，立即壓低機頭展開俯衝攻擊！`,
-              });
-              continue;
-            }
-          }
-
-          // Circular orbit (ASW planes sweep wider corridors)
-          const orbitR = aswRange > 0 ? 520 : 250;
-          const a = Date.now() * (aswRange > 0 ? 0.0009 : 0.0016);
-          const ox = center.x + Math.cos(a) * orbitR + plane.wingmanOffset.x;
-          const oy = center.y + Math.sin(a) * orbitR + plane.wingmanOffset.y;
-          plane.targetHeading = Math.atan2(oy - plane.pos.y, ox - plane.pos.x);
-        }
+        if (this.updatePatrolOrder(dt, flagship, plane)) continue;
       } else if (plane.order.type === 'move' && plane.order.targetPos) {
-        const dx = plane.order.targetPos.x - plane.pos.x;
-        const dy = plane.order.targetPos.y - plane.pos.y;
-        const moveDist = Math.hypot(dx, dy);
-        plane.targetHeading = Math.atan2(dy, dx);
-
-        const isPendingTroopDrop =
-          plane.hasPayload &&
-          plane.order.pendingUnload &&
-          (plane.payloadType === 'c1_paratroopers' || plane.payloadType === 'helo_assault_troops');
-
-        if (plane.order.pendingSonobuoyPos) {
-          const isHelo =
-            plane.role === 'rescue' ||
-            plane.model === 'ho3s1' ||
-            plane.model === 'sh2' ||
-            plane.model === 'uh2' ||
-            plane.model === 'sh3f';
-          if (isHelo && moveDist < 340) {
-            plane.altitude = Math.max(0.22, plane.altitude - dt * 0.3);
-          }
-          const buoyDropRadius = isHelo ? 105 : 145;
-          if (moveDist < buoyDropRadius) {
-            const dropPt = { ...plane.order.pendingSonobuoyPos };
-            this.deploySonobuoyFromAircraft(plane, dropPt);
-            plane.order = { type: 'patrol', patrolOrigin: dropPt, targetPos: dropPt };
-            plane.state = 'patrolling';
-            continue;
-          }
-        } else if (isPendingTroopDrop) {
-          const dropRadius = plane.payloadType === 'helo_assault_troops' ? 150 : 220;
-          if (plane.payloadType === 'helo_assault_troops' && moveDist < 420) {
-            plane.altitude = Math.max(0.15, plane.altitude - dt * 0.35);
-          } else if (plane.payloadType === 'c1_paratroopers' && moveDist < 500) {
-            plane.altitude = 0.5;
-          }
-          if (moveDist < dropRadius) {
-            const safeDropPt = this.findIslandDropPoint(plane.order.targetPos, 240) || plane.order.targetPos;
-            if (plane.payloadType === 'helo_assault_troops') {
-              this.dropHeloAssaultTroops(plane, safeDropPt);
-            } else {
-              this.dropParatroopers(plane, safeDropPt);
-            }
-            plane.ammoRemaining = 0;
-            plane.hasPayload = false;
-            plane.order = { type: 'rtb' };
-            plane.state = 'returning';
-            continue;
-          }
-        } else if (moveDist < 40) {
-          plane.order = { type: 'patrol', patrolOrigin: { ...plane.pos } };
-          plane.state = 'patrolling';
-        }
+        if (this.updateMoveOrder(dt, plane)) continue;
       } else if (plane.state === 'returning' || plane.order.type === 'rtb') {
-        if (plane.side === 'allied') {
-          const basePos = this.friendlyBase?.center || { x: 2000, y: 12400 };
-          const dx = basePos.x - plane.pos.x;
-          const dy = basePos.y - plane.pos.y;
-          const d = Math.hypot(dx, dy);
-          plane.targetHeading = Math.atan2(dy, dx);
-          plane.altitude = Math.min(0.85, plane.altitude + dt * 0.2);
-
-          if (d < 65) {
-            this.addCombatLog({
-              category: 'air',
-              sourceSide: 'allied',
-              sourceName: '前進航空基地 (AFB)',
-              targetName: plane.name,
-              actionType: 'recon_spotted',
-              text: `🛬【盟軍戰機平安返航】「${plane.name}」完成戰鬥巡邏與打擊任務，平安返降前進基地！`,
-            });
-            this.aircraft.splice(i, 1);
-            continue;
-          }
-        } else if (plane.side === 'player') {
-          const isLandBased =
-            plane.squadronId.startsWith('sq-afb-') ||
-            plane.model === 'c47' ||
-            plane.model === 'c130' ||
-            plane.model === 'b29' ||
-            plane.model === 'b17' ||
-            plane.model === 'b17_late' ||
-            plane.model === 'b25' ||
-            plane.model === 'b24' ||
-            plane.model === 'f86' ||
-            plane.model === 'f82' ||
-            plane.model === 'p51' ||
-            plane.model === 'p47' ||
-            plane.model === 'p38' ||
-            plane.model === 'p40' ||
-            plane.model === 'p36a' ||
-            plane.model === 'p39d' ||
-            plane.model === 'a20' ||
-            plane.model === 'a26' ||
-            plane.model === 'a1h' ||
-            plane.model === 'a37b' ||
-            plane.model === 'f5a' ||
-            plane.model === 'f104g';
-
-          if (isLandBased) {
-            // 友軍陸基戰機返航至 Henderson Field / Wonsan 前進基地
-            const basePos = this.friendlyBase?.center || { x: 2000, y: 12400 };
-            const dx = basePos.x - plane.pos.x;
-            const dy = basePos.y - plane.pos.y;
-            const d = Math.hypot(dx, dy);
-            plane.targetHeading = Math.atan2(dy, dx);
-            plane.altitude = plane.model === 'b29' ? 0.98 : Math.min(0.85, plane.altitude + dt * 0.2);
-
-            if (d < 65) {
-              // 成功降落基地並補入庫存
-              this.airbasePlanes[plane.model] = (this.airbasePlanes[plane.model] || 0) + 1;
-              const baseName = this.friendlyBase?.name || (this.era === 'era3' ? 'Wonsan Airfield' : 'Henderson Field');
-              this.addCombatLog({
-                category: 'air',
-                sourceSide: 'player',
-                sourceName: '前進航空基地 (AFB)',
-                targetName: plane.name,
-                actionType: 'recon_spotted',
-                text: plane.model === 'b29'
-                  ? `🛬【戰略重轟平安返降】「${plane.name}」完成長程作戰任務返降 ${baseName}，庫存整備入庫！`
-                  : `🛬【陸基戰機平安返航】「${plane.name}」完成長程作戰任務返降 ${baseName}，整備入庫！`,
-              });
-              this.aircraft.splice(i, 1);
-              continue;
-            }
-          } else {
-            // 艦載機返航降落航母甲板
-            if (flagship) {
-              const dx = flagship.pos.x - plane.pos.x;
-              const dy = flagship.pos.y - plane.pos.y;
-              const d = Math.hypot(dx, dy);
-              plane.targetHeading = Math.atan2(dy, dx);
-              plane.altitude = Math.min(0.8, plane.altitude + dt * 0.2);
-
-              if (d < 50) {
-                if (flagship.carrierPlanes) {
-                  flagship.carrierPlanes.ready[plane.model] = (flagship.carrierPlanes.ready[plane.model] || 0) + 1;
-                }
-                this.aircraft.splice(i, 1);
-                continue;
-              }
-            }
-          }
-        } else {
-          // 敵機返航 (Enemy RTB): 返航至敵方航母或脫離戰場返回北方前線基地
-          const enemyCarrier = this.enemyShips.find((s) => s.type === 'carrier' && !s.isSunk);
-          if (enemyCarrier) {
-            const dx = enemyCarrier.pos.x - plane.pos.x;
-            const dy = enemyCarrier.pos.y - plane.pos.y;
-            const d = Math.hypot(dx, dy);
-            plane.targetHeading = Math.atan2(dy, dx);
-            if (d < 60) {
-              this.aircraft.splice(i, 1);
-              continue;
-            }
-          } else {
-            // 敵航母已沉沒或陸攻機，飛返北方作戰分界線脫離
-            const exitPoint = { x: 11000, y: 1000 };
-            const dx = exitPoint.x - plane.pos.x;
-            const dy = exitPoint.y - plane.pos.y;
-            plane.targetHeading = Math.atan2(dy, dx);
-            if (Math.hypot(dx, dy) < 300 || plane.pos.y < 1200) {
-              this.aircraft.splice(i, 1);
-              continue;
-            }
-          }
-        }
+        if (this.updateReturnToBase(dt, flagship, i, plane)) continue;
       }
 
       // Low-altitude breakaway turn timer countdown (魚雷機/火箭機投放後低空急轉脫離)
@@ -4199,146 +2712,7 @@ export class GameEngine {
         }
       }
 
-      // ══════════════════════════════════════════════════════════
-      // 時代四/時代五戰機干擾絲 (Chaff) / 熱焰彈 (Flare) 與機動高G破轉防禦
-      // ══════════════════════════════════════════════════════════
-      if (this.era === 'era4' || this.era === 'era5') {
-        if (plane.chaffCount === undefined) {
-          plane.chaffCount = 36;
-          plane.maxChaff = 36;
-          plane.flareCount = 36;
-          plane.maxFlare = 36;
-          plane.cmCooldown = 0;
-        }
-
-        if (plane.cmCooldown !== undefined && plane.cmCooldown > 0) {
-          plane.cmCooldown = Math.max(0, plane.cmCooldown - dt);
-        }
-
-        if (plane.evasionTimer !== undefined && plane.evasionTimer > 0) {
-          plane.evasionTimer = Math.max(0, plane.evasionTimer - dt);
-          if (plane.evasionTimer <= 0) {
-            plane.isEvading = false;
-            plane.evasionTactic = undefined;
-          }
-        }
-
-        if (plane.health > 0 && plane.state !== 'landing') {
-          const incomingMissile = this.projectiles.find(
-            (pr) =>
-              !pr.isDead &&
-              this.isHostile(plane.side, pr.side) &&
-              (pr.type === 'missile_sam' || pr.type === 'missile_aam') &&
-              (pr.targetEntityId === plane.id || dist(pr.pos, plane.pos) < 780)
-          );
-
-          if (incomingMissile && (plane.cmCooldown || 0) <= 0) {
-            const isIr = incomingMissile.guidanceType === 'infrared' || incomingMissile.guidanceType === 'ir';
-            const isRadar = !isIr;
-
-            if (isIr && (plane.flareCount ?? 0) > 0) {
-              // ════ 紅外尋標飛彈威脅對策: Breaking 高G大角度切向破轉 + 熱焰彈群 ════
-              plane.flareCount = Math.max(0, (plane.flareCount ?? 30) - 2);
-              plane.cmCooldown = 1.4;
-              plane.isEvading = true;
-              plane.evasionTactic = 'breaking';
-              plane.evasionTimer = 2.6;
-              plane.evasionTurnSign = Math.random() > 0.5 ? 1 : -1;
-
-              // High-G Break Slice: 猛烈大角度急轉切入飛彈追擊幾何並開啟加力燃燒室
-              plane.targetHeading = plane.heading + (plane.evasionTurnSign || 1) * 1.85;
-              plane.speed = Math.min(plane.maxSpeed * 1.35, plane.speed + 120);
-
-              // 投放高溫鎂燃燒熱焰彈 (Burning magnesium flares)
-              for (let f = 0; f < 4; f++) {
-                const flareAng = plane.heading + Math.PI + (Math.random() - 0.5) * 0.9;
-                this.particles.push({
-                  id: `flare-${Date.now()}-${f}-${Math.random()}`,
-                  x: plane.pos.x - Math.cos(plane.heading) * 14,
-                  y: plane.pos.y - Math.sin(plane.heading) * 14,
-                  vx: Math.cos(flareAng) * (55 + Math.random() * 30),
-                  vy: Math.sin(flareAng) * (55 + Math.random() * 30),
-                  life: 1.6,
-                  maxLife: 1.6,
-                  radius: 5.5,
-                  color: '#FF6D00',
-                  type: 'flare',
-                });
-              }
-
-              // Threat-matched Breaking 誘騙脫鎖率達 80%
-              if (Math.random() < 0.80) {
-                incomingMissile.isDecoyed = true;
-                incomingMissile.targetEntityId = undefined;
-                incomingMissile.targetPos = {
-                  x: plane.pos.x + (Math.random() - 0.5) * 450,
-                  y: plane.pos.y + (Math.random() - 0.5) * 450,
-                };
-              }
-
-              this.addCombatLog({
-                category: 'aa',
-                sourceSide: plane.side,
-                sourceName: plane.name,
-                targetName: '來襲紅外飛彈',
-                actionType: 'recon_spotted',
-                text: `⚡【Breaking 高G破轉機動 + 熱焰彈群】「${plane.name}」開後燃器大過載破轉！紅外尋標頭被高溫熱焰彈欺騙脫鎖！`,
-              });
-            } else if (isRadar && (plane.chaffCount ?? 0) > 0) {
-              // ════ 雷達導向飛彈威脅對策: Notching 90° 零都卜勒切向規避 + 箔條干擾雲 ════
-              plane.chaffCount = Math.max(0, (plane.chaffCount ?? 30) - 4);
-              plane.cmCooldown = 1.4;
-              plane.isEvading = true;
-              plane.evasionTactic = 'notching';
-              plane.evasionTimer = 3.0;
-              plane.evasionTurnSign = Math.random() > 0.5 ? 1 : -1;
-
-              // 3-9 Line Beam / Notching: 航向精確切至與來襲飛彈夾角 90°，落入都卜勒雷達盲區
-              const missileHeading = incomingMissile.heading ?? Math.atan2(plane.pos.y - incomingMissile.pos.y, plane.pos.x - incomingMissile.pos.x);
-              plane.targetHeading = missileHeading + (Math.PI / 2) * (plane.evasionTurnSign || 1);
-              // 俯衝貼近海面/地形雜波 (Sea Clutter Masking)
-              plane.altitude = Math.max(0.14, plane.altitude - dt * 0.45);
-
-              // 投放鍍鋁干擾絲箔條雲 (Reflective aluminum chaff strips)
-              for (let c = 0; c < 10; c++) {
-                this.particles.push({
-                  id: `chaff-${Date.now()}-${c}-${Math.random()}`,
-                  x: plane.pos.x - Math.cos(plane.heading) * 16 + (Math.random() - 0.5) * 14,
-                  y: plane.pos.y - Math.sin(plane.heading) * 16 + (Math.random() - 0.5) * 14,
-                  vx: (Math.random() - 0.5) * 16,
-                  vy: (Math.random() - 0.5) * 16,
-                  life: 2.8,
-                  maxLife: 2.8,
-                  radius: 6.5,
-                  color: '#E0F7FA',
-                  type: 'chaff',
-                });
-              }
-
-              // Threat-matched Notching 規避誘騙率 (78%，若切入角接近90°垂直波束則提升至 88%)
-              const angleDiff = Math.abs(Math.sin(plane.heading - missileHeading));
-              const notchingBonus = angleDiff > 0.85 ? 0.88 : 0.78;
-              if (Math.random() < notchingBonus) {
-                incomingMissile.isDecoyed = true;
-                incomingMissile.targetEntityId = undefined;
-                incomingMissile.targetPos = {
-                  x: plane.pos.x + (Math.random() - 0.5) * 600,
-                  y: plane.pos.y + (Math.random() - 0.5) * 600,
-                };
-              }
-
-              this.addCombatLog({
-                category: 'aa',
-                sourceSide: plane.side,
-                sourceName: plane.name,
-                targetName: '來襲雷達導引飛彈',
-                actionType: 'recon_spotted',
-                text: `📡【Notching 切向橫滾規避 + 箔條干擾雲】「${plane.name}」切至 90° 零都卜勒盲區並俯衝貼地！雷達波束完全迷失於雜波反射雲中！`,
-              });
-            }
-          }
-        }
-      }
+      this.updateCountermeasures(dt, plane);
 
       // 威脅配對規避機動姿態維持 (Threat-Matched Evasive Maneuver Steering)
       if (plane.isEvading && (plane.evasionTimer || 0) > 0) {
@@ -4377,7 +2751,7 @@ export class GameEngine {
         plane.role === 'attacker' ||
         plane.role === 'dive_bomber' ||
         plane.role === 'torpedo_bomber' ||
-        ['b17', 'b24', 'b29', 'a20', 'a26', 'sbd', 'sb2c', 'tbd', 'tbf', 'val', 'kate', 'judy', 'jill', 'g4m', 'tu14', 'il10'].includes(plane.model);
+        TAIL_GUNNER_MODELS.has(plane.model);
 
       if (hasTailGunner) {
         plane.rearGunnerCooldown = Math.max(0, (plane.rearGunnerCooldown || 0) - dt);
@@ -4400,6 +2774,1528 @@ export class GameEngine {
           if (pursuer) {
             this.fireTailGunnerBurst(plane, pursuer);
             plane.rearGunnerCooldown = isB29 ? 0.28 : plane.role === 'level_bomber' ? 0.36 : 0.60;
+          }
+        }
+      }
+    }
+  }
+
+  /** Crash sequence for a shot-down aircraft; true once the wreck is removed. */
+  private updateShotDownAircraft(dt: number, i: number, plane: Aircraft): boolean {
+    if (plane.state === 'shot_down') {
+      plane.deathTimer = (plane.deathTimer || 0) - dt;
+      const mode = plane.crashMode || 'smoke';
+
+      // Dynamic flight physics according to crash mode
+      if (mode === 'spin') {
+        plane.heading += (plane.crashSpinSpeed || 4) * dt;
+        plane.speed = Math.max(35, plane.speed * 0.96);
+        plane.pos.x += Math.cos(plane.heading) * plane.speed * dt * 0.4;
+        plane.pos.y += Math.sin(plane.heading) * plane.speed * dt * 0.4;
+        plane.altitude = Math.max(0, plane.altitude - dt * 0.55);
+      } else if (mode === 'breakup') {
+        plane.heading += (plane.crashSpinSpeed || 2) * dt * 0.4;
+        plane.pos.x += plane.vel.x * dt * 0.5;
+        plane.pos.y += plane.vel.y * dt * 0.5;
+        plane.altitude = Math.max(0, plane.altitude - dt * 0.65);
+
+        // Update detached debris pieces (flying wings & tail)
+        if (plane.crashDebris) {
+          for (const deb of plane.crashDebris) {
+            deb.x += deb.vx * dt;
+            deb.y += deb.vy * dt;
+            deb.rot += deb.rotSpeed * dt;
+          }
+        }
+      } else if (mode === 'burn') {
+        plane.heading += (Math.sin(this.gameTime * 4) * 0.5) * dt;
+        plane.pos.x += plane.vel.x * dt * 0.65;
+        plane.pos.y += plane.vel.y * dt * 0.65;
+        plane.altitude = Math.max(0, plane.altitude - dt * 0.5);
+      } else {
+        // Smoke & Yaw Glide
+        plane.pos.x += plane.vel.x * dt * 0.7;
+        plane.pos.y += plane.vel.y * dt * 0.7;
+        plane.altitude = Math.max(0, plane.altitude - dt * 0.45);
+      }
+
+      // Spawn dynamic crash fire particles
+      if (mode === 'burn') {
+        if (Math.random() < 0.75) {
+          this.particles.push({
+            id: `crash-fire-${Date.now()}-${Math.random()}`,
+            x: plane.pos.x + (Math.random() - 0.5) * 6,
+            y: plane.pos.y + (Math.random() - 0.5) * 6,
+            vx: (Math.random() - 0.5) * 10,
+            vy: (Math.random() - 0.5) * 10 - 5,
+            life: 0.45,
+            maxLife: 0.45,
+            radius: 5 + Math.random() * 5,
+            color: Math.random() > 0.4 ? '#FF3D00' : '#FFD54F',
+            type: 'fire',
+          });
+        }
+      }
+
+      // Heavy dark smoke trails for all crashing planes
+      if (Math.random() < 0.8) {
+        this.particles.push({
+          id: `crash-smoke-${Date.now()}-${Math.random()}`,
+          x: plane.pos.x - Math.cos(plane.heading) * 10 + (Math.random() - 0.5) * 6,
+          y: plane.pos.y - Math.sin(plane.heading) * 10 + (Math.random() - 0.5) * 6,
+          vx: (Math.random() - 0.5) * 6,
+          vy: (Math.random() - 0.5) * 6 - 8,
+          life: 1.2 + Math.random() * 0.6,
+          maxLife: 1.8,
+          radius: 8 + Math.random() * 10,
+          color: 'rgba(20, 24, 30, 0.82)',
+          type: 'smoke',
+        });
+      }
+
+      // Terminal crash impact when altitude reaches sea level or timer expires
+      if (plane.altitude <= 0.04 || (plane.deathTimer || 0) <= 0) {
+        soundEngine.playExplosion(true);
+        soundEngine.playWaterSplash();
+
+        // Check if crashing into island land or ocean water
+        const onIsland = this.islands.some((isl) => isPointInPolygon(plane.pos, isl.points));
+
+        if (onIsland) {
+          // Ground impact explosion & shockwave
+          this.particles.push({
+            id: `crash-impact-blast-${Date.now()}`,
+            x: plane.pos.x,
+            y: plane.pos.y,
+            vx: 0,
+            vy: 0,
+            life: 0.8,
+            maxLife: 0.8,
+            radius: 45,
+            color: '#FF5722',
+            type: 'shockwave',
+            shape: 'ring',
+          });
+        } else {
+          // Soaring Ocean Geyser Splash Water Column!
+          this.particles.push({
+            id: `crash-geyser-${Date.now()}`,
+            x: plane.pos.x,
+            y: plane.pos.y,
+            vx: 0,
+            vy: 0,
+            life: 1.0,
+            maxLife: 1.0,
+            radius: 42,
+            color: '#E0F7FA',
+            type: 'geyser',
+          });
+          // Foam ring
+          this.particles.push({
+            id: `crash-foam-${Date.now()}`,
+            x: plane.pos.x,
+            y: plane.pos.y,
+            vx: 0,
+            vy: 0,
+            life: 1.6,
+            maxLife: 1.6,
+            radius: 35,
+            color: 'rgba(255, 255, 255, 0.8)',
+            type: 'splash',
+            shape: 'ring',
+          });
+        }
+
+        this.aircraft.splice(i, 1);
+      }
+      return true;
+    }
+    return false;
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // SPECIAL ERA 2 THREATS: OHKA ROCKET, G4M BETTY, & KAMIKAZE
+  // ══════════════════════════════════════════════════════════
+  // 1. MXY-7 櫻花特攻火箭反艦飛彈 (Rocket-Propelled Anti-Ship Suicide Missile)
+  private updateOhkaRocket(dt: number, plane: Aircraft): boolean {
+    if (plane.model === 'ohka') {
+      plane.speed = SPECIAL_ATTACK_SPEED.ohka;
+      // 噴射火尾與推進煙幕粒子 (Flaring rocket trail)
+      if (Math.random() < 0.65) {
+        this.particles.push({
+          id: `ohka-smoke-${Date.now()}-${Math.random()}`,
+          x: plane.pos.x - Math.cos(plane.heading) * 14,
+          y: plane.pos.y - Math.sin(plane.heading) * 14,
+          vx: (Math.random() - 0.5) * 6,
+          vy: (Math.random() - 0.5) * 6,
+          life: 0.35,
+          maxLife: 0.35,
+          radius: 4.5,
+          color: Math.random() < 0.5 ? '#FF3D00' : 'rgba(255, 235, 150, 0.8)',
+          type: 'smoke',
+        });
+      }
+
+      const targetShip =
+        [...this.playerShips, ...this.alliedShips]
+          .filter((s) => !s.isSunk && !this.isSubmarine(s) && (s.id === plane.order.targetId || dist(plane.pos, s.pos) < 3200))
+          .sort((a, b) => (a.id === plane.order.targetId ? -1 : b.id === plane.order.targetId ? 1 : dist(plane.pos, a.pos) - dist(plane.pos, b.pos)))[0] ||
+        this.getFlagship();
+
+      if (targetShip) {
+        const d = dist(plane.pos, targetShip.pos);
+        plane.targetHeading = Math.atan2(targetShip.pos.y - plane.pos.y, targetShip.pos.x - plane.pos.x);
+        plane.altitude = Math.max(0.08, plane.altitude - dt * 0.45);
+
+        if (d < 45 || (d < 85 && plane.altitude <= 0.12)) {
+          // 直擊命中！1200kg特裝穿甲彈頭巨爆
+          soundEngine.playExplosion(true);
+          const warheadDmg = 2200;
+          const safeArmor = Math.min(0.85, Math.max(0, targetShip.armor || 0));
+          const actualDmg = Math.round(warheadDmg * (1 - safeArmor * 0.35));
+          targetShip.health = Math.max(0, targetShip.health - actualDmg);
+          if (targetShip.hullCrewHealth !== undefined) {
+            targetShip.hullCrewHealth = Math.max(0, targetShip.hullCrewHealth - actualDmg);
+            targetShip.health = targetShip.hullCrewHealth;
+          }
+
+          this.particles.push({
+            id: `ohka-blast-${Date.now()}`,
+            x: targetShip.pos.x,
+            y: targetShip.pos.y,
+            vx: 0,
+            vy: 0,
+            life: 0.9,
+            maxLife: 0.9,
+            radius: 85,
+            color: '#FF1744',
+            type: 'shockwave',
+            shape: 'ring',
+          });
+
+          this.addCombatLog({
+            category: 'naval',
+            sourceSide: 'enemy',
+            sourceName: 'MXY-7 櫻花特攻火箭反艦飛彈',
+            targetName: targetShip.name,
+            actionType: 'bomb_crit',
+            isCrit: true,
+            damage: actualDmg,
+            diceRoll: {
+              dieType: 'd100',
+              roll: 99,
+              targetScore: 40,
+              result: 'crit',
+              rollDesc: '櫻花1200kg特裝彈頭以400節極速貫穿裝甲甲板',
+            },
+            text: `💥【櫻花火箭撞擊引爆！】1200kg特裝穿甲彈頭高速撞擊「${targetShip.name}」！造成毀滅性重創 (-${actualDmg} HP)！全艦陷入火海！`,
+          });
+
+          if (targetShip.health <= 0) {
+            targetShip.isSunk = true;
+          }
+          this.killPlane(plane);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // 2. 一式陸攻 (G4M "Betty") 投放櫻花特攻火箭
+  private updateOhkaCarrierRelease(plane: Aircraft): void {
+    if (plane.model === 'g4m' && plane.hasOhkaAttached) {
+      const targetShip =
+        [...this.playerShips, ...this.alliedShips]
+          .filter((s) => !s.isSunk && !this.isSubmarine(s) && (s.id === plane.order.targetId || dist(plane.pos, s.pos) < 3800))
+          .sort((a, b) => (a.id === plane.order.targetId ? -1 : b.id === plane.order.targetId ? 1 : dist(plane.pos, a.pos) - dist(plane.pos, b.pos)))[0] ||
+        this.getFlagship();
+
+      if (targetShip) {
+        const d = dist(plane.pos, targetShip.pos);
+        plane.targetHeading = Math.atan2(targetShip.pos.y - plane.pos.y, targetShip.pos.x - plane.pos.x);
+
+        // 於1800米外或受創重傷時脫離投放櫻花
+        if (d < 1800 || plane.health < 260) {
+          plane.hasOhkaAttached = false;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+
+          soundEngine.playRocketIgnition();
+          const ohkaHeading = Math.atan2(targetShip.pos.y - plane.pos.y, targetShip.pos.x - plane.pos.x);
+          this.aircraft.push({
+            id: `ohka-${Date.now()}`,
+            squadronId: `sq-ohka-${Date.now()}`,
+            model: 'ohka',
+            role: 'dive_bomber',
+            name: 'MXY-7 櫻花火箭反艦飛彈 (一式陸攻投擲)',
+            side: 'enemy',
+            pos: { ...plane.pos },
+            vel: { x: Math.cos(ohkaHeading) * 380, y: Math.sin(ohkaHeading) * 380 },
+            heading: ohkaHeading,
+            targetHeading: ohkaHeading,
+            speed: SPECIAL_ATTACK_SPEED.ohka,
+            maxSpeed: SPECIAL_ATTACK_SPEED.ohka,
+            altitude: 0.75,
+            state: 'kamikaze_dive',
+            health: 180,
+            maxHealth: 180,
+            order: { type: 'attack', targetPos: targetShip.pos, targetId: targetShip.id },
+            hasPayload: false,
+            shootCooldown: 0,
+            wingmanOffset: { x: 0, y: 0 },
+            isKamikaze: true,
+          });
+
+          this.addCombatLog({
+            category: 'air',
+            sourceSide: 'enemy',
+            sourceName: '一式陸攻 (神雷部隊)',
+            targetName: targetShip.name,
+            actionType: 'recon_spotted',
+            text: `🚀【櫻花特攻火箭點火出擊！】一式陸攻於1800米空域投下 MXY-7 櫻花火箭！火箭發動機全開，以近400節極速直撲「${targetShip.name}」！`,
+          });
+        }
+      }
+    }
+  }
+
+  // 3. 一般神風特攻機 (A6M5 / Suisei Suicide Attack)
+  private updateKamikazeAttack(dt: number, plane: Aircraft): boolean {
+    if (plane.isKamikaze || plane.model === 'kamikaze_zero' || plane.model === 'kamikaze_judy') {
+      const targetShip =
+        [...this.playerShips, ...this.alliedShips]
+          .filter((s) => !s.isSunk && !this.isSubmarine(s) && (s.id === plane.order.targetId || dist(plane.pos, s.pos) < 3200))
+          .sort((a, b) => (a.id === plane.order.targetId ? -1 : b.id === plane.order.targetId ? 1 : dist(plane.pos, a.pos) - dist(plane.pos, b.pos)))[0] ||
+        this.getFlagship();
+
+      if (targetShip) {
+        const d = dist(plane.pos, targetShip.pos);
+        plane.targetHeading = Math.atan2(targetShip.pos.y - plane.pos.y, targetShip.pos.x - plane.pos.x);
+
+        // 距離小於 950米 時進入特攻俯衝
+        if (d < 950 && plane.state !== 'kamikaze_dive') {
+          plane.state = 'kamikaze_dive';
+          plane.speed = SPECIAL_ATTACK_SPEED.kamikazeDive;
+          soundEngine.playDiveBomberWhistle();
+          this.addCombatLog({
+            category: 'air',
+            sourceSide: 'enemy',
+            sourceName: plane.name,
+            targetName: targetShip.name,
+            actionType: 'bomb_hit',
+            text: `⚠️【神風特攻俯衝啟動】敵「${plane.name}」鎖定「${targetShip.name}」進入自殺俯衝航線！防空火網集火截擊！`,
+          });
+        }
+
+        if (plane.state === 'kamikaze_dive') {
+          plane.altitude = Math.max(0.05, plane.altitude - dt * 0.55);
+          if (Math.random() < 0.6) {
+            this.particles.push({
+              id: `kami-trail-${Date.now()}-${Math.random()}`,
+              x: plane.pos.x,
+              y: plane.pos.y,
+              vx: (Math.random() - 0.5) * 5,
+              vy: (Math.random() - 0.5) * 5,
+              life: 0.35,
+              maxLife: 0.35,
+              radius: 4,
+              color: 'rgba(255, 87, 34, 0.7)',
+              type: 'smoke',
+            });
+          }
+
+          if (d < 45 || (d < 75 && plane.altitude <= 0.08)) {
+            // 自殺撞擊引爆
+            soundEngine.playExplosion(true);
+            const suicideDmg = 1200;
+            const safeArmor = Math.min(0.85, Math.max(0, targetShip.armor || 0));
+            const actualDmg = Math.round(suicideDmg * (1 - safeArmor * 0.3));
+            targetShip.health = Math.max(0, targetShip.health - actualDmg);
+            if (targetShip.hullCrewHealth !== undefined) {
+              targetShip.hullCrewHealth = Math.max(0, targetShip.hullCrewHealth - actualDmg);
+              targetShip.health = targetShip.hullCrewHealth;
+            }
+
+            this.particles.push({
+              id: `kami-hit-${Date.now()}`,
+              x: targetShip.pos.x,
+              y: targetShip.pos.y,
+              vx: 0,
+              vy: 0,
+              life: 0.8,
+              maxLife: 0.8,
+              radius: 65,
+              color: '#FF5722',
+              type: 'shockwave',
+              shape: 'ring',
+            });
+
+            this.addCombatLog({
+              category: 'naval',
+              sourceSide: 'enemy',
+              sourceName: '神風特別攻擊隊 (自殺撞擊)',
+              targetName: targetShip.name,
+              actionType: 'bomb_crit',
+              isCrit: true,
+              damage: actualDmg,
+              diceRoll: {
+                dieType: 'd100',
+                roll: 95,
+                targetScore: 50,
+                result: 'crit',
+                rollDesc: '神風特攻機攜帶250kg航彈撞入甲板',
+              },
+              text: `💥【神風特攻撞擊命中！】敵機直接撞擊「${targetShip.name}」引爆250kg航彈！造成重創 (-${actualDmg} HP)！`,
+            });
+
+            if (targetShip.health <= 0) targetShip.isSunk = true;
+            this.killPlane(plane);
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  /** GCI hit-and-run supersonic slashing pass and egress. */
+  private updateHitAndRunPass(dt: number, plane: Aircraft): void {
+    plane.disengageTimer = (plane.disengageTimer || 5.0) - dt;
+    plane.targetHeading = plane.bugOutHeading ?? plane.heading;
+
+    if (plane.model === 'mig21') {
+      // MiG-21: Mach 1.5+ supersonic afterburner climb & high-speed sprint
+      plane.speed = plane.maxSpeed * 1.55;
+      plane.altitude = Math.min(0.98, plane.altitude + dt * 0.22);
+
+      // Supersonic afterburner flame & shock diamond particles
+      if (Math.random() < 0.85) {
+        const exhaustX = plane.pos.x - Math.cos(plane.heading) * 16;
+        const exhaustY = plane.pos.y - Math.sin(plane.heading) * 16;
+        this.particles.push({
+          id: `ab-flame-${Date.now()}-${Math.random()}`,
+          x: exhaustX,
+          y: exhaustY,
+          vx: -Math.cos(plane.heading) * 60 + (Math.random() - 0.5) * 8,
+          vy: -Math.sin(plane.heading) * 60 + (Math.random() - 0.5) * 8,
+          life: 0.28,
+          maxLife: 0.28,
+          radius: 4.5,
+          color: Math.random() < 0.6 ? '#00E5FF' : '#FF6D00',
+          type: 'fire',
+        });
+      }
+    } else if (plane.model === 'mig17') {
+      // MiG-17: Low-altitude terrain masking egress to drop below radar horizon
+      plane.speed = plane.maxSpeed * 1.25;
+      plane.altitude = Math.max(0.12, plane.altitude - dt * 0.28);
+      if (Math.random() < 0.5) {
+        const exhaustX = plane.pos.x - Math.cos(plane.heading) * 12;
+        const exhaustY = plane.pos.y - Math.sin(plane.heading) * 12;
+        this.particles.push({
+          id: `mig17-smoke-${Date.now()}-${Math.random()}`,
+          x: exhaustX,
+          y: exhaustY,
+          vx: -Math.cos(plane.heading) * 25,
+          vy: -Math.sin(plane.heading) * 25,
+          life: 0.4,
+          maxLife: 0.4,
+          radius: 3.5,
+          color: 'rgba(90, 100, 110, 0.6)',
+          type: 'smoke',
+        });
+      }
+    } else {
+      plane.speed = plane.maxSpeed * 1.3;
+    }
+
+    if (plane.disengageTimer <= 0) {
+      plane.isHitAndRunActive = false;
+      plane.hitAndRunStage = 'ingress';
+      plane.speed = plane.maxSpeed;
+      // Re-target nearest hostile aircraft or naval ship to begin next slashing pass
+      const nextTarget = this.aircraft.find((a) => this.isHostile(plane.side, a.side) && a.state !== 'shot_down');
+      if (nextTarget) {
+        plane.order = { type: 'attack', targetPos: nextTarget.pos, targetId: nextTarget.id };
+      } else {
+        plane.order = { type: 'patrol' };
+      }
+    }
+    // While disengaging, skip normal attack turning to maintain breakaway trajectory
+  }
+
+  private updateBombingRun(dt: number, plane: Aircraft): void {
+    // 保持直線穩定平飛穿越目標，沿航線直線投下串列炸彈後再脫離
+    this.updateBombingRunCorridor(plane, dt);
+  }
+
+  private updateDivePullout(dt: number, plane: Aircraft): void {
+    // 俯衝投彈後大G值拉起脫離 (High-G Pullout with wingtip vortex)
+    plane.pulloutTimer = (plane.pulloutTimer || 1.3) - dt;
+    plane.altitude = Math.min(0.85, plane.altitude + dt * 0.65);
+    if (Math.random() < 0.65) {
+      const perpX = -Math.sin(plane.heading) * 14;
+      const perpY = Math.cos(plane.heading) * 14;
+      for (const dir of [-1, 1]) {
+        this.particles.push({
+          id: `vortex-${Date.now()}-${Math.random()}`,
+          x: plane.pos.x + perpX * dir,
+          y: plane.pos.y + perpY * dir,
+          vx: -Math.cos(plane.heading) * 12,
+          vy: -Math.sin(plane.heading) * 12,
+          life: 0.35,
+          maxLife: 0.35,
+          radius: 2.2,
+          color: 'rgba(255, 255, 255, 0.75)',
+          type: 'smoke',
+        });
+      }
+    }
+    if (plane.pulloutTimer <= 0) {
+      plane.state = 'returning';
+      plane.order = { type: 'rtb' };
+      plane.speed = plane.maxSpeed;
+    }
+  }
+
+  /** Attack order: intercept, dogfight, strike and weapon release against the assigned target. */
+  private updateAttackOrder(dt: number, plane: Aircraft): boolean {
+    // Find designated target
+    const allShips = [...this.playerShips, ...this.alliedShips, ...this.enemyShips];
+    const rawShipTarget = allShips.find((s) => s.id === plane.order.targetId && !s.isSunk && this.isHostile(plane.side, s.side));
+    const canSeeShipTarget =
+      rawShipTarget &&
+      (!this.isSubmarine(rawShipTarget) ||
+        (rawShipTarget.side === 'enemy' ? Boolean(rawShipTarget.isSpotted) : Boolean(rawShipTarget.isSpottedByEnemy)));
+
+    let targetEntity =
+      (canSeeShipTarget ? rawShipTarget : undefined) ||
+      this.aircraft.find((a) => a.id === plane.order.targetId && a.state !== 'shot_down' && this.isHostile(plane.side, a.side)) ||
+      (() => {
+        const inst = this.findTargetInstallation(plane.order.targetId || '');
+        return inst && this.isHostile(plane.side, inst.side) ? inst : null;
+      })() ||
+      this.groundUnits.find((u) => u.id === plane.order.targetId && !u.isDestroyed && !u.embarkedInShipId && this.isHostile(plane.side, u.side));
+
+    // 時代一~時代四 CAS 近接支援自動索敵: 若無指定目標或原目標已遭殲滅，自動搜尋周邊敵方地面裝甲與部隊
+    if (!targetEntity && this.isCasAircraft(plane)) {
+      const autoGround = this.acquireCasGroundTarget(plane);
+      if (autoGround) {
+        targetEntity = autoGround;
+        plane.order.targetId = autoGround.id;
+        plane.order.targetPos = autoGround.pos;
+      }
+    }
+
+    // 若為 ASW 反潛機失去已下潛目標 (Fog of War)，恢復反潛巡邏而非直接浪費返航
+    const isAswPlane =
+      plane.missionType === 'asw_patrol' ||
+      plane.payloadType === 'asw_torpedo' ||
+      plane.payloadType === 'asw_acoustic_torpedo' ||
+      plane.model === 'be12' ||
+      plane.model === 'il38' ||
+      plane.model === 'ka27';
+
+    if (plane.order.targetId && !targetEntity) {
+      if (isAswPlane && plane.hasPayload) {
+        plane.order = { type: 'patrol', patrolOrigin: plane.order.patrolOrigin || { ...plane.pos } };
+        plane.state = 'patrolling';
+        return true;
+      }
+      // 指定目標已遭殲滅或並非敵對目標！終止無效空襲任務返航
+      plane.order = { type: 'rtb' };
+      plane.state = 'returning';
+      return true;
+    }
+
+    const targetPos = targetEntity ? targetEntity.pos : plane.order.targetPos;
+    if (!targetPos) {
+      plane.order = { type: 'rtb' };
+      plane.state = 'returning';
+      return true;
+    }
+
+    if (targetPos) {
+      const dx = targetPos.x - plane.pos.x;
+      const dy = targetPos.y - plane.pos.y;
+      const d = Math.hypot(dx, dy);
+      plane.targetHeading = Math.atan2(dy, dx);
+
+      if (plane.hasPayload) {
+        this.releasePayloadOnTarget(dt, plane, targetEntity, targetPos, d);
+      } else {
+        // Dogfight intercept & strafe
+        plane.shootCooldown -= dt;
+        const targetPlane = targetEntity && 'role' in targetEntity ? (targetEntity as Aircraft) : null;
+        if (targetPlane && targetPlane.state !== 'shot_down') {
+          if (plane.side === 'enemy' && (plane.model === 'su27' || plane.model === 'mig29a' || plane.model === 'mig21' || plane.model === 'mig17')) {
+            if (plane.model === 'su27' || plane.model === 'mig29a') {
+              // Era 5 Soviet 4th Gen Fighters: R-27 BVR & R-73 High-Off-Boresight Dogfight
+              if (d >= 1000 && d <= AIR_WEAPON_RANGE.r27er && plane.shootCooldown <= 0) {
+                this.fireAAMissile(plane, targetPlane, 'aim7'); // R-27ER Alamo BVR
+                plane.shootCooldown = 5.0;
+              } else if (d < 1000 && d > 200 && plane.shootCooldown <= 0) {
+                this.fireAAMissile(plane, targetPlane, 'aim9'); // R-73 Archer All-Aspect Dogfight
+                plane.shootCooldown = 4.0;
+              } else if (d <= 250 && plane.shootCooldown <= 0) {
+                this.fireAircraftGuns(plane, targetPos);
+                plane.shootCooldown = 0.15;
+              }
+            } else if (plane.model === 'mig21') {
+              if (d >= 320 && d <= AIR_WEAPON_RANGE.k13 && plane.shootCooldown <= 0) {
+                this.fireAAMissile(plane, targetPlane, 'k13');
+                plane.shootCooldown = 4.2;
+                this.triggerSovietHitAndRun(plane, targetPlane.pos);
+              } else if (d < 320 && plane.shootCooldown <= 0) {
+                this.fireAircraftGuns(plane, targetPos);
+                plane.shootCooldown = 0.18;
+                this.triggerSovietHitAndRun(plane, targetPos);
+              }
+            } else {
+              // MiG-17 37mm/23mm heavy cannon pass
+              if (d < 360 && plane.shootCooldown <= 0) {
+                this.fireAircraftGuns(plane, targetPos);
+                plane.shootCooldown = 0.22;
+                this.triggerSovietHitAndRun(plane, targetPos);
+              }
+            }
+          } else if ((plane.side === 'player' || plane.side === 'allied') && (FRIENDLY_MISSILE_FIGHTER_MODELS.has(plane.model))) {
+            if (plane.model === 'f14a' && d >= 1600 && d <= AIR_WEAPON_RANGE.aim54 && plane.shootCooldown <= 0) {
+              this.firePhoenixMissile(plane, targetPlane.pos, targetPlane);
+              plane.shootCooldown = 7.0;
+            } else if (d >= 800 && d <= AIR_WEAPON_RANGE.aim7 && (plane.sarhHoldTimer || 0) <= 0 && plane.shootCooldown <= 0) {
+              this.fireAAMissile(plane, targetPlane, 'aim7');
+              plane.shootCooldown = 5.5;
+            } else if (d < 800 && d > 200 && plane.shootCooldown <= 0) {
+              this.fireAAMissile(plane, targetPlane, 'aim9');
+              plane.shootCooldown = 4.0;
+            } else if (d <= 250 && plane.shootCooldown <= 0) {
+              this.fireAircraftGuns(plane, targetPos);
+              plane.shootCooldown = 0.16;
+            }
+          } else {
+            if (plane.shootCooldown <= 0 && d < 240) {
+              this.fireAircraftGuns(plane, targetPos);
+              plane.shootCooldown = 0.2;
+            }
+          }
+        } else {
+          // 對地或對艦無彈藥俯衝低空掃射 (僅在確認目標敵對存在時擊發)
+          if (plane.shootCooldown <= 0 && d < 240 && targetEntity && this.isHostile(plane.side, targetEntity.side)) {
+            this.fireAircraftGuns(plane, targetPos);
+            plane.shootCooldown = 0.2;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  // ════ 優先判定超視距/遠程導引飛彈（確保 B-52G / Tu-22 等戰略轟炸機掛載魚叉/暴風反艦飛彈時能在 4000m 外實施遠程獵殺，不誤入近距離地毯投彈）════
+  private releasePayloadOnTarget(dt: number, plane: Aircraft, targetEntity: Aircraft | GroundUnit | Installation | Ship | undefined, targetPos: Vector2D, d: number): void {
+    if (plane.payloadType === 'rgm84_harpoon') {
+      // ════ 魚叉超視距反艦飛彈 (AGM-84 Harpoon AShM): 4000m 掠海主動雷達導引 ════
+      if (d < AIR_WEAPON_RANGE.harpoon) {
+        this.fireAirLaunchedHarpoon(plane, targetPos, targetEntity);
+        plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
+        if ((plane.ammoRemaining || 0) <= 0) {
+          plane.hasPayload = false;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+        }
+      }
+    } else if (plane.payloadType === 'kh22_burya') {
+      // ════ Kh-22 暴風超音速高空俯衝重型反艦飛彈 (Mach 4.0): 4600m ════
+      if (d < AIR_WEAPON_RANGE.kh22) {
+        this.fireKh22Missile(plane, targetPos, targetEntity);
+        plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
+        if ((plane.ammoRemaining || 0) <= 0) {
+          plane.hasPayload = false;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+        }
+      }
+    } else if (plane.payloadType === 'p700_granit') {
+      // ════ P-700 花崗岩超音速飽和掠海反艦群: 4600m ════
+      if (d < AIR_WEAPON_RANGE.p700) {
+        this.fireGranitMissile(plane, targetPos, targetEntity);
+        plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
+        if ((plane.ammoRemaining || 0) <= 0) {
+          plane.hasPayload = false;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+        }
+      }
+    } else if (plane.payloadType === 'agm88_harm') {
+      // ════ AGM-88 HARM 高速反輻射飛彈 (SEAD 獵殺雷達與防空陣地): 4200m ════
+      if (d < AIR_WEAPON_RANGE.harm) {
+        this.fireHARMMissile(plane, targetPos, targetEntity);
+        plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
+        if ((plane.ammoRemaining || 0) <= 0) {
+          plane.hasPayload = false;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+        }
+      }
+    } else if (plane.role === 'level_bomber') {
+      // ════ 水平重型轟炸機 (Level Bomber - B-17 / B-24 / B-29 / B-52 地毯走廊): 保持平流層萬米平飛航線，直線穿透投彈走廊 ════
+      plane.altitude = (plane.model === 'b29' || plane.model === 'b52') ? 0.98 : 0.95;
+      if (d < 520) {
+        this.initiateBombingRun(plane, targetPos);
+      }
+    } else if (plane.payloadType === 'tiny_tim_rocket') {
+      // ════ 11.75" 小蒂姆重型穿甲火箭 (Tiny Tim Heavy Standoff Rocket): 500m 遠程直線齊射 ════
+      if (d < 500) {
+        this.fireTinyTimRocket(plane, targetPos);
+        plane.hasPayload = false;
+        plane.heading += (Math.random() > 0.5 ? 1 : -1) * 0.65;
+        plane.targetHeading = plane.heading;
+        plane.breakawayTimer = 1.6;
+      }
+    } else if (plane.payloadType === 'napalm_canister') {
+      // ════ 凝固汽油燃燒彈 (Napalm Firebomb Canister): 低空滑翔投擲，地面化為焦土火海 ════
+      plane.altitude = Math.max(0.22, plane.altitude - dt * 0.55);
+      if (d < 260) {
+        this.dropNapalmCanisters(plane, targetPos);
+        plane.hasPayload = false;
+        plane.state = 'pullout';
+        plane.pulloutTimer = 1.3;
+      }
+    } else if (
+      plane.payloadType === 'aerial_torpedo' ||
+      plane.payloadType === 'asw_torpedo' ||
+      plane.payloadType === 'asw_acoustic_torpedo' ||
+      plane.role === 'torpedo_bomber'
+    ) {
+      // ════ 掠海低空魚雷 / 反潛聲自導魚雷攻擊 (Torpedo Run) ════
+      if (d < 560) {
+        plane.altitude = Math.max(0.12, plane.altitude - dt * 0.6);
+      }
+      if (d < 320) {
+        this.dropAircraftTorpedo(plane, targetPos);
+        const isAswTorp = plane.payloadType === 'asw_torpedo' || plane.payloadType === 'asw_acoustic_torpedo';
+        if (isAswTorp && (plane.ammoRemaining ?? 1) > 1) {
+          plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
+          plane.order = { type: 'patrol', patrolOrigin: { ...targetPos } };
+          plane.state = 'patrolling';
+        } else {
+          plane.ammoRemaining = 0;
+          plane.hasPayload = false;
+          // Immediate 45-degree evasive breakaway turn to dodge ship anti-aircraft fire
+          plane.heading += (Math.random() > 0.5 ? 1 : -1) * 0.78;
+          plane.targetHeading = plane.heading;
+          plane.breakawayTimer = 1.8;
+        }
+      }
+    } else if (plane.payloadType === 'mixed_bombs_rockets') {
+      // ════ 攻擊機三段式強襲 (Mixed Attack): 500m火箭壓制 -> 360m機槍掃射 -> 180m精準俯衝投彈 ════
+      plane.altitude = Math.max(0.26, plane.altitude - dt * 0.45);
+      if (d < 500 && !plane.hasFiredRockets) {
+        this.fireRockets(plane, targetPos, 4);
+        plane.hasFiredRockets = true;
+      }
+      if (d < 360 && plane.shootCooldown <= 0) {
+        this.fireAircraftGuns(plane, targetPos);
+        plane.shootCooldown = 0.16;
+      }
+      if (d < 180) {
+        this.dropBomb(plane, targetPos);
+        plane.hasPayload = false;
+        plane.hasFiredRockets = undefined;
+        plane.state = 'pullout';
+        plane.pulloutTimer = 1.3;
+      }
+    } else if (plane.payloadType === 'hvar_rockets') {
+      // ════ HVAR 5吋航空火箭彈 (HVAR Rockets Salvo): 520m 遠程連環齊射 ════
+      if (d < 520) {
+        this.fireRockets(plane, targetPos, 8);
+        plane.hasPayload = false;
+        plane.order = { type: 'rtb' };
+        plane.state = 'returning';
+        plane.altitude = 0.75;
+      }
+    } else if (plane.payloadType === 'aim54_phoenix') {
+      // ════ AIM-54 鳳凰超遠程空空/反飛彈攔截 (AWG-9 Mach 4.3): 4800m BVR ════
+      if (d < AIR_WEAPON_RANGE.aim54) {
+        this.firePhoenixMissile(plane, targetPos, targetEntity);
+        plane.ammoRemaining = (plane.ammoRemaining || 6) - 1;
+        if ((plane.ammoRemaining || 0) <= 0) {
+          plane.hasPayload = false;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+        }
+      }
+    } else if (plane.payloadType === 'agm65_maverick') {
+      // ════ AGM-65 小牛精確電視/紅外導引反裝甲飛彈: 2400m ════
+      if (d < AIR_WEAPON_RANGE.maverick) {
+        this.fireMaverickMissile(plane, targetPos, targetEntity);
+        plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
+        if ((plane.ammoRemaining || 0) <= 0) {
+          plane.hasPayload = false;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+        }
+      }
+    } else if (plane.payloadType === 'hellfire_missiles' || plane.payloadType === 'tow_missiles') {
+      // ════ AGM-114 地獄火 / BGM-71 拖式 反戰車導引飛彈: 2000m ════
+      if (d < AIR_WEAPON_RANGE.hellfire) {
+        this.fireHellfireMissile(plane, targetPos, targetEntity);
+        plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
+        if ((plane.ammoRemaining || 0) <= 0) {
+          plane.hasPayload = false;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+        }
+      }
+    } else if (plane.payloadType === 'aim9_sidewinder') {
+      if (d < AIR_WEAPON_RANGE.aim9) {
+        const targetHostile = targetEntity || { pos: targetPos, id: plane.order.targetId || '' };
+        this.fireAAMissile(plane, targetHostile as Aircraft, 'aim9');
+        plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
+        if ((plane.ammoRemaining || 0) <= 0) {
+          plane.hasPayload = false;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+        }
+      }
+    } else if (plane.payloadType === 'aim7_sparrow') {
+      if (d < AIR_WEAPON_RANGE.aim7) {
+        const targetHostile = targetEntity || { pos: targetPos, id: plane.order.targetId || '' };
+        this.fireAAMissile(plane, targetHostile as Aircraft, 'aim7');
+        plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
+        if ((plane.ammoRemaining || 0) <= 0) {
+          plane.hasPayload = false;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+        }
+      }
+    } else if (plane.payloadType === 'agm45_shrike') {
+      if (d < AIR_WEAPON_RANGE.shrike) {
+        let radarTarget = targetEntity && 'type' in targetEntity ? targetEntity as Installation : null;
+        if (!radarTarget) {
+          for (const isl of this.islands) {
+            const rInst = isl.installations.find(
+              (i) => !i.isDestroyed && this.isHostile(plane.side, i.side) && (i.type === 'fan_song_radar' || i.type === 'radar_station')
+            );
+            if (rInst) {
+              radarTarget = rInst;
+              break;
+            }
+          }
+        }
+        if (radarTarget) {
+          this.fireARMShrike(plane, radarTarget);
+        } else {
+          this.fireBullpupMissile(plane, targetPos);
+        }
+        plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
+        if ((plane.ammoRemaining || 0) <= 0) {
+          plane.hasPayload = false;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+        }
+      }
+    } else if (plane.payloadType === 'agm12_bullpup') {
+      if (d < AIR_WEAPON_RANGE.bullpup) {
+        this.fireBullpupMissile(plane, targetPos);
+        plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
+        if ((plane.ammoRemaining || 0) <= 0) {
+          plane.hasPayload = false;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+        }
+      }
+    } else if (plane.payloadType === 'agm62_walleye') {
+      if (d < AIR_WEAPON_RANGE.walleye) {
+        this.dropWalleyeGlideBomb(plane, targetPos);
+        plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
+        if ((plane.ammoRemaining || 0) <= 0) {
+          plane.hasPayload = false;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+        }
+      }
+    } else if (plane.payloadType === 'tactical_b61_nuke') {
+      plane.altitude = Math.max(0.24, plane.altitude - dt * 0.5);
+      if (d < 300) {
+        this.dropBomb(plane, targetPos);
+        plane.hasPayload = false;
+        plane.state = 'pullout';
+        plane.pulloutTimer = 1.5;
+        plane.speed = plane.maxSpeed * 1.35;
+      }
+    } else if (plane.payloadType === 'opfor_tactical_nuke') {
+      if (d < 450) {
+        this.dropSingleCorridorBomb(plane, targetPos, 0, 1, 0);
+        plane.hasPayload = false;
+        plane.state = 'returning';
+        plane.order = { type: 'rtb' };
+      }
+    } else if (plane.payloadType === 'bombs_snakeye_retarded') {
+      plane.altitude = Math.max(0.2, plane.altitude - dt * 0.6);
+      if (d < 260) {
+        this.dropSnakeyeBombs(plane, targetPos);
+        plane.hasPayload = false;
+        plane.state = 'pullout';
+        plane.pulloutTimer = 1.3;
+      }
+    } else if (plane.payloadType === 'ffar_rockets_pod') {
+      if (d < 520) {
+        this.fireRockets(plane, targetPos, 16);
+        plane.hasPayload = false;
+        plane.order = { type: 'rtb' };
+        plane.state = 'returning';
+      }
+    } else if (plane.payloadType === 'helo_assault_troops') {
+      plane.altitude = Math.max(0.12, plane.altitude - dt * 0.4);
+      if (d < 150) {
+        this.dropHeloAssaultTroops(plane, targetPos);
+        plane.ammoRemaining = 0;
+        plane.hasPayload = false;
+        plane.order = { type: 'rtb' };
+        plane.state = 'returning';
+      }
+    } else if (plane.payloadType === 'c1_paratroopers') {
+      plane.altitude = 0.5;
+      if (d < 220) {
+        this.dropParatroopers(plane, targetPos);
+        plane.ammoRemaining = 0;
+        plane.hasPayload = false;
+        plane.order = { type: 'rtb' };
+        plane.state = 'returning';
+      }
+    } else if (plane.model === 'tu16') {
+      // ════ 蘇聯海航 Tu-16 獾式長程飛彈轟炸機: 2800m 發射 KSR-5 超音速反艦飛彈 ════
+      if (d < AIR_WEAPON_RANGE.ksr5) {
+        this.fireTu16KSR5Missile(plane, targetPos);
+        plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
+        if ((plane.ammoRemaining || 0) <= 0) {
+          plane.hasPayload = false;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+        }
+      }
+    } else if (plane.payloadType === 'aim7_aim9_combo') {
+      // ════ AIM-7 麻雀 + AIM-9 響尾蛇 雙重空優混編 (遠程半主動雷達 + 近距紅外格鬥) ════
+      const targetHostile = targetEntity || { pos: targetPos, id: plane.order.targetId || '' };
+      const targetPlane = 'role' in targetHostile ? targetHostile : null;
+      if (d >= 1200 && d <= AIR_WEAPON_RANGE.aim7 && (plane.ammoRemaining || 4) > 2) {
+        this.fireAAMissile(plane, targetPlane || targetHostile, 'aim7');
+        plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
+      } else if (d < AIR_WEAPON_RANGE.aim9) {
+        this.fireAAMissile(plane, targetPlane || targetHostile, 'aim9');
+        plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
+        if ((plane.ammoRemaining || 0) <= 0) {
+          plane.hasPayload = false;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+        }
+      }
+    } else if (plane.payloadType === 'gbu10_laser_paveway') {
+      // ════ GBU-10 鋪路雷射導引穿甲炸彈 (外科手術式精確破障) ════
+      if (d < AIR_WEAPON_RANGE.laserBomb) {
+        this.dropLaserGuidedBomb(plane, targetPos);
+        plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
+        if ((plane.ammoRemaining || 0) <= 0) {
+          plane.hasPayload = false;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+        }
+      }
+    } else if (plane.payloadType === 'cbu_cluster_bombs') {
+      // ════ CBU-24 / Rockeye 廣域集束子母彈群 (80m 防空陣地粉碎) ════
+      plane.altitude = Math.max(0.28, plane.altitude - dt * 0.45);
+      if (d < 380) {
+        this.dropClusterBombs(plane, targetPos);
+        plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
+        if ((plane.ammoRemaining || 0) <= 0) {
+          plane.hasPayload = false;
+          plane.state = 'pullout';
+          plane.pulloutTimer = 1.3;
+        }
+      }
+    } else if (plane.payloadType === 'blu27_napalm') {
+      // ════ BLU-27 凝固汽油燃燒彈 (75m 叢林火海持續灼燒) ════
+      plane.altitude = Math.max(0.2, plane.altitude - dt * 0.55);
+      if (d < 280) {
+        this.dropNapalmCanisters(plane, targetPos);
+        plane.ammoRemaining = (plane.ammoRemaining || 4) - 2;
+        if ((plane.ammoRemaining || 0) <= 0) {
+          plane.hasPayload = false;
+          plane.state = 'pullout';
+          plane.pulloutTimer = 1.4;
+        }
+      }
+    } else if (plane.payloadType === 'agm78_standard_arm') {
+      // ════ AGM-78 標準長程反輻射飛彈 (3600m SEAD 野鼬超遠程獵殺) ════
+      if (d < AIR_WEAPON_RANGE.standardArm) {
+        let radarTarget = targetEntity && 'type' in targetEntity ? targetEntity as Installation : null;
+        if (!radarTarget) {
+          for (const isl of this.islands) {
+            const rInst = isl.installations.find(
+              (i) => !i.isDestroyed && this.isHostile(plane.side, i.side) && (i.type === 'fan_song_radar' || i.type === 'radar_station')
+            );
+            if (rInst) {
+              radarTarget = rInst;
+              break;
+            }
+          }
+        }
+        if (radarTarget) {
+          this.fireStandardARM(plane, radarTarget);
+        } else {
+          this.fireBullpupMissile(plane, targetPos);
+        }
+        plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
+        if ((plane.ammoRemaining || 0) <= 0) {
+          plane.hasPayload = false;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+        }
+      }
+    } else if (plane.payloadType === 'mer_iron_bombs') {
+      // ════ MER 多聯掛架 18-24枚 500lb 通用高爆彈群 (密集連環彈幕走廊) ════
+      plane.altitude = Math.max(0.26, plane.altitude - dt * 0.4);
+      if (d < 340) {
+        this.dropMERIronBombStick(plane, targetPos);
+        plane.hasPayload = false;
+        plane.state = 'pullout';
+        plane.pulloutTimer = 1.5;
+      }
+    } else if (
+      plane.payloadType === 'asw_depth_bombs' ||
+      plane.payloadType === 'depth_bombs' ||
+      plane.payloadType === 'scout_depth_charge'
+    ) {
+      // ════ 航空深水炸彈群 (ASW Depth Bomb Attack): 低空震盪獵潛 ════
+      plane.altitude = Math.max(0.22, plane.altitude - dt * 0.45);
+      if (d < 220) {
+        this.dropDepthBombs(plane, targetPos);
+        plane.hasPayload = false;
+        plane.order = { type: 'rtb' };
+        plane.state = 'returning';
+        plane.altitude = 0.75;
+      }
+    } else if (
+      plane.payloadType === 'bomb_500' ||
+      plane.payloadType === 'bomb_1000' ||
+      plane.payloadType === 'bomb_1600' ||
+      plane.payloadType === 'bomb_2000' ||
+      plane.payloadType === 'bombs_dual_500' ||
+      plane.role === 'dive_bomber'
+    ) {
+      // ════ 高空垂直呼嘯俯衝轟炸 (High-Angle Screaming Dive Bombing) ════
+      if (d < 480 && plane.state !== 'diving') {
+        plane.state = 'diving';
+        soundEngine.playDiveBomberWhistle();
+        plane.speed = plane.maxSpeed * 1.35;
+      }
+
+      if (plane.state === 'diving') {
+        plane.altitude = Math.max(0.18, plane.altitude - dt * 1.05);
+      }
+
+      // Release bomb at point-blank altitude (120m distance or altitude <= 0.22)
+      if (d < 120 || (plane.state === 'diving' && plane.altitude <= 0.22)) {
+        this.dropBomb(plane, targetPos);
+        plane.hasPayload = false;
+        plane.state = 'pullout';
+        plane.pulloutTimer = 1.3;
+      }
+    } else {
+      // 通用對地/對艦投彈
+      plane.altitude = Math.max(0.28, plane.altitude - dt * 0.45);
+      if (d < 360 && plane.shootCooldown <= 0) {
+        this.fireAircraftGuns(plane, targetPos);
+        plane.shootCooldown = 0.16;
+      }
+      if (d < 180) {
+        this.dropBomb(plane, targetPos);
+        plane.hasPayload = false;
+        plane.state = 'pullout';
+        plane.pulloutTimer = 1.2;
+      }
+    }
+  }
+
+  /** CAP / patrol orbit with threat detection and interception. */
+  private updatePatrolOrder(dt: number, flagship: Ship | undefined, plane: Aircraft): boolean {
+    // Orbit patrol area & auto-intercept hostile planes entering perimeter
+    const center = plane.order.patrolOrigin || (flagship ? flagship.pos : plane.pos);
+
+    // SARH continuous radar illumination lock
+    if (plane.sarhHoldTimer !== undefined && plane.sarhHoldTimer > 0 && plane.sarhIlluminatingTargetId) {
+      plane.sarhHoldTimer -= dt;
+      const illTarget = this.aircraft.find((a) => a.id === plane.sarhIlluminatingTargetId && a.state !== 'shot_down');
+      if (illTarget) {
+        plane.targetHeading = Math.atan2(illTarget.pos.y - plane.pos.y, illTarget.pos.x - plane.pos.x);
+      } else {
+        plane.sarhIlluminatingTargetId = undefined;
+        plane.sarhHoldTimer = 0;
+      }
+    }
+
+    // In Era 4 & 5 or with modern radar, fighters have extended radar search range (up to 4800m for F-14 AWG-9)!
+    const isModernFighter = this.era === 'era4' || this.era === 'era5' || plane.payloadType === 'aim7_sparrow' || plane.payloadType === 'aim9_sidewinder' || plane.payloadType === 'aim54_phoenix';
+    const radarPerimeter = plane.model === 'f14a' ? 4800 : (this.era === 'era5' ? 3800 : isModernFighter ? 2400 : 420);
+
+    // Find hostile aircraft within patrol radar
+    const hostile = this.aircraft.find(
+      (a) => this.isHostile(plane.side, a.side) && a.state !== 'shot_down' && dist(plane.pos, a.pos) < radarPerimeter
+    );
+
+    if (hostile && plane.role === 'fighter') {
+      const hDist = dist(plane.pos, hostile.pos);
+      plane.targetHeading = Math.atan2(hostile.pos.y - plane.pos.y, hostile.pos.x - plane.pos.x);
+      plane.shootCooldown -= dt;
+
+      if (isModernFighter) {
+        if (plane.side === 'enemy' && (plane.model === 'su27' || plane.model === 'mig29a' || plane.model === 'mig21' || plane.model === 'mig17')) {
+          if (plane.model === 'su27' || plane.model === 'mig29a') {
+            if (hDist >= 1000 && hDist <= 3600 && plane.shootCooldown <= 0) {
+              this.fireAAMissile(plane, hostile, 'aim7'); // R-27ER Alamo
+              plane.shootCooldown = 5.0;
+            } else if (hDist < 1000 && hDist > 200 && plane.shootCooldown <= 0) {
+              this.fireAAMissile(plane, hostile, 'aim9'); // R-73 Archer
+              plane.shootCooldown = 4.0;
+            } else if (hDist <= 250 && plane.shootCooldown <= 0) {
+              this.fireAircraftGuns(plane, hostile.pos);
+              plane.shootCooldown = 0.15;
+            }
+          } else if (plane.model === 'mig21') {
+            if (hDist >= 320 && hDist <= 1800 && plane.shootCooldown <= 0) {
+              this.fireAAMissile(plane, hostile, 'k13');
+              plane.shootCooldown = 4.2;
+              this.triggerSovietHitAndRun(plane, hostile.pos);
+            } else if (hDist < 320 && plane.shootCooldown <= 0) {
+              this.fireAircraftGuns(plane, hostile.pos);
+              plane.shootCooldown = 0.18;
+              this.triggerSovietHitAndRun(plane, hostile.pos);
+            }
+          } else {
+            if (hDist < 360 && plane.shootCooldown <= 0) {
+              this.fireAircraftGuns(plane, hostile.pos);
+              plane.shootCooldown = 0.22;
+              this.triggerSovietHitAndRun(plane, hostile.pos);
+            }
+          }
+        } else {
+          // F-14A Phoenix ultra long range (1600m - 4800m)
+          if (plane.model === 'f14a' && hDist >= 1600 && hDist <= 4800 && plane.shootCooldown <= 0) {
+            this.firePhoenixMissile(plane, hostile.pos, hostile);
+            plane.shootCooldown = 7.0;
+          }
+          // BVR Engagement (800m - 3200m): AIM-7 Sparrow SARH
+          else if (hDist >= 800 && hDist <= 3200 && (plane.sarhHoldTimer || 0) <= 0 && plane.shootCooldown <= 0) {
+            this.fireAAMissile(plane, hostile, 'aim7');
+            plane.shootCooldown = 5.5;
+          }
+          // Dogfight Salvo (< 800m): Dual AIM-9 Sidewinder Salvo (ripple 2 missiles)
+          else if (hDist < 800 && hDist > 200 && plane.shootCooldown <= 0) {
+            this.fireAAMissile(plane, hostile, 'aim9');
+            this.scheduleAction(0.25, () => {
+              if (plane.state !== 'shot_down') {
+                this.fireAAMissile(plane, hostile, 'aim9');
+              }
+            });
+            plane.shootCooldown = 4.5;
+          }
+          // Close Guns (< 250m): M61 Vulcan stream
+          else if (hDist <= 250 && plane.shootCooldown <= 0) {
+            this.fireAircraftGuns(plane, hostile.pos);
+            plane.shootCooldown = 0.16;
+          }
+        }
+      } else {
+        // Era 1 - 3 WWII/Korea machine guns
+        if (plane.shootCooldown <= 0 && hDist < 220) {
+          this.fireAircraftGuns(plane, hostile.pos);
+          plane.shootCooldown = 0.22;
+        }
+      }
+    } else {
+      // 反潛機主動巡邏：定時投放聲吶浮標 / 吊放聲吶脈衝，並自動獵殺已被定位之敵方潛艦
+      const aswRange = this.getAircraftAswSonarRange(plane);
+      if (aswRange > 0) {
+        plane.sonarPingCooldown = (plane.sonarPingCooldown ?? 2.5) - dt;
+        if (plane.sonarPingCooldown <= 0) {
+          plane.sonarPingCooldown = 3.8;
+          this.particles.push({
+            id: `air-sonar-${Date.now()}-${Math.random()}`,
+            x: plane.pos.x,
+            y: plane.pos.y,
+            vx: 0,
+            vy: 0,
+            life: 0.9,
+            maxLife: 0.9,
+            radius: 45,
+            color: plane.side === 'enemy' ? '#FF5252' : '#00E5FF',
+            type: 'shockwave',
+            shape: 'ring',
+          });
+        }
+
+        if (plane.hasPayload) {
+          const spottedSub =
+            plane.side === 'enemy'
+              ? [...this.playerShips, ...this.alliedShips].find(
+                  (s) => !s.isSunk && this.isSubmarine(s) && s.isSpottedByEnemy && dist(plane.pos, s.pos) < 2200
+                )
+              : this.enemyShips.find(
+                  (s) => !s.isSunk && this.isSubmarine(s) && s.isSpotted && dist(plane.pos, s.pos) < 2200
+                );
+          if (spottedSub) {
+            plane.order = { type: 'attack', targetId: spottedSub.id, targetPos: { ...spottedSub.pos }, patrolOrigin: center };
+            plane.state = 'attacking';
+            return true;
+          }
+        }
+      }
+
+      // 時代一~時代四 CAS 戰機常態空巡自動索敵地面部隊 (Auto-engage ground troops when patrolling)
+      if (this.isCasAircraft(plane) && (plane.hasPayload || (plane.gunAmmo ?? 0) > 0)) {
+        const autoCasTarget = this.acquireCasGroundTarget(plane);
+        if (autoCasTarget) {
+          plane.order = { type: 'attack', targetId: autoCasTarget.id, targetPos: autoCasTarget.pos };
+          plane.state = 'attacking';
+          plane.shootCooldown = 0.4;
+          this.addCombatLog({
+            category: 'air',
+            sourceSide: plane.side,
+            sourceName: plane.name,
+            targetName: autoCasTarget.name,
+            actionType: 'recon_spotted',
+            text: `🎯【CAS 密接空中支援索敵】「${plane.name}」在空巡巡邏空域偵測到敵「${autoCasTarget.name}」，立即壓低機頭展開俯衝攻擊！`,
+          });
+          return true;
+        }
+      }
+
+      // Circular orbit (ASW planes sweep wider corridors)
+      const orbitR = aswRange > 0 ? 520 : 250;
+      const a = Date.now() * (aswRange > 0 ? 0.0009 : 0.0016);
+      const ox = center.x + Math.cos(a) * orbitR + plane.wingmanOffset.x;
+      const oy = center.y + Math.sin(a) * orbitR + plane.wingmanOffset.y;
+      plane.targetHeading = Math.atan2(oy - plane.pos.y, ox - plane.pos.x);
+    }
+    return false;
+  }
+
+  private updateMoveOrder(dt: number, plane: Aircraft): boolean {
+    // Narrowing guard carried over from the caller's `plane.order.type === 'move' && plane.order.targetPos` test
+    if (!plane.order.targetPos) return false;
+    const dx = plane.order.targetPos.x - plane.pos.x;
+    const dy = plane.order.targetPos.y - plane.pos.y;
+    const moveDist = Math.hypot(dx, dy);
+    plane.targetHeading = Math.atan2(dy, dx);
+
+    const isPendingTroopDrop =
+      plane.hasPayload &&
+      plane.order.pendingUnload &&
+      (plane.payloadType === 'c1_paratroopers' || plane.payloadType === 'helo_assault_troops');
+
+    if (plane.order.pendingSonobuoyPos) {
+      const isHelo =
+        plane.role === 'rescue' ||
+        plane.model === 'ho3s1' ||
+        plane.model === 'sh2' ||
+        plane.model === 'uh2' ||
+        plane.model === 'sh3f';
+      if (isHelo && moveDist < 340) {
+        plane.altitude = Math.max(0.22, plane.altitude - dt * 0.3);
+      }
+      const buoyDropRadius = isHelo ? 105 : 145;
+      if (moveDist < buoyDropRadius) {
+        const dropPt = { ...plane.order.pendingSonobuoyPos };
+        this.deploySonobuoyFromAircraft(plane, dropPt);
+        plane.order = { type: 'patrol', patrolOrigin: dropPt, targetPos: dropPt };
+        plane.state = 'patrolling';
+        return true;
+      }
+    } else if (isPendingTroopDrop) {
+      const dropRadius = plane.payloadType === 'helo_assault_troops' ? 150 : 220;
+      if (plane.payloadType === 'helo_assault_troops' && moveDist < 420) {
+        plane.altitude = Math.max(0.15, plane.altitude - dt * 0.35);
+      } else if (plane.payloadType === 'c1_paratroopers' && moveDist < 500) {
+        plane.altitude = 0.5;
+      }
+      if (moveDist < dropRadius) {
+        const safeDropPt = this.findIslandDropPoint(plane.order.targetPos, 240) || plane.order.targetPos;
+        if (plane.payloadType === 'helo_assault_troops') {
+          this.dropHeloAssaultTroops(plane, safeDropPt);
+        } else {
+          this.dropParatroopers(plane, safeDropPt);
+        }
+        plane.ammoRemaining = 0;
+        plane.hasPayload = false;
+        plane.order = { type: 'rtb' };
+        plane.state = 'returning';
+        return true;
+      }
+    } else if (moveDist < 40) {
+      plane.order = { type: 'patrol', patrolOrigin: { ...plane.pos } };
+      plane.state = 'patrolling';
+    }
+    return false;
+  }
+
+  /** Return to carrier / airbase, landing and rearming. */
+  private updateReturnToBase(dt: number, flagship: Ship | undefined, i: number, plane: Aircraft): boolean {
+    if (plane.side === 'allied') {
+      const basePos = this.friendlyBase?.center || { x: 2000, y: 12400 };
+      const dx = basePos.x - plane.pos.x;
+      const dy = basePos.y - plane.pos.y;
+      const d = Math.hypot(dx, dy);
+      plane.targetHeading = Math.atan2(dy, dx);
+      plane.altitude = Math.min(0.85, plane.altitude + dt * 0.2);
+
+      if (d < 65) {
+        this.addCombatLog({
+          category: 'air',
+          sourceSide: 'allied',
+          sourceName: '前進航空基地 (AFB)',
+          targetName: plane.name,
+          actionType: 'recon_spotted',
+          text: `🛬【盟軍戰機平安返航】「${plane.name}」完成戰鬥巡邏與打擊任務，平安返降前進基地！`,
+        });
+        this.aircraft.splice(i, 1);
+        return true;
+      }
+    } else if (plane.side === 'player') {
+      const isLandBased =
+        plane.squadronId.startsWith('sq-afb-') ||
+        plane.model === 'c47' ||
+        plane.model === 'c130' ||
+        plane.model === 'b29' ||
+        plane.model === 'b17' ||
+        plane.model === 'b17_late' ||
+        plane.model === 'b25' ||
+        plane.model === 'b24' ||
+        plane.model === 'f86' ||
+        plane.model === 'f82' ||
+        plane.model === 'p51' ||
+        plane.model === 'p47' ||
+        plane.model === 'p38' ||
+        plane.model === 'p40' ||
+        plane.model === 'p36a' ||
+        plane.model === 'p39d' ||
+        plane.model === 'a20' ||
+        plane.model === 'a26' ||
+        plane.model === 'a1h' ||
+        plane.model === 'a37b' ||
+        plane.model === 'f5a' ||
+        plane.model === 'f104g';
+
+      if (isLandBased) {
+        // 友軍陸基戰機返航至 Henderson Field / Wonsan 前進基地
+        const basePos = this.friendlyBase?.center || { x: 2000, y: 12400 };
+        const dx = basePos.x - plane.pos.x;
+        const dy = basePos.y - plane.pos.y;
+        const d = Math.hypot(dx, dy);
+        plane.targetHeading = Math.atan2(dy, dx);
+        plane.altitude = plane.model === 'b29' ? 0.98 : Math.min(0.85, plane.altitude + dt * 0.2);
+
+        if (d < 65) {
+          // 成功降落基地並補入庫存
+          this.airbasePlanes[plane.model] = (this.airbasePlanes[plane.model] || 0) + 1;
+          const baseName = this.friendlyBase?.name || (this.era === 'era3' ? 'Wonsan Airfield' : 'Henderson Field');
+          this.addCombatLog({
+            category: 'air',
+            sourceSide: 'player',
+            sourceName: '前進航空基地 (AFB)',
+            targetName: plane.name,
+            actionType: 'recon_spotted',
+            text: plane.model === 'b29'
+              ? `🛬【戰略重轟平安返降】「${plane.name}」完成長程作戰任務返降 ${baseName}，庫存整備入庫！`
+              : `🛬【陸基戰機平安返航】「${plane.name}」完成長程作戰任務返降 ${baseName}，整備入庫！`,
+          });
+          this.aircraft.splice(i, 1);
+          return true;
+        }
+      } else {
+        // 艦載機返航降落航母甲板
+        if (flagship) {
+          const dx = flagship.pos.x - plane.pos.x;
+          const dy = flagship.pos.y - plane.pos.y;
+          const d = Math.hypot(dx, dy);
+          plane.targetHeading = Math.atan2(dy, dx);
+          plane.altitude = Math.min(0.8, plane.altitude + dt * 0.2);
+
+          if (d < 50) {
+            if (flagship.carrierPlanes) {
+              flagship.carrierPlanes.ready[plane.model] = (flagship.carrierPlanes.ready[plane.model] || 0) + 1;
+            }
+            this.aircraft.splice(i, 1);
+            return true;
+          }
+        }
+      }
+    } else {
+      // 敵機返航 (Enemy RTB): 返航至敵方航母或脫離戰場返回北方前線基地
+      const enemyCarrier = this.enemyShips.find((s) => s.type === 'carrier' && !s.isSunk);
+      if (enemyCarrier) {
+        const dx = enemyCarrier.pos.x - plane.pos.x;
+        const dy = enemyCarrier.pos.y - plane.pos.y;
+        const d = Math.hypot(dx, dy);
+        plane.targetHeading = Math.atan2(dy, dx);
+        if (d < 60) {
+          this.aircraft.splice(i, 1);
+          return true;
+        }
+      } else {
+        // 敵航母已沉沒或陸攻機，飛返北方作戰分界線脫離
+        const exitPoint = { x: 11000, y: 1000 };
+        const dx = exitPoint.x - plane.pos.x;
+        const dy = exitPoint.y - plane.pos.y;
+        plane.targetHeading = Math.atan2(dy, dx);
+        if (Math.hypot(dx, dy) < 300 || plane.pos.y < 1200) {
+          this.aircraft.splice(i, 1);
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // 時代四/時代五戰機干擾絲 (Chaff) / 熱焰彈 (Flare) 與機動高G破轉防禦
+  // ══════════════════════════════════════════════════════════
+  /** Era 4/5 chaff, flares and high-G break against incoming missiles. */
+  private updateCountermeasures(dt: number, plane: Aircraft): void {
+    if (this.era === 'era4' || this.era === 'era5') {
+      if (plane.chaffCount === undefined) {
+        plane.chaffCount = 36;
+        plane.maxChaff = 36;
+        plane.flareCount = 36;
+        plane.maxFlare = 36;
+        plane.cmCooldown = 0;
+      }
+
+      if (plane.cmCooldown !== undefined && plane.cmCooldown > 0) {
+        plane.cmCooldown = Math.max(0, plane.cmCooldown - dt);
+      }
+
+      if (plane.evasionTimer !== undefined && plane.evasionTimer > 0) {
+        plane.evasionTimer = Math.max(0, plane.evasionTimer - dt);
+        if (plane.evasionTimer <= 0) {
+          plane.isEvading = false;
+          plane.evasionTactic = undefined;
+        }
+      }
+
+      if (plane.health > 0 && plane.state !== 'landing') {
+        const incomingMissile = this.projectiles.find(
+          (pr) =>
+            !pr.isDead &&
+            this.isHostile(plane.side, pr.side) &&
+            (pr.type === 'missile_sam' || pr.type === 'missile_aam') &&
+            (pr.targetEntityId === plane.id || dist(pr.pos, plane.pos) < 780)
+        );
+
+        if (incomingMissile && (plane.cmCooldown || 0) <= 0) {
+          const isIr = incomingMissile.guidanceType === 'infrared' || incomingMissile.guidanceType === 'ir';
+          const isRadar = !isIr;
+
+          if (isIr && (plane.flareCount ?? 0) > 0) {
+            // ════ 紅外尋標飛彈威脅對策: Breaking 高G大角度切向破轉 + 熱焰彈群 ════
+            plane.flareCount = Math.max(0, (plane.flareCount ?? 30) - 2);
+            plane.cmCooldown = 1.4;
+            plane.isEvading = true;
+            plane.evasionTactic = 'breaking';
+            plane.evasionTimer = 2.6;
+            plane.evasionTurnSign = Math.random() > 0.5 ? 1 : -1;
+
+            // High-G Break Slice: 猛烈大角度急轉切入飛彈追擊幾何並開啟加力燃燒室
+            plane.targetHeading = plane.heading + (plane.evasionTurnSign || 1) * 1.85;
+            plane.speed = Math.min(plane.maxSpeed * 1.35, plane.speed + 120);
+
+            // 投放高溫鎂燃燒熱焰彈 (Burning magnesium flares)
+            for (let f = 0; f < 4; f++) {
+              const flareAng = plane.heading + Math.PI + (Math.random() - 0.5) * 0.9;
+              this.particles.push({
+                id: `flare-${Date.now()}-${f}-${Math.random()}`,
+                x: plane.pos.x - Math.cos(plane.heading) * 14,
+                y: plane.pos.y - Math.sin(plane.heading) * 14,
+                vx: Math.cos(flareAng) * (55 + Math.random() * 30),
+                vy: Math.sin(flareAng) * (55 + Math.random() * 30),
+                life: 1.6,
+                maxLife: 1.6,
+                radius: 5.5,
+                color: '#FF6D00',
+                type: 'flare',
+              });
+            }
+
+            // Threat-matched Breaking 誘騙脫鎖率達 80%
+            if (Math.random() < 0.80) {
+              incomingMissile.isDecoyed = true;
+              incomingMissile.targetEntityId = undefined;
+              incomingMissile.targetPos = {
+                x: plane.pos.x + (Math.random() - 0.5) * 450,
+                y: plane.pos.y + (Math.random() - 0.5) * 450,
+              };
+            }
+
+            this.addCombatLog({
+              category: 'aa',
+              sourceSide: plane.side,
+              sourceName: plane.name,
+              targetName: '來襲紅外飛彈',
+              actionType: 'recon_spotted',
+              text: `⚡【Breaking 高G破轉機動 + 熱焰彈群】「${plane.name}」開後燃器大過載破轉！紅外尋標頭被高溫熱焰彈欺騙脫鎖！`,
+            });
+          } else if (isRadar && (plane.chaffCount ?? 0) > 0) {
+            // ════ 雷達導向飛彈威脅對策: Notching 90° 零都卜勒切向規避 + 箔條干擾雲 ════
+            plane.chaffCount = Math.max(0, (plane.chaffCount ?? 30) - 4);
+            plane.cmCooldown = 1.4;
+            plane.isEvading = true;
+            plane.evasionTactic = 'notching';
+            plane.evasionTimer = 3.0;
+            plane.evasionTurnSign = Math.random() > 0.5 ? 1 : -1;
+
+            // 3-9 Line Beam / Notching: 航向精確切至與來襲飛彈夾角 90°，落入都卜勒雷達盲區
+            const missileHeading = incomingMissile.heading ?? Math.atan2(plane.pos.y - incomingMissile.pos.y, plane.pos.x - incomingMissile.pos.x);
+            plane.targetHeading = missileHeading + (Math.PI / 2) * (plane.evasionTurnSign || 1);
+            // 俯衝貼近海面/地形雜波 (Sea Clutter Masking)
+            plane.altitude = Math.max(0.14, plane.altitude - dt * 0.45);
+
+            // 投放鍍鋁干擾絲箔條雲 (Reflective aluminum chaff strips)
+            for (let c = 0; c < 10; c++) {
+              this.particles.push({
+                id: `chaff-${Date.now()}-${c}-${Math.random()}`,
+                x: plane.pos.x - Math.cos(plane.heading) * 16 + (Math.random() - 0.5) * 14,
+                y: plane.pos.y - Math.sin(plane.heading) * 16 + (Math.random() - 0.5) * 14,
+                vx: (Math.random() - 0.5) * 16,
+                vy: (Math.random() - 0.5) * 16,
+                life: 2.8,
+                maxLife: 2.8,
+                radius: 6.5,
+                color: '#E0F7FA',
+                type: 'chaff',
+              });
+            }
+
+            // Threat-matched Notching 規避誘騙率 (78%，若切入角接近90°垂直波束則提升至 88%)
+            const angleDiff = Math.abs(Math.sin(plane.heading - missileHeading));
+            const notchingBonus = angleDiff > 0.85 ? 0.88 : 0.78;
+            if (Math.random() < notchingBonus) {
+              incomingMissile.isDecoyed = true;
+              incomingMissile.targetEntityId = undefined;
+              incomingMissile.targetPos = {
+                x: plane.pos.x + (Math.random() - 0.5) * 600,
+                y: plane.pos.y + (Math.random() - 0.5) * 600,
+              };
+            }
+
+            this.addCombatLog({
+              category: 'aa',
+              sourceSide: plane.side,
+              sourceName: plane.name,
+              targetName: '來襲雷達導引飛彈',
+              actionType: 'recon_spotted',
+              text: `📡【Notching 切向橫滾規避 + 箔條干擾雲】「${plane.name}」切至 90° 零都卜勒盲區並俯衝貼地！雷達波束完全迷失於雜波反射雲中！`,
+            });
           }
         }
       }
@@ -4463,7 +4359,7 @@ export class GameEngine {
     }
 
     const isA10 = attacker.model === 'a10a';
-    const isModernVulcan = ['f14a', 'f15a', 'f16a', 'fa18a', 'su27', 'mig29a', 'f4e', 'f105', 'a7', 'ah1', 'f8', 'mig21'].includes(attacker.model);
+    const isModernVulcan = ROTARY_CANNON_MODELS.has(attacker.model);
     const isF86 = attacker.model === 'f86';
     const isMig15 = attacker.model === 'mig15';
 
@@ -4659,59 +4555,6 @@ export class GameEngine {
         actionType: 'bomb_hit',
         text: `🔥【凝固汽油彈投放】${attackerName} 掠地投下 2 具凝固汽油燃燒罐！鋁製罐體空中翻滾砸向敵目標陣地！`,
       });
-    }
-  }
-
-  private fireTailGunner(bomber: Aircraft, targetFighter: Aircraft) {
-    soundEngine.playPlaneGun();
-    const tailAngle = bomber.heading + Math.PI;
-    const originX = bomber.pos.x + Math.cos(tailAngle) * 16;
-    const originY = bomber.pos.y + Math.sin(tailAngle) * 16;
-    const dx = targetFighter.pos.x - originX;
-    const dy = targetFighter.pos.y - originY;
-    const d = Math.hypot(dx, dy);
-    const fireAngle = Math.atan2(dy, dx);
-    const bulletSpeed = 560;
-
-    // Backward tracer stream from tail/dorsal turret
-    for (let b = 0; b < 2; b++) {
-      const spread = (Math.random() - 0.5) * 0.1;
-      const bAngle = fireAngle + spread;
-      this.projectiles.push({
-        id: `tailgun-${Date.now()}-${b}-${Math.random()}`,
-        type: 'bullet',
-        side: bomber.side,
-        pos: { x: originX, y: originY },
-        vel: { x: Math.cos(bAngle) * bulletSpeed, y: Math.sin(bAngle) * bulletSpeed },
-        originPos: { x: originX, y: originY },
-        targetPos: { x: originX + Math.cos(bAngle) * d, y: originY + Math.sin(bAngle) * d },
-        flightProgress: 0,
-        maxDistance: d + 40,
-        distanceTraveled: 0,
-        damage: bomber.role === 'level_bomber' ? 28 : 18,
-        blastRadius: 8,
-        speed: bulletSpeed,
-        heading: bAngle,
-        isDead: false,
-        trail: [],
-        attackerName: `${bomber.name} (自衛尾部機槍)`,
-      });
-    }
-
-    if (Math.random() < 0.6) {
-      const dmg = bomber.role === 'level_bomber' ? 36 : 22;
-      targetFighter.health = Math.max(0, targetFighter.health - dmg);
-      if (targetFighter.health <= 0) {
-        this.killPlane(targetFighter);
-        this.addCombatLog({
-          category: 'air',
-          sourceSide: bomber.side,
-          sourceName: `${bomber.name} 尾部機槍射手`,
-          targetName: targetFighter.name,
-          actionType: 'recon_spotted',
-          text: `🎯【自衛火力擊落！】${bomber.name} 尾部機槍手冷靜鎖定咬尾敵機「${targetFighter.name}」，自衛火網將其當空打爆！`,
-        });
-      }
     }
   }
 
@@ -5110,11 +4953,7 @@ export class GameEngine {
     });
   }
 
-  private dropCarpetBomb(plane: Aircraft, targetPos: Vector2D) {
-    this.initiateBombingRun(plane, targetPos);
-  }
-
-  private dropDepthBombs(plane: Aircraft, targetPos: Vector2D) {
+  private dropDepthBombs(plane: Aircraft, _targetPos: Vector2D) {
     soundEngine.playWaterSplash();
     const count = plane.payloadType === 'scout_depth_charge' ? 2 : 4;
     for (let i = 0; i < count; i++) {
@@ -5259,7 +5098,7 @@ export class GameEngine {
     }
 
     if (plane.side === 'player') {
-      const bombName = PAYLOAD_CATALOG[pType]?.nameZh || '航空炸彈';
+      const bombName = PAYLOAD_CATALOG[pType]?.name || '航空炸彈';
       this.addCombatLog({
         category: 'air',
         sourceSide: 'player',
@@ -6028,846 +5867,882 @@ export class GameEngine {
       : 'jill';
 
     if (missionType === 'dca') {
-      // 1. DCA (防空攔截): 戰鬥機緊急升空截擊正在逼近之轟炸機隊 (動態規模 2-6架)
-      soundEngine.playKlaxon();
-      const targetPlane = this.aircraft.find(
-        (a) => a.side === 'player' && a.state !== 'shot_down' && (a.role === 'dive_bomber' || a.role === 'torpedo_bomber' || a.role === 'level_bomber' || a.role === 'attacker')
-      );
-      const targetPos = targetPlane ? targetPlane.pos : (flagship ? flagship.pos : { x: 5000, y: 5000 });
-      const heading = Math.atan2(targetPos.y - spawnPos.y, targetPos.x - spawnPos.x);
-
-      const dcaModel: AircraftModel = isEra5 ? (Math.random() < 0.5 ? 'su27' : 'mig29a') : isEra4 ? (Math.random() < 0.6 ? 'mig21' : 'mig19') : isEra3 ? 'mig15' : fModel;
-      const dcaSpeed = isEra5 ? 195 : dcaModel === 'mig21' ? 185 : dcaModel === 'mig19' ? 172 : isEra3 ? 160 : 148;
-      const dcaHealth = isEra5 ? 750 : dcaModel === 'mig21' ? 580 : dcaModel === 'mig19' ? 560 : isEra3 ? 540 : 160;
-      const dcaCount = this.calculateDynamicWaveSize(5);
-
-      for (let i = 0; i < dcaCount; i++) {
-        const thisModel: AircraftModel = isEra5 ? (i % 2 === 0 ? 'su27' : 'mig29a') : isEra4 ? (i % 2 === 0 ? 'mig21' : 'mig19') : dcaModel;
-        this.aircraft.push({
-          id: `enemy-dca-${Date.now()}-${i}`,
-          squadronId: sqId,
-          model: thisModel,
-          role: 'fighter',
-          name: isEra5
-            ? (thisModel === 'su27' ? `Su-27 側衛超音速防空截擊機 (#${i + 1})` : `MiG-29A 支點全天候截擊機 (#${i + 1})`)
-            : isEra4
-            ? (thisModel === 'mig21' ? `MiG-21 魚窩超音速防空截擊機 (#${i + 1})` : `MiG-19 農夫超音速防空截擊機 (#${i + 1})`)
-            : isEra3
-            ? `DCA 米格-15 噴射截擊機 (#${i + 1})`
-            : `DCA 零戰防空截擊機 (#${i + 1})`,
-          side: 'enemy',
-          pos: { x: spawnPos.x + i * 28, y: spawnPos.y + (i - (dcaCount - 1) / 2) * 22 },
-          vel: { x: Math.cos(heading) * dcaSpeed, y: Math.sin(heading) * dcaSpeed },
-          heading,
-          targetHeading: heading,
-          speed: dcaSpeed,
-          maxSpeed: dcaSpeed,
-          altitude: 0.95,
-          state: 'cruising',
-          health: dcaHealth,
-          maxHealth: dcaHealth,
-          order: targetPlane ? { type: 'attack', targetPos, targetId: targetPlane.id } : { type: 'patrol', patrolOrigin: spawnPos },
-          hasPayload: (isEra5 || isEra4) && (thisModel === 'su27' || thisModel === 'mig29a' || thisModel === 'mig21'),
-          payloadType: (isEra5 || isEra4) ? 'aim9_sidewinder' : undefined,
-          shootCooldown: 0,
-          gunAmmo: thisModel === 'su27' ? 250 : thisModel === 'mig29a' ? 250 : thisModel === 'mig21' ? 200 : thisModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
-          maxGunAmmo: thisModel === 'su27' ? 250 : thisModel === 'mig29a' ? 250 : thisModel === 'mig21' ? 200 : thisModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
-          wingmanOffset: { x: i * 25, y: (i - (dcaCount - 1) / 2) * 20 },
-          missionType: 'dca',
-          chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        });
-      }
-
-      this.addBannerAlert(
-        isEra5
-          ? `🚨【DCA 蘇聯防空軍超音速截擊】蘇聯 GCI / 30N6 雷達引導！${dcaCount}架 Su-27 / MiG-29A 超音速截擊戰機全加力升空阻截！`
-          : isEra4
-          ? `🚨【DCA 蘇越防空截擊】蘇聯 GCI 雷達引導！${dcaCount}架 北越空軍 MiG-21 / MiG-19 超音速截擊大隊全加力升空阻截！`
-          : isEra3
-          ? `🚨【DCA 噴射防空截擊】冷戰聯軍出動 ${dcaCount}架 MiG-15 噴射截擊編隊緊急升空阻截！`
-          : `🚨【DCA 戰鬥機防空攔截】敵出動 ${dcaCount}架 戰機升空截擊我空襲轟炸機！`,
-        'enemy',
-        'sunk',
-        5.5
-      );
-      this.addCombatLog({
-        category: 'air',
-        sourceSide: 'enemy',
-        sourceName: isEra5 ? '蘇聯國土防空軍 (PVO GCI引導)' : isEra4 ? '北越人民軍空軍 921/925 截擊團 (蘇聯GCI引導)' : isEra3 ? '冷戰遠東航空軍 (DCA)' : '帝國海軍防空戰隊 (DCA)',
-        targetName: targetPlane ? targetPlane.name : '美軍空襲編隊',
-        actionType: 'recon_spotted',
-        text: isEra5
-          ? `🚨【Su-27 / MiG-29A 超音速截擊起飛】蘇聯防空軍 (PVO) 地面引導雷達偵獲我機！緊急起飛 ${dcaCount}架 Su-27 與 MiG-29A 實施極速防空截擊！`
-          : isEra4
-          ? `🚨【MiG-21 / MiG-19 超音速截擊起飛】蘇聯顧問團 GCI 地面引導雷達偵獲我機！北越空軍 921 團與 925 團起飛 ${dcaCount}架 米格-21 與 米格-19 戰鬥機實施超音速防空截擊！`
-          : isEra3
-          ? `🚨【MiG-15 噴射截擊起飛】防空雷達偵獲我機！冷戰聯軍基地緊急起飛 ${dcaCount}架 米格-15 (MiG-15) 噴射戰鬥機實施超音速防空攔截！`
-          : `🚨【DCA 防空截擊起飛】防空雷達與哨戒艇偵獲美機逼近！敵基地緊急彈射 ${dcaCount}架 ${fModel.toUpperCase()} 戰鬥機實施防空攔截 (DCA)！`,
-      });
+      this.launchEnemyDca(flagship, spawnPos, sqId, isEra3, isEra4, isEra5, fModel);
     } else if (missionType === 'air_sweep') {
-      // 2. Air Sweep (空中制空掃蕩): 戰鬥機大編隊飛越戰區搶奪制空權 (動態規模 2-6架)
-      soundEngine.playKlaxon();
-      const sweepTarget = flagship ? { ...flagship.pos } : { x: 6000, y: 7000 };
-      const heading = Math.atan2(sweepTarget.y - spawnPos.y, sweepTarget.x - spawnPos.x);
-
-      const sweepCount = this.calculateDynamicWaveSize(6);
-      for (let i = 0; i < sweepCount; i++) {
-        const sweepModel: AircraftModel = isEra5
-          ? (i % 3 === 0 ? 'su27' : i % 3 === 1 ? 'mig29a' : 'yak38')
-          : isEra4
-          ? (i % 3 === 0 ? 'mig21' : i % 3 === 1 ? 'mig19' : 'mig17')
-          : isEra3
-          ? (i % 2 === 0 ? 'mig15' : 'yak9')
-          : i % 2 === 0
-          ? fModel
-          : (this.era === 'era1' ? 'zero_a6m5' : 'ki61');
-        const sSpeed = sweepModel === 'su27' ? 195 : sweepModel === 'mig29a' ? 190 : sweepModel === 'yak38' ? 150 : sweepModel === 'mig21' ? 185 : sweepModel === 'mig19' ? 172 : sweepModel === 'mig17' ? 152 : sweepModel === 'mig15' ? 160 : sweepModel === 'yak9' ? 132 : 152;
-        const sHealth = sweepModel === 'su27' ? 750 : sweepModel === 'mig29a' ? 680 : sweepModel === 'yak38' ? 520 : sweepModel === 'mig21' ? 580 : sweepModel === 'mig19' ? 560 : sweepModel === 'mig17' ? 480 : sweepModel === 'mig15' ? 540 : sweepModel === 'yak9' ? 440 : 175;
-
-        this.aircraft.push({
-          id: `enemy-sweep-${Date.now()}-${i}`,
-          squadronId: sqId,
-          model: sweepModel,
-          role: 'fighter',
-          name: isEra5
-            ? (sweepModel === 'su27' ? `Su-27 側衛高空超音速制空戰機 (#${i + 1})` : sweepModel === 'mig29a' ? `MiG-29A 支點前線格鬥戰機 (#${i + 1})` : `Yak-38 鐵匠艦載垂直起降攔截機 (#${i + 1})`)
-            : isEra4
-            ? (sweepModel === 'mig21' ? `MiG-21 魚窩高空制空戰機 (#${i + 1})` : sweepModel === 'mig19' ? `MiG-19 農夫超音速纏鬥機 (#${i + 1})` : `MiG-17 壁畫低空纏鬥王牌機 (#${i + 1})`)
-            : isEra3
-            ? `${sweepModel.toUpperCase()} 冷戰空優戰鬥機 (#${i + 1})`
-            : `制空掃蕩戰鬥機 (Air Sweep #${i + 1})`,
-          side: 'enemy',
-          pos: { x: spawnPos.x + i * 32, y: spawnPos.y + (i - (sweepCount - 1) / 2) * 25 },
-          vel: { x: Math.cos(heading) * sSpeed, y: Math.sin(heading) * sSpeed },
-          heading,
-          targetHeading: heading,
-          speed: sSpeed,
-          maxSpeed: sSpeed,
-          altitude: 0.92,
-          state: 'cruising',
-          health: sHealth,
-          maxHealth: sHealth,
-          order: { type: 'attack', targetPos: sweepTarget },
-          hasPayload: (isEra5 || isEra4) && (sweepModel === 'su27' || sweepModel === 'mig29a' || sweepModel === 'mig21'),
-          payloadType: (isEra5 || isEra4) ? 'aim9_sidewinder' : undefined,
-          shootCooldown: 0,
-          gunAmmo: sweepModel === 'su27' ? 250 : sweepModel === 'mig29a' ? 250 : sweepModel === 'yak38' ? 250 : sweepModel === 'mig21' ? 200 : sweepModel === 'mig19' ? 210 : sweepModel === 'mig17' ? 240 : sweepModel === 'mig15' ? 300 : sweepModel === 'yak9' ? 340 : 1000,
-          maxGunAmmo: sweepModel === 'su27' ? 250 : sweepModel === 'mig29a' ? 250 : sweepModel === 'yak38' ? 250 : sweepModel === 'mig21' ? 200 : sweepModel === 'mig19' ? 210 : sweepModel === 'mig17' ? 240 : sweepModel === 'mig15' ? 300 : sweepModel === 'yak9' ? 340 : 1000,
-          wingmanOffset: { x: i * 30, y: (i - (sweepCount - 1) / 2) * 22 },
-          missionType: 'air_sweep',
-          chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        });
-      }
-
-      this.addBannerAlert(
-        isEra5
-          ? `⚔️【Air Sweep 蘇聯海空軍制空大掃蕩】${sweepCount}架 Su-27 / MiG-29A / Yak-38 高低空超音速混編戰鬥群突入搶奪制空權！`
-          : isEra4
-          ? `⚔️【Air Sweep 蘇越戰區制空掃蕩】${sweepCount}架 MiG-21 / MiG-19 / MiG-17 高中低三層混編噴射戰鬥群突入搶奪制空權！`
-          : isEra3
-          ? `⚔️【Air Sweep 冷戰空優掃蕩】${sweepCount}架 米格-15 噴射機與雅克-9 混編大隊搶奪戰區制空權！`
-          : `⚔️【Air Sweep 制空掃蕩】日軍派出 ${sweepCount}架 王牌戰鬥機編隊搶奪制空權！`,
-        'enemy',
-        'down',
-        6.0
-      );
-      this.addCombatLog({
-        category: 'air',
-        sourceSide: 'enemy',
-        sourceName: isEra5 ? '蘇聯空軍與北方艦隊航空兵制空大隊' : isEra4 ? '北越人民軍空軍 921/923/925 聯合掃蕩大隊' : isEra3 ? '遠東前線聯軍制空戰隊' : '南太平洋航空戰隊制空隊',
-        targetName: '特混艦隊制空空域',
-        actionType: 'recon_spotted',
-        text: isEra5
-          ? `⚔️【空中制空掃蕩 (Air Sweep)】蘇聯海空軍 ${sweepCount}架 Su-27 / MiG-29A 超音速噴射戰機掠海與高空突入！雷達鎖定我軍巡邏戰機 (CAP) 爭奪全戰區制空權！`
-          : isEra4
-          ? `⚔️【空中制空掃蕩 (Air Sweep)】北越 VPAF ${sweepCount}架 MiG-21 / MiG-19 / MiG-17 噴射戰機高速突入！MiG-21 高空雷達掩護、MiG-19 爬升攔截、MiG-17 低空山谷剪刀伏擊，專門搜尋我軍巡邏戰機 (CAP) 爭奪制空權！`
-          : isEra3
-          ? `⚔️【空中制空掃蕩 (Air Sweep)】冷戰聯軍 ${sweepCount}架 MiG-15 / Yak-9 戰鬥機高速掠過戰區，專門搜尋我軍巡邏戰機 (CAP) 爭奪制空權！`
-          : `⚔️【空中制空掃蕩 (Air Sweep)】偵測到敵軍 ${sweepCount}架 零戰/飛燕高速掠過鐵底灣！專門鎖定我軍巡邏戰機 (CAP) 爭奪制空權！`,
-      });
+      this.launchEnemyAirSweep(flagship, spawnPos, sqId, isEra3, isEra4, isEra5, fModel);
     } else if (missionType === 'scramble') {
-      // 3. Scramble (緊急迎擊起飛): 基地防空警報大作時立即由跑道拉起 (動態規模 2-4架)
-      soundEngine.playKamikazeSiren();
-      const scrambleTarget = flagship ? { ...flagship.pos } : { x: 5000, y: 5000 };
-      const heading = Math.atan2(scrambleTarget.y - spawnPos.y, scrambleTarget.x - spawnPos.x);
-
-      const scModel: AircraftModel = isEra5 ? (Math.random() < 0.5 ? 'su27' : 'mig29a') : isEra4 ? (Math.random() < 0.5 ? 'mig21' : 'mig19') : isEra3 ? 'mig15' : fModel;
-      const scSpeed = isEra5 ? 195 : scModel === 'mig21' ? 185 : scModel === 'mig19' ? 172 : isEra3 ? 160 : 142;
-      const scHealth = isEra5 ? 720 : scModel === 'mig21' ? 580 : scModel === 'mig19' ? 560 : isEra3 ? 540 : 150;
-      const scrambleCount = Math.min(8, this.calculateDynamicWaveSize(4));
-
-      for (let i = 0; i < scrambleCount; i++) {
-        this.aircraft.push({
-          id: `enemy-scramble-${Date.now()}-${i}`,
-          squadronId: sqId,
-          model: scModel,
-          role: 'fighter',
-          name: isEra5
-            ? (scModel === 'su27' ? `Su-27 側衛緊急迎擊噴射機 (#${i + 1})` : `MiG-29A 支點超音速迎擊機 (#${i + 1})`)
-            : isEra4
-            ? (scModel === 'mig21' ? `MiG-21 緊急迎擊噴射機 (#${i + 1})` : `MiG-19 超音速迎擊機 (#${i + 1})`)
-            : isEra3
-            ? `MiG-15 緊急迎擊噴射機 (#${i + 1})`
-            : `緊急起飛迎擊機 (Scramble #${i + 1})`,
-          side: 'enemy',
-          pos: { x: spawnPos.x + i * 22, y: spawnPos.y + (i - (scrambleCount - 1) / 2) * 16 },
-          vel: { x: Math.cos(heading) * scSpeed, y: Math.sin(heading) * scSpeed },
-          heading,
-          targetHeading: heading,
-          speed: scSpeed,
-          maxSpeed: scSpeed,
-          altitude: 0.65,
-          state: 'cruising',
-          health: scHealth,
-          maxHealth: scHealth,
-          order: { type: 'attack', targetPos: scrambleTarget },
-          hasPayload: (isEra5 || isEra4) && (scModel === 'su27' || scModel === 'mig29a' || scModel === 'mig21'),
-          payloadType: (isEra5 || isEra4) ? 'aim9_sidewinder' : undefined,
-          shootCooldown: 0,
-          gunAmmo: scModel === 'su27' ? 250 : scModel === 'mig29a' ? 250 : scModel === 'mig21' ? 200 : scModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
-          maxGunAmmo: scModel === 'su27' ? 250 : scModel === 'mig29a' ? 250 : scModel === 'mig21' ? 200 : scModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
-          wingmanOffset: { x: i * 22, y: 15 },
-          missionType: 'scramble',
-          chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        });
-      }
-
-      this.addBannerAlert(
-        isEra5
-          ? `⚡【Scramble 蘇軍基地超音速緊急迎擊】警報長鳴！${scrambleCount}架 ${scModel.toUpperCase()} 點燃後燃器強行起飛！`
-          : isEra4
-          ? `⚡【Scramble 蘇越超音速緊急迎擊】內排/安沛/克夫基地防空警報長鳴！${scrambleCount}架 ${scModel.toUpperCase()} 點燃後燃器強行起飛！`
-          : isEra3
-          ? `⚡【Scramble 噴射緊急迎擊】冷戰聯軍基地防空警報大作，${scrambleCount}架 米格-15 加足噴射推力升空！`
-          : `⚡【Scramble 緊急起飛】敵前線航空基地 ${scrambleCount}架 戰機拉響警報緊急升空！`,
-        'enemy',
-        'sunk',
-        5.0
-      );
-      this.addCombatLog({
-        category: 'air',
-        sourceSide: 'enemy',
-        sourceName: isEra5 ? '蘇軍前線戰區空軍基地迎擊聯隊' : isEra4 ? '內排/安沛空軍基地迎擊聯隊' : isEra3 ? '前線要塞迎擊隊' : '前線基地迎擊隊',
-        targetName: '來襲戰機',
-        actionType: 'recon_spotted',
-        text: isEra5
-          ? `⚡【${scModel.toUpperCase()} 超音速緊急起飛】蘇聯空軍前線基地一級戰備警報！${scrambleCount}架 ${scModel.toUpperCase()} 超音速戰機全後燃器推力緊急起飛迎敵！`
-          : isEra4
-          ? `⚡【${scModel.toUpperCase()} 超音速緊急起飛】北越前線基地跑道拉響一級戰備紅色警報！${scrambleCount}架 ${scModel.toUpperCase()} 噴射戰鬥機全推力加力強行起飛迎敵！`
-          : isEra3
-          ? `⚡【噴射截擊緊急升空】敵基地防空雷達鎖定！${scrambleCount}架 MiG-15 噴射戰鬥機點燃發動機強行起飛迎敵！`
-          : `⚡【基地防空緊急起飛 (Scramble)】敵機場警報響起！${scrambleCount}架 戰機加足馬力強行起飛迎敵！`,
-      });
+      this.launchEnemyScramble(flagship, spawnPos, sqId, isEra3, isEra4, isEra5, fModel);
     } else if (missionType === 'strike_flagship') {
-      // 4. Strike Package (針對旗艦反艦 動態編隊: 2-6架): 蘇聯海航 Tu-16 獾式長程飛彈轟炸機 + 蘇聯空軍 Su-7 強擊機 + 北越 MiG-21 直衛
-      soundEngine.playKamikazeSiren();
-      const target = flagship ? { ...flagship.pos } : { x: 3000, y: 11000 };
-      const heading = Math.atan2(target.y - spawnPos.y, target.x - spawnPos.x);
-
-      const totalStrikeCount = this.calculateDynamicWaveSize(7); // 4-12 架
-      const escCount = totalStrikeCount >= 7 ? 3 : 2;
-      const bomberCount = totalStrikeCount - escCount;
-      const dbCount = Math.ceil(bomberCount / 2);
-      const tbCount = bomberCount - dbCount;
-
-      // 護航戰鬥機 (Su-27 / MiG-21 / MiG-15 / Zero Escorts)
-      const escModel: AircraftModel = isEra5 ? (Math.random() < 0.5 ? 'su27' : 'mig29a') : isEra4 ? 'mig21' : isEra3 ? 'mig15' : fModel;
-      const escSpeed = isEra5 ? 190 : isEra4 ? 180 : isEra3 ? 150 : 135;
-      const escHealth = isEra5 ? 750 : isEra4 ? 580 : isEra3 ? 540 : 160;
-
-      for (let i = 0; i < escCount; i++) {
-        this.aircraft.push({
-          id: `st-flag-f-${Date.now()}-${i}`,
-          squadronId: sqId,
-          model: escModel,
-          role: 'fighter',
-          name: isEra5
-            ? (escModel === 'su27' ? `Su-27 側衛反艦護航直衛機 (蘇聯防空軍 #${i + 1})` : `MiG-29A 支點護航直衛機 (#${i + 1})`)
-            : isEra4
-            ? `MiG-21 魚窩反艦護航直衛機 (北越921團 #${i + 1})`
-            : isEra3
-            ? `旗艦突擊 MiG-15 噴射直衛機 (#${i + 1})`
-            : `旗艦突擊直衛機 (#${i + 1})`,
-          side: 'enemy',
-          pos: { x: spawnPos.x + i * 30, y: spawnPos.y - 25 },
-          vel: { x: Math.cos(heading) * escSpeed, y: Math.sin(heading) * escSpeed },
-          heading,
-          targetHeading: heading,
-          speed: escSpeed,
-          maxSpeed: escSpeed,
-          altitude: 0.9,
-          state: 'cruising',
-          health: escHealth,
-          maxHealth: escHealth,
-          order: { type: 'attack', targetPos: target, targetId: flagship?.id },
-          hasPayload: isEra5 || isEra4,
-          payloadType: (isEra5 || isEra4) ? 'aim9_sidewinder' : undefined,
-          shootCooldown: 0,
-          gunAmmo: isEra5 ? 250 : isEra4 ? 200 : isEra3 ? 300 : 1000,
-          maxGunAmmo: isEra5 ? 250 : isEra4 ? 200 : isEra3 ? 300 : 1000,
-          wingmanOffset: { x: i * 30, y: -25 },
-          missionType: 'strike_flagship',
-          chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        });
-      }
-
-      // 俯衝轟炸機 / 強擊機 (Su-25 / Su-7 / IL-10 / Val / Judy)
-      const strikeDbModel: AircraftModel = isEra5 ? 'su25' : isEra4 ? 'su7' : isEra3 ? 'il10' : dbModel;
-      const strikeDbSpeed = isEra5 ? 165 : isEra4 ? 158 : isEra3 ? 116 : 115;
-      const strikeDbHealth = isEra5 ? 850 : isEra4 ? 700 : isEra3 ? 620 : 155;
-
-      for (let i = 0; i < dbCount; i++) {
-        this.aircraft.push({
-          id: `st-flag-db-${Date.now()}-${i}`,
-          squadronId: sqId,
-          model: strikeDbModel,
-          role: 'dive_bomber',
-          name: isEra5
-            ? `Su-25 蛙足超低空反艦強擊機 (蘇聯前線空軍 #${i + 1})`
-            : isEra4
-            ? `Su-7 裝配匠超音速反艦強擊機 (蘇聯空軍遠東戰術大隊 #${i + 1})`
-            : isEra3
-            ? `IL-10 鐵獸裝甲強擊機 (#${i + 1})`
-            : `旗艦俯衝轟炸機 (#${i + 1})`,
-          side: 'enemy',
-          pos: { x: spawnPos.x + i * 28, y: spawnPos.y },
-          vel: { x: Math.cos(heading) * strikeDbSpeed, y: Math.sin(heading) * strikeDbSpeed },
-          heading,
-          targetHeading: heading,
-          speed: strikeDbSpeed,
-          maxSpeed: strikeDbSpeed,
-          altitude: 0.88,
-          state: 'cruising',
-          health: strikeDbHealth,
-          maxHealth: strikeDbHealth,
-          order: { type: 'attack', targetPos: target, targetId: flagship?.id },
-          hasPayload: true,
-          shootCooldown: 0,
-          gunAmmo: isEra5 ? 400 : isEra4 ? 320 : isEra3 ? 600 : 600,
-          maxGunAmmo: isEra5 ? 400 : isEra4 ? 320 : isEra3 ? 600 : 600,
-          wingmanOffset: { x: i * 28, y: 0 },
-          missionType: 'strike_flagship',
-          chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        });
-      }
-
-      // 魚雷攻擊機 / 長程反艦飛彈轟炸機 (Tu-22M3 逆火 / Tu-16 獾式 / Tu-14 / Kate / Jill)
-      const strikeTbModel: AircraftModel = isEra5 ? 'tu22m3' : isEra4 ? 'tu16' : isEra3 ? 'tu14' : tbModel;
-      const strikeTbSpeed = isEra5 ? 175 : isEra4 ? 142 : isEra3 ? 130 : 110;
-      const strikeTbHealth = isEra5 ? 2200 : isEra4 ? 1350 : isEra3 ? 680 : 150;
-
-      for (let i = 0; i < tbCount; i++) {
-        this.aircraft.push({
-          id: `st-flag-tb-${Date.now()}-${i}`,
-          squadronId: sqId,
-          model: strikeTbModel,
-          role: 'torpedo_bomber',
-          name: isEra5
-            ? `Tu-22M3 逆火超音速反艦飛彈轟炸機 (蘇聯海航 AV-MF #${i + 1})`
-            : isEra4
-            ? `Tu-16 獾式長程反艦飛彈轟炸機 (蘇聯海航 AV-MF #${i + 1})`
-            : isEra3
-            ? `Tu-14 雙噴射魚雷轟炸機 (#${i + 1})`
-            : `旗艦魚雷雷擊機 (#${i + 1})`,
-          side: 'enemy',
-          pos: { x: spawnPos.x + i * 35, y: spawnPos.y + 30 },
-          vel: { x: Math.cos(heading) * strikeTbSpeed, y: Math.sin(heading) * strikeTbSpeed },
-          heading,
-          targetHeading: heading,
-          speed: strikeTbSpeed,
-          maxSpeed: strikeTbSpeed,
-          altitude: 0.88,
-          state: 'cruising',
-          health: strikeTbHealth,
-          maxHealth: strikeTbHealth,
-          order: { type: 'attack', targetPos: target, targetId: flagship?.id },
-          hasPayload: true,
-          shootCooldown: 0,
-          gunAmmo: isEra5 ? 800 : isEra4 ? 600 : isEra3 ? 400 : 500,
-          maxGunAmmo: isEra5 ? 800 : isEra4 ? 600 : isEra3 ? 400 : 500,
-          wingmanOffset: { x: i * 35, y: 30 },
-          missionType: 'strike_flagship',
-          hasDefensiveTurret: true,
-          rearGunnerCooldown: 0,
-          chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        });
-      }
-
-      this.addBannerAlert(
-        isEra5
-          ? `🚨【Strike Package 蘇聯紅海軍飽和反艦大突擊！】Tu-22M3 逆火超音速飛彈轟炸機 (Kh-22 暴風雨超音速反艦飛彈) + Su-25 強擊機 + Su-27 護航直撲航母！`
-          : isEra4
-          ? `🚨【Strike Package 蘇越聯合旗艦大打擊群！】蘇聯海航 Tu-16 獾式長程飛彈轟炸機 (KSR-5 超音速反艦飛彈) + 蘇聯空軍 Su-7 強擊機 + 北越空軍 MiG-21 直撲航母！`
-          : isEra3
-          ? `🚨【Strike Package 旗艦反艦編隊】冷戰聯軍 ${totalStrikeCount}機 打擊群（圖-14與伊爾-10）直撲我旗艦航母！`
-          : `🚨【Strike Package 旗艦反艦編隊】敵海空主力 ${totalStrikeCount}機 打擊群直撲我旗艦航母！`,
-        'enemy',
-        'sunk',
-        7.0
-      );
-      this.addCombatLog({
-        category: 'air',
-        sourceSide: 'enemy',
-        sourceName: isEra5 ? '蘇聯海軍航空兵特遣打擊部隊 (AV-MF)' : isEra4 ? '蘇聯海空軍特遣打擊部隊 (AV-MF / VPAF)' : isEra3 ? '冷戰遠東航空打擊軍 (Strike Package)' : '帝國海軍第一航空戰隊 (Strike Package)',
-        targetName: flagship?.name || '特混艦隊旗艦',
-        actionType: 'recon_spotted',
-        text: isEra5
-          ? `🚨【蘇聯海航逆火大編隊反艦突擊！】長程雷達網紅警狂響！偵測到蘇聯海航 ${totalStrikeCount}機 飽和打擊群（Tu-22M3 逆火掛載 Kh-22 重型超音速反艦飛彈 + Su-25 蛙足強擊機 + Su-27 側衛超音速護航）全速直撲「${flagship?.name || '航空母艦'}」！`
-          : isEra4
-          ? `🚨【蘇越海空聯合突擊旗艦！】長程對空警戒雷達警報大作！偵測到敵 ${totalStrikeCount}機 聯合重打擊群（蘇聯海航 Tu-16 獾式飛彈轟炸機掛載 KSR-5 凱爾特超音速重型反艦飛彈 + 蘇聯空軍 Su-7 裝配匠超音速強擊機 + 北越 921 團 MiG-21 超音速護航）全速直撲「${flagship?.name || '航空母艦'}」！`
-          : isEra3
-          ? `🚨【旗艦打擊編隊！】長程對空雷達警報大作！偵測到敵 ${totalStrikeCount}機 動態反艦打擊群 (Tu-14 噴射魚雷機 + IL-10 鐵獸強擊機 + MiG-15 噴射直衛) 全速直撲「${flagship?.name || '航空母艦'}」！`
-          : `🚨【旗艦打擊編隊！】長程對空雷達警報大作！偵測到敵 ${totalStrikeCount}機 動態反艦打擊群 (魚雷機+俯衝艦爆+直衛零戰) 全速直撲「${flagship?.name || '航空母艦'}」！`,
-      });
+      this.launchEnemyFlagshipStrike(flagship, spawnPos, sqId, isEra3, isEra4, isEra5, fModel, dbModel, tbModel);
     } else if (missionType === 'strike_fleet') {
-      // 5. Strike Package (針對船艦反艦 動態編隊: 2-6架): 獵殺巡洋艦、驅逐艦與兩棲運輸隊
-      soundEngine.playKlaxon();
-      const escorts = [...this.playerShips, ...this.alliedShips].filter(
-        (s) => !s.isSunk && !this.isSubmarine(s) && s.type !== 'carrier'
-      );
-      const targetShip = escorts.length > 0 ? escorts[Math.floor(Math.random() * escorts.length)] : flagship;
-      const target = targetShip ? { ...targetShip.pos } : { x: 3000, y: 11000 };
-      const heading = Math.atan2(target.y - spawnPos.y, target.x - spawnPos.x);
-
-      const fleetDbModel: AircraftModel = isEra5 ? 'su25' : isEra4 ? 'su7' : isEra3 ? 'il10' : dbModel;
-      const fleetTbModel: AircraftModel = isEra5 ? 'tu22m3' : isEra4 ? 'il28' : isEra3 ? 'tu14' : tbModel;
-      const fDbSpeed = isEra5 ? 165 : isEra4 ? 158 : isEra3 ? 116 : 115;
-      const fTbSpeed = isEra5 ? 175 : isEra4 ? 138 : isEra3 ? 130 : 110;
-      const fDbHealth = isEra5 ? 850 : isEra4 ? 700 : isEra3 ? 620 : 155;
-      const fTbHealth = isEra5 ? 2200 : isEra4 ? 950 : isEra3 ? 680 : 150;
-
-      const totalFleetCount = this.calculateDynamicWaveSize(6); // 4-12 架
-      const fDbCount = Math.ceil(totalFleetCount / 2);
-      const fTbCount = totalFleetCount - fDbCount;
-
-      // Dive Bombers / Ground Attackers
-      for (let i = 0; i < fDbCount; i++) {
-        this.aircraft.push({
-          id: `st-flt-db-${Date.now()}-${i}`,
-          squadronId: sqId,
-          model: fleetDbModel,
-          role: 'dive_bomber',
-          name: isEra5
-            ? `Su-25 蛙足反艦強擊機 (#${i + 1})`
-            : isEra4
-            ? `Su-7 裝配匠反艦強擊機 (#${i + 1})`
-            : isEra3
-            ? `IL-10 反艦強擊機 (#${i + 1})`
-            : `反艦俯衝轟炸機 (#${i + 1})`,
-          side: 'enemy',
-          pos: { x: spawnPos.x + i * 26, y: spawnPos.y - 15 },
-          vel: { x: Math.cos(heading) * fDbSpeed, y: Math.sin(heading) * fDbSpeed },
-          heading,
-          targetHeading: heading,
-          speed: fDbSpeed,
-          maxSpeed: fDbSpeed,
-          altitude: 0.88,
-          state: 'cruising',
-          health: fDbHealth,
-          maxHealth: fDbHealth,
-          order: { type: 'attack', targetPos: target, targetId: targetShip?.id },
-          hasPayload: true,
-          shootCooldown: 0,
-          gunAmmo: isEra5 ? 400 : isEra4 ? 320 : isEra3 ? 600 : 600,
-          maxGunAmmo: isEra5 ? 400 : isEra4 ? 320 : isEra3 ? 600 : 600,
-          wingmanOffset: { x: i * 26, y: -15 },
-          missionType: 'strike_fleet',
-          chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        });
-      }
-      // Torpedo Bombers / Standoff AShM Bombers
-      for (let i = 0; i < fTbCount; i++) {
-        this.aircraft.push({
-          id: `st-flt-tb-${Date.now()}-${i}`,
-          squadronId: sqId,
-          model: fleetTbModel,
-          role: 'torpedo_bomber',
-          name: isEra5
-            ? `Tu-22M3 逆火超音速反艦飛彈轟炸機 (#${i + 1})`
-            : isEra4
-            ? `IL-28 獵犬雙噴射反艦魚雷機 (#${i + 1})`
-            : isEra3
-            ? `Tu-14 噴射魚雷機 (#${i + 1})`
-            : `反艦魚雷機 (#${i + 1})`,
-          side: 'enemy',
-          pos: { x: spawnPos.x + i * 26, y: spawnPos.y + 15 },
-          vel: { x: Math.cos(heading) * fTbSpeed, y: Math.sin(heading) * fTbSpeed },
-          heading,
-          targetHeading: heading,
-          speed: fTbSpeed,
-          maxSpeed: fTbSpeed,
-          altitude: 0.8,
-          state: 'cruising',
-          health: fTbHealth,
-          maxHealth: fTbHealth,
-          order: { type: 'attack', targetPos: target, targetId: targetShip?.id },
-          hasPayload: true,
-          shootCooldown: 0,
-          gunAmmo: isEra5 ? 800 : isEra4 ? 400 : isEra3 ? 400 : 500,
-          maxGunAmmo: isEra5 ? 800 : isEra4 ? 400 : isEra3 ? 400 : 500,
-          wingmanOffset: { x: i * 26, y: 15 },
-          missionType: 'strike_fleet',
-          hasDefensiveTurret: isEra5 || isEra4 || isEra3,
-          rearGunnerCooldown: 0,
-          chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        });
-      }
-
-      this.addBannerAlert(
-        isEra5
-          ? `⚠️【Strike Package 水面艦艇獵殺】蘇軍 ${totalFleetCount}架 Su-25 / Tu-22M3 噴射打擊機隊低空掠海直撲我巡洋艦與驅逐艦！`
-          : isEra4
-          ? `⚠️【Strike Package 水面艦艇獵殺】敵 ${totalFleetCount}架 Su-7 / IL-28 噴射打擊機隊低空掠海直撲我護航艦艇！`
-          : isEra3
-          ? `⚠️【Strike Package 反艦打擊】冷戰聯軍 ${totalFleetCount}機 編隊鎖定我巡洋艦與護航驅逐艦！`
-          : `⚠️【Strike Package 反艦打擊】敵 ${totalFleetCount}機 轟炸機隊鎖定我巡洋艦與護航驅逐艦！`,
-        'enemy',
-        'down',
-        6.0
-      );
-      this.addCombatLog({
-        category: 'air',
-        sourceSide: 'enemy',
-        sourceName: isEra5 ? '蘇聯北方艦隊航空兵反艦特遣隊' : isEra4 ? '北越人民軍海軍航空反艦作戰隊' : isEra3 ? '冷戰遠東反艦突擊隊' : '反艦戰鬥轟炸隊',
-        targetName: targetShip?.name || '護航艦隊',
-        actionType: 'recon_spotted',
-        text: isEra5
-          ? `⚠️【反艦動態編隊來襲】蘇軍 ${totalFleetCount}架 Su-25 蛙足強擊機與 Tu-22M3 逆火超音速轟炸機掠海突進，目標鎖定神盾護航艦「${targetShip?.name || '巡洋艦'}」！`
-          : isEra4
-          ? `⚠️【反艦動態編隊來襲】敵 ${totalFleetCount}架 Su-7 裝配匠強擊機與 IL-28 噴射魚雷轟炸機超低空掠海飛來，目標鎖定護航艦艇「${targetShip?.name || '巡洋艦'}」！`
-          : isEra3
-          ? `⚠️【反艦動態編隊來襲】冷戰遠東聯軍 ${totalFleetCount}架 打擊機隊掠海飛來，Tu-14 噴射魚雷機與 IL-10 強擊機目標鎖定護航艦艇「${targetShip?.name || '巡洋艦'}」！`
-          : `⚠️【反艦動態編隊來襲】敵 ${totalFleetCount}架 打擊機隊掠海飛來，目標鎖定護航艦艇「${targetShip?.name || '巡洋艦'}」！護航艦砲火全力攔截！`,
-      });
+      this.launchEnemyFleetStrike(flagship, spawnPos, sqId, isEra3, isEra4, isEra5, dbModel, tbModel);
     } else if (missionType === 'strike_airbase') {
-      // 6. Strike Package (針對陸基基地 動態編隊: 2-6架): 重轟大隊空襲前進基地
-      soundEngine.playKlaxon();
-      const basePos = this.friendlyBase?.center || { x: 2000, y: 12400 };
-      const heading = Math.atan2(basePos.y - spawnPos.y, basePos.x - spawnPos.x);
-
-      const heavyModel: AircraftModel = isEra5 ? (Math.random() < 0.6 ? 'tu22m3' : 'tu95') : isEra4 ? 'il28' : isEra3 ? 'tu14' : 'g4m';
-      const hSpeed = isEra5 ? 170 : isEra4 ? 138 : isEra3 ? 130 : 120;
-      const hHealth = isEra5 ? 2500 : isEra4 ? 850 : isEra3 ? 680 : 480;
-
-      const heavyCount = this.calculateDynamicWaveSize(6);
-      for (let i = 0; i < heavyCount; i++) {
-        this.aircraft.push({
-          id: `st-base-h-${Date.now()}-${i}`,
-          squadronId: sqId,
-          model: heavyModel,
-          role: 'dive_bomber',
-          name: isEra5
-            ? (heavyModel === 'tu22m3' ? `Tu-22M3 逆火超音速戰略轟炸機 (#${i + 1})` : `Tu-95 熊式長程戰略飛彈轟炸機 (#${i + 1})`)
-            : isEra4
-            ? `IL-28 獵犬雙發噴射重轟炸機 (#${i + 1})`
-            : isEra3
-            ? `Tu-14 雙噴射重轟大隊 (#${i + 1})`
-            : `一式陸攻重轟大隊 (#${i + 1})`,
-          side: 'enemy',
-          pos: { x: spawnPos.x + (i - (heavyCount - 1) / 2) * 36, y: spawnPos.y + (i - (heavyCount - 1) / 2) * 20 },
-          vel: { x: Math.cos(heading) * hSpeed, y: Math.sin(heading) * hSpeed },
-          heading,
-          targetHeading: heading,
-          speed: hSpeed,
-          maxSpeed: hSpeed,
-          altitude: 0.94,
-          state: 'cruising',
-          health: hHealth,
-          maxHealth: hHealth,
-          order: { type: 'attack', targetPos: basePos },
-          hasPayload: true,
-          shootCooldown: 0,
-          gunAmmo: isEra5 ? 800 : isEra4 ? 400 : isEra3 ? 400 : 600,
-          maxGunAmmo: isEra5 ? 800 : isEra4 ? 400 : isEra3 ? 400 : 600,
-          wingmanOffset: { x: (i - (heavyCount - 1) / 2) * 35, y: (i - (heavyCount - 1) / 2) * 18 },
-          missionType: 'strike_airbase',
-          hasDefensiveTurret: isEra5 || isEra4 || isEra3,
-          rearGunnerCooldown: 0,
-          chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        });
-      }
-
-      this.addBannerAlert(
-        isEra5
-          ? `💣【Strike Package 戰略基地大轟炸】蘇軍 ${heavyCount}架 ${heavyModel === 'tu22m3' ? 'Tu-22M3 逆火' : 'Tu-95 熊式'} 長程戰略轟炸大隊空襲我方大陸航空基地！`
-          : isEra4
-          ? `💣【Strike Package 基地大轟炸】敵 ${heavyCount}架 IL-28 雙發噴射轟炸大隊空襲我方航空基地！`
-          : isEra3
-          ? `💣【Strike Package 陸基基地編隊】冷戰聯軍 ${heavyCount}架 圖-14雙噴射轟炸機空襲前進基地！`
-          : `💣【Strike Package 陸基基地編隊】敵 ${heavyCount}架 一式陸攻大隊空襲 Henderson 前進基地！`,
-        'enemy',
-        'sunk',
-        6.5
-      );
-      this.addCombatLog({
-        category: 'air',
-        sourceSide: 'enemy',
-        sourceName: isEra5 ? '蘇聯遠程航空兵戰略轟炸大隊' : isEra4 ? '北越人民軍空軍戰略轟炸大隊 (IL-28)' : isEra3 ? '遠東戰略轟炸航空軍 (Tu-14大隊)' : '基地航空部隊 (陸攻大隊)',
-        targetName: '前進空軍基地跑道',
-        actionType: 'recon_spotted',
-        text: isEra5
-          ? `💣【陸基前進基地遭襲！】蘇聯遠程航空兵 ${heavyCount}架 ${heavyModel === 'tu22m3' ? 'Tu-22M3 逆火超音速轟炸機' : 'Tu-95 熊式長程戰略轟炸機'} 高空大編隊越境！意圖對前進空軍基地跑道與機庫實施毀滅性長程巡航飛彈轟炸！`
-          : isEra4
-          ? `💣【陸基前進基地遭襲！】敵 ${heavyCount}架 IL-28 雙噴射重型轟炸機以高空大編隊越境！意圖對前進空軍基地跑道與機庫實施毀滅性地毯轟炸！`
-          : isEra3
-          ? `💣【陸基前進基地遭襲！】冷戰聯軍 ${heavyCount}架 Tu-14 雙噴射轟炸機以高空編隊越境！意圖對前進空軍基地跑道與機庫實施毀滅性面狀轟炸！`
-          : `💣【陸基前進基地遭襲！】敵 ${heavyCount}架 一式陸攻以高空編隊越境！意圖對 Henderson Field 機場跑道與機庫實施毀滅性面狀轟炸！`,
-      });
+      this.launchEnemyAirbaseStrike(spawnPos, sqId, isEra3, isEra4, isEra5);
     } else if (missionType === 'cas') {
-      // 7. CAS (近距空中支援 動態編隊: 2-4架): 俯衝掃射我搶灘舟艇 (LCVP/LST) 與灘頭陸戰隊
-      soundEngine.playKlaxon();
-      const landingTransports = this.playerShips.filter(
-        (s) => !s.isSunk && (s.type === 'lst' || s.type === 'lcvp' || s.name.includes('LST') || s.name.includes('LCVP'))
-      );
-      const playerGround = this.groundUnits.filter((u) => u.side === 'player' && !u.isDestroyed);
-      const targetPos = landingTransports.length > 0
-        ? landingTransports[0].pos
-        : playerGround.length > 0
-        ? playerGround[0].pos
-        : (flagship ? flagship.pos : { x: 4000, y: 9000 });
-
-      const heading = Math.atan2(targetPos.y - spawnPos.y, targetPos.x - spawnPos.x);
-      const casModel: AircraftModel = isEra5 ? (Math.random() < 0.6 ? 'su25' : 'mi24') : isEra4 ? (Math.random() < 0.6 ? 'su7' : 'mig17') : isEra3 ? 'il10' : dbModel;
-      const casSpeed = isEra5 ? (casModel === 'su25' ? 165 : 120) : isEra4 ? 155 : isEra3 ? 116 : 122;
-      const casHealth = isEra5 ? (casModel === 'su25' ? 850 : 750) : isEra4 ? 680 : isEra3 ? 620 : 145;
-      const casCount = Math.min(6, this.calculateDynamicWaveSize(4));
-
-      for (let i = 0; i < casCount; i++) {
-        this.aircraft.push({
-          id: `cas-db-${Date.now()}-${i}`,
-          squadronId: sqId,
-          model: casModel,
-          role: 'dive_bomber',
-          name: isEra5
-            ? (casModel === 'su25' ? `Su-25 蛙足噴射裝甲強擊機 (#${i + 1})` : `Mi-24 雌鹿重裝攻擊直升機 (#${i + 1})`)
-            : isEra4
-            ? (casModel === 'su7' ? `Su-7 裝配匠噴射強擊機 (#${i + 1})` : `MiG-17 俯衝密接掃射機 (#${i + 1})`)
-            : isEra3
-            ? `IL-10 鐵獸裝甲強擊機 (#${i + 1})`
-            : `CAS 近距空中支援艦爆 (#${i + 1})`,
-          side: 'enemy',
-          pos: { x: spawnPos.x + i * 28, y: spawnPos.y },
-          vel: { x: Math.cos(heading) * casSpeed, y: Math.sin(heading) * casSpeed },
-          heading,
-          targetHeading: heading,
-          speed: casSpeed,
-          maxSpeed: casSpeed,
-          altitude: casModel === 'mi24' ? 0.25 : 0.65,
-          state: 'cruising',
-          health: casHealth,
-          maxHealth: casHealth,
-          order: { type: 'attack', targetPos },
-          hasPayload: true,
-          shootCooldown: 0,
-          gunAmmo: isEra5 ? (casModel === 'su25' ? 400 : 900) : isEra4 ? 320 : isEra3 ? 600 : 600,
-          maxGunAmmo: isEra5 ? (casModel === 'su25' ? 400 : 900) : isEra4 ? 320 : isEra3 ? 600 : 600,
-          wingmanOffset: { x: i * 25, y: 15 },
-          missionType: 'cas',
-          chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        });
-      }
-
-      this.addBannerAlert(
-        isEra5
-          ? `🛩️【CAS 蘇軍裝甲密接空中支援】敵 ${casCount}架 ${casModel === 'su25' ? 'Su-25 蛙足強擊機' : 'Mi-24 雌鹿武裝直升機'} 低空突防，火箭與機砲俯衝掃射我前線部隊！`
-          : isEra4
-          ? `🛩️【CAS 噴射密接空中支援】敵 ${casCount}架 Su-7 / MiG-17 噴射強擊機低空突防，火箭彈俯衝掃射灘頭！`
-          : isEra3
-          ? `🛩️【CAS 密接空中支援】冷戰聯軍 ${casCount}架 伊爾-10裝甲強擊機向我搶灘舟艇與登陸部隊俯衝掃射！`
-          : `🛩️【CAS 密接空中支援】敵 ${casCount}架 俯衝轟炸機向我搶灘舟艇與登陸部隊俯衝掃射！`,
-        'enemy',
-        'down',
-        5.5
-      );
-      this.addCombatLog({
-        category: 'air',
-        sourceSide: 'enemy',
-        sourceName: isEra5 ? '蘇聯前線強擊航空兵 (CAS)' : isEra4 ? '北越人民軍空軍 923 "安世" 團 (CAS)' : isEra3 ? '遠東前線強擊航空師 (IL-10)' : '近距支援艦爆隊 (CAS)',
-        targetName: '前線部隊與登陸載具',
-        actionType: 'recon_spotted',
-        text: isEra5
-          ? `🛩️【前線密接支援 (CAS)】蘇聯空軍 ${casCount}架 ${casModel === 'su25' ? 'Su-25 蛙足強擊機' : 'Mi-24 雌鹿直升機'} 超低空突防！30mm 航空機砲與重型火箭彈猛烈壓制我陸戰隊與裝甲矛頭！`
-          : isEra4
-          ? `🛩️【灘頭密接支援 (CAS)】北越 923 團 ${casCount}架 Su-7 / MiG-17 噴射強擊機超低空突防！俯衝壓制我方兩棲登陸艇與陸戰隊排！海灘防空火力全力還擊！`
-          : isEra3
-          ? `🛩️【灘頭密接支援 (CAS)】冷戰聯軍 ${casCount}架 IL-10 鐵獸強擊機實施超低空突防！俯衝壓制我方兩棲登陸艇與陸戰隊排！`
-          : `🛩️【灘頭密接支援 (CAS)】敵 ${casCount}架 艦爆實施超低空突防！俯衝壓制我方兩棲登陸艇與陸戰隊排！海灘防空機槍全力還擊！`,
-      });
+      this.launchEnemyCas(flagship, spawnPos, sqId, isEra3, isEra4, isEra5, dbModel);
     } else if (missionType === 'cap') {
-      // 8. CAP (平時巡邏): 在敵艦隊或要塞上空執行強化 4 機防空巡邏 (CAP)
-      const enemyCarrier = this.enemyShips.find((s) => s.type === 'carrier' && !s.isSunk);
-      const capCenter = enemyCarrier ? enemyCarrier.pos : spawnPos;
-      const heading = 0;
-
-      for (let i = 0; i < 4; i++) {
-        const capModel: AircraftModel = isEra5
-          ? (i % 2 === 0 ? 'su27' : 'mig29a')
-          : isEra4
-          ? (i % 2 === 0 ? 'mig21' : 'mig17')
-          : isEra3
-          ? (i % 2 === 0 ? 'mig15' : 'yak9')
-          : fModel;
-        const cSpeed = capModel === 'su27' ? 195 : capModel === 'mig29a' ? 190 : capModel === 'mig21' ? 185 : capModel === 'mig17' ? 152 : capModel === 'mig15' ? 160 : capModel === 'yak9' ? 132 : 130;
-        const cHealth = capModel === 'su27' ? 750 : capModel === 'mig29a' ? 680 : capModel === 'mig21' ? 580 : capModel === 'mig17' ? 480 : capModel === 'mig15' ? 540 : capModel === 'yak9' ? 440 : 150;
-
-        this.aircraft.push({
-          id: `cap-f-${Date.now()}-${i}`,
-          squadronId: sqId,
-          model: capModel,
-          role: 'fighter',
-          name: isEra5
-            ? (capModel === 'su27' ? `Su-27 側衛常態空巡機 (#${i + 1})` : `MiG-29A 支點常態空巡機 (#${i + 1})`)
-            : isEra4
-            ? (capModel === 'mig21' ? `MiG-21 魚窩常態空巡機 (#${i + 1})` : `MiG-17 壁畫常態空巡機 (#${i + 1})`)
-            : isEra3
-            ? `${capModel.toUpperCase()} 冷戰巡邏戰鬥機 (#${i + 1})`
-            : `CAP 常態戰鬥巡邏機 (#${i + 1})`,
-          side: 'enemy',
-          pos: { x: capCenter.x + (i % 2 === 0 ? 80 : -80), y: capCenter.y + (i < 2 ? -60 : 60) },
-          vel: { x: 0, y: 0 },
-          heading,
-          targetHeading: heading,
-          speed: cSpeed,
-          maxSpeed: cSpeed,
-          altitude: 0.88,
-          state: 'patrolling',
-          health: cHealth,
-          maxHealth: cHealth,
-          order: { type: 'patrol', patrolOrigin: { ...capCenter } },
-          hasPayload: (isEra5 || isEra4) && (capModel === 'su27' || capModel === 'mig29a' || capModel === 'mig21'),
-          payloadType: (isEra5 || isEra4) ? 'aim9_sidewinder' : undefined,
-          shootCooldown: 0,
-          gunAmmo: capModel === 'su27' ? 250 : capModel === 'mig29a' ? 250 : capModel === 'mig21' ? 200 : capModel === 'mig17' ? 240 : capModel === 'mig15' ? 300 : capModel === 'yak9' ? 340 : 1000,
-          maxGunAmmo: capModel === 'su27' ? 250 : capModel === 'mig29a' ? 250 : capModel === 'mig21' ? 200 : capModel === 'mig17' ? 240 : capModel === 'mig15' ? 300 : capModel === 'yak9' ? 340 : 1000,
-          wingmanOffset: { x: i * 35, y: -20 },
-          missionType: 'cap',
-          chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-          maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        });
-      }
-
-      this.addCombatLog({
-        category: 'air',
-        sourceSide: 'enemy',
-        sourceName: isEra5 ? '蘇聯防空軍強化巡邏隊' : isEra4 ? '北越人民軍空軍直衛巡邏隊' : isEra3 ? '冷戰聯軍直衛機隊' : '敵方直衛機隊',
-        targetName: '敵主力空域',
-        actionType: 'recon_spotted',
-        text: isEra5
-          ? `🛡️【常態戰鬥巡邏 (CAP)】蘇聯海空軍維持 4 機 Su-27 / MiG-29A 防空巡邏 (CAP)，嚴密警戒全空域！`
-          : isEra4
-          ? `🛡️【常態戰鬥巡邏 (CAP)】北越空軍維持 4 機 MiG-21 / MiG-17 防空巡邏 (CAP)，雷達引導警戒空域！`
-          : isEra3
-          ? `🛡️【常態戰鬥巡邏 (CAP)】冷戰遠東聯軍維持 4 機 MiG-15 / Yak-9 編隊防空巡邏 (CAP)，警戒戰區空域！`
-          : `🛡️【常態戰鬥巡邏 (CAP)】敵艦隊上空維持 4 機編隊防空巡邏 (CAP)，警戒任何接近之美軍航空隊！`,
-      });
+      this.launchEnemyCap(spawnPos, sqId, isEra3, isEra4, isEra5, fModel);
     } else if (missionType === 'asw_patrol' && (isEra4 || isEra5)) {
-      // 9. Era 4 & Era 5 OPFOR ASW Patrol (蘇聯海航專職反潛機隊: Be-12 / Il-38 / Ka-27)
-      const spottedPlayerSub = [...this.playerShips, ...this.alliedShips].find(
-        (s) => !s.isSunk && this.isSubmarine(s) && s.isSpottedByEnemy
-      );
-      const patrolCenter = spottedPlayerSub
-        ? { ...spottedPlayerSub.pos }
-        : flagship
-        ? {
-            x: Math.max(1200, Math.min(this.worldSize - 1200, flagship.pos.x + (Math.random() - 0.5) * 1600)),
-            y: Math.max(1200, Math.min(this.worldSize - 1200, flagship.pos.y - 900 + (Math.random() - 0.5) * 900)),
-          }
-        : { x: 4200, y: 6000 };
+      this.launchEnemyAswPatrol(flagship, spawnPos, sqId, isEra4);
+    }
+  }
 
-      const heading = Math.atan2(patrolCenter.y - spawnPos.y, patrolCenter.x - spawnPos.x);
-      const aswCount = 3;
+  private launchEnemyAswPatrol(flagship: Ship | undefined, spawnPos: Vector2D, sqId: string, isEra4: boolean): void {
+    // 9. Era 4 & Era 5 OPFOR ASW Patrol (蘇聯海航專職反潛機隊: Be-12 / Il-38 / Ka-27)
+    const spottedPlayerSub = [...this.playerShips, ...this.alliedShips].find(
+      (s) => !s.isSunk && this.isSubmarine(s) && s.isSpottedByEnemy
+    );
+    const patrolCenter = spottedPlayerSub
+      ? { ...spottedPlayerSub.pos }
+      : flagship
+      ? {
+          x: Math.max(1200, Math.min(this.worldSize - 1200, flagship.pos.x + (Math.random() - 0.5) * 1600)),
+          y: Math.max(1200, Math.min(this.worldSize - 1200, flagship.pos.y - 900 + (Math.random() - 0.5) * 900)),
+        }
+      : { x: 4200, y: 6000 };
 
-      for (let i = 0; i < aswCount; i++) {
-        const aswModel: AircraftModel = isEra4 ? 'be12' : i === 0 ? 'il38' : 'ka27';
-        const aswSpeed = aswModel === 'il38' ? 128 : aswModel === 'be12' ? 112 : 102;
-        const aswHealth = aswModel === 'il38' ? 1150 : aswModel === 'be12' ? 920 : 800;
+    const heading = Math.atan2(patrolCenter.y - spawnPos.y, patrolCenter.x - spawnPos.x);
+    const aswCount = 3;
 
-        this.aircraft.push({
-          id: `opfor-asw-${Date.now()}-${i}`,
-          squadronId: sqId,
-          model: aswModel,
-          role: 'scout',
-          name:
-            aswModel === 'be12'
-              ? `Be-12 海鷗水陸兩棲反潛巡邏機 (蘇聯海航 #${i + 1})`
-              : aswModel === 'il38'
-              ? `Il-38 五月花長程反潛巡邏機 (蘇聯海航 #${i + 1})`
-              : `Ka-27 蝸牛同軸雙旋翼反潛直升機 (#${i + 1})`,
-          side: 'enemy',
-          pos: { x: spawnPos.x + i * 40, y: spawnPos.y + (i === 0 ? -30 : 30) },
-          vel: { x: Math.cos(heading) * aswSpeed, y: Math.sin(heading) * aswSpeed },
-          heading,
-          targetHeading: heading,
-          speed: aswSpeed,
-          maxSpeed: aswSpeed,
-          altitude: aswModel === 'ka27' ? 0.28 : 0.45,
-          state: 'patrolling',
-          health: aswHealth,
-          maxHealth: aswHealth,
-          order: spottedPlayerSub
-            ? { type: 'attack', targetId: spottedPlayerSub.id, targetPos: patrolCenter, patrolOrigin: patrolCenter }
-            : { type: 'patrol', patrolOrigin: patrolCenter, targetPos: patrolCenter },
-          hasPayload: true,
-          payloadType: 'asw_acoustic_torpedo',
-          payloadName: 'APR-2 / AT-1 航空聲自導反潛魚雷',
-          ammoRemaining: 2,
-          maxAmmo: 2,
-          shootCooldown: 0,
-          gunAmmo: 0,
-          maxGunAmmo: 0,
-          wingmanOffset: { x: i * 55, y: i === 0 ? -35 : 35 },
-          missionType: 'asw_patrol',
-          sonarPingCooldown: 2.0 + i * 1.4,
-          chaffCount: 24,
-          maxChaff: 24,
-          flareCount: 24,
-          maxFlare: 24,
-        });
-      }
+    for (let i = 0; i < aswCount; i++) {
+      const aswModel: AircraftModel = isEra4 ? 'be12' : i === 0 ? 'il38' : 'ka27';
+      const aswSpeed = getAircraftSpeed(aswModel);
+      const aswHealth = aswModel === 'il38' ? 1150 : aswModel === 'be12' ? 920 : 800;
 
-      this.addCombatLog({
-        category: 'air',
-        sourceSide: 'enemy',
-        sourceName: '蘇聯海軍航空兵反潛大隊 (AV-MF ASW)',
-        targetName: '特混艦隊潛航航道',
-        actionType: 'recon_spotted',
-        text: isEra4
-          ? `🛰️【敵反潛航空巡邏隊逼近！】蘇聯太平洋艦隊派出 2架 Be-12「海鷗」兩棲反潛機攜帶聲吶浮標與 APR-2 航空反潛魚雷前往巡弋！`
-          : `🛰️【敵長程反潛機隊獵潛巡邏！】蘇聯北方/太平洋艦隊派出 Il-38「五月花」反潛巡邏機與 Ka-27「蝸牛」反潛直升機！主動投擲聲吶浮標搜捕我方潛艦！`,
+      this.aircraft.push({
+        id: `opfor-asw-${Date.now()}-${i}`,
+        squadronId: sqId,
+        model: aswModel,
+        role: 'scout',
+        name:
+          aswModel === 'be12'
+            ? `Be-12 海鷗水陸兩棲反潛巡邏機 (蘇聯海航 #${i + 1})`
+            : aswModel === 'il38'
+            ? `Il-38 五月花長程反潛巡邏機 (蘇聯海航 #${i + 1})`
+            : `Ka-27 蝸牛同軸雙旋翼反潛直升機 (#${i + 1})`,
+        side: 'enemy',
+        pos: { x: spawnPos.x + i * 40, y: spawnPos.y + (i === 0 ? -30 : 30) },
+        vel: { x: Math.cos(heading) * aswSpeed, y: Math.sin(heading) * aswSpeed },
+        heading,
+        targetHeading: heading,
+        speed: aswSpeed,
+        maxSpeed: aswSpeed,
+        altitude: aswModel === 'ka27' ? 0.28 : 0.45,
+        state: 'patrolling',
+        health: aswHealth,
+        maxHealth: aswHealth,
+        order: spottedPlayerSub
+          ? { type: 'attack', targetId: spottedPlayerSub.id, targetPos: patrolCenter, patrolOrigin: patrolCenter }
+          : { type: 'patrol', patrolOrigin: patrolCenter, targetPos: patrolCenter },
+        hasPayload: true,
+        payloadType: 'asw_acoustic_torpedo',
+        payloadName: 'APR-2 / AT-1 航空聲自導反潛魚雷',
+        ammoRemaining: 2,
+        maxAmmo: 2,
+        shootCooldown: 0,
+        gunAmmo: 0,
+        maxGunAmmo: 0,
+        wingmanOffset: { x: i * 55, y: i === 0 ? -35 : 35 },
+        missionType: 'asw_patrol',
+        sonarPingCooldown: 2.0 + i * 1.4,
+        chaffCount: 24,
+        maxChaff: 24,
+        flareCount: 24,
+        maxFlare: 24,
       });
     }
+
+    this.addCombatLog({
+      category: 'air',
+      sourceSide: 'enemy',
+      sourceName: '蘇聯海軍航空兵反潛大隊 (AV-MF ASW)',
+      targetName: '特混艦隊潛航航道',
+      actionType: 'recon_spotted',
+      text: isEra4
+        ? `🛰️【敵反潛航空巡邏隊逼近！】蘇聯太平洋艦隊派出 2架 Be-12「海鷗」兩棲反潛機攜帶聲吶浮標與 APR-2 航空反潛魚雷前往巡弋！`
+        : `🛰️【敵長程反潛機隊獵潛巡邏！】蘇聯北方/太平洋艦隊派出 Il-38「五月花」反潛巡邏機與 Ka-27「蝸牛」反潛直升機！主動投擲聲吶浮標搜捕我方潛艦！`,
+    });
+  }
+
+  private launchEnemyCap(spawnPos: Vector2D, sqId: string, isEra3: boolean, isEra4: boolean, isEra5: boolean, fModel: AircraftModel): void {
+    // 8. CAP (平時巡邏): 在敵艦隊或要塞上空執行強化 4 機防空巡邏 (CAP)
+    const enemyCarrier = this.enemyShips.find((s) => s.type === 'carrier' && !s.isSunk);
+    const capCenter = enemyCarrier ? enemyCarrier.pos : spawnPos;
+    const heading = 0;
+
+    for (let i = 0; i < 4; i++) {
+      const capModel: AircraftModel = isEra5
+        ? (i % 2 === 0 ? 'su27' : 'mig29a')
+        : isEra4
+        ? (i % 2 === 0 ? 'mig21' : 'mig17')
+        : isEra3
+        ? (i % 2 === 0 ? 'mig15' : 'yak9')
+        : fModel;
+      const cSpeed = getAircraftSpeed(capModel);
+      const cHealth = capModel === 'su27' ? 750 : capModel === 'mig29a' ? 680 : capModel === 'mig21' ? 580 : capModel === 'mig17' ? 480 : capModel === 'mig15' ? 540 : capModel === 'yak9' ? 440 : 150;
+
+      this.aircraft.push({
+        id: `cap-f-${Date.now()}-${i}`,
+        squadronId: sqId,
+        model: capModel,
+        role: 'fighter',
+        name: isEra5
+          ? (capModel === 'su27' ? `Su-27 側衛常態空巡機 (#${i + 1})` : `MiG-29A 支點常態空巡機 (#${i + 1})`)
+          : isEra4
+          ? (capModel === 'mig21' ? `MiG-21 魚窩常態空巡機 (#${i + 1})` : `MiG-17 壁畫常態空巡機 (#${i + 1})`)
+          : isEra3
+          ? `${capModel.toUpperCase()} 冷戰巡邏戰鬥機 (#${i + 1})`
+          : `CAP 常態戰鬥巡邏機 (#${i + 1})`,
+        side: 'enemy',
+        pos: { x: capCenter.x + (i % 2 === 0 ? 80 : -80), y: capCenter.y + (i < 2 ? -60 : 60) },
+        vel: { x: 0, y: 0 },
+        heading,
+        targetHeading: heading,
+        speed: cSpeed,
+        maxSpeed: cSpeed,
+        altitude: 0.88,
+        state: 'patrolling',
+        health: cHealth,
+        maxHealth: cHealth,
+        order: { type: 'patrol', patrolOrigin: { ...capCenter } },
+        hasPayload: (isEra5 || isEra4) && (capModel === 'su27' || capModel === 'mig29a' || capModel === 'mig21'),
+        payloadType: (isEra5 || isEra4) ? 'aim9_sidewinder' : undefined,
+        shootCooldown: 0,
+        gunAmmo: capModel === 'su27' ? 250 : capModel === 'mig29a' ? 250 : capModel === 'mig21' ? 200 : capModel === 'mig17' ? 240 : capModel === 'mig15' ? 300 : capModel === 'yak9' ? 340 : 1000,
+        maxGunAmmo: capModel === 'su27' ? 250 : capModel === 'mig29a' ? 250 : capModel === 'mig21' ? 200 : capModel === 'mig17' ? 240 : capModel === 'mig15' ? 300 : capModel === 'yak9' ? 340 : 1000,
+        wingmanOffset: { x: i * 35, y: -20 },
+        missionType: 'cap',
+        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
+      });
+    }
+
+    this.addCombatLog({
+      category: 'air',
+      sourceSide: 'enemy',
+      sourceName: isEra5 ? '蘇聯防空軍強化巡邏隊' : isEra4 ? '北越人民軍空軍直衛巡邏隊' : isEra3 ? '冷戰聯軍直衛機隊' : '敵方直衛機隊',
+      targetName: '敵主力空域',
+      actionType: 'recon_spotted',
+      text: isEra5
+        ? `🛡️【常態戰鬥巡邏 (CAP)】蘇聯海空軍維持 4 機 Su-27 / MiG-29A 防空巡邏 (CAP)，嚴密警戒全空域！`
+        : isEra4
+        ? `🛡️【常態戰鬥巡邏 (CAP)】北越空軍維持 4 機 MiG-21 / MiG-17 防空巡邏 (CAP)，雷達引導警戒空域！`
+        : isEra3
+        ? `🛡️【常態戰鬥巡邏 (CAP)】冷戰遠東聯軍維持 4 機 MiG-15 / Yak-9 編隊防空巡邏 (CAP)，警戒戰區空域！`
+        : `🛡️【常態戰鬥巡邏 (CAP)】敵艦隊上空維持 4 機編隊防空巡邏 (CAP)，警戒任何接近之美軍航空隊！`,
+    });
+  }
+
+  private launchEnemyCas(flagship: Ship | undefined, spawnPos: Vector2D, sqId: string, isEra3: boolean, isEra4: boolean, isEra5: boolean, dbModel: AircraftModel): void {
+    // 7. CAS (近距空中支援 動態編隊: 2-4架): 俯衝掃射我搶灘舟艇 (LCVP/LST) 與灘頭陸戰隊
+    soundEngine.playKlaxon();
+    const landingTransports = this.playerShips.filter(
+      (s) => !s.isSunk && (s.type === 'lst' || s.type === 'lcvp' || s.name.includes('LST') || s.name.includes('LCVP'))
+    );
+    const playerGround = this.groundUnits.filter((u) => u.side === 'player' && !u.isDestroyed);
+    const targetPos = landingTransports.length > 0
+      ? landingTransports[0].pos
+      : playerGround.length > 0
+      ? playerGround[0].pos
+      : (flagship ? flagship.pos : { x: 4000, y: 9000 });
+
+    const heading = Math.atan2(targetPos.y - spawnPos.y, targetPos.x - spawnPos.x);
+    const casModel: AircraftModel = isEra5 ? (Math.random() < 0.6 ? 'su25' : 'mi24') : isEra4 ? (Math.random() < 0.6 ? 'su7' : 'mig17') : isEra3 ? 'il10' : dbModel;
+    const casSpeed = getAircraftSpeed(casModel);
+    const casHealth = isEra5 ? (casModel === 'su25' ? 850 : 750) : isEra4 ? 680 : isEra3 ? 620 : 145;
+    const casCount = Math.min(6, this.calculateDynamicWaveSize(4));
+
+    for (let i = 0; i < casCount; i++) {
+      this.aircraft.push({
+        id: `cas-db-${Date.now()}-${i}`,
+        squadronId: sqId,
+        model: casModel,
+        role: 'dive_bomber',
+        name: isEra5
+          ? (casModel === 'su25' ? `Su-25 蛙足噴射裝甲強擊機 (#${i + 1})` : `Mi-24 雌鹿重裝攻擊直升機 (#${i + 1})`)
+          : isEra4
+          ? (casModel === 'su7' ? `Su-7 裝配匠噴射強擊機 (#${i + 1})` : `MiG-17 俯衝密接掃射機 (#${i + 1})`)
+          : isEra3
+          ? `IL-10 鐵獸裝甲強擊機 (#${i + 1})`
+          : `CAS 近距空中支援艦爆 (#${i + 1})`,
+        side: 'enemy',
+        pos: { x: spawnPos.x + i * 28, y: spawnPos.y },
+        vel: { x: Math.cos(heading) * casSpeed, y: Math.sin(heading) * casSpeed },
+        heading,
+        targetHeading: heading,
+        speed: casSpeed,
+        maxSpeed: casSpeed,
+        altitude: casModel === 'mi24' ? 0.25 : 0.65,
+        state: 'cruising',
+        health: casHealth,
+        maxHealth: casHealth,
+        order: { type: 'attack', targetPos },
+        hasPayload: true,
+        shootCooldown: 0,
+        gunAmmo: isEra5 ? (casModel === 'su25' ? 400 : 900) : isEra4 ? 320 : isEra3 ? 600 : 600,
+        maxGunAmmo: isEra5 ? (casModel === 'su25' ? 400 : 900) : isEra4 ? 320 : isEra3 ? 600 : 600,
+        wingmanOffset: { x: i * 25, y: 15 },
+        missionType: 'cas',
+        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
+      });
+    }
+
+    this.addBannerAlert(
+      isEra5
+        ? `🛩️【CAS 蘇軍裝甲密接空中支援】敵 ${casCount}架 ${casModel === 'su25' ? 'Su-25 蛙足強擊機' : 'Mi-24 雌鹿武裝直升機'} 低空突防，火箭與機砲俯衝掃射我前線部隊！`
+        : isEra4
+        ? `🛩️【CAS 噴射密接空中支援】敵 ${casCount}架 Su-7 / MiG-17 噴射強擊機低空突防，火箭彈俯衝掃射灘頭！`
+        : isEra3
+        ? `🛩️【CAS 密接空中支援】冷戰聯軍 ${casCount}架 伊爾-10裝甲強擊機向我搶灘舟艇與登陸部隊俯衝掃射！`
+        : `🛩️【CAS 密接空中支援】敵 ${casCount}架 俯衝轟炸機向我搶灘舟艇與登陸部隊俯衝掃射！`,
+      'enemy',
+      'down',
+      5.5
+    );
+    this.addCombatLog({
+      category: 'air',
+      sourceSide: 'enemy',
+      sourceName: isEra5 ? '蘇聯前線強擊航空兵 (CAS)' : isEra4 ? '北越人民軍空軍 923 "安世" 團 (CAS)' : isEra3 ? '遠東前線強擊航空師 (IL-10)' : '近距支援艦爆隊 (CAS)',
+      targetName: '前線部隊與登陸載具',
+      actionType: 'recon_spotted',
+      text: isEra5
+        ? `🛩️【前線密接支援 (CAS)】蘇聯空軍 ${casCount}架 ${casModel === 'su25' ? 'Su-25 蛙足強擊機' : 'Mi-24 雌鹿直升機'} 超低空突防！30mm 航空機砲與重型火箭彈猛烈壓制我陸戰隊與裝甲矛頭！`
+        : isEra4
+        ? `🛩️【灘頭密接支援 (CAS)】北越 923 團 ${casCount}架 Su-7 / MiG-17 噴射強擊機超低空突防！俯衝壓制我方兩棲登陸艇與陸戰隊排！海灘防空火力全力還擊！`
+        : isEra3
+        ? `🛩️【灘頭密接支援 (CAS)】冷戰聯軍 ${casCount}架 IL-10 鐵獸強擊機實施超低空突防！俯衝壓制我方兩棲登陸艇與陸戰隊排！`
+        : `🛩️【灘頭密接支援 (CAS)】敵 ${casCount}架 艦爆實施超低空突防！俯衝壓制我方兩棲登陸艇與陸戰隊排！海灘防空機槍全力還擊！`,
+    });
+  }
+
+  private launchEnemyAirbaseStrike(spawnPos: Vector2D, sqId: string, isEra3: boolean, isEra4: boolean, isEra5: boolean): void {
+    // 6. Strike Package (針對陸基基地 動態編隊: 2-6架): 重轟大隊空襲前進基地
+    soundEngine.playKlaxon();
+    const basePos = this.friendlyBase?.center || { x: 2000, y: 12400 };
+    const heading = Math.atan2(basePos.y - spawnPos.y, basePos.x - spawnPos.x);
+
+    const heavyModel: AircraftModel = isEra5 ? (Math.random() < 0.6 ? 'tu22m3' : 'tu95') : isEra4 ? 'il28' : isEra3 ? 'tu14' : 'g4m';
+    const hSpeed = getAircraftSpeed(heavyModel);
+    const hHealth = isEra5 ? 2500 : isEra4 ? 850 : isEra3 ? 680 : 480;
+
+    const heavyCount = this.calculateDynamicWaveSize(6);
+    for (let i = 0; i < heavyCount; i++) {
+      this.aircraft.push({
+        id: `st-base-h-${Date.now()}-${i}`,
+        squadronId: sqId,
+        model: heavyModel,
+        role: 'dive_bomber',
+        name: isEra5
+          ? (heavyModel === 'tu22m3' ? `Tu-22M3 逆火超音速戰略轟炸機 (#${i + 1})` : `Tu-95 熊式長程戰略飛彈轟炸機 (#${i + 1})`)
+          : isEra4
+          ? `IL-28 獵犬雙發噴射重轟炸機 (#${i + 1})`
+          : isEra3
+          ? `Tu-14 雙噴射重轟大隊 (#${i + 1})`
+          : `一式陸攻重轟大隊 (#${i + 1})`,
+        side: 'enemy',
+        pos: { x: spawnPos.x + (i - (heavyCount - 1) / 2) * 36, y: spawnPos.y + (i - (heavyCount - 1) / 2) * 20 },
+        vel: { x: Math.cos(heading) * hSpeed, y: Math.sin(heading) * hSpeed },
+        heading,
+        targetHeading: heading,
+        speed: hSpeed,
+        maxSpeed: hSpeed,
+        altitude: 0.94,
+        state: 'cruising',
+        health: hHealth,
+        maxHealth: hHealth,
+        order: { type: 'attack', targetPos: basePos },
+        hasPayload: true,
+        shootCooldown: 0,
+        gunAmmo: isEra5 ? 800 : isEra4 ? 400 : isEra3 ? 400 : 600,
+        maxGunAmmo: isEra5 ? 800 : isEra4 ? 400 : isEra3 ? 400 : 600,
+        wingmanOffset: { x: (i - (heavyCount - 1) / 2) * 35, y: (i - (heavyCount - 1) / 2) * 18 },
+        missionType: 'strike_airbase',
+        hasDefensiveTurret: isEra5 || isEra4 || isEra3,
+        rearGunnerCooldown: 0,
+        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
+      });
+    }
+
+    this.addBannerAlert(
+      isEra5
+        ? `💣【Strike Package 戰略基地大轟炸】蘇軍 ${heavyCount}架 ${heavyModel === 'tu22m3' ? 'Tu-22M3 逆火' : 'Tu-95 熊式'} 長程戰略轟炸大隊空襲我方大陸航空基地！`
+        : isEra4
+        ? `💣【Strike Package 基地大轟炸】敵 ${heavyCount}架 IL-28 雙發噴射轟炸大隊空襲我方航空基地！`
+        : isEra3
+        ? `💣【Strike Package 陸基基地編隊】冷戰聯軍 ${heavyCount}架 圖-14雙噴射轟炸機空襲前進基地！`
+        : `💣【Strike Package 陸基基地編隊】敵 ${heavyCount}架 一式陸攻大隊空襲 Henderson 前進基地！`,
+      'enemy',
+      'sunk',
+      6.5
+    );
+    this.addCombatLog({
+      category: 'air',
+      sourceSide: 'enemy',
+      sourceName: isEra5 ? '蘇聯遠程航空兵戰略轟炸大隊' : isEra4 ? '北越人民軍空軍戰略轟炸大隊 (IL-28)' : isEra3 ? '遠東戰略轟炸航空軍 (Tu-14大隊)' : '基地航空部隊 (陸攻大隊)',
+      targetName: '前進空軍基地跑道',
+      actionType: 'recon_spotted',
+      text: isEra5
+        ? `💣【陸基前進基地遭襲！】蘇聯遠程航空兵 ${heavyCount}架 ${heavyModel === 'tu22m3' ? 'Tu-22M3 逆火超音速轟炸機' : 'Tu-95 熊式長程戰略轟炸機'} 高空大編隊越境！意圖對前進空軍基地跑道與機庫實施毀滅性長程巡航飛彈轟炸！`
+        : isEra4
+        ? `💣【陸基前進基地遭襲！】敵 ${heavyCount}架 IL-28 雙噴射重型轟炸機以高空大編隊越境！意圖對前進空軍基地跑道與機庫實施毀滅性地毯轟炸！`
+        : isEra3
+        ? `💣【陸基前進基地遭襲！】冷戰聯軍 ${heavyCount}架 Tu-14 雙噴射轟炸機以高空編隊越境！意圖對前進空軍基地跑道與機庫實施毀滅性面狀轟炸！`
+        : `💣【陸基前進基地遭襲！】敵 ${heavyCount}架 一式陸攻以高空編隊越境！意圖對 Henderson Field 機場跑道與機庫實施毀滅性面狀轟炸！`,
+    });
+  }
+
+  private launchEnemyFleetStrike(flagship: Ship | undefined, spawnPos: Vector2D, sqId: string, isEra3: boolean, isEra4: boolean, isEra5: boolean, dbModel: AircraftModel, tbModel: AircraftModel): void {
+    // 5. Strike Package (針對船艦反艦 動態編隊: 2-6架): 獵殺巡洋艦、驅逐艦與兩棲運輸隊
+    soundEngine.playKlaxon();
+    const escorts = [...this.playerShips, ...this.alliedShips].filter(
+      (s) => !s.isSunk && !this.isSubmarine(s) && s.type !== 'carrier'
+    );
+    const targetShip = escorts.length > 0 ? escorts[Math.floor(Math.random() * escorts.length)] : flagship;
+    const target = targetShip ? { ...targetShip.pos } : { x: 3000, y: 11000 };
+    const heading = Math.atan2(target.y - spawnPos.y, target.x - spawnPos.x);
+
+    const fleetDbModel: AircraftModel = isEra5 ? 'su25' : isEra4 ? 'su7' : isEra3 ? 'il10' : dbModel;
+    const fleetTbModel: AircraftModel = isEra5 ? 'tu22m3' : isEra4 ? 'il28' : isEra3 ? 'tu14' : tbModel;
+    const fDbSpeed = getAircraftSpeed(fleetDbModel);
+    const fTbSpeed = getAircraftSpeed(fleetTbModel);
+    const fDbHealth = isEra5 ? 850 : isEra4 ? 700 : isEra3 ? 620 : 155;
+    const fTbHealth = isEra5 ? 2200 : isEra4 ? 950 : isEra3 ? 680 : 150;
+
+    const totalFleetCount = this.calculateDynamicWaveSize(6); // 4-12 架
+    const fDbCount = Math.ceil(totalFleetCount / 2);
+    const fTbCount = totalFleetCount - fDbCount;
+
+    // Dive Bombers / Ground Attackers
+    for (let i = 0; i < fDbCount; i++) {
+      this.aircraft.push({
+        id: `st-flt-db-${Date.now()}-${i}`,
+        squadronId: sqId,
+        model: fleetDbModel,
+        role: 'dive_bomber',
+        name: isEra5
+          ? `Su-25 蛙足反艦強擊機 (#${i + 1})`
+          : isEra4
+          ? `Su-7 裝配匠反艦強擊機 (#${i + 1})`
+          : isEra3
+          ? `IL-10 反艦強擊機 (#${i + 1})`
+          : `反艦俯衝轟炸機 (#${i + 1})`,
+        side: 'enemy',
+        pos: { x: spawnPos.x + i * 26, y: spawnPos.y - 15 },
+        vel: { x: Math.cos(heading) * fDbSpeed, y: Math.sin(heading) * fDbSpeed },
+        heading,
+        targetHeading: heading,
+        speed: fDbSpeed,
+        maxSpeed: fDbSpeed,
+        altitude: 0.88,
+        state: 'cruising',
+        health: fDbHealth,
+        maxHealth: fDbHealth,
+        order: { type: 'attack', targetPos: target, targetId: targetShip?.id },
+        hasPayload: true,
+        shootCooldown: 0,
+        gunAmmo: isEra5 ? 400 : isEra4 ? 320 : isEra3 ? 600 : 600,
+        maxGunAmmo: isEra5 ? 400 : isEra4 ? 320 : isEra3 ? 600 : 600,
+        wingmanOffset: { x: i * 26, y: -15 },
+        missionType: 'strike_fleet',
+        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
+      });
+    }
+    // Torpedo Bombers / Standoff AShM Bombers
+    for (let i = 0; i < fTbCount; i++) {
+      this.aircraft.push({
+        id: `st-flt-tb-${Date.now()}-${i}`,
+        squadronId: sqId,
+        model: fleetTbModel,
+        role: 'torpedo_bomber',
+        name: isEra5
+          ? `Tu-22M3 逆火超音速反艦飛彈轟炸機 (#${i + 1})`
+          : isEra4
+          ? `IL-28 獵犬雙噴射反艦魚雷機 (#${i + 1})`
+          : isEra3
+          ? `Tu-14 噴射魚雷機 (#${i + 1})`
+          : `反艦魚雷機 (#${i + 1})`,
+        side: 'enemy',
+        pos: { x: spawnPos.x + i * 26, y: spawnPos.y + 15 },
+        vel: { x: Math.cos(heading) * fTbSpeed, y: Math.sin(heading) * fTbSpeed },
+        heading,
+        targetHeading: heading,
+        speed: fTbSpeed,
+        maxSpeed: fTbSpeed,
+        altitude: 0.8,
+        state: 'cruising',
+        health: fTbHealth,
+        maxHealth: fTbHealth,
+        order: { type: 'attack', targetPos: target, targetId: targetShip?.id },
+        hasPayload: true,
+        shootCooldown: 0,
+        gunAmmo: isEra5 ? 800 : isEra4 ? 400 : isEra3 ? 400 : 500,
+        maxGunAmmo: isEra5 ? 800 : isEra4 ? 400 : isEra3 ? 400 : 500,
+        wingmanOffset: { x: i * 26, y: 15 },
+        missionType: 'strike_fleet',
+        hasDefensiveTurret: isEra5 || isEra4 || isEra3,
+        rearGunnerCooldown: 0,
+        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
+      });
+    }
+
+    this.addBannerAlert(
+      isEra5
+        ? `⚠️【Strike Package 水面艦艇獵殺】蘇軍 ${totalFleetCount}架 Su-25 / Tu-22M3 噴射打擊機隊低空掠海直撲我巡洋艦與驅逐艦！`
+        : isEra4
+        ? `⚠️【Strike Package 水面艦艇獵殺】敵 ${totalFleetCount}架 Su-7 / IL-28 噴射打擊機隊低空掠海直撲我護航艦艇！`
+        : isEra3
+        ? `⚠️【Strike Package 反艦打擊】冷戰聯軍 ${totalFleetCount}機 編隊鎖定我巡洋艦與護航驅逐艦！`
+        : `⚠️【Strike Package 反艦打擊】敵 ${totalFleetCount}機 轟炸機隊鎖定我巡洋艦與護航驅逐艦！`,
+      'enemy',
+      'down',
+      6.0
+    );
+    this.addCombatLog({
+      category: 'air',
+      sourceSide: 'enemy',
+      sourceName: isEra5 ? '蘇聯北方艦隊航空兵反艦特遣隊' : isEra4 ? '北越人民軍海軍航空反艦作戰隊' : isEra3 ? '冷戰遠東反艦突擊隊' : '反艦戰鬥轟炸隊',
+      targetName: targetShip?.name || '護航艦隊',
+      actionType: 'recon_spotted',
+      text: isEra5
+        ? `⚠️【反艦動態編隊來襲】蘇軍 ${totalFleetCount}架 Su-25 蛙足強擊機與 Tu-22M3 逆火超音速轟炸機掠海突進，目標鎖定神盾護航艦「${targetShip?.name || '巡洋艦'}」！`
+        : isEra4
+        ? `⚠️【反艦動態編隊來襲】敵 ${totalFleetCount}架 Su-7 裝配匠強擊機與 IL-28 噴射魚雷轟炸機超低空掠海飛來，目標鎖定護航艦艇「${targetShip?.name || '巡洋艦'}」！`
+        : isEra3
+        ? `⚠️【反艦動態編隊來襲】冷戰遠東聯軍 ${totalFleetCount}架 打擊機隊掠海飛來，Tu-14 噴射魚雷機與 IL-10 強擊機目標鎖定護航艦艇「${targetShip?.name || '巡洋艦'}」！`
+        : `⚠️【反艦動態編隊來襲】敵 ${totalFleetCount}架 打擊機隊掠海飛來，目標鎖定護航艦艇「${targetShip?.name || '巡洋艦'}」！護航艦砲火全力攔截！`,
+    });
+  }
+
+  private launchEnemyFlagshipStrike(flagship: Ship | undefined, spawnPos: Vector2D, sqId: string, isEra3: boolean, isEra4: boolean, isEra5: boolean, fModel: AircraftModel, dbModel: AircraftModel, tbModel: AircraftModel): void {
+    // 4. Strike Package (針對旗艦反艦 動態編隊: 2-6架): 蘇聯海航 Tu-16 獾式長程飛彈轟炸機 + 蘇聯空軍 Su-7 強擊機 + 北越 MiG-21 直衛
+    soundEngine.playKamikazeSiren();
+    const target = flagship ? { ...flagship.pos } : { x: 3000, y: 11000 };
+    const heading = Math.atan2(target.y - spawnPos.y, target.x - spawnPos.x);
+
+    const totalStrikeCount = this.calculateDynamicWaveSize(7); // 4-12 架
+    const escCount = totalStrikeCount >= 7 ? 3 : 2;
+    const bomberCount = totalStrikeCount - escCount;
+    const dbCount = Math.ceil(bomberCount / 2);
+    const tbCount = bomberCount - dbCount;
+
+    // 護航戰鬥機 (Su-27 / MiG-21 / MiG-15 / Zero Escorts)
+    const escModel: AircraftModel = isEra5 ? (Math.random() < 0.5 ? 'su27' : 'mig29a') : isEra4 ? 'mig21' : isEra3 ? 'mig15' : fModel;
+    const escSpeed = getAircraftSpeed(escModel);
+    const escHealth = isEra5 ? 750 : isEra4 ? 580 : isEra3 ? 540 : 160;
+
+    for (let i = 0; i < escCount; i++) {
+      this.aircraft.push({
+        id: `st-flag-f-${Date.now()}-${i}`,
+        squadronId: sqId,
+        model: escModel,
+        role: 'fighter',
+        name: isEra5
+          ? (escModel === 'su27' ? `Su-27 側衛反艦護航直衛機 (蘇聯防空軍 #${i + 1})` : `MiG-29A 支點護航直衛機 (#${i + 1})`)
+          : isEra4
+          ? `MiG-21 魚窩反艦護航直衛機 (北越921團 #${i + 1})`
+          : isEra3
+          ? `旗艦突擊 MiG-15 噴射直衛機 (#${i + 1})`
+          : `旗艦突擊直衛機 (#${i + 1})`,
+        side: 'enemy',
+        pos: { x: spawnPos.x + i * 30, y: spawnPos.y - 25 },
+        vel: { x: Math.cos(heading) * escSpeed, y: Math.sin(heading) * escSpeed },
+        heading,
+        targetHeading: heading,
+        speed: escSpeed,
+        maxSpeed: escSpeed,
+        altitude: 0.9,
+        state: 'cruising',
+        health: escHealth,
+        maxHealth: escHealth,
+        order: { type: 'attack', targetPos: target, targetId: flagship?.id },
+        hasPayload: isEra5 || isEra4,
+        payloadType: (isEra5 || isEra4) ? 'aim9_sidewinder' : undefined,
+        shootCooldown: 0,
+        gunAmmo: isEra5 ? 250 : isEra4 ? 200 : isEra3 ? 300 : 1000,
+        maxGunAmmo: isEra5 ? 250 : isEra4 ? 200 : isEra3 ? 300 : 1000,
+        wingmanOffset: { x: i * 30, y: -25 },
+        missionType: 'strike_flagship',
+        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
+      });
+    }
+
+    // 俯衝轟炸機 / 強擊機 (Su-25 / Su-7 / IL-10 / Val / Judy)
+    const strikeDbModel: AircraftModel = isEra5 ? 'su25' : isEra4 ? 'su7' : isEra3 ? 'il10' : dbModel;
+    const strikeDbSpeed = getAircraftSpeed(strikeDbModel);
+    const strikeDbHealth = isEra5 ? 850 : isEra4 ? 700 : isEra3 ? 620 : 155;
+
+    for (let i = 0; i < dbCount; i++) {
+      this.aircraft.push({
+        id: `st-flag-db-${Date.now()}-${i}`,
+        squadronId: sqId,
+        model: strikeDbModel,
+        role: 'dive_bomber',
+        name: isEra5
+          ? `Su-25 蛙足超低空反艦強擊機 (蘇聯前線空軍 #${i + 1})`
+          : isEra4
+          ? `Su-7 裝配匠超音速反艦強擊機 (蘇聯空軍遠東戰術大隊 #${i + 1})`
+          : isEra3
+          ? `IL-10 鐵獸裝甲強擊機 (#${i + 1})`
+          : `旗艦俯衝轟炸機 (#${i + 1})`,
+        side: 'enemy',
+        pos: { x: spawnPos.x + i * 28, y: spawnPos.y },
+        vel: { x: Math.cos(heading) * strikeDbSpeed, y: Math.sin(heading) * strikeDbSpeed },
+        heading,
+        targetHeading: heading,
+        speed: strikeDbSpeed,
+        maxSpeed: strikeDbSpeed,
+        altitude: 0.88,
+        state: 'cruising',
+        health: strikeDbHealth,
+        maxHealth: strikeDbHealth,
+        order: { type: 'attack', targetPos: target, targetId: flagship?.id },
+        hasPayload: true,
+        shootCooldown: 0,
+        gunAmmo: isEra5 ? 400 : isEra4 ? 320 : isEra3 ? 600 : 600,
+        maxGunAmmo: isEra5 ? 400 : isEra4 ? 320 : isEra3 ? 600 : 600,
+        wingmanOffset: { x: i * 28, y: 0 },
+        missionType: 'strike_flagship',
+        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
+      });
+    }
+
+    // 魚雷攻擊機 / 長程反艦飛彈轟炸機 (Tu-22M3 逆火 / Tu-16 獾式 / Tu-14 / Kate / Jill)
+    const strikeTbModel: AircraftModel = isEra5 ? 'tu22m3' : isEra4 ? 'tu16' : isEra3 ? 'tu14' : tbModel;
+    const strikeTbSpeed = getAircraftSpeed(strikeTbModel);
+    const strikeTbHealth = isEra5 ? 2200 : isEra4 ? 1350 : isEra3 ? 680 : 150;
+
+    for (let i = 0; i < tbCount; i++) {
+      this.aircraft.push({
+        id: `st-flag-tb-${Date.now()}-${i}`,
+        squadronId: sqId,
+        model: strikeTbModel,
+        role: 'torpedo_bomber',
+        name: isEra5
+          ? `Tu-22M3 逆火超音速反艦飛彈轟炸機 (蘇聯海航 AV-MF #${i + 1})`
+          : isEra4
+          ? `Tu-16 獾式長程反艦飛彈轟炸機 (蘇聯海航 AV-MF #${i + 1})`
+          : isEra3
+          ? `Tu-14 雙噴射魚雷轟炸機 (#${i + 1})`
+          : `旗艦魚雷雷擊機 (#${i + 1})`,
+        side: 'enemy',
+        pos: { x: spawnPos.x + i * 35, y: spawnPos.y + 30 },
+        vel: { x: Math.cos(heading) * strikeTbSpeed, y: Math.sin(heading) * strikeTbSpeed },
+        heading,
+        targetHeading: heading,
+        speed: strikeTbSpeed,
+        maxSpeed: strikeTbSpeed,
+        altitude: 0.88,
+        state: 'cruising',
+        health: strikeTbHealth,
+        maxHealth: strikeTbHealth,
+        order: { type: 'attack', targetPos: target, targetId: flagship?.id },
+        hasPayload: true,
+        shootCooldown: 0,
+        gunAmmo: isEra5 ? 800 : isEra4 ? 600 : isEra3 ? 400 : 500,
+        maxGunAmmo: isEra5 ? 800 : isEra4 ? 600 : isEra3 ? 400 : 500,
+        wingmanOffset: { x: i * 35, y: 30 },
+        missionType: 'strike_flagship',
+        hasDefensiveTurret: true,
+        rearGunnerCooldown: 0,
+        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
+      });
+    }
+
+    this.addBannerAlert(
+      isEra5
+        ? `🚨【Strike Package 蘇聯紅海軍飽和反艦大突擊！】Tu-22M3 逆火超音速飛彈轟炸機 (Kh-22 暴風雨超音速反艦飛彈) + Su-25 強擊機 + Su-27 護航直撲航母！`
+        : isEra4
+        ? `🚨【Strike Package 蘇越聯合旗艦大打擊群！】蘇聯海航 Tu-16 獾式長程飛彈轟炸機 (KSR-5 超音速反艦飛彈) + 蘇聯空軍 Su-7 強擊機 + 北越空軍 MiG-21 直撲航母！`
+        : isEra3
+        ? `🚨【Strike Package 旗艦反艦編隊】冷戰聯軍 ${totalStrikeCount}機 打擊群（圖-14與伊爾-10）直撲我旗艦航母！`
+        : `🚨【Strike Package 旗艦反艦編隊】敵海空主力 ${totalStrikeCount}機 打擊群直撲我旗艦航母！`,
+      'enemy',
+      'sunk',
+      7.0
+    );
+    this.addCombatLog({
+      category: 'air',
+      sourceSide: 'enemy',
+      sourceName: isEra5 ? '蘇聯海軍航空兵特遣打擊部隊 (AV-MF)' : isEra4 ? '蘇聯海空軍特遣打擊部隊 (AV-MF / VPAF)' : isEra3 ? '冷戰遠東航空打擊軍 (Strike Package)' : '帝國海軍第一航空戰隊 (Strike Package)',
+      targetName: flagship?.name || '特混艦隊旗艦',
+      actionType: 'recon_spotted',
+      text: isEra5
+        ? `🚨【蘇聯海航逆火大編隊反艦突擊！】長程雷達網紅警狂響！偵測到蘇聯海航 ${totalStrikeCount}機 飽和打擊群（Tu-22M3 逆火掛載 Kh-22 重型超音速反艦飛彈 + Su-25 蛙足強擊機 + Su-27 側衛超音速護航）全速直撲「${flagship?.name || '航空母艦'}」！`
+        : isEra4
+        ? `🚨【蘇越海空聯合突擊旗艦！】長程對空警戒雷達警報大作！偵測到敵 ${totalStrikeCount}機 聯合重打擊群（蘇聯海航 Tu-16 獾式飛彈轟炸機掛載 KSR-5 凱爾特超音速重型反艦飛彈 + 蘇聯空軍 Su-7 裝配匠超音速強擊機 + 北越 921 團 MiG-21 超音速護航）全速直撲「${flagship?.name || '航空母艦'}」！`
+        : isEra3
+        ? `🚨【旗艦打擊編隊！】長程對空雷達警報大作！偵測到敵 ${totalStrikeCount}機 動態反艦打擊群 (Tu-14 噴射魚雷機 + IL-10 鐵獸強擊機 + MiG-15 噴射直衛) 全速直撲「${flagship?.name || '航空母艦'}」！`
+        : `🚨【旗艦打擊編隊！】長程對空雷達警報大作！偵測到敵 ${totalStrikeCount}機 動態反艦打擊群 (魚雷機+俯衝艦爆+直衛零戰) 全速直撲「${flagship?.name || '航空母艦'}」！`,
+    });
+  }
+
+  private launchEnemyScramble(flagship: Ship | undefined, spawnPos: Vector2D, sqId: string, isEra3: boolean, isEra4: boolean, isEra5: boolean, fModel: AircraftModel): void {
+    // 3. Scramble (緊急迎擊起飛): 基地防空警報大作時立即由跑道拉起 (動態規模 2-4架)
+    soundEngine.playKamikazeSiren();
+    const scrambleTarget = flagship ? { ...flagship.pos } : { x: 5000, y: 5000 };
+    const heading = Math.atan2(scrambleTarget.y - spawnPos.y, scrambleTarget.x - spawnPos.x);
+
+    const scModel: AircraftModel = isEra5 ? (Math.random() < 0.5 ? 'su27' : 'mig29a') : isEra4 ? (Math.random() < 0.5 ? 'mig21' : 'mig19') : isEra3 ? 'mig15' : fModel;
+    const scSpeed = getAircraftSpeed(scModel);
+    const scHealth = isEra5 ? 720 : scModel === 'mig21' ? 580 : scModel === 'mig19' ? 560 : isEra3 ? 540 : 150;
+    const scrambleCount = Math.min(8, this.calculateDynamicWaveSize(4));
+
+    for (let i = 0; i < scrambleCount; i++) {
+      this.aircraft.push({
+        id: `enemy-scramble-${Date.now()}-${i}`,
+        squadronId: sqId,
+        model: scModel,
+        role: 'fighter',
+        name: isEra5
+          ? (scModel === 'su27' ? `Su-27 側衛緊急迎擊噴射機 (#${i + 1})` : `MiG-29A 支點超音速迎擊機 (#${i + 1})`)
+          : isEra4
+          ? (scModel === 'mig21' ? `MiG-21 緊急迎擊噴射機 (#${i + 1})` : `MiG-19 超音速迎擊機 (#${i + 1})`)
+          : isEra3
+          ? `MiG-15 緊急迎擊噴射機 (#${i + 1})`
+          : `緊急起飛迎擊機 (Scramble #${i + 1})`,
+        side: 'enemy',
+        pos: { x: spawnPos.x + i * 22, y: spawnPos.y + (i - (scrambleCount - 1) / 2) * 16 },
+        vel: { x: Math.cos(heading) * scSpeed, y: Math.sin(heading) * scSpeed },
+        heading,
+        targetHeading: heading,
+        speed: scSpeed,
+        maxSpeed: scSpeed,
+        altitude: 0.65,
+        state: 'cruising',
+        health: scHealth,
+        maxHealth: scHealth,
+        order: { type: 'attack', targetPos: scrambleTarget },
+        hasPayload: (isEra5 || isEra4) && (scModel === 'su27' || scModel === 'mig29a' || scModel === 'mig21'),
+        payloadType: (isEra5 || isEra4) ? 'aim9_sidewinder' : undefined,
+        shootCooldown: 0,
+        gunAmmo: scModel === 'su27' ? 250 : scModel === 'mig29a' ? 250 : scModel === 'mig21' ? 200 : scModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
+        maxGunAmmo: scModel === 'su27' ? 250 : scModel === 'mig29a' ? 250 : scModel === 'mig21' ? 200 : scModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
+        wingmanOffset: { x: i * 22, y: 15 },
+        missionType: 'scramble',
+        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
+      });
+    }
+
+    this.addBannerAlert(
+      isEra5
+        ? `⚡【Scramble 蘇軍基地超音速緊急迎擊】警報長鳴！${scrambleCount}架 ${scModel.toUpperCase()} 點燃後燃器強行起飛！`
+        : isEra4
+        ? `⚡【Scramble 蘇越超音速緊急迎擊】內排/安沛/克夫基地防空警報長鳴！${scrambleCount}架 ${scModel.toUpperCase()} 點燃後燃器強行起飛！`
+        : isEra3
+        ? `⚡【Scramble 噴射緊急迎擊】冷戰聯軍基地防空警報大作，${scrambleCount}架 米格-15 加足噴射推力升空！`
+        : `⚡【Scramble 緊急起飛】敵前線航空基地 ${scrambleCount}架 戰機拉響警報緊急升空！`,
+      'enemy',
+      'sunk',
+      5.0
+    );
+    this.addCombatLog({
+      category: 'air',
+      sourceSide: 'enemy',
+      sourceName: isEra5 ? '蘇軍前線戰區空軍基地迎擊聯隊' : isEra4 ? '內排/安沛空軍基地迎擊聯隊' : isEra3 ? '前線要塞迎擊隊' : '前線基地迎擊隊',
+      targetName: '來襲戰機',
+      actionType: 'recon_spotted',
+      text: isEra5
+        ? `⚡【${scModel.toUpperCase()} 超音速緊急起飛】蘇聯空軍前線基地一級戰備警報！${scrambleCount}架 ${scModel.toUpperCase()} 超音速戰機全後燃器推力緊急起飛迎敵！`
+        : isEra4
+        ? `⚡【${scModel.toUpperCase()} 超音速緊急起飛】北越前線基地跑道拉響一級戰備紅色警報！${scrambleCount}架 ${scModel.toUpperCase()} 噴射戰鬥機全推力加力強行起飛迎敵！`
+        : isEra3
+        ? `⚡【噴射截擊緊急升空】敵基地防空雷達鎖定！${scrambleCount}架 MiG-15 噴射戰鬥機點燃發動機強行起飛迎敵！`
+        : `⚡【基地防空緊急起飛 (Scramble)】敵機場警報響起！${scrambleCount}架 戰機加足馬力強行起飛迎敵！`,
+    });
+  }
+
+  private launchEnemyAirSweep(flagship: Ship | undefined, spawnPos: Vector2D, sqId: string, isEra3: boolean, isEra4: boolean, isEra5: boolean, fModel: AircraftModel): void {
+    // 2. Air Sweep (空中制空掃蕩): 戰鬥機大編隊飛越戰區搶奪制空權 (動態規模 2-6架)
+    soundEngine.playKlaxon();
+    const sweepTarget = flagship ? { ...flagship.pos } : { x: 6000, y: 7000 };
+    const heading = Math.atan2(sweepTarget.y - spawnPos.y, sweepTarget.x - spawnPos.x);
+
+    const sweepCount = this.calculateDynamicWaveSize(6);
+    for (let i = 0; i < sweepCount; i++) {
+      const sweepModel: AircraftModel = isEra5
+        ? (i % 3 === 0 ? 'su27' : i % 3 === 1 ? 'mig29a' : 'yak38')
+        : isEra4
+        ? (i % 3 === 0 ? 'mig21' : i % 3 === 1 ? 'mig19' : 'mig17')
+        : isEra3
+        ? (i % 2 === 0 ? 'mig15' : 'yak9')
+        : i % 2 === 0
+        ? fModel
+        : (this.era === 'era1' ? 'zero_a6m5' : 'ki61');
+      const sSpeed = getAircraftSpeed(sweepModel);
+      const sHealth = sweepModel === 'su27' ? 750 : sweepModel === 'mig29a' ? 680 : sweepModel === 'yak38' ? 520 : sweepModel === 'mig21' ? 580 : sweepModel === 'mig19' ? 560 : sweepModel === 'mig17' ? 480 : sweepModel === 'mig15' ? 540 : sweepModel === 'yak9' ? 440 : 175;
+
+      this.aircraft.push({
+        id: `enemy-sweep-${Date.now()}-${i}`,
+        squadronId: sqId,
+        model: sweepModel,
+        role: 'fighter',
+        name: isEra5
+          ? (sweepModel === 'su27' ? `Su-27 側衛高空超音速制空戰機 (#${i + 1})` : sweepModel === 'mig29a' ? `MiG-29A 支點前線格鬥戰機 (#${i + 1})` : `Yak-38 鐵匠艦載垂直起降攔截機 (#${i + 1})`)
+          : isEra4
+          ? (sweepModel === 'mig21' ? `MiG-21 魚窩高空制空戰機 (#${i + 1})` : sweepModel === 'mig19' ? `MiG-19 農夫超音速纏鬥機 (#${i + 1})` : `MiG-17 壁畫低空纏鬥王牌機 (#${i + 1})`)
+          : isEra3
+          ? `${sweepModel.toUpperCase()} 冷戰空優戰鬥機 (#${i + 1})`
+          : `制空掃蕩戰鬥機 (Air Sweep #${i + 1})`,
+        side: 'enemy',
+        pos: { x: spawnPos.x + i * 32, y: spawnPos.y + (i - (sweepCount - 1) / 2) * 25 },
+        vel: { x: Math.cos(heading) * sSpeed, y: Math.sin(heading) * sSpeed },
+        heading,
+        targetHeading: heading,
+        speed: sSpeed,
+        maxSpeed: sSpeed,
+        altitude: 0.92,
+        state: 'cruising',
+        health: sHealth,
+        maxHealth: sHealth,
+        order: { type: 'attack', targetPos: sweepTarget },
+        hasPayload: (isEra5 || isEra4) && (sweepModel === 'su27' || sweepModel === 'mig29a' || sweepModel === 'mig21'),
+        payloadType: (isEra5 || isEra4) ? 'aim9_sidewinder' : undefined,
+        shootCooldown: 0,
+        gunAmmo: sweepModel === 'su27' ? 250 : sweepModel === 'mig29a' ? 250 : sweepModel === 'yak38' ? 250 : sweepModel === 'mig21' ? 200 : sweepModel === 'mig19' ? 210 : sweepModel === 'mig17' ? 240 : sweepModel === 'mig15' ? 300 : sweepModel === 'yak9' ? 340 : 1000,
+        maxGunAmmo: sweepModel === 'su27' ? 250 : sweepModel === 'mig29a' ? 250 : sweepModel === 'yak38' ? 250 : sweepModel === 'mig21' ? 200 : sweepModel === 'mig19' ? 210 : sweepModel === 'mig17' ? 240 : sweepModel === 'mig15' ? 300 : sweepModel === 'yak9' ? 340 : 1000,
+        wingmanOffset: { x: i * 30, y: (i - (sweepCount - 1) / 2) * 22 },
+        missionType: 'air_sweep',
+        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
+      });
+    }
+
+    this.addBannerAlert(
+      isEra5
+        ? `⚔️【Air Sweep 蘇聯海空軍制空大掃蕩】${sweepCount}架 Su-27 / MiG-29A / Yak-38 高低空超音速混編戰鬥群突入搶奪制空權！`
+        : isEra4
+        ? `⚔️【Air Sweep 蘇越戰區制空掃蕩】${sweepCount}架 MiG-21 / MiG-19 / MiG-17 高中低三層混編噴射戰鬥群突入搶奪制空權！`
+        : isEra3
+        ? `⚔️【Air Sweep 冷戰空優掃蕩】${sweepCount}架 米格-15 噴射機與雅克-9 混編大隊搶奪戰區制空權！`
+        : `⚔️【Air Sweep 制空掃蕩】日軍派出 ${sweepCount}架 王牌戰鬥機編隊搶奪制空權！`,
+      'enemy',
+      'down',
+      6.0
+    );
+    this.addCombatLog({
+      category: 'air',
+      sourceSide: 'enemy',
+      sourceName: isEra5 ? '蘇聯空軍與北方艦隊航空兵制空大隊' : isEra4 ? '北越人民軍空軍 921/923/925 聯合掃蕩大隊' : isEra3 ? '遠東前線聯軍制空戰隊' : '南太平洋航空戰隊制空隊',
+      targetName: '特混艦隊制空空域',
+      actionType: 'recon_spotted',
+      text: isEra5
+        ? `⚔️【空中制空掃蕩 (Air Sweep)】蘇聯海空軍 ${sweepCount}架 Su-27 / MiG-29A 超音速噴射戰機掠海與高空突入！雷達鎖定我軍巡邏戰機 (CAP) 爭奪全戰區制空權！`
+        : isEra4
+        ? `⚔️【空中制空掃蕩 (Air Sweep)】北越 VPAF ${sweepCount}架 MiG-21 / MiG-19 / MiG-17 噴射戰機高速突入！MiG-21 高空雷達掩護、MiG-19 爬升攔截、MiG-17 低空山谷剪刀伏擊，專門搜尋我軍巡邏戰機 (CAP) 爭奪制空權！`
+        : isEra3
+        ? `⚔️【空中制空掃蕩 (Air Sweep)】冷戰聯軍 ${sweepCount}架 MiG-15 / Yak-9 戰鬥機高速掠過戰區，專門搜尋我軍巡邏戰機 (CAP) 爭奪制空權！`
+        : `⚔️【空中制空掃蕩 (Air Sweep)】偵測到敵軍 ${sweepCount}架 零戰/飛燕高速掠過鐵底灣！專門鎖定我軍巡邏戰機 (CAP) 爭奪制空權！`,
+    });
+  }
+
+  private launchEnemyDca(flagship: Ship | undefined, spawnPos: Vector2D, sqId: string, isEra3: boolean, isEra4: boolean, isEra5: boolean, fModel: AircraftModel): void {
+    // 1. DCA (防空攔截): 戰鬥機緊急升空截擊正在逼近之轟炸機隊 (動態規模 2-6架)
+    soundEngine.playKlaxon();
+    const targetPlane = this.aircraft.find(
+      (a) => a.side === 'player' && a.state !== 'shot_down' && (a.role === 'dive_bomber' || a.role === 'torpedo_bomber' || a.role === 'level_bomber' || a.role === 'attacker')
+    );
+    const targetPos = targetPlane ? targetPlane.pos : (flagship ? flagship.pos : { x: 5000, y: 5000 });
+    const heading = Math.atan2(targetPos.y - spawnPos.y, targetPos.x - spawnPos.x);
+
+    const dcaModel: AircraftModel = isEra5 ? (Math.random() < 0.5 ? 'su27' : 'mig29a') : isEra4 ? (Math.random() < 0.6 ? 'mig21' : 'mig19') : isEra3 ? 'mig15' : fModel;
+    const dcaSpeed = getAircraftSpeed(dcaModel);
+    const dcaHealth = isEra5 ? 750 : dcaModel === 'mig21' ? 580 : dcaModel === 'mig19' ? 560 : isEra3 ? 540 : 160;
+    const dcaCount = this.calculateDynamicWaveSize(5);
+
+    for (let i = 0; i < dcaCount; i++) {
+      const thisModel: AircraftModel = isEra5 ? (i % 2 === 0 ? 'su27' : 'mig29a') : isEra4 ? (i % 2 === 0 ? 'mig21' : 'mig19') : dcaModel;
+      this.aircraft.push({
+        id: `enemy-dca-${Date.now()}-${i}`,
+        squadronId: sqId,
+        model: thisModel,
+        role: 'fighter',
+        name: isEra5
+          ? (thisModel === 'su27' ? `Su-27 側衛超音速防空截擊機 (#${i + 1})` : `MiG-29A 支點全天候截擊機 (#${i + 1})`)
+          : isEra4
+          ? (thisModel === 'mig21' ? `MiG-21 魚窩超音速防空截擊機 (#${i + 1})` : `MiG-19 農夫超音速防空截擊機 (#${i + 1})`)
+          : isEra3
+          ? `DCA 米格-15 噴射截擊機 (#${i + 1})`
+          : `DCA 零戰防空截擊機 (#${i + 1})`,
+        side: 'enemy',
+        pos: { x: spawnPos.x + i * 28, y: spawnPos.y + (i - (dcaCount - 1) / 2) * 22 },
+        vel: { x: Math.cos(heading) * dcaSpeed, y: Math.sin(heading) * dcaSpeed },
+        heading,
+        targetHeading: heading,
+        speed: dcaSpeed,
+        maxSpeed: dcaSpeed,
+        altitude: 0.95,
+        state: 'cruising',
+        health: dcaHealth,
+        maxHealth: dcaHealth,
+        order: targetPlane ? { type: 'attack', targetPos, targetId: targetPlane.id } : { type: 'patrol', patrolOrigin: spawnPos },
+        hasPayload: (isEra5 || isEra4) && (thisModel === 'su27' || thisModel === 'mig29a' || thisModel === 'mig21'),
+        payloadType: (isEra5 || isEra4) ? 'aim9_sidewinder' : undefined,
+        shootCooldown: 0,
+        gunAmmo: thisModel === 'su27' ? 250 : thisModel === 'mig29a' ? 250 : thisModel === 'mig21' ? 200 : thisModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
+        maxGunAmmo: thisModel === 'su27' ? 250 : thisModel === 'mig29a' ? 250 : thisModel === 'mig21' ? 200 : thisModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
+        wingmanOffset: { x: i * 25, y: (i - (dcaCount - 1) / 2) * 20 },
+        missionType: 'dca',
+        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
+        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
+      });
+    }
+
+    this.addBannerAlert(
+      isEra5
+        ? `🚨【DCA 蘇聯防空軍超音速截擊】蘇聯 GCI / 30N6 雷達引導！${dcaCount}架 Su-27 / MiG-29A 超音速截擊戰機全加力升空阻截！`
+        : isEra4
+        ? `🚨【DCA 蘇越防空截擊】蘇聯 GCI 雷達引導！${dcaCount}架 北越空軍 MiG-21 / MiG-19 超音速截擊大隊全加力升空阻截！`
+        : isEra3
+        ? `🚨【DCA 噴射防空截擊】冷戰聯軍出動 ${dcaCount}架 MiG-15 噴射截擊編隊緊急升空阻截！`
+        : `🚨【DCA 戰鬥機防空攔截】敵出動 ${dcaCount}架 戰機升空截擊我空襲轟炸機！`,
+      'enemy',
+      'sunk',
+      5.5
+    );
+    this.addCombatLog({
+      category: 'air',
+      sourceSide: 'enemy',
+      sourceName: isEra5 ? '蘇聯國土防空軍 (PVO GCI引導)' : isEra4 ? '北越人民軍空軍 921/925 截擊團 (蘇聯GCI引導)' : isEra3 ? '冷戰遠東航空軍 (DCA)' : '帝國海軍防空戰隊 (DCA)',
+      targetName: targetPlane ? targetPlane.name : '美軍空襲編隊',
+      actionType: 'recon_spotted',
+      text: isEra5
+        ? `🚨【Su-27 / MiG-29A 超音速截擊起飛】蘇聯防空軍 (PVO) 地面引導雷達偵獲我機！緊急起飛 ${dcaCount}架 Su-27 與 MiG-29A 實施極速防空截擊！`
+        : isEra4
+        ? `🚨【MiG-21 / MiG-19 超音速截擊起飛】蘇聯顧問團 GCI 地面引導雷達偵獲我機！北越空軍 921 團與 925 團起飛 ${dcaCount}架 米格-21 與 米格-19 戰鬥機實施超音速防空截擊！`
+        : isEra3
+        ? `🚨【MiG-15 噴射截擊起飛】防空雷達偵獲我機！冷戰聯軍基地緊急起飛 ${dcaCount}架 米格-15 (MiG-15) 噴射戰鬥機實施超音速防空攔截！`
+        : `🚨【DCA 防空截擊起飛】防空雷達與哨戒艇偵獲美機逼近！敵基地緊急彈射 ${dcaCount}架 ${fModel.toUpperCase()} 戰鬥機實施防空攔截 (DCA)！`,
+    });
   }
 
   private checkEnemyAirDoctrineTriggers() {
@@ -7450,545 +7325,553 @@ export class GameEngine {
 
       // Combat Behavior
       if (unit.side === 'player' || unit.side === 'allied') {
-        let targetPos: Vector2D | null = null;
-        let targetUnit: GroundUnit | null = null;
-        let targetName = '敵軍防禦工事';
-
-        const enemyGround = this.groundUnits.find(
-          (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && dist(unit.pos, u.pos) <= unit.range
-        );
-        if (enemyGround) {
-          targetPos = enemyGround.pos;
-          targetUnit = enemyGround;
-          targetName = enemyGround.name;
-        } else {
-          // Find enemy installation on current island (友軍地面部隊絕不攻擊我方或盟軍建造之陣地設施)
-          for (const isl of this.islands) {
-            for (const inst of isl.installations) {
-              if (!inst.isDestroyed && this.isHostile(unit.side, inst.side) && dist(unit.pos, inst.pos) <= unit.range) {
-                targetPos = inst.pos;
-                targetName = inst.name;
-                break;
-              }
-            }
-            if (targetPos) break;
-          }
-        }
-
-        if (targetPos && unit.cooldown <= 0) {
-          unit.heading = Math.atan2(targetPos.y - unit.pos.y, targetPos.x - unit.pos.x);
-          soundEngine.playGunSalvo(false);
-
-          const d = dist(unit.pos, targetPos);
-          const isNuclearAtacms = unit.type === 'us_atacms_nuclear';
-          const isAtacms = unit.type === 'us_m270_atacms';
-          const isCalliope = unit.type === 'us_m4_calliope';
-          const isMlrs = unit.type === 'us_m270_mlrs';
-          const isAtgm = unit.type === 'us_dragon_atgm' || unit.type === 'us_m2_bradley';
-          const isArty = unit.isArtillery || unit.isSPG || unit.type.includes('artillery') || unit.type.includes('howitzer') || unit.type === 'us_m198_155';
-          const isTank = unit.type.includes('armor') || unit.type.includes('tank') || unit.type === 'us_m1ip_abrams' || unit.type === 'us_m60a1_rise';
-          const isShell = isTank || isArty || unit.type === 'usmc_lvt_45' || unit.type === 'usmc_lvtp5a1' || unit.type === 'usmc_aav7a1' || unit.type === 'usmc_lav25';
-
-          if (isNuclearAtacms) {
-            this.fireNuclearSSMMissile(unit, targetPos, targetUnit ?? undefined);
-            unit.cooldown = unit.reloadTime || 45.0;
-            continue;
-          } else if (isAtacms) {
-            this.fireAtacmsMissile(unit, targetPos, targetUnit ?? undefined);
-            unit.cooldown = unit.reloadTime || 32.0;
-            continue;
-          } else if (isCalliope) {
-            this.fireCalliopeMLRSSalvo(unit, targetPos, targetUnit ?? undefined);
-            unit.cooldown = unit.reloadTime || 24.0;
-            continue;
-          } else if (isMlrs) {
-            this.fireM270MLRSSalvo(unit, targetPos, targetUnit ?? undefined);
-            unit.cooldown = unit.reloadTime || 28.0;
-            continue;
-          } else if (isAtgm) {
-            // 🚀 BGM-71 TOW 反戰車飛彈 (M2 Bradley) 或 M47 龍式反戰車飛彈
-            soundEngine.playRocketWhoosh();
-            const atgmSpeed = 440;
-            const atgmName = unit.type === 'us_m2_bradley' ? 'BGM-71 TOW 重型反戰車飛彈' : 'M47 龍式反戰車飛彈';
-            this.projectiles.push({
-              id: `atgm-${Date.now()}-${Math.random()}`,
-              type: 'missile_arm',
-              side: 'player',
-              pos: { ...unit.pos },
-              vel: {
-                x: ((targetPos.x - unit.pos.x) / d) * atgmSpeed,
-                y: ((targetPos.y - unit.pos.y) / d) * atgmSpeed,
-              },
-              originPos: { ...unit.pos },
-              targetPos: { ...targetPos },
-              flightProgress: 0,
-              maxDistance: d,
-              distanceTraveled: 0,
-              damage: Math.round(unit.damage * 1.35),
-              blastRadius: 26,
-              speed: atgmSpeed,
-              heading: unit.heading,
-              isDead: false,
-              trail: [],
-              attackerName: `${unit.name} 【${atgmName}】`,
-              targetEntityId: targetUnit?.id,
-              targetEntityType: targetUnit ? 'ground' : 'installation',
-              guidanceType: 'laser',
-              turnRate: 3.5,
-            });
-
-            // M2 Bradley 額外同步發射 25mm 巨蝮鏈砲點射
-            if (unit.type === 'us_m2_bradley') {
-              for (let b = 0; b < 2; b++) {
-                const spread = (Math.random() - 0.5) * 0.05;
-                const bAngle = unit.heading + spread;
-                const bSpeed = 520;
-                this.projectiles.push({
-                  id: `m2-25mm-${Date.now()}-${b}`,
-                  type: 'bullet',
-                  side: 'player',
-                  pos: { ...unit.pos },
-                  vel: { x: Math.cos(bAngle) * bSpeed, y: Math.sin(bAngle) * bSpeed },
-                  originPos: { ...unit.pos },
-                  targetPos: { ...targetPos },
-                  flightProgress: 0,
-                  maxDistance: d,
-                  distanceTraveled: 0,
-                  damage: 65,
-                  blastRadius: 8,
-                  speed: bSpeed,
-                  heading: bAngle,
-                  isDead: false,
-                  trail: [],
-                  attackerName: `${unit.name} (25mm M242 鏈砲)`,
-                });
-              }
-            }
-          } else if (isArty) {
-            this.registerArtillerySignature(unit.pos, unit.side, unit.name, unit.type);
-            if (d < 700) {
-              // Direct tank-like line-of-sight cannon fire mode! (直瞄平射)
-              unit.artilleryMode = 'direct_fire';
-              const pSpeed = 580;
-              this.projectiles.push({
-                id: `arty-direct-${Date.now()}`,
-                type: 'shell',
-                side: 'player',
-                pos: { ...unit.pos },
-                vel: {
-                  x: ((targetPos.x - unit.pos.x) / d) * pSpeed,
-                  y: ((targetPos.y - unit.pos.y) / d) * pSpeed,
-                },
-                originPos: { ...unit.pos },
-                targetPos: { ...targetPos },
-                flightProgress: 0,
-                maxDistance: d,
-                distanceTraveled: 0,
-                damage: Math.round(unit.damage * 1.15),
-                blastRadius: 20,
-                speed: pSpeed,
-                heading: unit.heading,
-                isDead: false,
-                trail: [],
-                attackerName: `${unit.name} 【直瞄平射】`,
-              });
-            } else {
-              // Long-range high-angle parabolic bombardment mode! (長程曲射)
-              unit.artilleryMode = 'bombardment';
-              const pSpeed = 410;
-              this.projectiles.push({
-                id: `arty-bombard-${Date.now()}`,
-                type: 'shell',
-                side: 'player',
-                pos: { ...unit.pos },
-                vel: {
-                  x: ((targetPos.x - unit.pos.x) / d) * pSpeed,
-                  y: ((targetPos.y - unit.pos.y) / d) * pSpeed,
-                },
-                originPos: { ...unit.pos },
-                targetPos: { ...targetPos },
-                flightProgress: 0,
-                maxDistance: d,
-                distanceTraveled: 0,
-                damage: unit.damage,
-                blastRadius: 42,
-                arcAltitude: 1.25,
-                speed: pSpeed,
-                heading: unit.heading,
-                isDead: false,
-                trail: [],
-                attackerName: `${unit.name} 【長程曲射】`,
-              });
-            }
-          } else if (isShell) {
-            const pSpeed = isTank ? 540 : 460;
-            this.projectiles.push({
-              id: `usmc-shell-${Date.now()}`,
-              type: 'shell',
-              side: 'player',
-              pos: { ...unit.pos },
-              vel: {
-                x: ((targetPos.x - unit.pos.x) / d) * pSpeed,
-                y: ((targetPos.y - unit.pos.y) / d) * pSpeed,
-              },
-              originPos: { ...unit.pos },
-              targetPos: { ...targetPos },
-              flightProgress: 0,
-              maxDistance: d,
-              distanceTraveled: 0,
-              damage: unit.damage,
-              blastRadius: 22,
-              speed: pSpeed,
-              heading: unit.heading,
-              isDead: false,
-              trail: [],
-              attackerName: unit.name,
-            });
-          } else {
-            // 密集群射機槍曳光彈 (3發高速點射)
-            for (let b = 0; b < 3; b++) {
-              const spread = (Math.random() - 0.5) * 0.07;
-              const bAngle = unit.heading + spread;
-              const bSpeed = 490;
-              this.projectiles.push({
-                id: `usmc-mg-${Date.now()}-${b}`,
-                type: 'bullet',
-                side: 'player',
-                pos: {
-                  x: unit.pos.x + Math.cos(unit.heading) * (b * 8),
-                  y: unit.pos.y + Math.sin(unit.heading) * (b * 8),
-                },
-                vel: { x: Math.cos(bAngle) * bSpeed, y: Math.sin(bAngle) * bSpeed },
-                originPos: { ...unit.pos },
-                targetPos: { ...targetPos },
-                flightProgress: 0,
-                maxDistance: d,
-                distanceTraveled: 0,
-                damage: Math.round(unit.damage / 3),
-                blastRadius: 8,
-                speed: bSpeed,
-                heading: bAngle,
-                isDead: false,
-                trail: [],
-                attackerName: unit.name,
-              });
-            }
-          }
-
-          // 戰鬥交火使雙方組織度與壓制值受到衝擊
-          unit.organization = Math.max(0, unit.organization - 0.8);
-          if (targetUnit) {
-            targetUnit.organization = Math.max(0, targetUnit.organization - Math.max(4, Math.round(unit.damage / 24)));
-            targetUnit.suppression = Math.min(100, (targetUnit.suppression || 0) + Math.max(16, Math.round(unit.damage / 16)));
-            targetUnit.suppressionTimer = 5.0;
-            targetUnit.isSuppressed = targetUnit.suppression >= 30;
-            targetUnit.isPinned = targetUnit.suppression >= 75;
-          }
-
-          unit.cooldown = unit.disorganized ? unit.reloadTime * 2 : unit.reloadTime;
-        }
+        if (this.updateFriendlyGroundCombat(unit)) continue;
       } else {
-        // ══════════════════════════════════════════════════════════
-        // 敵軍地面部隊 AI (OPFOR SPAAG Active AA + Mobile Patrols & Counter-Attacks)
-        // ══════════════════════════════════════════════════════════
-        const isOpforSpaag =
-          unit.type === 'opfor_s60_flak' ||
-          unit.type === 'opfor_ks19_heavy' ||
-          unit.type === 'opfor_zsu23_shilka' ||
-          unit.type === 'opfor_zu23_aa' ||
-          unit.type === 'opfor_zsu57_2' ||
-          unit.type === 'opfor_btr_zd' ||
-          unit.type === 'opfor_tunguska';
-
-        if (isOpforSpaag && unit.cooldown <= 0 && !unit.embarkedInShipId) {
-          const aaRange =
-            unit.type === 'opfor_ks19_heavy'
-              ? 1900
-              : unit.type === 'opfor_zsu57_2'
-              ? 1700
-              : unit.type === 'opfor_s60_flak'
-              ? 1550
-              : 1400;
-          const targetPlane = this.aircraft.find(
-            (a) => this.isHostile(unit.side, a.side) && a.state !== 'shot_down' && dist(unit.pos, a.pos) <= aaRange
-          );
-          if (targetPlane) {
-            unit.heading = Math.atan2(targetPlane.pos.y - unit.pos.y, targetPlane.pos.x - unit.pos.x);
-            this.fireFlakBurst(unit.pos, targetPlane, unit.side);
-            unit.cooldown = unit.disorganized ? 2.8 : 1.45;
-          }
-        }
-
-        const targetGround = this.groundUnits.find(
-          (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && dist(unit.pos, u.pos) <= (unit.isBanzaiCharging ? 1200 : unit.range)
-        );
-
-        // 局部反突擊判定: 若同一島嶼或1600m內有美軍或盟軍登陸部隊，敵機動部隊主動逼近
-        const nearbyLandingForce = !targetGround
-          ? this.groundUnits.find(
-              (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && dist(unit.pos, u.pos) <= 1600
-            )
-          : null;
-
-        if (nearbyLandingForce && dist(unit.pos, nearbyLandingForce.pos) > unit.range) {
-          unit.heading = Math.atan2(nearbyLandingForce.pos.y - unit.pos.y, nearbyLandingForce.pos.x - unit.pos.x);
-          let advanceSpeed = (unit.disorganized || (unit.organization ?? 100) < 20) ? unit.maxSpeed * 0.5 : unit.maxSpeed;
-          if ((unit.suppression ?? 0) > 0) {
-            const pen = Math.min(0.80, 0.30 + ((unit.suppression ?? 0) / 100) * 0.50);
-            advanceSpeed *= (1 - pen);
-          }
-          unit.pos.x += Math.cos(unit.heading) * advanceSpeed * dt * 12;
-          unit.pos.y += Math.sin(unit.heading) * advanceSpeed * dt * 12;
-        }
-
-        if (targetGround) {
-          unit.heading = Math.atan2(targetGround.pos.y - unit.pos.y, targetGround.pos.x - unit.pos.x);
-
-          // Banzai charge: 狂熱白刃刺刀突擊
-          if (unit.isBanzaiCharging) {
-            unit.pos.x += Math.cos(unit.heading) * unit.maxSpeed * 1.6 * dt * 18;
-            unit.pos.y += Math.sin(unit.heading) * unit.maxSpeed * 1.6 * dt * 18;
-
-            if (dist(unit.pos, targetGround.pos) < 60 && unit.cooldown <= 0) {
-              soundEngine.playExplosion(false);
-              const targetOrg = targetGround.organization ?? 100;
-              const orgDmgScale = targetOrg < 50 ? 1.0 + 0.5 * (1.0 - targetOrg / 50) : 1.0;
-              const urbanDefense = targetGround.isInUrbanCover ? 0.50 : 1.0;
-              const banzaiDmg = Math.round(120 * orgDmgScale * urbanDefense);
-              targetGround.health -= banzaiDmg;
-              targetGround.organization = Math.max(0, targetGround.organization - (targetGround.isInUrbanCover ? 14 : 25));
-              targetGround.strength = Math.max(0, Math.round((targetGround.health / targetGround.maxHealth) * 100));
-
-              this.particles.push({
-                id: `banzai-clash-${Date.now()}`,
-                x: targetGround.pos.x,
-                y: targetGround.pos.y,
-                vx: 0,
-                vy: 0,
-                life: 0.4,
-                maxLife: 0.4,
-                radius: 18,
-                color: '#FF1744',
-                type: 'spark',
-              });
-              this.addCombatLog({
-                category: 'naval',
-                sourceSide: 'enemy',
-                sourceName: unit.name,
-                targetName: targetGround.name,
-                actionType: 'gun_hit',
-                damage: banzaiDmg,
-                text: `⚔️【白刃突擊！】狂熱萬歲衝鋒刺刀突入「${targetGround.name}」防線！造成 ${banzaiDmg} 點傷害，士氣重挫 (組織度-25%)！`,
-              });
-              unit.cooldown = 1.0;
-              if (targetGround.health <= 0) {
-                targetGround.isDestroyed = true;
-              }
-            }
-          } else if (dist(unit.pos, targetGround.pos) <= unit.range && unit.cooldown <= 0) {
-            soundEngine.playGunSalvo(false);
-            const d = dist(unit.pos, targetGround.pos);
-            const isArty = unit.isArtillery || unit.isSPG || unit.type.includes('artillery') || unit.type === 'opfor_2s1';
-            const isTank = unit.type.includes('tank') || unit.type === 'opfor_t72b' || unit.type === 'opfor_t80b' || unit.type === 'opfor_bmp2';
-            const isMortar = unit.type.includes('mortar');
-            const isAtgm = unit.type === 'opfor_bmp2' || unit.type === 'opfor_t80b';
-            const isNuclearScud = unit.type === 'opfor_scud_nuclear';
-            const isScud = unit.type === 'opfor_scud_tel';
-            const isOpforMlrs = unit.type === 'opfor_bm21_grad' || unit.type === 'opfor_bm27_uragan';
-
-            if (isNuclearScud) {
-              this.fireNuclearSSMMissile(unit, targetGround.pos, targetGround);
-              unit.cooldown = unit.reloadTime || 45.0;
-            } else if (isScud) {
-              this.fireScudMissile(unit, targetGround.pos, targetGround);
-              unit.cooldown = unit.reloadTime || 30.0;
-            } else if (isOpforMlrs) {
-              this.fireOpforMLRSSalvo(unit, targetGround.pos, targetGround);
-              unit.cooldown = unit.reloadTime || (unit.type === 'opfor_bm27_uragan' ? 30.0 : 26.0);
-            } else if (isAtgm) {
-              soundEngine.playRocketWhoosh();
-              const atgmSpeed = 460;
-              const atgmName = unit.type === 'opfor_bmp2' ? '9M113 競賽 (Konkurs) 反戰車飛彈' : '9M112 眼鏡蛇 (Kobra) 砲射反戰車飛彈';
-              this.projectiles.push({
-                id: `opfor-atgm-${Date.now()}-${Math.random()}`,
-                type: 'missile_arm',
-                side: 'enemy',
-                pos: { ...unit.pos },
-                vel: {
-                  x: ((targetGround.pos.x - unit.pos.x) / d) * atgmSpeed,
-                  y: ((targetGround.pos.y - unit.pos.y) / d) * atgmSpeed,
-                },
-                originPos: { ...unit.pos },
-                targetPos: { ...targetGround.pos },
-                flightProgress: 0,
-                maxDistance: d,
-                distanceTraveled: 0,
-                damage: Math.round(unit.damage * 1.3),
-                blastRadius: 28,
-                speed: atgmSpeed,
-                heading: unit.heading,
-                isDead: false,
-                trail: [],
-                attackerName: `${unit.name} 【${atgmName}】`,
-                targetEntityId: targetGround.id,
-                targetEntityType: 'ground',
-                guidanceType: 'laser',
-                turnRate: 3.6,
-              });
-
-              if (unit.type === 'opfor_bmp2') {
-                for (let b = 0; b < 2; b++) {
-                  const spread = (Math.random() - 0.5) * 0.06;
-                  const bAngle = unit.heading + spread;
-                  const bSpeed = 510;
-                  this.projectiles.push({
-                    id: `opfor-2a42-${Date.now()}-${b}`,
-                    type: 'bullet',
-                    side: 'enemy',
-                    pos: { ...unit.pos },
-                    vel: { x: Math.cos(bAngle) * bSpeed, y: Math.sin(bAngle) * bSpeed },
-                    originPos: { ...unit.pos },
-                    targetPos: { ...targetGround.pos },
-                    flightProgress: 0,
-                    maxDistance: d,
-                    distanceTraveled: 0,
-                    damage: 60,
-                    blastRadius: 8,
-                    speed: bSpeed,
-                    heading: bAngle,
-                    isDead: false,
-                    trail: [],
-                    attackerName: `${unit.name} (2A42 30mm 機砲)`,
-                  });
-                }
-              }
-              unit.cooldown = unit.disorganized ? unit.reloadTime * 2 : unit.reloadTime;
-            } else if (isArty) {
-              this.registerArtillerySignature(unit.pos, unit.side, unit.name, unit.type);
-              if (d < 700) {
-                unit.artilleryMode = 'direct_fire';
-                const pSpeed = 560;
-                this.projectiles.push({
-                  id: `opfor-arty-direct-${Date.now()}`,
-                  type: 'shell',
-                  side: 'enemy',
-                  pos: { ...unit.pos },
-                  vel: {
-                    x: ((targetGround.pos.x - unit.pos.x) / d) * pSpeed,
-                    y: ((targetGround.pos.y - unit.pos.y) / d) * pSpeed,
-                  },
-                  originPos: { ...unit.pos },
-                  targetPos: { ...targetGround.pos },
-                  flightProgress: 0,
-                  maxDistance: d,
-                  distanceTraveled: 0,
-                  damage: Math.round(unit.damage * 1.15),
-                  blastRadius: 20,
-                  speed: pSpeed,
-                  heading: unit.heading,
-                  isDead: false,
-                  trail: [],
-                  attackerName: `${unit.name} 【直瞄平射】`,
-                });
-              } else {
-                unit.artilleryMode = 'bombardment';
-                const pSpeed = 400;
-                this.projectiles.push({
-                  id: `opfor-arty-bombard-${Date.now()}`,
-                  type: 'shell',
-                  side: 'enemy',
-                  pos: { ...unit.pos },
-                  vel: {
-                    x: ((targetGround.pos.x - unit.pos.x) / d) * pSpeed,
-                    y: ((targetGround.pos.y - unit.pos.y) / d) * pSpeed,
-                  },
-                  originPos: { ...unit.pos },
-                  targetPos: { ...targetGround.pos },
-                  flightProgress: 0,
-                  maxDistance: d,
-                  distanceTraveled: 0,
-                  damage: unit.damage,
-                  blastRadius: 40,
-                  arcAltitude: 1.25,
-                  speed: pSpeed,
-                  heading: unit.heading,
-                  isDead: false,
-                  trail: [],
-                  attackerName: `${unit.name} 【長程曲射】`,
-                });
-              }
-            } else if (isTank || isMortar) {
-              if (isMortar) {
-                this.registerArtillerySignature(unit.pos, unit.side, unit.name, unit.type);
-              }
-              const pSpeed = isMortar ? 390 : 520;
-              this.projectiles.push({
-                id: `opfor-shell-${Date.now()}`,
-                type: 'shell',
-                side: 'enemy',
-                pos: { ...unit.pos },
-                vel: {
-                  x: ((targetGround.pos.x - unit.pos.x) / d) * pSpeed,
-                  y: ((targetGround.pos.y - unit.pos.y) / d) * pSpeed,
-                },
-                originPos: { ...unit.pos },
-                targetPos: { ...targetGround.pos },
-                flightProgress: 0,
-                maxDistance: d,
-                distanceTraveled: 0,
-                damage: unit.damage,
-                blastRadius: isMortar ? 18 : 22,
-                speed: pSpeed,
-                heading: unit.heading,
-                isDead: false,
-                trail: [],
-                attackerName: unit.name,
-              });
-            } else {
-              // 密集群射機槍曳光彈 (3發緊湊點射)
-              for (let b = 0; b < 3; b++) {
-                const spread = (Math.random() - 0.5) * 0.08;
-                const bAngle = unit.heading + spread;
-                const bSpeed = 480;
-                this.projectiles.push({
-                  id: `opfor-mg-${Date.now()}-${b}`,
-                  type: 'bullet',
-                  side: 'enemy',
-                  pos: {
-                    x: unit.pos.x + Math.cos(unit.heading) * (b * 8),
-                    y: unit.pos.y + Math.sin(unit.heading) * (b * 8),
-                  },
-                  vel: { x: Math.cos(bAngle) * bSpeed, y: Math.sin(bAngle) * bSpeed },
-                  originPos: { ...unit.pos },
-                  targetPos: { ...targetGround.pos },
-                  flightProgress: 0,
-                  maxDistance: d,
-                  distanceTraveled: 0,
-                  damage: Math.round(unit.damage / 3),
-                  blastRadius: 6,
-                  speed: bSpeed,
-                  heading: bAngle,
-                  isDead: false,
-                  trail: [],
-                  attackerName: unit.name,
-                });
-              }
-            }
-
-            // 壓制我軍步兵組織度與壓制值
-            targetGround.organization = Math.max(0, targetGround.organization - Math.max(3, Math.round(unit.damage / 26)));
-            targetGround.suppression = Math.min(100, (targetGround.suppression || 0) + Math.max(16, Math.round(unit.damage / 16)));
-            targetGround.suppressionTimer = 5.0;
-            targetGround.isSuppressed = targetGround.suppression >= 30;
-            targetGround.isPinned = targetGround.suppression >= 75;
-            unit.cooldown = unit.disorganized ? unit.reloadTime * 2 : unit.reloadTime;
-          }
-        }
+        this.updateEnemyGroundCombat(dt, unit);
       }
     }
 
     // 3. 跨時代長程火箭/戰術飛彈與自走砲自動反砲擊雷達聯動 (Era 2-5 Long-Range MLRS/SSM & SPG Counter-Battery)
     this.updateGroundLongRangeAndCounterBattery();
+  }
+
+  /** OPFOR ground unit fire selection and attack. */
+  private updateEnemyGroundCombat(dt: number, unit: GroundUnit): void {
+    // ══════════════════════════════════════════════════════════
+    // 敵軍地面部隊 AI (OPFOR SPAAG Active AA + Mobile Patrols & Counter-Attacks)
+    // ══════════════════════════════════════════════════════════
+    const isOpforSpaag =
+      unit.type === 'opfor_s60_flak' ||
+      unit.type === 'opfor_ks19_heavy' ||
+      unit.type === 'opfor_zsu23_shilka' ||
+      unit.type === 'opfor_zu23_aa' ||
+      unit.type === 'opfor_zsu57_2' ||
+      unit.type === 'opfor_btr_zd' ||
+      unit.type === 'opfor_tunguska';
+
+    if (isOpforSpaag && unit.cooldown <= 0 && !unit.embarkedInShipId) {
+      const aaRange =
+        unit.type === 'opfor_ks19_heavy'
+          ? 1900
+          : unit.type === 'opfor_zsu57_2'
+          ? 1700
+          : unit.type === 'opfor_s60_flak'
+          ? 1550
+          : 1400;
+      const targetPlane = this.aircraft.find(
+        (a) => this.isHostile(unit.side, a.side) && a.state !== 'shot_down' && dist(unit.pos, a.pos) <= aaRange
+      );
+      if (targetPlane) {
+        unit.heading = Math.atan2(targetPlane.pos.y - unit.pos.y, targetPlane.pos.x - unit.pos.x);
+        this.fireFlakBurst(unit.pos, targetPlane, unit.side);
+        unit.cooldown = unit.disorganized ? 2.8 : 1.45;
+      }
+    }
+
+    const targetGround = this.groundUnits.find(
+      (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && dist(unit.pos, u.pos) <= (unit.isBanzaiCharging ? 1200 : unit.range)
+    );
+
+    // 局部反突擊判定: 若同一島嶼或1600m內有美軍或盟軍登陸部隊，敵機動部隊主動逼近
+    const nearbyLandingForce = !targetGround
+      ? this.groundUnits.find(
+          (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && dist(unit.pos, u.pos) <= 1600
+        )
+      : null;
+
+    if (nearbyLandingForce && dist(unit.pos, nearbyLandingForce.pos) > unit.range) {
+      unit.heading = Math.atan2(nearbyLandingForce.pos.y - unit.pos.y, nearbyLandingForce.pos.x - unit.pos.x);
+      let advanceSpeed = (unit.disorganized || (unit.organization ?? 100) < 20) ? unit.maxSpeed * 0.5 : unit.maxSpeed;
+      if ((unit.suppression ?? 0) > 0) {
+        const pen = Math.min(0.80, 0.30 + ((unit.suppression ?? 0) / 100) * 0.50);
+        advanceSpeed *= (1 - pen);
+      }
+      unit.pos.x += Math.cos(unit.heading) * advanceSpeed * dt * 12;
+      unit.pos.y += Math.sin(unit.heading) * advanceSpeed * dt * 12;
+    }
+
+    if (targetGround) {
+      unit.heading = Math.atan2(targetGround.pos.y - unit.pos.y, targetGround.pos.x - unit.pos.x);
+
+      // Banzai charge: 狂熱白刃刺刀突擊
+      if (unit.isBanzaiCharging) {
+        unit.pos.x += Math.cos(unit.heading) * unit.maxSpeed * 1.6 * dt * 18;
+        unit.pos.y += Math.sin(unit.heading) * unit.maxSpeed * 1.6 * dt * 18;
+
+        if (dist(unit.pos, targetGround.pos) < 60 && unit.cooldown <= 0) {
+          soundEngine.playExplosion(false);
+          const targetOrg = targetGround.organization ?? 100;
+          const orgDmgScale = targetOrg < 50 ? 1.0 + 0.5 * (1.0 - targetOrg / 50) : 1.0;
+          const urbanDefense = targetGround.isInUrbanCover ? 0.50 : 1.0;
+          const banzaiDmg = Math.round(120 * orgDmgScale * urbanDefense);
+          targetGround.health -= banzaiDmg;
+          targetGround.organization = Math.max(0, targetGround.organization - (targetGround.isInUrbanCover ? 14 : 25));
+          targetGround.strength = Math.max(0, Math.round((targetGround.health / targetGround.maxHealth) * 100));
+
+          this.particles.push({
+            id: `banzai-clash-${Date.now()}`,
+            x: targetGround.pos.x,
+            y: targetGround.pos.y,
+            vx: 0,
+            vy: 0,
+            life: 0.4,
+            maxLife: 0.4,
+            radius: 18,
+            color: '#FF1744',
+            type: 'spark',
+          });
+          this.addCombatLog({
+            category: 'naval',
+            sourceSide: 'enemy',
+            sourceName: unit.name,
+            targetName: targetGround.name,
+            actionType: 'gun_hit',
+            damage: banzaiDmg,
+            text: `⚔️【白刃突擊！】狂熱萬歲衝鋒刺刀突入「${targetGround.name}」防線！造成 ${banzaiDmg} 點傷害，士氣重挫 (組織度-25%)！`,
+          });
+          unit.cooldown = 1.0;
+          if (targetGround.health <= 0) {
+            targetGround.isDestroyed = true;
+          }
+        }
+      } else if (dist(unit.pos, targetGround.pos) <= unit.range && unit.cooldown <= 0) {
+        soundEngine.playGunSalvo(false);
+        const d = dist(unit.pos, targetGround.pos);
+        const isArty = unit.isArtillery || unit.isSPG || unit.type.includes('artillery') || unit.type === 'opfor_2s1';
+        const isTank = unit.type.includes('tank') || unit.type === 'opfor_t72b' || unit.type === 'opfor_t80b' || unit.type === 'opfor_bmp2';
+        const isMortar = unit.type.includes('mortar');
+        const isAtgm = unit.type === 'opfor_bmp2' || unit.type === 'opfor_t80b';
+        const isNuclearScud = unit.type === 'opfor_scud_nuclear';
+        const isScud = unit.type === 'opfor_scud_tel';
+        const isOpforMlrs = unit.type === 'opfor_bm21_grad' || unit.type === 'opfor_bm27_uragan';
+
+        if (isNuclearScud) {
+          this.fireNuclearSSMMissile(unit, targetGround.pos, targetGround);
+          unit.cooldown = unit.reloadTime || 45.0;
+        } else if (isScud) {
+          this.fireScudMissile(unit, targetGround.pos, targetGround);
+          unit.cooldown = unit.reloadTime || 30.0;
+        } else if (isOpforMlrs) {
+          this.fireOpforMLRSSalvo(unit, targetGround.pos, targetGround);
+          unit.cooldown = unit.reloadTime || (unit.type === 'opfor_bm27_uragan' ? 30.0 : 26.0);
+        } else if (isAtgm) {
+          soundEngine.playRocketWhoosh();
+          const atgmSpeed = 460;
+          const atgmName = unit.type === 'opfor_bmp2' ? '9M113 競賽 (Konkurs) 反戰車飛彈' : '9M112 眼鏡蛇 (Kobra) 砲射反戰車飛彈';
+          this.projectiles.push({
+            id: `opfor-atgm-${Date.now()}-${Math.random()}`,
+            type: 'missile_arm',
+            side: 'enemy',
+            pos: { ...unit.pos },
+            vel: {
+              x: ((targetGround.pos.x - unit.pos.x) / d) * atgmSpeed,
+              y: ((targetGround.pos.y - unit.pos.y) / d) * atgmSpeed,
+            },
+            originPos: { ...unit.pos },
+            targetPos: { ...targetGround.pos },
+            flightProgress: 0,
+            maxDistance: d,
+            distanceTraveled: 0,
+            damage: Math.round(unit.damage * 1.3),
+            blastRadius: 28,
+            speed: atgmSpeed,
+            heading: unit.heading,
+            isDead: false,
+            trail: [],
+            attackerName: `${unit.name} 【${atgmName}】`,
+            targetEntityId: targetGround.id,
+            targetEntityType: 'ground',
+            guidanceType: 'laser',
+            turnRate: 3.6,
+          });
+
+          if (unit.type === 'opfor_bmp2') {
+            for (let b = 0; b < 2; b++) {
+              const spread = (Math.random() - 0.5) * 0.06;
+              const bAngle = unit.heading + spread;
+              const bSpeed = 510;
+              this.projectiles.push({
+                id: `opfor-2a42-${Date.now()}-${b}`,
+                type: 'bullet',
+                side: 'enemy',
+                pos: { ...unit.pos },
+                vel: { x: Math.cos(bAngle) * bSpeed, y: Math.sin(bAngle) * bSpeed },
+                originPos: { ...unit.pos },
+                targetPos: { ...targetGround.pos },
+                flightProgress: 0,
+                maxDistance: d,
+                distanceTraveled: 0,
+                damage: 60,
+                blastRadius: 8,
+                speed: bSpeed,
+                heading: bAngle,
+                isDead: false,
+                trail: [],
+                attackerName: `${unit.name} (2A42 30mm 機砲)`,
+              });
+            }
+          }
+          unit.cooldown = unit.disorganized ? unit.reloadTime * 2 : unit.reloadTime;
+        } else if (isArty) {
+          this.registerArtillerySignature(unit.pos, unit.side, unit.name, unit.type);
+          if (d < 700) {
+            unit.artilleryMode = 'direct_fire';
+            const pSpeed = 560;
+            this.projectiles.push({
+              id: `opfor-arty-direct-${Date.now()}`,
+              type: 'shell',
+              side: 'enemy',
+              pos: { ...unit.pos },
+              vel: {
+                x: ((targetGround.pos.x - unit.pos.x) / d) * pSpeed,
+                y: ((targetGround.pos.y - unit.pos.y) / d) * pSpeed,
+              },
+              originPos: { ...unit.pos },
+              targetPos: { ...targetGround.pos },
+              flightProgress: 0,
+              maxDistance: d,
+              distanceTraveled: 0,
+              damage: Math.round(unit.damage * 1.15),
+              blastRadius: 20,
+              speed: pSpeed,
+              heading: unit.heading,
+              isDead: false,
+              trail: [],
+              attackerName: `${unit.name} 【直瞄平射】`,
+            });
+          } else {
+            unit.artilleryMode = 'bombardment';
+            const pSpeed = 400;
+            this.projectiles.push({
+              id: `opfor-arty-bombard-${Date.now()}`,
+              type: 'shell',
+              side: 'enemy',
+              pos: { ...unit.pos },
+              vel: {
+                x: ((targetGround.pos.x - unit.pos.x) / d) * pSpeed,
+                y: ((targetGround.pos.y - unit.pos.y) / d) * pSpeed,
+              },
+              originPos: { ...unit.pos },
+              targetPos: { ...targetGround.pos },
+              flightProgress: 0,
+              maxDistance: d,
+              distanceTraveled: 0,
+              damage: unit.damage,
+              blastRadius: 40,
+              arcAltitude: 1.25,
+              speed: pSpeed,
+              heading: unit.heading,
+              isDead: false,
+              trail: [],
+              attackerName: `${unit.name} 【長程曲射】`,
+            });
+          }
+        } else if (isTank || isMortar) {
+          if (isMortar) {
+            this.registerArtillerySignature(unit.pos, unit.side, unit.name, unit.type);
+          }
+          const pSpeed = isMortar ? 390 : 520;
+          this.projectiles.push({
+            id: `opfor-shell-${Date.now()}`,
+            type: 'shell',
+            side: 'enemy',
+            pos: { ...unit.pos },
+            vel: {
+              x: ((targetGround.pos.x - unit.pos.x) / d) * pSpeed,
+              y: ((targetGround.pos.y - unit.pos.y) / d) * pSpeed,
+            },
+            originPos: { ...unit.pos },
+            targetPos: { ...targetGround.pos },
+            flightProgress: 0,
+            maxDistance: d,
+            distanceTraveled: 0,
+            damage: unit.damage,
+            blastRadius: isMortar ? 18 : 22,
+            speed: pSpeed,
+            heading: unit.heading,
+            isDead: false,
+            trail: [],
+            attackerName: unit.name,
+          });
+        } else {
+          // 密集群射機槍曳光彈 (3發緊湊點射)
+          for (let b = 0; b < 3; b++) {
+            const spread = (Math.random() - 0.5) * 0.08;
+            const bAngle = unit.heading + spread;
+            const bSpeed = 480;
+            this.projectiles.push({
+              id: `opfor-mg-${Date.now()}-${b}`,
+              type: 'bullet',
+              side: 'enemy',
+              pos: {
+                x: unit.pos.x + Math.cos(unit.heading) * (b * 8),
+                y: unit.pos.y + Math.sin(unit.heading) * (b * 8),
+              },
+              vel: { x: Math.cos(bAngle) * bSpeed, y: Math.sin(bAngle) * bSpeed },
+              originPos: { ...unit.pos },
+              targetPos: { ...targetGround.pos },
+              flightProgress: 0,
+              maxDistance: d,
+              distanceTraveled: 0,
+              damage: Math.round(unit.damage / 3),
+              blastRadius: 6,
+              speed: bSpeed,
+              heading: bAngle,
+              isDead: false,
+              trail: [],
+              attackerName: unit.name,
+            });
+          }
+        }
+
+        // 壓制我軍步兵組織度與壓制值
+        targetGround.organization = Math.max(0, targetGround.organization - Math.max(3, Math.round(unit.damage / 26)));
+        targetGround.suppression = Math.min(100, (targetGround.suppression || 0) + Math.max(16, Math.round(unit.damage / 16)));
+        targetGround.suppressionTimer = 5.0;
+        targetGround.isSuppressed = targetGround.suppression >= 30;
+        targetGround.isPinned = targetGround.suppression >= 75;
+        unit.cooldown = unit.disorganized ? unit.reloadTime * 2 : unit.reloadTime;
+      }
+    }
+  }
+
+  /** Player / allied ground unit fire selection and attack. */
+  private updateFriendlyGroundCombat(unit: GroundUnit): boolean {
+    let targetPos: Vector2D | null = null;
+    let targetUnit: GroundUnit | null = null;
+
+    const enemyGround = this.groundUnits.find(
+      (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && dist(unit.pos, u.pos) <= unit.range
+    );
+    if (enemyGround) {
+      targetPos = enemyGround.pos;
+      targetUnit = enemyGround;
+    } else {
+      // Find enemy installation on current island (友軍地面部隊絕不攻擊我方或盟軍建造之陣地設施)
+      for (const isl of this.islands) {
+        for (const inst of isl.installations) {
+          if (!inst.isDestroyed && this.isHostile(unit.side, inst.side) && dist(unit.pos, inst.pos) <= unit.range) {
+            targetPos = inst.pos;
+            break;
+          }
+        }
+        if (targetPos) break;
+      }
+    }
+
+    if (targetPos && unit.cooldown <= 0) {
+      unit.heading = Math.atan2(targetPos.y - unit.pos.y, targetPos.x - unit.pos.x);
+      soundEngine.playGunSalvo(false);
+
+      const d = dist(unit.pos, targetPos);
+      const isNuclearAtacms = unit.type === 'us_atacms_nuclear';
+      const isAtacms = unit.type === 'us_m270_atacms';
+      const isCalliope = unit.type === 'us_m4_calliope';
+      const isMlrs = unit.type === 'us_m270_mlrs';
+      const isAtgm = unit.type === 'us_dragon_atgm' || unit.type === 'us_m2_bradley';
+      const isArty = unit.isArtillery || unit.isSPG || unit.type.includes('artillery') || unit.type.includes('howitzer') || unit.type === 'us_m198_155';
+      const isTank = unit.type.includes('armor') || unit.type.includes('tank') || unit.type === 'us_m1ip_abrams' || unit.type === 'us_m60a1_rise';
+      const isShell = isTank || isArty || unit.type === 'usmc_lvt_45' || unit.type === 'usmc_lvtp5a1' || unit.type === 'usmc_aav7a1' || unit.type === 'usmc_lav25';
+
+      if (isNuclearAtacms) {
+        this.fireNuclearSSMMissile(unit, targetPos, targetUnit ?? undefined);
+        unit.cooldown = unit.reloadTime || 45.0;
+        return true;
+      } else if (isAtacms) {
+        this.fireAtacmsMissile(unit, targetPos, targetUnit ?? undefined);
+        unit.cooldown = unit.reloadTime || 32.0;
+        return true;
+      } else if (isCalliope) {
+        this.fireCalliopeMLRSSalvo(unit, targetPos, targetUnit ?? undefined);
+        unit.cooldown = unit.reloadTime || 24.0;
+        return true;
+      } else if (isMlrs) {
+        this.fireM270MLRSSalvo(unit, targetPos, targetUnit ?? undefined);
+        unit.cooldown = unit.reloadTime || 28.0;
+        return true;
+      } else if (isAtgm) {
+        // 🚀 BGM-71 TOW 反戰車飛彈 (M2 Bradley) 或 M47 龍式反戰車飛彈
+        soundEngine.playRocketWhoosh();
+        const atgmSpeed = 440;
+        const atgmName = unit.type === 'us_m2_bradley' ? 'BGM-71 TOW 重型反戰車飛彈' : 'M47 龍式反戰車飛彈';
+        this.projectiles.push({
+          id: `atgm-${Date.now()}-${Math.random()}`,
+          type: 'missile_arm',
+          side: 'player',
+          pos: { ...unit.pos },
+          vel: {
+            x: ((targetPos.x - unit.pos.x) / d) * atgmSpeed,
+            y: ((targetPos.y - unit.pos.y) / d) * atgmSpeed,
+          },
+          originPos: { ...unit.pos },
+          targetPos: { ...targetPos },
+          flightProgress: 0,
+          maxDistance: d,
+          distanceTraveled: 0,
+          damage: Math.round(unit.damage * 1.35),
+          blastRadius: 26,
+          speed: atgmSpeed,
+          heading: unit.heading,
+          isDead: false,
+          trail: [],
+          attackerName: `${unit.name} 【${atgmName}】`,
+          targetEntityId: targetUnit?.id,
+          targetEntityType: targetUnit ? 'ground' : 'installation',
+          guidanceType: 'laser',
+          turnRate: 3.5,
+        });
+
+        // M2 Bradley 額外同步發射 25mm 巨蝮鏈砲點射
+        if (unit.type === 'us_m2_bradley') {
+          for (let b = 0; b < 2; b++) {
+            const spread = (Math.random() - 0.5) * 0.05;
+            const bAngle = unit.heading + spread;
+            const bSpeed = 520;
+            this.projectiles.push({
+              id: `m2-25mm-${Date.now()}-${b}`,
+              type: 'bullet',
+              side: 'player',
+              pos: { ...unit.pos },
+              vel: { x: Math.cos(bAngle) * bSpeed, y: Math.sin(bAngle) * bSpeed },
+              originPos: { ...unit.pos },
+              targetPos: { ...targetPos },
+              flightProgress: 0,
+              maxDistance: d,
+              distanceTraveled: 0,
+              damage: 65,
+              blastRadius: 8,
+              speed: bSpeed,
+              heading: bAngle,
+              isDead: false,
+              trail: [],
+              attackerName: `${unit.name} (25mm M242 鏈砲)`,
+            });
+          }
+        }
+      } else if (isArty) {
+        this.registerArtillerySignature(unit.pos, unit.side, unit.name, unit.type);
+        if (d < 700) {
+          // Direct tank-like line-of-sight cannon fire mode! (直瞄平射)
+          unit.artilleryMode = 'direct_fire';
+          const pSpeed = 580;
+          this.projectiles.push({
+            id: `arty-direct-${Date.now()}`,
+            type: 'shell',
+            side: 'player',
+            pos: { ...unit.pos },
+            vel: {
+              x: ((targetPos.x - unit.pos.x) / d) * pSpeed,
+              y: ((targetPos.y - unit.pos.y) / d) * pSpeed,
+            },
+            originPos: { ...unit.pos },
+            targetPos: { ...targetPos },
+            flightProgress: 0,
+            maxDistance: d,
+            distanceTraveled: 0,
+            damage: Math.round(unit.damage * 1.15),
+            blastRadius: 20,
+            speed: pSpeed,
+            heading: unit.heading,
+            isDead: false,
+            trail: [],
+            attackerName: `${unit.name} 【直瞄平射】`,
+          });
+        } else {
+          // Long-range high-angle parabolic bombardment mode! (長程曲射)
+          unit.artilleryMode = 'bombardment';
+          const pSpeed = 410;
+          this.projectiles.push({
+            id: `arty-bombard-${Date.now()}`,
+            type: 'shell',
+            side: 'player',
+            pos: { ...unit.pos },
+            vel: {
+              x: ((targetPos.x - unit.pos.x) / d) * pSpeed,
+              y: ((targetPos.y - unit.pos.y) / d) * pSpeed,
+            },
+            originPos: { ...unit.pos },
+            targetPos: { ...targetPos },
+            flightProgress: 0,
+            maxDistance: d,
+            distanceTraveled: 0,
+            damage: unit.damage,
+            blastRadius: 42,
+            arcAltitude: 1.25,
+            speed: pSpeed,
+            heading: unit.heading,
+            isDead: false,
+            trail: [],
+            attackerName: `${unit.name} 【長程曲射】`,
+          });
+        }
+      } else if (isShell) {
+        const pSpeed = isTank ? 540 : 460;
+        this.projectiles.push({
+          id: `usmc-shell-${Date.now()}`,
+          type: 'shell',
+          side: 'player',
+          pos: { ...unit.pos },
+          vel: {
+            x: ((targetPos.x - unit.pos.x) / d) * pSpeed,
+            y: ((targetPos.y - unit.pos.y) / d) * pSpeed,
+          },
+          originPos: { ...unit.pos },
+          targetPos: { ...targetPos },
+          flightProgress: 0,
+          maxDistance: d,
+          distanceTraveled: 0,
+          damage: unit.damage,
+          blastRadius: 22,
+          speed: pSpeed,
+          heading: unit.heading,
+          isDead: false,
+          trail: [],
+          attackerName: unit.name,
+        });
+      } else {
+        // 密集群射機槍曳光彈 (3發高速點射)
+        for (let b = 0; b < 3; b++) {
+          const spread = (Math.random() - 0.5) * 0.07;
+          const bAngle = unit.heading + spread;
+          const bSpeed = 490;
+          this.projectiles.push({
+            id: `usmc-mg-${Date.now()}-${b}`,
+            type: 'bullet',
+            side: 'player',
+            pos: {
+              x: unit.pos.x + Math.cos(unit.heading) * (b * 8),
+              y: unit.pos.y + Math.sin(unit.heading) * (b * 8),
+            },
+            vel: { x: Math.cos(bAngle) * bSpeed, y: Math.sin(bAngle) * bSpeed },
+            originPos: { ...unit.pos },
+            targetPos: { ...targetPos },
+            flightProgress: 0,
+            maxDistance: d,
+            distanceTraveled: 0,
+            damage: Math.round(unit.damage / 3),
+            blastRadius: 8,
+            speed: bSpeed,
+            heading: bAngle,
+            isDead: false,
+            trail: [],
+            attackerName: unit.name,
+          });
+        }
+      }
+
+      // 戰鬥交火使雙方組織度與壓制值受到衝擊
+      unit.organization = Math.max(0, unit.organization - 0.8);
+      if (targetUnit) {
+        targetUnit.organization = Math.max(0, targetUnit.organization - Math.max(4, Math.round(unit.damage / 24)));
+        targetUnit.suppression = Math.min(100, (targetUnit.suppression || 0) + Math.max(16, Math.round(unit.damage / 16)));
+        targetUnit.suppressionTimer = 5.0;
+        targetUnit.isSuppressed = targetUnit.suppression >= 30;
+        targetUnit.isPinned = targetUnit.suppression >= 75;
+      }
+
+      unit.cooldown = unit.disorganized ? unit.reloadTime * 2 : unit.reloadTime;
+    }
+    return false;
   }
 
   // ══════════════════════════════════════════════════════════
@@ -8379,7 +8262,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const attackerName = `${plane.name} (戰機 #${plane.id.slice(-4)})`;
     const heading = plane.heading;
-    const speed = 520; // 0.85 Mach sea-skimming
+    const speed = MISSILE_SPEED.harpoon; // Mach 0.71 sea-skimming
     const range = 4200;
 
     let targetShipId: string | undefined = undefined;
@@ -8462,7 +8345,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const attackerName = `${plane.name} (戰機 #${plane.id.slice(-4)})`;
     const heading = plane.heading;
-    const speed = 820; // Mach 4.3 hypersonic BVR interceptor
+    const speed = MISSILE_SPEED.aim54; // Mach 5
     const range = 5200;
 
     let targetId: string | undefined = undefined;
@@ -8523,11 +8406,11 @@ export class GameEngine {
     });
   }
 
-  private fireHARMMissile(plane: Aircraft, targetPos: Vector2D, targetEntity?: CombatTargetEntity) {
+  private fireHARMMissile(plane: Aircraft, targetPos: Vector2D, _targetEntity?: CombatTargetEntity) {
     soundEngine.playRocketIgnition();
     const attackerName = `${plane.name} (戰機 #${plane.id.slice(-4)})`;
     const heading = plane.heading;
-    const speed = 760; // Mach 3.0+ high-speed anti-radiation
+    const speed = MISSILE_SPEED.harm; // Mach 2.9
     const range = 4600;
 
     let radarInstId: string | undefined = undefined;
@@ -8575,11 +8458,11 @@ export class GameEngine {
     });
   }
 
-  private fireMaverickMissile(plane: Aircraft, targetPos: Vector2D, targetEntity?: CombatTargetEntity) {
+  private fireMaverickMissile(plane: Aircraft, targetPos: Vector2D, _targetEntity?: CombatTargetEntity) {
     soundEngine.playRocketIgnition();
     const attackerName = `${plane.name} (戰機 #${plane.id.slice(-4)})`;
     const heading = plane.heading;
-    const speed = 640;
+    const speed = MISSILE_SPEED.maverick;
     const range = 2600;
 
     this.projectiles.push({
@@ -8616,7 +8499,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const attackerName = `${plane.name} (轟炸機 #${plane.id.slice(-4)})`;
     const heading = plane.heading;
-    const speed = 780; // Mach 4.0 supersonic dive
+    const speed = MISSILE_SPEED.kh22; // Mach 4.6 dive
     const range = 4600;
 
     const playerShipsAlive = [...this.playerShips, ...this.alliedShips]
@@ -8681,7 +8564,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const attackerName = `${plane.name} (戰機 #${plane.id.slice(-4)})`;
     const heading = plane.heading;
-    const speed = 640; // Mach 2.5 Granit
+    const speed = MISSILE_SPEED.granit; // Mach 2.5
     const range = 4200;
 
     let targetShipId: string | undefined = targetEntity?.id;
@@ -8723,11 +8606,11 @@ export class GameEngine {
     });
   }
 
-  private fireHellfireMissile(plane: Aircraft, targetPos: Vector2D, targetEntity?: CombatTargetEntity) {
+  private fireHellfireMissile(plane: Aircraft, targetPos: Vector2D, _targetEntity?: CombatTargetEntity) {
     soundEngine.playRocketIgnition();
     const attackerName = `${plane.name} (武裝直升機 #${plane.id.slice(-4)})`;
     const heading = plane.heading;
-    const speed = 580;
+    const speed = MISSILE_SPEED.hellfire;
     const range = 2200;
 
     this.projectiles.push({
@@ -8827,184 +8710,11 @@ export class GameEngine {
     const heading = -Math.PI / 4;
     soundEngine.playPlaneSortie();
 
-    const role: AircraftRole =
-      model === 'b17' || model === 'b17_late' || model === 'b25' || model === 'b24' || model === 'b29' || model === 'b52' || model === 'f111' || model === 'lancaster'
-        ? 'level_bomber'
-        : model === 'p40' || model === 'p36a' || model === 'p38' || model === 'p51' || model === 'f82' || model === 'f86' || model === 'f4f' || model === 'f6f' || model === 'f4u' || model === 'f8f' || model === 'f9f' || model === 'f2h' || model === 'f8' || model === 'f4b' || model === 'f4j' || model === 'f4e' || model === 'f14a' || model === 'f15a' || model === 'f16a' || model === 'fa18a' || model === 'f5a' || model === 'f104g' || model === 'hurricane' || model === 'spitfire_v' || model === 'spitfire_xiv' || model === 'tempest' || model === 'meteor' || model === 'rokaf_p51' || model === 'mirage3' || model === 'tornado_adv' || model === 'mirage2000'
-        ? 'fighter'
-        : model === 'a20' || model === 'p39d' || model === 'p47' || model === 'a26' || model === 'ad1' || model === 'f4u4' || model === 'a4' || model === 'a6a' || model === 'a6b_weasel' || model === 'f105' || model === 'a7' || model === 'a1h' || model === 'a37b' || model === 'ah1' || model === 'a10a' || model === 'a6e' || model === 'av8b' || model === 'ea6b' || model === 'ah64a' || model === 'ah1w' || model === 'beaufighter' || model === 'mosquito' || model === 'sea_fury' || model === 'firefly_as5' || model === 'hunter_fga9' || model === 'tornado_gr1' || model === 'tornado_ids' || model === 'jaguar_gr1' || model === 'viggen_ja37'
-        ? 'attacker'
-        : model === 'sbd' || model === 'sb2c'
-        ? 'dive_bomber'
-        : model === 'os2u' || model === 'sc1' || model === 'ad3w' || model === 'e1' || model === 'ov10' || model === 's2' || model === 'p3' || model === 'e2c' || model === 'e3a' || model === 's3a'
-        ? 'scout'
-        : model === 'ho3s1' || model === 'uh2' || model === 'sh2' || model === 'sh3f'
-        ? 'rescue'
-        : model === 'uh1' || model === 'c1' || model === 'c2a' || model === 'c130' || model === 'c47' || model === 'ch53'
-        ? 'transport'
-        : 'torpedo_bomber';
+    const role: AircraftRole = getCatalogRole(model, 'airbase', this.era);
 
-    const rawSpeed =
-      model === 'f15a' ? 230 :
-      model === 'su27' ? 225 :
-      model === 'f14a' ? 220 :
-      model === 'mig29a' ? 218 :
-      model === 'f111' ? 215 :
-      model === 'f16a' ? 210 :
-      model === 'mirage2000' ? 205 :
-      model === 'tu22m3' ? 205 :
-      model === 'fa18a' ? 198 :
-      model === 'tornado_adv' ? 195 :
-      model === 'viggen_ja37' ? 190 :
-      model === 'f104g' ? 185 :
-      model === 'tornado_gr1' || model === 'tornado_ids' ? 175 :
-      model === 'av8b' ? 170 :
-      model === 'mirage3' ? 168 :
-      model === 'f4b' || model === 'f4j' || model === 'f4e' ? 165 :
-      model === 'f5a' ? 160 :
-      model === 'f105' ? 155 :
-      model === 'a6e' ? 155 :
-      model === 'jaguar_gr1' ? 155 :
-      model === 'ea6b' ? 152 :
-      model === 'f8' ? 150 :
-      model === 's3a' ? 148 :
-      model === 'a10a' ? 140 :
-      model === 'a7' ? 140 :
-      model === 'hunter_fga9' ? 140 :
-      model === 'f86' ? 138 :
-      model === 'meteor' ? 138 :
-      model === 'e3a' || model === 'a50' ? 135 :
-      model === 'b52' ? 135 :
-      model === 'a4' ? 132 :
-      model === 'a6a' || model === 'a6b_weasel' ? 130 :
-      model === 'a37b' ? 130 :
-      model === 'tu95' ? 130 :
-      model === 'f9f' ? 128 :
-      model === 'tempest' ? 128 :
-      model === 'f2h' ? 126 :
-      model === 'spitfire_xiv' ? 126 :
-      model === 'e2c' || model === 'c2a' || model === 'c130' ? 125 :
-      model === 'mosquito' ? 125 :
-      model === 'p51' || model === 'f82' ? 124 :
-      model === 'rokaf_p51' ? 122 :
-      model === 'mi24' ? 120 :
-      model === 'a26' ? 120 :
-      model === 'sea_fury' ? 120 :
-      model === 'f8f' ? 118 :
-      model === 'p38' ? 116 :
-      model === 'ad1' || model === 'p3' || model === 'a1h' ? 115 :
-      model === 'ah64a' || model === 'ah1w' ? 115 :
-      model === 'p47' ? 114 :
-      model === 'spitfire_v' ? 112 :
-      model === 'f4u' || model === 'f4u4' ? 112 :
-      model === 'b29' ? 108 :
-      model === 'b25' ? 108 :
-      model === 'a20' ? 108 :
-      model === 'beaufighter' ? 106 :
-      model === 'f6f' ? 105 :
-      model === 'ka27' || model === 'sh3f' || model === 'ch53' ? 105 :
-      model === 'p40' ? 104 :
-      model === 'firefly_as5' ? 104 :
-      model === 'hurricane' ? 102 :
-      model === 'c1' || model === 's2' || model === 'e1' ? 100 :
-      model === 'p36a' ? 100 :
-      model === 'f4f' ? (this.era === 'era5' ? 165 : 98) :
-      model === 'p39d' ? 98 :
-      model === 'c47' ? 98 :
-      model === 'b24' ? 96 :
-      model === 'lancaster' ? 96 :
-      model === 'ov10' || model === 'ah1' ? 95 :
-      model === 'sh2' ? 92 :
-      model === 'uh1' || model === 'uh2' ? 90 :
-      model === 'sb2c' ? 90 :
-      model === 'b17' || model === 'b17_late' ? 88 :
-      model === 'tbf' || model === 'af_guardian' ? 86 :
-      model === 'sbd' ? 84 :
-      model === 'tbd' ? 76 :
-      model === 'swordfish' ? 74 : 120;
+    const rawSpeed = getAircraftBaseSpeed(model);
 
-    const baseHealth =
-      model === 'b52' ? 3200 :
-      model === 'tu95' ? 2200 :
-      model === 'tu22m3' ? 1800 :
-      model === 'c130' ? 1600 :
-      model === 'e3a' || model === 'a50' ? 1500 :
-      model === 'a10a' ? 1400 :
-      model === 'b29' ? 1350 :
-      model === 'f111' ? 1350 :
-      model === 'lancaster' ? 980 :
-      model === 'a6e' ? 950 :
-      model === 'b24' ? 920 :
-      model === 'ea6b' ? 920 :
-      model === 's3a' ? 900 :
-      model === 'ch53' ? 980 :
-      model === 'c2a' ? 880 :
-      model === 'f14a' ? 860 :
-      model === 'f15a' ? 850 :
-      model === 'b17_late' ? 850 :
-      model === 'e2c' ? 850 :
-      model === 'b17' ? 820 :
-      model === 'sh3f' ? 820 :
-      model === 'fa18a' ? 800 :
-      model === 'viggen_ja37' ? 780 :
-      model === 'mig29a' ? 780 :
-      model === 'f16a' ? 760 :
-      model === 'tornado_gr1' || model === 'tornado_ids' ? 760 :
-      model === 'ah64a' ? 750 :
-      model === 'tornado_adv' ? 750 :
-      model === 'f105' ? 720 :
-      model === 'av8b' ? 720 :
-      model === 'b25' ? 720 :
-      model === 'mirage2000' ? 720 :
-      model === 'a6a' || model === 'a6b_weasel' ? 700 :
-      model === 'f4b' || model === 'f4j' || model === 'f4e' ? 680 :
-      model === 'a1h' ? 680 :
-      model === 'ah1w' ? 680 :
-      model === 'ad1' ? 680 :
-      model === 'a26' ? 660 :
-      model === 'jaguar_gr1' ? 650 :
-      model === 'a7' ? 640 :
-      model === 'p47' ? 620 :
-      model === 'beaufighter' ? 620 :
-      model === 'c47' ? 760 :
-      model === 's2' || model === 'c1' || model === 'e1' ? 580 :
-      model === 'mosquito' ? 580 :
-      model === 'hunter_fga9' ? 580 :
-      model === 'mirage3' ? 580 :
-      model === 'f5a' ? 560 :
-      model === 'a4' ? 560 :
-      model === 'f8' ? 560 :
-      model === 'f104g' ? 550 :
-      model === 'f2h' ? 540 :
-      model === 'a20' ? 520 :
-      model === 'f8f' ? 520 :
-      model === 'meteor' ? 520 :
-      model === 'tempest' ? 520 :
-      model === 'f9f' ? 500 :
-      model === 'sb2c' ? 500 :
-      model === 'sea_fury' ? 500 :
-      model === 'a37b' ? 500 :
-      model === 'ah1' ? 490 :
-      model === 'firefly_as5' ? 490 :
-      model === 'p38' ? 480 :
-      model === 'p39d' ? 480 :
-      model === 'f82' ? 480 :
-      model === 'f86' ? 480 :
-      model === 'spitfire_xiv' ? 460 :
-      model === 'rokaf_p51' ? 460 :
-      model === 'uh1' || model === 'uh2' ? 460 :
-      model === 'f4u' || model === 'f4u4' ? 480 :
-      model === 'tbf' || model === 'af_guardian' ? 460 :
-      model === 'p51' ? 450 :
-      model === 'ov10' ? 440 :
-      model === 'f6f' ? 440 :
-      model === 'hurricane' ? 420 :
-      model === 'spitfire_v' ? 420 :
-      model === 'p40' ? 420 :
-      model === 'sbd' ? 420 :
-      model === 'p36a' ? 400 :
-      model === 'f4f' ? (this.era === 'era5' ? 680 : 360) :
-      model === 'swordfish' ? 340 : 500;
+    const baseHealth = getAircraftBaseHealth(model);
 
     const pType: AircraftPayloadType =
       payload ||
@@ -9040,7 +8750,7 @@ export class GameEngine {
         ? 'c1_paratroopers'
         : model === 'b52'
         ? (this.era === 'era5' ? 'rgm84_harpoon' : 'b52_megaton_carpet')
-        : model === 'f4e' || model === 'f4j' || model === 'f4f'
+        : model === 'f4e' || model === 'f4j' || model === 'f4f_phantom'
         ? 'aim7_sparrow'
         : model === 'tornado_adv'
         ? 'aim7_sparrow'
@@ -9204,25 +8914,7 @@ export class GameEngine {
 
     const flightName = `AFB 出擊機隊 (${count}x ${model.toUpperCase()} ${roleZh})`;
 
-    let gunRounds = 1440;
-    if (model === 'b52') gunRounds = 4000;
-    else if (model === 'b29') gunRounds = 4400;
-    else if (model === 'b17' || model === 'b24') gunRounds = 3200;
-    else if (model === 'a10a') gunRounds = 1174;
-    else if (model === 'ah64a') gunRounds = 1200;
-    else if (model === 'ah1w') gunRounds = 750;
-    else if (model === 'av8b') gunRounds = 300;
-    else if (model === 'f14a' || model === 'fa18a' || model === 'f15a' || model === 'f16a' || model === 'f111') gunRounds = 940;
-    else if (model === 'f4e' || model === 'f105' || model === 'a7') gunRounds = 1000;
-    else if (model === 'ov10' || model === 'ah1') gunRounds = 1500;
-    else if (model === 'uh1') gunRounds = 1200;
-    else if (model === 'c47' || model === 'c1' || model === 'c2a' || model === 'c130' || model === 'ch53' || model === 'e2c' || model === 'e3a') gunRounds = 0;
-    else if (model === 'p47') gunRounds = 3400;
-    else if (model === 'a26') gunRounds = 2400;
-    else if (model === 'a20') gunRounds = 2000;
-    else if (model === 'p51') gunRounds = 1880;
-    else if (model === 'p38' || model === 'f86') gunRounds = 1800;
-    else if (model === 'p40') gunRounds = 1440;
+    const gunRounds = getAircraftGunRounds(model);
 
     const afbHasPayload = pType !== 'clean_guns' && pType !== 'scout_fuel';
     const afbInitialAmmo =
@@ -9284,7 +8976,7 @@ export class GameEngine {
       sourceName: '前進航空基地 (AFB)',
       targetName: '戰區空域',
       actionType: 'recon_spotted',
-      text: `✈️【基地機隊緊急出擊！】前進航空基地出動 ${count} 架 ${model.toUpperCase()} (${roleZh}) 直飛戰區！掛載: ${PAYLOAD_CATALOG[pType]?.nameZh || pType}`,
+      text: `✈️【基地機隊緊急出擊！】前進航空基地出動 ${count} 架 ${model.toUpperCase()} (${roleZh}) 直飛戰區！掛載: ${PAYLOAD_CATALOG[pType]?.name || pType}`,
     });
   }
 
@@ -9356,6 +9048,7 @@ export class GameEngine {
       isASuWOnly: false,
     };
     onIsland.installations.push(newFlak);
+    this.applyHistoricalInstallationRanges();
 
     // Stock newly built airfield with fresh planes in airbase pool!
     if (this.era === 'era1') {
@@ -9394,6 +9087,16 @@ export class GameEngine {
   // 戰區後勤採購系統 (Command Logistics & Requisition System)
   // ══════════════════════════════════════════════════════════
 
+  /** Moves every armed installation onto the shared historical range scale (rangeScale.ts). */
+  private applyHistoricalInstallationRanges() {
+    for (const isl of this.islands) {
+      for (const inst of isl.installations) {
+        const r = getInstallationRange(inst.type, inst.name, this.era);
+        if (r !== null) inst.range = r;
+      }
+    }
+  }
+
   public purchaseRequisition(
     item: RequisitionItem,
     targetIslandId?: string,
@@ -9412,7 +9115,7 @@ export class GameEngine {
           category: 'naval',
           sourceSide: 'player',
           sourceName: '後勤司令部 (LOGCOM)',
-          targetName: item.nameZh,
+          targetName: item.name,
           actionType: 'recon_spotted',
           text: `⚠️ 資源點數不足！需要 ${item.cost} CP，目前僅有 ${Math.floor(this.resourcePoints)} CP。請等待時間累積、佔領據點或擊沉敵艦！`,
         });
@@ -9428,778 +9131,804 @@ export class GameEngine {
     const fleetPos = flagship ? { x: flagship.pos.x - 220, y: flagship.pos.y + 220 } : spawnBase;
 
     if (item.category === 'ships') {
-      soundEngine.playPlaneSortie();
-      let newShip: Ship | null = null;
-      const shipId = `player-req-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
-      // 海軍艦艇單位固定自地圖西南邊緣海疆增援航向戰區
-      const mapBound = this.worldSize || 14000;
-      const edgeSpawnX = 800 + Math.random() * 1400;
-      const edgeSpawnY = mapBound - 350 - Math.random() * 400;
-      const warshipSpawnPos: Vector2D = { x: edgeSpawnX, y: edgeSpawnY };
-
-      if (item.typeTag === 'ohio_ssbn' || item.id === 'req-support-ohio-ssbn') {
-        const targetPos = customPos || (this.enemyShips.find(s => !s.isSunk)?.pos) || { x: 9500, y: 4500 };
-        this.fireOhioSSBNTridentStrike(targetPos);
-        return true;
-      } else if (item.typeTag === 'bb' || item.typeTag === 'bb_missouri') {
-        const isMo = item.typeTag === 'bb_missouri' || this.era === 'era3';
-        newShip = createPlayerBattleship(
-          shipId,
-          isMo
-            ? 'USS Missouri (BB-63 密蘇里號主力戰艦)'
-            : this.era === 'era1'
-            ? 'USS North Carolina (BB-55)'
-            : 'USS Iowa (BB-61)',
-          warshipSpawnPos,
-          this.era
-        );
-      } else if (item.typeTag === 'ca' || item.typeTag === 'ca_desmoines') {
-        newShip = createConvoyEscortShip(shipId, 'ca', warshipSpawnPos, this.era);
-        if (item.typeTag === 'ca_desmoines' || this.era === 'era3') {
-          newShip.name = 'USS Des Moines (CA-134 得梅因號自動裝填重巡)';
-          newShip.health = 3600;
-          newShip.maxHealth = 3600;
-        }
-      } else if (item.typeTag === 'cl') {
-        newShip = createConvoyEscortShip(shipId, 'cl', warshipSpawnPos, this.era);
-      } else if (item.typeTag === 'dd' || item.typeTag === 'dd_gearing' || item.typeTag === 'dd_sherman') {
-        if (this.era === 'era4' || item.typeTag === 'dd_sherman') {
-          newShip = createForrestShermanDD(shipId, 'USS Forrest Sherman (DD-931 驅逐艦)', warshipSpawnPos);
-        } else {
-          newShip = createConvoyEscortShip(shipId, 'dd', warshipSpawnPos, this.era);
-          if (item.typeTag === 'dd_gearing' || this.era === 'era3') {
-            newShip.name = 'USS Gearing (DD-710 基靈級雷達糾察驅逐艦)';
-            newShip.health = 1850;
-            newShip.maxHealth = 1850;
-          }
-        }
-      } else if (item.typeTag === 'ffg') {
-        newShip = createKnoxFFG(shipId, 'USS Knox (FFG-1052 巡防艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'ss') {
-        newShip = createConvoyEscortShip(shipId, 'ss', warshipSpawnPos, this.era);
-      } else if (item.typeTag === 'lst') {
-        newShip = (this.era === 'era4' || this.era === 'era5')
-          ? createNewportLST(shipId, this.era === 'era5' ? 'USS Newport (LST-1179 紐波特戰車登陸艦 現代化改型)' : 'USS Newport (LST-1179 紐波特級戰車登陸艦)', warshipSpawnPos, this.era)
-          : createLST(shipId, 'USS LST-491 戰車登陸艦', warshipSpawnPos, this.era);
-      } else if (item.typeTag === 'lcvp') {
-        newShip = this.era === 'era5'
-          ? createLCAC(shipId, 'LCAC-01 氣墊登陸艇', warshipSpawnPos)
-          : this.era === 'era4'
-          ? createLCM8(shipId, 'LCM-8 機械化登陸艇', warshipSpawnPos)
-          : createLCVP(shipId, 'LCVP 突擊登陸艇', warshipSpawnPos, this.era);
-      } else if (item.typeTag === 'cv63') {
-        newShip = createCV63(shipId, 'USS Kitty Hawk (CV-63 超級航空母艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'cg') {
-        newShip = createBelknapCG(shipId, 'USS Belknap (CG-26 導彈巡洋艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'ddg') {
-        newShip = createAdamsDDG(shipId, 'USS Charles F. Adams (DDG-2 導彈驅逐艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'lph') {
-        newShip = createLPHIwoJima(shipId, 'USS Iwo Jima (LPH-2 兩棲突擊艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'lcm8') {
-        newShip = createLCM8(shipId, 'LCM-8 機械化登陸艇', warshipSpawnPos);
-      } else if (item.typeTag === 'cvn') {
-        newShip = createCVNNimitz(shipId, 'USS Nimitz (CVN-68 超級核動力航空母艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'cg_tico') {
-        newShip = createTiconderogaCG(shipId, 'USS Ticonderoga (CG-47 神盾巡洋艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'cg_virginia') {
-        newShip = createVirginiaCGN(shipId, 'USS Virginia (CGN-38 核動力巡洋艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'bb_iowa_mod') {
-        newShip = createIowaModernizedBB(shipId, 'USS Iowa (BB-61 近代化改裝主力戰艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'dd_spruance') {
-        newShip = createSpruanceDD(shipId, 'USS Spruance (DD-963 反潛驅逐艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'ddg_kidd') {
-        newShip = createKiddDDG(shipId, 'USS Kidd (DDG-993 飛彈驅逐艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'ffg_ohp') {
-        newShip = createPerryFFG(shipId, 'USS Oliver Hazard Perry (FFG-7 巡防艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'ssn_la') {
-        newShip = createLosAngelesSSN(shipId, 'USS Los Angeles (SSN-688 攻擊核潛艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'lpd') {
-        newShip = createAustinLPD(shipId, 'USS Austin (LPD-4 兩棲船塢運輸艦)', warshipSpawnPos);
-      } else if (item.typeTag === 'lcac') {
-        newShip = createLCAC(shipId, 'LCAC-01 氣墊登陸艇', warshipSpawnPos);
-      }
-
-      if (newShip) {
-        newShip.heading = -Math.PI / 4; // 朝向東北戰區航進
-        this.playerShips.push(newShip);
-        this.applyUpgradesToShip(newShip);
-        this.addBannerAlert(`⚓【艦隊邊界增援】「${newShip.name}」自地圖邊緣駛入戰區！`, 'player', 'capture', 6.0);
-        this.addCombatLog({
-          category: 'naval',
-          sourceSide: 'player',
-          sourceName: '後勤調遣司令部',
-          targetName: newShip.name,
-          actionType: 'recon_spotted',
-          text: `⚓【海軍調遣就緒】${freeSandbox ? '【免CP沙盒建造】' : `耗費 ${item.cost} CP`} 調派「${newShip.name}」自地圖西南邊疆外海駛入戰區！火砲裝備、航向與戰術編隊已就緒！`,
-        });
-        return true;
-      }
+      return this.purchaseShipRequisition(item, customPos, freeSandbox);
     } else if (item.category === 'aircraft') {
-      soundEngine.playPlaneSortie();
-      // 飛機(陸海基)增援固定剛開始都是在起始機場 pool 中
-      if (item.typeTag === 'fighter_pool') {
-        const fighterModel = this.era === 'era1' ? 'f4f' : this.era === 'era2' ? 'f6f' : this.era === 'era3' ? 'f9f' : 'f4b';
-        const landFighter = this.era === 'era1' ? 'p40' : this.era === 'era2' ? 'p51' : this.era === 'era3' ? 'f86' : 'f4e';
-        this.airbasePlanes[fighterModel] = (this.airbasePlanes[fighterModel] || 0) + 4;
-        this.airbasePlanes[landFighter] = (this.airbasePlanes[landFighter] || 0) + 4;
-      } else if (item.typeTag === 'air_f4j') {
-        this.airbasePlanes.f4j = (this.airbasePlanes.f4j || 0) + 4;
-      } else if (item.typeTag === 'air_f8') {
-        this.airbasePlanes.f8 = (this.airbasePlanes.f8 || 0) + 4;
-      } else if (item.typeTag === 'air_a6a') {
-        this.airbasePlanes.a6a = (this.airbasePlanes.a6a || 0) + 4;
-      } else if (item.typeTag === 'air_a4') {
-        this.airbasePlanes.a4 = (this.airbasePlanes.a4 || 0) + 4;
-      } else if (item.typeTag === 'air_b52') {
-        this.airbasePlanes.b52 = (this.airbasePlanes.b52 || 0) + 2;
-      } else if (item.typeTag === 'air_f105') {
-        this.airbasePlanes.f105 = (this.airbasePlanes.f105 || 0) + 4;
-      } else if (item.typeTag === 'air_a7') {
-        this.airbasePlanes.a7 = (this.airbasePlanes.a7 || 0) + 4;
-      } else if (item.typeTag === 'air_ov10') {
-        this.airbasePlanes.ov10 = (this.airbasePlanes.ov10 || 0) + 4;
-      } else if (item.typeTag === 'air_uh1') {
-        this.airbasePlanes.uh1 = (this.airbasePlanes.uh1 || 0) + 4;
-      } else if (item.typeTag === 'air_ah1') {
-        this.airbasePlanes.ah1 = (this.airbasePlanes.ah1 || 0) + 4;
-      } else if (item.typeTag === 'air_c1') {
-        this.airbasePlanes.c1 = (this.airbasePlanes.c1 || 0) + 2;
-      } else if (item.typeTag === 'air_c47') {
-        this.airbasePlanes.c47 = (this.airbasePlanes.c47 || 0) + 2;
-      } else if (item.typeTag === 'air_sh2') {
-        this.airbasePlanes.sh2 = (this.airbasePlanes.sh2 || 0) + 2;
-      } else if (item.typeTag === 'air_p3') {
-        this.airbasePlanes.p3 = (this.airbasePlanes.p3 || 0) + 2;
-      } else if (item.typeTag === 'fighter_jet_f9f') {
-        this.airbasePlanes.f9f = (this.airbasePlanes.f9f || 0) + 4;
-      } else if (item.typeTag === 'fighter_jet_f2h') {
-        this.airbasePlanes.f2h = (this.airbasePlanes.f2h || 0) + 4;
-      } else if (item.typeTag === 'attacker_skyraider') {
-        this.airbasePlanes.ad1 = (this.airbasePlanes.ad1 || 0) + 4;
-      } else if (item.typeTag === 'aew_ad3w') {
-        this.airbasePlanes.ad3w = (this.airbasePlanes.ad3w || 0) + 1;
-      } else if (item.typeTag === 'sar_ho3s1') {
-        this.airbasePlanes.ho3s1 = (this.airbasePlanes.ho3s1 || 0) + 1;
-      } else if (item.typeTag === 'dive_bomber_pool') {
-        const diveModel = this.era === 'era1' ? 'sbd' : this.era === 'era2' ? 'sb2c' : this.era === 'era3' ? 'ad1' : 'a4';
-        this.airbasePlanes[diveModel] = (this.airbasePlanes[diveModel] || 0) + 4;
-      } else if (item.typeTag === 'torpedo_bomber_pool') {
-        const torpModel = this.era === 'era1' ? 'tbd' : this.era === 'era2' ? 'tbf' : this.era === 'era3' ? 'af_guardian' : 'a6a';
-        this.airbasePlanes[torpModel] = (this.airbasePlanes[torpModel] || 0) + 4;
-      } else if (item.typeTag === 'heavy_bomber_pool') {
-        const heavyModel = this.era === 'era1' ? 'b17' : this.era === 'era2' ? 'b24' : this.era === 'era3' ? 'b29' : 'b52';
-        this.airbasePlanes[heavyModel] = (this.airbasePlanes[heavyModel] || 0) + 2;
-      } else if (item.typeTag === 'attacker_pool') {
-        const attModel = this.era === 'era1' ? 'a20' : this.era === 'era2' ? 'p47' : this.era === 'era3' ? 'a26' : 'a7';
-        this.airbasePlanes[attModel] = (this.airbasePlanes[attModel] || 0) + 4;
-      } else if (item.typeTag === 'air_sh2') {
-        this.airbasePlanes['sh2'] = (this.airbasePlanes['sh2'] || 0) + 4;
-        if (flagship && flagship.carrierPlanes) {
-          flagship.carrierPlanes.ready.sh2 = (flagship.carrierPlanes.ready.sh2 || 0) + 2;
-        }
-      } else if (item.typeTag === 'air_p3') {
-        this.airbasePlanes['p3'] = (this.airbasePlanes['p3'] || 0) + 2;
-        if (flagship && flagship.carrierPlanes) {
-          flagship.carrierPlanes.ready.p3 = (flagship.carrierPlanes.ready.p3 || 0) + 1;
-        }
-      } else if (item.typeTag === 'air_f14a') {
-        this.airbasePlanes.f14a = (this.airbasePlanes.f14a || 0) + 4;
-        if (flagship && flagship.carrierPlanes) {
-          flagship.carrierPlanes.ready.f14a = (flagship.carrierPlanes.ready.f14a || 0) + 2;
-        }
-      } else if (item.typeTag === 'air_fa18a') {
-        this.airbasePlanes.fa18a = (this.airbasePlanes.fa18a || 0) + 4;
-        if (flagship && flagship.carrierPlanes) {
-          flagship.carrierPlanes.ready.fa18a = (flagship.carrierPlanes.ready.fa18a || 0) + 2;
-        }
-      } else if (item.typeTag === 'air_s3a') {
-        this.airbasePlanes.s3a = (this.airbasePlanes.s3a || 0) + 4;
-        if (flagship && flagship.carrierPlanes) {
-          flagship.carrierPlanes.ready.s3a = (flagship.carrierPlanes.ready.s3a || 0) + 2;
-        }
-      } else if (item.typeTag === 'air_a6e') {
-        this.airbasePlanes.a6e = (this.airbasePlanes.a6e || 0) + 4;
-        if (flagship && flagship.carrierPlanes) {
-          flagship.carrierPlanes.ready.a6e = (flagship.carrierPlanes.ready.a6e || 0) + 2;
-        }
-      } else if (item.typeTag === 'air_e2c') {
-        this.airbasePlanes.e2c = (this.airbasePlanes.e2c || 0) + 2;
-        if (flagship && flagship.carrierPlanes) {
-          flagship.carrierPlanes.ready.e2c = (flagship.carrierPlanes.ready.e2c || 0) + 1;
-        }
-      } else if (item.typeTag === 'air_ea6b') {
-        this.airbasePlanes.ea6b = (this.airbasePlanes.ea6b || 0) + 2;
-        if (flagship && flagship.carrierPlanes) {
-          flagship.carrierPlanes.ready.ea6b = (flagship.carrierPlanes.ready.ea6b || 0) + 1;
-        }
-      } else if (item.typeTag === 'air_c2a') {
-        this.airbasePlanes.c2a = (this.airbasePlanes.c2a || 0) + 2;
-      } else if (item.typeTag === 'air_sh3f') {
-        this.airbasePlanes.sh3f = (this.airbasePlanes.sh3f || 0) + 4;
-        if (flagship && flagship.carrierPlanes) {
-          flagship.carrierPlanes.ready.sh3f = (flagship.carrierPlanes.ready.sh3f || 0) + 2;
-        }
-      } else if (item.typeTag === 'air_av8b') {
-        this.airbasePlanes.av8b = (this.airbasePlanes.av8b || 0) + 4;
-      } else if (item.typeTag === 'air_ch53') {
-        this.airbasePlanes.ch53 = (this.airbasePlanes.ch53 || 0) + 4;
-      } else if (item.typeTag === 'air_a10a') {
-        this.airbasePlanes.a10a = (this.airbasePlanes.a10a || 0) + 4;
-      } else if (item.typeTag === 'air_ah64a') {
-        this.airbasePlanes.ah64a = (this.airbasePlanes.ah64a || 0) + 4;
-      } else if (item.typeTag === 'air_ah1w') {
-        this.airbasePlanes.ah1w = (this.airbasePlanes.ah1w || 0) + 4;
-      } else if (item.typeTag === 'air_f15a') {
-        this.airbasePlanes.f15a = (this.airbasePlanes.f15a || 0) + 4;
-      } else if (item.typeTag === 'air_f16a') {
-        this.airbasePlanes.f16a = (this.airbasePlanes.f16a || 0) + 4;
-      } else if (item.typeTag === 'air_e3a') {
-        this.airbasePlanes.e3a = (this.airbasePlanes.e3a || 0) + 1;
-      } else if (item.typeTag === 'air_f111') {
-        this.airbasePlanes.f111 = (this.airbasePlanes.f111 || 0) + 4;
-      } else if (item.typeTag === 'air_c130') {
-        this.airbasePlanes.c130 = (this.airbasePlanes.c130 || 0) + 2;
-      }
-
-      this.addBannerAlert(`✈️【機隊補充】「${item.nameZh}」已進駐起始前進基地航空庫存！`, 'player', 'capture', 5.0);
-      this.addCombatLog({
-        category: 'air',
-        sourceSide: 'player',
-        sourceName: '海軍航空兵部 (BuAer)',
-        targetName: item.nameZh,
-        actionType: 'recon_spotted',
-        text: `✈️【航空戰力充實】${freeSandbox ? '【免CP沙盒配置】' : `耗費 ${item.cost} CP`}！${item.nameZh} 戰機群已進駐起始前進基地機庫，可隨時自基地起飛或轉場！`,
-      });
-      return true;
+      return this.purchaseAircraftRequisition(item, freeSandbox, flagship);
     } else if (item.category === 'ground') {
-      soundEngine.playPlaneSortie();
-      // 尋找可用的友軍營指揮所 (Battalion CP)
-      let activeBattalionCp: Installation | null = null;
-      for (const isl of this.islands) {
-        const found = isl.installations.find(
-          (inst) => (inst.type === 'battalion_cp' || inst.type === 'command_post') && !inst.isDestroyed && inst.side === 'player'
-        );
-        if (found) {
-          if (!activeBattalionCp || (targetIslandId && isl.id === targetIslandId)) {
-            activeBattalionCp = found;
-          }
-        }
-      }
-
-      let spawnPos: Vector2D;
-      let spawnLabel: string;
-      if (customPos) {
-        spawnPos = { x: customPos.x + (Math.random() - 0.5) * 35, y: customPos.y + (Math.random() - 0.5) * 35 };
-        spawnLabel = '指定營指揮所前線';
-      } else if (activeBattalionCp) {
-        // 在該營指揮所旁邊 Spawn 陸地單位！
-        spawnPos = {
-          x: activeBattalionCp.pos.x + 40 + (Math.random() - 0.5) * 30,
-          y: activeBattalionCp.pos.y + 40 + (Math.random() - 0.5) * 30,
-        };
-        spawnLabel = `${activeBattalionCp.name} 旁集結點`;
-      } else {
-        const targetIsland = targetIslandId
-          ? this.islands.find((i) => i.id === targetIslandId)
-          : this.islands.find((i) => i.isFriendlyBase) || this.islands[0];
-        spawnPos = targetIsland
-          ? { x: targetIsland.center.x + (Math.random() - 0.5) * 120, y: targetIsland.center.y + (Math.random() - 0.5) * 120 }
-          : fleetPos;
-        spawnLabel = targetIsland?.name || '戰略基地';
-      }
-
-      const gId = `usmc-req-${Date.now()}`;
-      let gUnit: GroundUnit | null = null;
-      if (item.typeTag === 'infantry') {
-        gUnit = createGroundUnit(
-          gId,
-          this.era === 'era1' ? 'usmc_rifle_42' : this.era === 'era2' ? 'usmc_rifle_45' : this.era === 'era3' ? 'usmc_korea_rifle' : 'usmc_air_assault_65',
-          this.era === 'era1' ? 'USMC 陸戰步兵排 (1942)' : this.era === 'era2' ? 'USMC 陸戰突擊步兵排 (1945)' : this.era === 'era3' ? 'USMC 陸戰突擊步兵排 (1950)' : 'USMC 空中突擊/直升機機降排 (1965)',
-          'player',
-          this.era,
-          spawnPos
-        );
-      } else if (item.typeTag === 'army_rifle_65') {
-        gUnit = createGroundUnit(gId, 'us_army_rifle_platoon_65', '美軍 1965 年型前線常規步槍排', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'm113_mech') {
-        gUnit = createGroundUnit(gId, 'us_army_m113_mech', 'M113 裝甲運兵機械化步兵排', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'chaparral_sam') {
-        gUnit = createGroundUnit(gId, 'us_army_chaparral_sam', 'MIM-72 榭樹野戰履帶防空飛彈排', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'air_assault') {
-        gUnit = createGroundUnit(gId, 'usmc_air_assault_65', 'USMC 空中突擊/直升機機降突擊排 (1965)', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'armor_m48') {
-        gUnit = createGroundUnit(gId, 'usmc_armor_m48', 'USMC M48A3 巴頓主力戰車排', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'ontos_m50') {
-        gUnit = createGroundUnit(gId, 'usmc_ontos_m50', 'USMC M50 昂圖斯六聯無後座力砲戰車', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'artillery') {
-        gUnit = createGroundUnit(
-          gId,
-          this.era === 'era3' || this.era === 'era4' ? 'usmc_howitzer_155' : 'usmc_artillery_105',
-          this.era === 'era3' || this.era === 'era4' ? 'USMC M114 155mm 重榴彈砲排' : 'USMC M2A1 105mm 砲兵支援排',
-          'player',
-          this.era,
-          spawnPos
-        );
-      } else if (item.typeTag === 'tank') {
-        gUnit = createGroundUnit(
-          gId,
-          this.era === 'era1' ? 'usmc_armor_m3' : this.era === 'era2' ? 'usmc_armor_m4' : this.era === 'era3' ? 'usmc_patton_m46' : 'usmc_armor_m48',
-          this.era === 'era1' ? 'USMC M3 斯圖亞特戰車排' : this.era === 'era2' ? 'USMC M4A2 薛曼中戰車排' : this.era === 'era3' ? 'USMC M46 巴頓主力戰車排' : 'USMC M48A3 巴頓中戰車排',
-          'player',
-          this.era,
-          spawnPos
-        );
-      } else if (item.typeTag === 'lvt') {
-        gUnit = createGroundUnit(
-          gId,
-          this.era === 'era1' ? 'usmc_lvt_42' : 'usmc_lvt_45',
-          this.era === 'era1'
-            ? 'USMC LVT-1 水牛兩棲機步排'
-            : this.era === 'era2'
-            ? 'USMC LVT-4 水牛兩棲突擊排'
-            : 'USMC LVT-P5 兩棲重裝步戰排',
-          'player',
-          this.era,
-          spawnPos
-        );
-      } else if (item.typeTag === 'engineer') {
-        gUnit = createGroundUnit(gId, 'usmc_engineer', 'USN Seabees 戰鬥工兵排', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'usmc_lvtp5a1') {
-        gUnit = createGroundUnit(gId, 'usmc_lvtp5a1', 'USMC LVTP-5A1 兩棲重裝登陸裝甲車', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'army_rifle_83') {
-        gUnit = createGroundUnit(gId, 'us_army_rifle_83', '美陸軍步槍班 (1983)', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'usmc_rifle_83') {
-        gUnit = createGroundUnit(gId, 'usmc_rifle_83', '陸戰步槍班 (1983)', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'dragon_atgm') {
-        gUnit = createGroundUnit(gId, 'us_dragon_atgm', 'M47 巨龍反戰車飛彈班', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'usmc_aav7a1') {
-        gUnit = createGroundUnit(gId, 'usmc_aav7a1', 'AAV-7A1 兩棲突擊載具', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'usmc_lav25') {
-        gUnit = createGroundUnit(gId, 'usmc_lav25', 'LAV-25 輪型裝甲偵搜車', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'm60a1_rise') {
-        gUnit = createGroundUnit(gId, 'us_m60a1_rise', 'M60A1 RISE (PASSIVE) ERA 戰車', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'm1ip_abrams') {
-        gUnit = createGroundUnit(gId, 'us_m1ip_abrams', 'M1IP 艾布蘭主戰戰車', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'm198_155') {
-        gUnit = createGroundUnit(gId, 'us_m198_155', 'M198 155mm 牽引榴彈砲排', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'lav_ad') {
-        gUnit = createGroundUnit(gId, 'usmc_lav_ad', 'LAV-AD 25mm防空裝甲車', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'm163_vads') {
-        gUnit = createGroundUnit(gId, 'us_m163_vads', 'M163 火神 20mm 防空裝甲車', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'm2_bradley') {
-        gUnit = createGroundUnit(gId, 'us_m2_bradley', 'M2 布雷德利裝甲機步戰車 (TOW-2飛彈+25mm鏈砲)', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'us_m270_mlrs') {
-        gUnit = createGroundUnit(gId, 'us_m270_mlrs', 'M270 MLRS 多管火箭系統 (12x M39鋼鐵之雨)', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'us_m270_atacms') {
-        gUnit = createGroundUnit(gId, 'us_m270_atacms', 'MGM-140 ATACMS 戰術飛彈車 (M57碉堡剋星)', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'us_m4_calliope') {
-        gUnit = createGroundUnit(gId, 'us_m4_calliope', 'M4A3 薛曼「管風琴」60聯裝火箭車', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'us_m7_priest') {
-        gUnit = createGroundUnit(gId, 'us_m7_priest', 'M7 牧師 105mm 自走榴彈砲 (反砲兵急速射擊)', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'us_m44_spg') {
-        gUnit = createGroundUnit(gId, 'us_m44_spg', 'M44 155mm 自走榴彈砲 (反砲兵急速射擊)', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'us_m109_spg') {
-        gUnit = createGroundUnit(gId, 'us_m109_spg', 'M109 155mm 自走榴彈砲 (長程反砲兵壓制)', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'us_m109a6_paladin') {
-        gUnit = createGroundUnit(gId, 'us_m109a6_paladin', 'M109A6 帕拉丁 155mm 數位自走砲', 'player', this.era, spawnPos);
-      } else if (item.typeTag === 'us_atacms_nuclear') {
-        gUnit = createGroundUnit(gId, 'us_atacms_nuclear', 'MGM-140B 核武裝 ATACMS 戰術飛彈車 (W70/W85熱核彈頭)', 'player', this.era, spawnPos);
-      }
-
-      if (gUnit) {
-        this.groundUnits.push(gUnit);
-        this.addBannerAlert(`🪖【陸軍戰備就位】「${gUnit.name}」已於 ${spawnLabel} 就地集結！`, 'player', 'capture', 5.0);
-        this.addCombatLog({
-          category: 'naval',
-          sourceSide: 'player',
-          sourceName: '陸戰隊司令部',
-          targetName: gUnit.name,
-          actionType: 'recon_spotted',
-          text: `🪖【陸戰戰力進駐】耗費 ${item.cost} CP！「${gUnit.name}」於 ${spawnLabel} 完成戰備集結，隨時準備發動突擊或加固防衛！`,
-        });
-        return true;
-      }
+      // Garrisons placed by the player join the shared historical range scale
+      const ok = this.purchaseGroundRequisition(item, targetIslandId, customPos, fleetPos);
+      this.applyHistoricalInstallationRanges();
+      return ok;
     } else if (item.category === 'installations') {
-      soundEngine.playPlaneSortie();
-      let targetIsland = targetIslandId
-        ? this.islands.find((i) => i.id === targetIslandId)
-        : null;
+      // Garrisons placed by the player join the shared historical range scale
+      const ok = this.purchaseInstallationRequisition(item, targetIslandId, customPos, freeSandbox);
+      this.applyHistoricalInstallationRanges();
+      return ok;
+    }
 
-      // If customPos is supplied, locate the nearest island
-      if (customPos && !targetIsland) {
-        let bestDist = 999999;
-        for (const isl of this.islands) {
-          const d = dist(customPos, isl.center);
-          if (d < bestDist) {
-            bestDist = d;
-            targetIsland = isl;
-          }
+    return false;
+  }
+
+  private purchaseInstallationRequisition(item: RequisitionItem, targetIslandId: string | undefined, customPos: Vector2D | undefined, freeSandbox: boolean): boolean {
+    soundEngine.playPlaneSortie();
+    let targetIsland = targetIslandId
+      ? this.islands.find((i) => i.id === targetIslandId)
+      : null;
+
+    // If customPos is supplied, locate the nearest island
+    if (customPos && !targetIsland) {
+      let bestDist = 999999;
+      for (const isl of this.islands) {
+        const d = dist(customPos, isl.center);
+        if (d < bestDist) {
+          bestDist = d;
+          targetIsland = isl;
         }
       }
+    }
 
-      if (!targetIsland) {
-        targetIsland = this.islands.find((i) => i.isFullyCaptured || i.isFriendlyBase) || this.islands[0];
+    if (!targetIsland) {
+      targetIsland = this.islands.find((i) => i.isFullyCaptured || i.isFriendlyBase) || this.islands[0];
+    }
+
+    if (!targetIsland) return false;
+
+    const isMaritimeFacility =
+      item.typeTag === 'dockyard' || item.typeTag === 'pontoon_pier' || item.typeTag === 'major_naval_port';
+
+    let instPos: Vector2D;
+    let instAngle = 0;
+
+    if (customPos) {
+      instPos = { x: customPos.x, y: customPos.y };
+      instAngle = Math.atan2(customPos.y - targetIsland.center.y, customPos.x - targetIsland.center.x);
+    } else if (isMaritimeFacility) {
+      // Place maritime pier/dock on the shoreline / coastal water edge of the island facing open sea
+      const angle = targetIsland.isFriendlyBase ? -Math.PI / 4 : (Math.PI * 3) / 4;
+      instPos = {
+        x: targetIsland.center.x + Math.cos(angle) * (targetIsland.radius * 1.03),
+        y: targetIsland.center.y + Math.sin(angle) * (targetIsland.radius * 1.03),
+      };
+      instAngle = angle;
+    } else {
+      const offsetAngle = Math.random() * Math.PI * 2;
+      const rFactor = item.typeTag === 'coastal_gun' || item.typeTag === 'm1_240mm' ? 0.85 : 0.45;
+      instPos = {
+        x: targetIsland.center.x + Math.cos(offsetAngle) * (targetIsland.radius * rFactor),
+        y: targetIsland.center.y + Math.sin(offsetAngle) * (targetIsland.radius * rFactor),
+      };
+      instAngle = offsetAngle;
+    }
+
+    const instId = `inst-built-${Date.now()}`;
+    if (item.typeTag === 'heavy_aa') {
+      targetIsland.installations.push({
+        id: instId,
+        type: 'flak_battery',
+        name: '127mm 雙聯重型防空砲堡',
+        side: 'player',
+        pos: instPos,
+        health: 1200,
+        maxHealth: 1200,
+        angle: instAngle,
+        range: 1200,
+        reloadTime: 1.6,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'm1_240mm') {
+      const heavyRange =
+        this.era === 'era5' ? 3800 : this.era === 'era4' ? 3600 : this.era === 'era3' ? 3400 : this.era === 'era2' ? 3200 : 2800;
+      const heavyDamage =
+        this.era === 'era5' ? 1050 : this.era === 'era4' ? 920 : this.era === 'era3' ? 850 : this.era === 'era2' ? 780 : 640;
+      targetIsland.installations.push({
+        id: `${instId}-240`,
+        type: 'coastal_gun',
+        name:
+          this.era === 'era1'
+            ? 'M1918 240mm 固定式重型榴彈砲台'
+            : this.era === 'era5'
+            ? 'M1 240mm「黑龍」強化要塞重砲台 (RAP)'
+            : 'M1 240mm「黑龍」固定式重型榴彈砲台',
+        weaponDesc:
+          '固定式混凝土八角砲座 M1 240mm「黑龍」· 遠程砲擊封鎖海峽水道，轟擊敵艦、地面部隊與鄰島要塞',
+        side: 'player',
+        pos: instPos,
+        health: 2600,
+        maxHealth: 2600,
+        armor: 0.55,
+        damage: heavyDamage,
+        blastRadius: 52,
+        angle: instAngle,
+        range: heavyRange,
+        reloadTime: 6.2,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'coastal_gun') {
+      const coastalRange = this.era === 'era3' ? 2200 : this.era === 'era2' ? 1900 : 1650;
+      const coastalDmg = this.era === 'era3' ? 520 : this.era === 'era2' ? 420 : 340;
+      targetIsland.installations.push({
+        id: instId,
+        type: 'coastal_gun',
+        name: this.era === 'era3' ? '152mm 雙聯長管岸防砲台' : this.era === 'era2' ? '203mm 雙聯岸防重砲台' : '140mm 海岸加農砲台',
+        side: 'player',
+        pos: instPos,
+        health: 1800,
+        maxHealth: 1800,
+        armor: 0.45,
+        damage: coastalDmg,
+        blastRadius: 36,
+        angle: instAngle,
+        range: coastalRange,
+        reloadTime: 4.0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'radar') {
+      targetIsland.installations.push({
+        id: instId,
+        type: 'radar_station',
+        name: '早期對空預警雷達台',
+        side: 'player',
+        pos: instPos,
+        health: 800,
+        maxHealth: 800,
+        angle: instAngle,
+        range: 4500,
+        reloadTime: 1.0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'dockyard') {
+      targetIsland.installations.push({
+        id: instId,
+        type: 'ship_repair_dock',
+        name: `前線應急修護浮塢碼頭 (${targetIsland.name})`,
+        side: 'player',
+        pos: instPos,
+        health: 1800,
+        maxHealth: 1800,
+        angle: instAngle,
+        range: 650,
+        reloadTime: 1.0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'pontoon_pier') {
+      // 浮式人工棧橋港 (急造港口)
+      targetIsland.installations.push({
+        id: instId,
+        type: 'pontoon_pier',
+        name: `浮式人工棧橋港碼頭 (${targetIsland.name})`,
+        weaponDesc: '工兵快速架設急造棧橋港 · 打通全島陸軍補給線 · 工兵駐守35秒自動升級正規深水軍港',
+        side: 'player',
+        pos: instPos,
+        health: 2200,
+        maxHealth: 2200,
+        armor: 0.35,
+        angle: instAngle,
+        range: 550,
+        reloadTime: 1.0,
+        cooldown: 0,
+        isDestroyed: false,
+        upgradeTimer: 0,
+      });
+    } else if (item.typeTag === 'major_naval_port') {
+      // 正規深水軍港
+      targetIsland.installations.push({
+        id: instId,
+        type: 'major_naval_port',
+        name: `正規深水軍港突堤 (${targetIsland.name})`,
+        weaponDesc: '大型深水突堤起重港埠 · 穩定建立全島補給線 · 產出補給點 (+1.5 CP/s)',
+        side: 'player',
+        pos: instPos,
+        health: 4200,
+        maxHealth: 4200,
+        armor: 0.5,
+        angle: instAngle,
+        range: 850,
+        reloadTime: 1.0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'supply_depot') {
+      // 戰地輜重補給樞紐
+      targetIsland.installations.push({
+        id: instId,
+        type: 'supply_depot',
+        name: '戰地輜重補給樞紐',
+        weaponDesc: '地下彈藥儲備與重裝備修造處 · 大幅加快全島地面部隊建制度修整 (+2.0%/s)',
+        side: 'player',
+        pos: instPos,
+        health: 2000,
+        maxHealth: 2000,
+        armor: 0.4,
+        angle: instAngle,
+        range: 0,
+        reloadTime: 0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'field_hospital') {
+      // 戰地野戰醫院
+      targetIsland.installations.push({
+        id: instId,
+        type: 'field_hospital',
+        name: '戰地野戰醫院',
+        weaponDesc: '救護整編中心 · 救治前線負傷官兵快速歸隊 · 穩定部隊組織度 (+2.5%/s)',
+        side: 'player',
+        pos: instPos,
+        health: 1600,
+        maxHealth: 1600,
+        armor: 0.3,
+        angle: instAngle,
+        range: 0,
+        reloadTime: 0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'airfield') {
+      // 前進野戰機場
+      targetIsland.installations.push({
+        id: instId,
+        type: 'airfield',
+        name: `前進野戰機場跑道 (${targetIsland.name})`,
+        weaponDesc: 'PSP鋼板珊瑚礁平整跑道 · 前線戰鬥機與重轟炸機起降補給點',
+        side: 'player',
+        pos: instPos,
+        health: 3500,
+        maxHealth: 3500,
+        armor: 0.4,
+        angle: instAngle,
+        range: 0,
+        reloadTime: 0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+      targetIsland.isFriendlyBase = true;
+    } else if (item.typeTag === 'command_post') {
+      // 堅固防衛坑道指揮所
+      targetIsland.installations.push({
+        id: instId,
+        type: 'command_post',
+        name: `地下坑道指揮所 (${targetIsland.name})`,
+        weaponDesc: '深層防空花崗岩掩體 · 守備組織度抵抗 +50% · 擴展雷達視野 1000m',
+        side: 'player',
+        pos: instPos,
+        health: 3600,
+        maxHealth: 3600,
+        armor: 0.55,
+        angle: instAngle,
+        range: 1000,
+        reloadTime: 2.0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'ammo_depot') {
+      // 重型戰備油彈庫
+      targetIsland.installations.push({
+        id: instId,
+        type: 'ammo_depot',
+        name: `重型戰備油彈庫 (${targetIsland.name})`,
+        weaponDesc: '儲備巨型航空航彈與火箭 · 重砲裝填加速 35% · 砲擊冷卻縮短',
+        side: 'player',
+        pos: instPos,
+        health: 2600,
+        maxHealth: 2600,
+        armor: 0.45,
+        angle: instAngle,
+        range: 0,
+        reloadTime: 0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'battalion_cp') {
+      // 營級前進作戰指揮所 (Battalion CP)
+      targetIsland.installations.push({
+        id: instId,
+        type: 'battalion_cp',
+        name: `營前進作戰指揮所 (${targetIsland.name})`,
+        weaponDesc: '營級前進戰術指揮所 · 專屬解鎖地面部隊呼叫支援 · 新增援陸軍單位在此就地集結出生',
+        side: 'player',
+        pos: instPos,
+        health: 3800,
+        maxHealth: 3800,
+        armor: 0.50,
+        angle: instAngle,
+        range: 1200,
+        reloadTime: 1.0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'sam_patriot') {
+      // MIM-104 愛國者長程防空/反飛彈營
+      targetIsland.installations.push({
+        id: instId,
+        type: 'flak_battery',
+        name: `MIM-104 愛國者長程防空飛彈營 (${targetIsland.name})`,
+        weaponDesc: 'AN/MPQ-53 相位陣列雷達導引 · 射程 2600m · 高空反戰機與掠海反艦/彈道飛彈截擊',
+        side: 'player',
+        pos: instPos,
+        health: 2600,
+        maxHealth: 2600,
+        armor: 0.55,
+        angle: instAngle,
+        range: 2600,
+        reloadTime: 1.8,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'sam_hawk') {
+      // MIM-23 霍克防空飛彈陣地
+      targetIsland.installations.push({
+        id: instId,
+        type: 'flak_battery',
+        name: `MIM-23 霍克防空飛彈連 (${targetIsland.name})`,
+        weaponDesc: '半主動雷達導引防空飛彈 · 射程 1800m · 攔截高空高速噴射機與巡航飛彈',
+        side: 'player',
+        pos: instPos,
+        health: 1800,
+        maxHealth: 1800,
+        armor: 0.45,
+        angle: instAngle,
+        range: 1800,
+        reloadTime: 2.2,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    } else if (item.typeTag === 'fob') {
+      // 前進作戰基地 (FOB)
+      targetIsland.installations.push({
+        id: instId,
+        type: 'command_post',
+        name: `前進作戰基地 FOB (${targetIsland.name})`,
+        weaponDesc: '直升機停機坪與全天候作戰指揮中心 · 支援垂直包圍部隊登陸集結 · 擴展雷達視野 1600m',
+        side: 'player',
+        pos: instPos,
+        health: 4500,
+        maxHealth: 4500,
+        armor: 0.60,
+        angle: instAngle,
+        range: 1600,
+        reloadTime: 1.0,
+        cooldown: 0,
+        isDestroyed: false,
+      });
+    }
+
+    this.islandsVersion++;
+
+    // Spawn tactical construction sparkles & ring effect
+    for (let i = 0; i < 22; i++) {
+      const pAngle = Math.random() * Math.PI * 2;
+      const pSpd = 35 + Math.random() * 80;
+      this.particles.push({
+        id: `inst-p-${Date.now()}-${i}`,
+        x: instPos.x,
+        y: instPos.y,
+        vx: Math.cos(pAngle) * pSpd,
+        vy: Math.sin(pAngle) * pSpd,
+        life: 1.0,
+        maxLife: 1.0,
+        color: '#00E5FF',
+        radius: 2.5 + Math.random() * 2.5,
+        type: 'spark',
+      });
+    }
+
+    const locationLabel = customPos ? '指定海圖座標' : targetIsland.name;
+    this.addBannerAlert(`🏗️【碼頭/設施落成】已在 ${locationLabel} 構築「${item.name}」！`, 'player', 'capture', 4.5);
+    this.addCombatLog({
+      category: 'naval',
+      sourceSide: 'player',
+      sourceName: '海軍工兵團 (Seabees)',
+      targetName: item.name,
+      actionType: 'recon_spotted',
+      text: `🏗️【設施工事落成】${freeSandbox ? '【免CP沙盒建造】' : `耗費 ${item.cost} CP`}！「${item.name}」已在 ${targetIsland.name} (${locationLabel}) 構築完成並即刻投入戰備！`,
+    });
+    return true;
+    return false;
+  }
+
+  private purchaseGroundRequisition(item: RequisitionItem, targetIslandId: string | undefined, customPos: Vector2D | undefined, fleetPos: Vector2D): boolean {
+    soundEngine.playPlaneSortie();
+    // 尋找可用的友軍營指揮所 (Battalion CP)
+    let activeBattalionCp: Installation | null = null;
+    for (const isl of this.islands) {
+      const found = isl.installations.find(
+        (inst) => (inst.type === 'battalion_cp' || inst.type === 'command_post') && !inst.isDestroyed && inst.side === 'player'
+      );
+      if (found) {
+        if (!activeBattalionCp || (targetIslandId && isl.id === targetIslandId)) {
+          activeBattalionCp = found;
+        }
       }
+    }
 
-      if (!targetIsland) return false;
+    let spawnPos: Vector2D;
+    let spawnLabel: string;
+    if (customPos) {
+      spawnPos = { x: customPos.x + (Math.random() - 0.5) * 35, y: customPos.y + (Math.random() - 0.5) * 35 };
+      spawnLabel = '指定營指揮所前線';
+    } else if (activeBattalionCp) {
+      // 在該營指揮所旁邊 Spawn 陸地單位！
+      spawnPos = {
+        x: activeBattalionCp.pos.x + 40 + (Math.random() - 0.5) * 30,
+        y: activeBattalionCp.pos.y + 40 + (Math.random() - 0.5) * 30,
+      };
+      spawnLabel = `${activeBattalionCp.name} 旁集結點`;
+    } else {
+      const targetIsland = targetIslandId
+        ? this.islands.find((i) => i.id === targetIslandId)
+        : this.islands.find((i) => i.isFriendlyBase) || this.islands[0];
+      spawnPos = targetIsland
+        ? { x: targetIsland.center.x + (Math.random() - 0.5) * 120, y: targetIsland.center.y + (Math.random() - 0.5) * 120 }
+        : fleetPos;
+      spawnLabel = targetIsland?.name || '戰略基地';
+    }
 
-      const isMaritimeFacility =
-        item.typeTag === 'dockyard' || item.typeTag === 'pontoon_pier' || item.typeTag === 'major_naval_port';
+    const gId = `usmc-req-${Date.now()}`;
+    let gUnit: GroundUnit | null = null;
+    if (item.typeTag === 'infantry') {
+      gUnit = createGroundUnit(
+        gId,
+        this.era === 'era1' ? 'usmc_rifle_42' : this.era === 'era2' ? 'usmc_rifle_45' : this.era === 'era3' ? 'usmc_korea_rifle' : 'usmc_air_assault_65',
+        this.era === 'era1' ? 'USMC 陸戰步兵排 (1942)' : this.era === 'era2' ? 'USMC 陸戰突擊步兵排 (1945)' : this.era === 'era3' ? 'USMC 陸戰突擊步兵排 (1950)' : 'USMC 空中突擊/直升機機降排 (1965)',
+        'player',
+        this.era,
+        spawnPos
+      );
+    } else if (item.typeTag === 'army_rifle_65') {
+      gUnit = createGroundUnit(gId, 'us_army_rifle_platoon_65', '美軍 1965 年型前線常規步槍排', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'm113_mech') {
+      gUnit = createGroundUnit(gId, 'us_army_m113_mech', 'M113 裝甲運兵機械化步兵排', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'chaparral_sam') {
+      gUnit = createGroundUnit(gId, 'us_army_chaparral_sam', 'MIM-72 榭樹野戰履帶防空飛彈排', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'air_assault') {
+      gUnit = createGroundUnit(gId, 'usmc_air_assault_65', 'USMC 空中突擊/直升機機降突擊排 (1965)', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'armor_m48') {
+      gUnit = createGroundUnit(gId, 'usmc_armor_m48', 'USMC M48A3 巴頓主力戰車排', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'ontos_m50') {
+      gUnit = createGroundUnit(gId, 'usmc_ontos_m50', 'USMC M50 昂圖斯六聯無後座力砲戰車', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'artillery') {
+      gUnit = createGroundUnit(
+        gId,
+        this.era === 'era3' || this.era === 'era4' ? 'usmc_howitzer_155' : 'usmc_artillery_105',
+        this.era === 'era3' || this.era === 'era4' ? 'USMC M114 155mm 重榴彈砲排' : 'USMC M2A1 105mm 砲兵支援排',
+        'player',
+        this.era,
+        spawnPos
+      );
+    } else if (item.typeTag === 'tank') {
+      gUnit = createGroundUnit(
+        gId,
+        this.era === 'era1' ? 'usmc_armor_m3' : this.era === 'era2' ? 'usmc_armor_m4' : this.era === 'era3' ? 'usmc_patton_m46' : 'usmc_armor_m48',
+        this.era === 'era1' ? 'USMC M3 斯圖亞特戰車排' : this.era === 'era2' ? 'USMC M4A2 薛曼中戰車排' : this.era === 'era3' ? 'USMC M46 巴頓主力戰車排' : 'USMC M48A3 巴頓中戰車排',
+        'player',
+        this.era,
+        spawnPos
+      );
+    } else if (item.typeTag === 'lvt') {
+      gUnit = createGroundUnit(
+        gId,
+        this.era === 'era1' ? 'usmc_lvt_42' : 'usmc_lvt_45',
+        this.era === 'era1'
+          ? 'USMC LVT-1 水牛兩棲機步排'
+          : this.era === 'era2'
+          ? 'USMC LVT-4 水牛兩棲突擊排'
+          : 'USMC LVT-P5 兩棲重裝步戰排',
+        'player',
+        this.era,
+        spawnPos
+      );
+    } else if (item.typeTag === 'engineer') {
+      gUnit = createGroundUnit(gId, 'usmc_engineer', 'USN Seabees 戰鬥工兵排', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'usmc_lvtp5a1') {
+      gUnit = createGroundUnit(gId, 'usmc_lvtp5a1', 'USMC LVTP-5A1 兩棲重裝登陸裝甲車', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'army_rifle_83') {
+      gUnit = createGroundUnit(gId, 'us_army_rifle_83', '美陸軍步槍班 (1983)', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'usmc_rifle_83') {
+      gUnit = createGroundUnit(gId, 'usmc_rifle_83', '陸戰步槍班 (1983)', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'dragon_atgm') {
+      gUnit = createGroundUnit(gId, 'us_dragon_atgm', 'M47 巨龍反戰車飛彈班', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'usmc_aav7a1') {
+      gUnit = createGroundUnit(gId, 'usmc_aav7a1', 'AAV-7A1 兩棲突擊載具', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'usmc_lav25') {
+      gUnit = createGroundUnit(gId, 'usmc_lav25', 'LAV-25 輪型裝甲偵搜車', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'm60a1_rise') {
+      gUnit = createGroundUnit(gId, 'us_m60a1_rise', 'M60A1 RISE (PASSIVE) ERA 戰車', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'm1ip_abrams') {
+      gUnit = createGroundUnit(gId, 'us_m1ip_abrams', 'M1IP 艾布蘭主戰戰車', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'm198_155') {
+      gUnit = createGroundUnit(gId, 'us_m198_155', 'M198 155mm 牽引榴彈砲排', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'lav_ad') {
+      gUnit = createGroundUnit(gId, 'usmc_lav_ad', 'LAV-AD 25mm防空裝甲車', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'm163_vads') {
+      gUnit = createGroundUnit(gId, 'us_m163_vads', 'M163 火神 20mm 防空裝甲車', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'm2_bradley') {
+      gUnit = createGroundUnit(gId, 'us_m2_bradley', 'M2 布雷德利裝甲機步戰車 (TOW-2飛彈+25mm鏈砲)', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'us_m270_mlrs') {
+      gUnit = createGroundUnit(gId, 'us_m270_mlrs', 'M270 MLRS 多管火箭系統 (12x M39鋼鐵之雨)', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'us_m270_atacms') {
+      gUnit = createGroundUnit(gId, 'us_m270_atacms', 'MGM-140 ATACMS 戰術飛彈車 (M57碉堡剋星)', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'us_m4_calliope') {
+      gUnit = createGroundUnit(gId, 'us_m4_calliope', 'M4A3 薛曼「管風琴」60聯裝火箭車', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'us_m7_priest') {
+      gUnit = createGroundUnit(gId, 'us_m7_priest', 'M7 牧師 105mm 自走榴彈砲 (反砲兵急速射擊)', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'us_m44_spg') {
+      gUnit = createGroundUnit(gId, 'us_m44_spg', 'M44 155mm 自走榴彈砲 (反砲兵急速射擊)', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'us_m109_spg') {
+      gUnit = createGroundUnit(gId, 'us_m109_spg', 'M109 155mm 自走榴彈砲 (長程反砲兵壓制)', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'us_m109a6_paladin') {
+      gUnit = createGroundUnit(gId, 'us_m109a6_paladin', 'M109A6 帕拉丁 155mm 數位自走砲', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'us_atacms_nuclear') {
+      gUnit = createGroundUnit(gId, 'us_atacms_nuclear', 'MGM-140B 核武裝 ATACMS 戰術飛彈車 (W70/W85熱核彈頭)', 'player', this.era, spawnPos);
+    }
 
-      let instPos: Vector2D;
-      let instAngle = 0;
-
-      if (customPos) {
-        instPos = { x: customPos.x, y: customPos.y };
-        instAngle = Math.atan2(customPos.y - targetIsland.center.y, customPos.x - targetIsland.center.x);
-      } else if (isMaritimeFacility) {
-        // Place maritime pier/dock on the shoreline / coastal water edge of the island facing open sea
-        const angle = targetIsland.isFriendlyBase ? -Math.PI / 4 : (Math.PI * 3) / 4;
-        instPos = {
-          x: targetIsland.center.x + Math.cos(angle) * (targetIsland.radius * 1.03),
-          y: targetIsland.center.y + Math.sin(angle) * (targetIsland.radius * 1.03),
-        };
-        instAngle = angle;
-      } else {
-        const offsetAngle = Math.random() * Math.PI * 2;
-        const rFactor = item.typeTag === 'coastal_gun' || item.typeTag === 'm1_240mm' ? 0.85 : 0.45;
-        instPos = {
-          x: targetIsland.center.x + Math.cos(offsetAngle) * (targetIsland.radius * rFactor),
-          y: targetIsland.center.y + Math.sin(offsetAngle) * (targetIsland.radius * rFactor),
-        };
-        instAngle = offsetAngle;
-      }
-
-      const instId = `inst-built-${Date.now()}`;
-      if (item.typeTag === 'heavy_aa') {
-        targetIsland.installations.push({
-          id: instId,
-          type: 'flak_battery',
-          name: '127mm 雙聯重型防空砲堡',
-          side: 'player',
-          pos: instPos,
-          health: 1200,
-          maxHealth: 1200,
-          angle: instAngle,
-          range: 1200,
-          reloadTime: 1.6,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'm1_240mm') {
-        const heavyRange =
-          this.era === 'era5' ? 3800 : this.era === 'era4' ? 3600 : this.era === 'era3' ? 3400 : this.era === 'era2' ? 3200 : 2800;
-        const heavyDamage =
-          this.era === 'era5' ? 1050 : this.era === 'era4' ? 920 : this.era === 'era3' ? 850 : this.era === 'era2' ? 780 : 640;
-        targetIsland.installations.push({
-          id: `${instId}-240`,
-          type: 'coastal_gun',
-          name:
-            this.era === 'era1'
-              ? 'M1918 240mm 固定式重型榴彈砲台'
-              : this.era === 'era5'
-              ? 'M1 240mm「黑龍」強化要塞重砲台 (RAP)'
-              : 'M1 240mm「黑龍」固定式重型榴彈砲台',
-          weaponDesc:
-            '固定式混凝土八角砲座 M1 240mm「黑龍」· 遠程砲擊封鎖海峽水道，轟擊敵艦、地面部隊與鄰島要塞',
-          side: 'player',
-          pos: instPos,
-          health: 2600,
-          maxHealth: 2600,
-          armor: 0.55,
-          damage: heavyDamage,
-          blastRadius: 52,
-          angle: instAngle,
-          range: heavyRange,
-          reloadTime: 6.2,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'coastal_gun') {
-        const coastalRange = this.era === 'era3' ? 2200 : this.era === 'era2' ? 1900 : 1650;
-        const coastalDmg = this.era === 'era3' ? 520 : this.era === 'era2' ? 420 : 340;
-        targetIsland.installations.push({
-          id: instId,
-          type: 'coastal_gun',
-          name: this.era === 'era3' ? '152mm 雙聯長管岸防砲台' : this.era === 'era2' ? '203mm 雙聯岸防重砲台' : '140mm 海岸加農砲台',
-          side: 'player',
-          pos: instPos,
-          health: 1800,
-          maxHealth: 1800,
-          armor: 0.45,
-          damage: coastalDmg,
-          blastRadius: 36,
-          angle: instAngle,
-          range: coastalRange,
-          reloadTime: 4.0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'radar') {
-        targetIsland.installations.push({
-          id: instId,
-          type: 'radar_station',
-          name: '早期對空預警雷達台',
-          side: 'player',
-          pos: instPos,
-          health: 800,
-          maxHealth: 800,
-          angle: instAngle,
-          range: 4500,
-          reloadTime: 1.0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'dockyard') {
-        targetIsland.installations.push({
-          id: instId,
-          type: 'ship_repair_dock',
-          name: `前線應急修護浮塢碼頭 (${targetIsland.name})`,
-          side: 'player',
-          pos: instPos,
-          health: 1800,
-          maxHealth: 1800,
-          angle: instAngle,
-          range: 650,
-          reloadTime: 1.0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'pontoon_pier') {
-        // 浮式人工棧橋港 (急造港口)
-        targetIsland.installations.push({
-          id: instId,
-          type: 'pontoon_pier',
-          name: `浮式人工棧橋港碼頭 (${targetIsland.name})`,
-          weaponDesc: '工兵快速架設急造棧橋港 · 打通全島陸軍補給線 · 工兵駐守35秒自動升級正規深水軍港',
-          side: 'player',
-          pos: instPos,
-          health: 2200,
-          maxHealth: 2200,
-          armor: 0.35,
-          angle: instAngle,
-          range: 550,
-          reloadTime: 1.0,
-          cooldown: 0,
-          isDestroyed: false,
-          upgradeTimer: 0,
-        });
-      } else if (item.typeTag === 'major_naval_port') {
-        // 正規深水軍港
-        targetIsland.installations.push({
-          id: instId,
-          type: 'major_naval_port',
-          name: `正規深水軍港突堤 (${targetIsland.name})`,
-          weaponDesc: '大型深水突堤起重港埠 · 穩定建立全島補給線 · 產出補給點 (+1.5 CP/s)',
-          side: 'player',
-          pos: instPos,
-          health: 4200,
-          maxHealth: 4200,
-          armor: 0.5,
-          angle: instAngle,
-          range: 850,
-          reloadTime: 1.0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'supply_depot') {
-        // 戰地輜重補給樞紐
-        targetIsland.installations.push({
-          id: instId,
-          type: 'supply_depot',
-          name: '戰地輜重補給樞紐',
-          weaponDesc: '地下彈藥儲備與重裝備修造處 · 大幅加快全島地面部隊建制度修整 (+2.0%/s)',
-          side: 'player',
-          pos: instPos,
-          health: 2000,
-          maxHealth: 2000,
-          armor: 0.4,
-          angle: instAngle,
-          range: 0,
-          reloadTime: 0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'field_hospital') {
-        // 戰地野戰醫院
-        targetIsland.installations.push({
-          id: instId,
-          type: 'field_hospital',
-          name: '戰地野戰醫院',
-          weaponDesc: '救護整編中心 · 救治前線負傷官兵快速歸隊 · 穩定部隊組織度 (+2.5%/s)',
-          side: 'player',
-          pos: instPos,
-          health: 1600,
-          maxHealth: 1600,
-          armor: 0.3,
-          angle: instAngle,
-          range: 0,
-          reloadTime: 0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'airfield') {
-        // 前進野戰機場
-        targetIsland.installations.push({
-          id: instId,
-          type: 'airfield',
-          name: `前進野戰機場跑道 (${targetIsland.name})`,
-          weaponDesc: 'PSP鋼板珊瑚礁平整跑道 · 前線戰鬥機與重轟炸機起降補給點',
-          side: 'player',
-          pos: instPos,
-          health: 3500,
-          maxHealth: 3500,
-          armor: 0.4,
-          angle: instAngle,
-          range: 0,
-          reloadTime: 0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-        targetIsland.isFriendlyBase = true;
-      } else if (item.typeTag === 'command_post') {
-        // 堅固防衛坑道指揮所
-        targetIsland.installations.push({
-          id: instId,
-          type: 'command_post',
-          name: `地下坑道指揮所 (${targetIsland.name})`,
-          weaponDesc: '深層防空花崗岩掩體 · 守備組織度抵抗 +50% · 擴展雷達視野 1000m',
-          side: 'player',
-          pos: instPos,
-          health: 3600,
-          maxHealth: 3600,
-          armor: 0.55,
-          angle: instAngle,
-          range: 1000,
-          reloadTime: 2.0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'ammo_depot') {
-        // 重型戰備油彈庫
-        targetIsland.installations.push({
-          id: instId,
-          type: 'ammo_depot',
-          name: `重型戰備油彈庫 (${targetIsland.name})`,
-          weaponDesc: '儲備巨型航空航彈與火箭 · 重砲裝填加速 35% · 砲擊冷卻縮短',
-          side: 'player',
-          pos: instPos,
-          health: 2600,
-          maxHealth: 2600,
-          armor: 0.45,
-          angle: instAngle,
-          range: 0,
-          reloadTime: 0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'battalion_cp') {
-        // 營級前進作戰指揮所 (Battalion CP)
-        targetIsland.installations.push({
-          id: instId,
-          type: 'battalion_cp',
-          name: `營前進作戰指揮所 (${targetIsland.name})`,
-          weaponDesc: '營級前進戰術指揮所 · 專屬解鎖地面部隊呼叫支援 · 新增援陸軍單位在此就地集結出生',
-          side: 'player',
-          pos: instPos,
-          health: 3800,
-          maxHealth: 3800,
-          armor: 0.50,
-          angle: instAngle,
-          range: 1200,
-          reloadTime: 1.0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'sam_patriot') {
-        // MIM-104 愛國者長程防空/反飛彈營
-        targetIsland.installations.push({
-          id: instId,
-          type: 'flak_battery',
-          name: `MIM-104 愛國者長程防空飛彈營 (${targetIsland.name})`,
-          weaponDesc: 'AN/MPQ-53 相位陣列雷達導引 · 射程 2600m · 高空反戰機與掠海反艦/彈道飛彈截擊',
-          side: 'player',
-          pos: instPos,
-          health: 2600,
-          maxHealth: 2600,
-          armor: 0.55,
-          angle: instAngle,
-          range: 2600,
-          reloadTime: 1.8,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'sam_hawk') {
-        // MIM-23 霍克防空飛彈陣地
-        targetIsland.installations.push({
-          id: instId,
-          type: 'flak_battery',
-          name: `MIM-23 霍克防空飛彈連 (${targetIsland.name})`,
-          weaponDesc: '半主動雷達導引防空飛彈 · 射程 1800m · 攔截高空高速噴射機與巡航飛彈',
-          side: 'player',
-          pos: instPos,
-          health: 1800,
-          maxHealth: 1800,
-          armor: 0.45,
-          angle: instAngle,
-          range: 1800,
-          reloadTime: 2.2,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      } else if (item.typeTag === 'fob') {
-        // 前進作戰基地 (FOB)
-        targetIsland.installations.push({
-          id: instId,
-          type: 'command_post',
-          name: `前進作戰基地 FOB (${targetIsland.name})`,
-          weaponDesc: '直升機停機坪與全天候作戰指揮中心 · 支援垂直包圍部隊登陸集結 · 擴展雷達視野 1600m',
-          side: 'player',
-          pos: instPos,
-          health: 4500,
-          maxHealth: 4500,
-          armor: 0.60,
-          angle: instAngle,
-          range: 1600,
-          reloadTime: 1.0,
-          cooldown: 0,
-          isDestroyed: false,
-        });
-      }
-
-      this.islandsVersion++;
-
-      // Spawn tactical construction sparkles & ring effect
-      for (let i = 0; i < 22; i++) {
-        const pAngle = Math.random() * Math.PI * 2;
-        const pSpd = 35 + Math.random() * 80;
-        this.particles.push({
-          id: `inst-p-${Date.now()}-${i}`,
-          x: instPos.x,
-          y: instPos.y,
-          vx: Math.cos(pAngle) * pSpd,
-          vy: Math.sin(pAngle) * pSpd,
-          life: 1.0,
-          maxLife: 1.0,
-          color: '#00E5FF',
-          radius: 2.5 + Math.random() * 2.5,
-          type: 'spark',
-        });
-      }
-
-      const locationLabel = customPos ? '指定海圖座標' : targetIsland.name;
-      this.addBannerAlert(`🏗️【碼頭/設施落成】已在 ${locationLabel} 構築「${item.nameZh}」！`, 'player', 'capture', 4.5);
+    if (gUnit) {
+      this.groundUnits.push(gUnit);
+      this.addBannerAlert(`🪖【陸軍戰備就位】「${gUnit.name}」已於 ${spawnLabel} 就地集結！`, 'player', 'capture', 5.0);
       this.addCombatLog({
         category: 'naval',
         sourceSide: 'player',
-        sourceName: '海軍工兵團 (Seabees)',
-        targetName: item.nameZh,
+        sourceName: '陸戰隊司令部',
+        targetName: gUnit.name,
         actionType: 'recon_spotted',
-        text: `🏗️【設施工事落成】${freeSandbox ? '【免CP沙盒建造】' : `耗費 ${item.cost} CP`}！「${item.nameZh}」已在 ${targetIsland.name} (${locationLabel}) 構築完成並即刻投入戰備！`,
+        text: `🪖【陸戰戰力進駐】耗費 ${item.cost} CP！「${gUnit.name}」於 ${spawnLabel} 完成戰備集結，隨時準備發動突擊或加固防衛！`,
       });
       return true;
     }
+    return false;
+  }
 
+  private purchaseAircraftRequisition(item: RequisitionItem, freeSandbox: boolean, flagship: Ship | undefined): boolean {
+    soundEngine.playPlaneSortie();
+    // 飛機(陸海基)增援固定剛開始都是在起始機場 pool 中
+    if (item.typeTag === 'fighter_pool') {
+      const fighterModel = this.era === 'era1' ? 'f4f' : this.era === 'era2' ? 'f6f' : this.era === 'era3' ? 'f9f' : 'f4b';
+      const landFighter = this.era === 'era1' ? 'p40' : this.era === 'era2' ? 'p51' : this.era === 'era3' ? 'f86' : 'f4e';
+      this.airbasePlanes[fighterModel] = (this.airbasePlanes[fighterModel] || 0) + 4;
+      this.airbasePlanes[landFighter] = (this.airbasePlanes[landFighter] || 0) + 4;
+    } else if (item.typeTag === 'air_f4j') {
+      this.airbasePlanes.f4j = (this.airbasePlanes.f4j || 0) + 4;
+    } else if (item.typeTag === 'air_f8') {
+      this.airbasePlanes.f8 = (this.airbasePlanes.f8 || 0) + 4;
+    } else if (item.typeTag === 'air_a6a') {
+      this.airbasePlanes.a6a = (this.airbasePlanes.a6a || 0) + 4;
+    } else if (item.typeTag === 'air_a4') {
+      this.airbasePlanes.a4 = (this.airbasePlanes.a4 || 0) + 4;
+    } else if (item.typeTag === 'air_b52') {
+      this.airbasePlanes.b52 = (this.airbasePlanes.b52 || 0) + 2;
+    } else if (item.typeTag === 'air_f105') {
+      this.airbasePlanes.f105 = (this.airbasePlanes.f105 || 0) + 4;
+    } else if (item.typeTag === 'air_a7') {
+      this.airbasePlanes.a7 = (this.airbasePlanes.a7 || 0) + 4;
+    } else if (item.typeTag === 'air_ov10') {
+      this.airbasePlanes.ov10 = (this.airbasePlanes.ov10 || 0) + 4;
+    } else if (item.typeTag === 'air_uh1') {
+      this.airbasePlanes.uh1 = (this.airbasePlanes.uh1 || 0) + 4;
+    } else if (item.typeTag === 'air_ah1') {
+      this.airbasePlanes.ah1 = (this.airbasePlanes.ah1 || 0) + 4;
+    } else if (item.typeTag === 'air_c1') {
+      this.airbasePlanes.c1 = (this.airbasePlanes.c1 || 0) + 2;
+    } else if (item.typeTag === 'air_c47') {
+      this.airbasePlanes.c47 = (this.airbasePlanes.c47 || 0) + 2;
+    } else if (item.typeTag === 'air_sh2') {
+      this.airbasePlanes.sh2 = (this.airbasePlanes.sh2 || 0) + 2;
+    } else if (item.typeTag === 'air_p3') {
+      this.airbasePlanes.p3 = (this.airbasePlanes.p3 || 0) + 2;
+    } else if (item.typeTag === 'fighter_jet_f9f') {
+      this.airbasePlanes.f9f = (this.airbasePlanes.f9f || 0) + 4;
+    } else if (item.typeTag === 'fighter_jet_f2h') {
+      this.airbasePlanes.f2h = (this.airbasePlanes.f2h || 0) + 4;
+    } else if (item.typeTag === 'attacker_skyraider') {
+      this.airbasePlanes.ad1 = (this.airbasePlanes.ad1 || 0) + 4;
+    } else if (item.typeTag === 'aew_ad3w') {
+      this.airbasePlanes.ad3w = (this.airbasePlanes.ad3w || 0) + 1;
+    } else if (item.typeTag === 'sar_ho3s1') {
+      this.airbasePlanes.ho3s1 = (this.airbasePlanes.ho3s1 || 0) + 1;
+    } else if (item.typeTag === 'dive_bomber_pool') {
+      const diveModel = this.era === 'era1' ? 'sbd' : this.era === 'era2' ? 'sb2c' : this.era === 'era3' ? 'ad1' : 'a4';
+      this.airbasePlanes[diveModel] = (this.airbasePlanes[diveModel] || 0) + 4;
+    } else if (item.typeTag === 'torpedo_bomber_pool') {
+      const torpModel = this.era === 'era1' ? 'tbd' : this.era === 'era2' ? 'tbf' : this.era === 'era3' ? 'af_guardian' : 'a6a';
+      this.airbasePlanes[torpModel] = (this.airbasePlanes[torpModel] || 0) + 4;
+    } else if (item.typeTag === 'heavy_bomber_pool') {
+      const heavyModel = this.era === 'era1' ? 'b17' : this.era === 'era2' ? 'b24' : this.era === 'era3' ? 'b29' : 'b52';
+      this.airbasePlanes[heavyModel] = (this.airbasePlanes[heavyModel] || 0) + 2;
+    } else if (item.typeTag === 'attacker_pool') {
+      const attModel = this.era === 'era1' ? 'a20' : this.era === 'era2' ? 'p47' : this.era === 'era3' ? 'a26' : 'a7';
+      this.airbasePlanes[attModel] = (this.airbasePlanes[attModel] || 0) + 4;
+    } else if (item.typeTag === 'air_sh2') {
+      this.airbasePlanes['sh2'] = (this.airbasePlanes['sh2'] || 0) + 4;
+      if (flagship && flagship.carrierPlanes) {
+        flagship.carrierPlanes.ready.sh2 = (flagship.carrierPlanes.ready.sh2 || 0) + 2;
+      }
+    } else if (item.typeTag === 'air_p3') {
+      this.airbasePlanes['p3'] = (this.airbasePlanes['p3'] || 0) + 2;
+      if (flagship && flagship.carrierPlanes) {
+        flagship.carrierPlanes.ready.p3 = (flagship.carrierPlanes.ready.p3 || 0) + 1;
+      }
+    } else if (item.typeTag === 'air_f14a') {
+      this.airbasePlanes.f14a = (this.airbasePlanes.f14a || 0) + 4;
+      if (flagship && flagship.carrierPlanes) {
+        flagship.carrierPlanes.ready.f14a = (flagship.carrierPlanes.ready.f14a || 0) + 2;
+      }
+    } else if (item.typeTag === 'air_fa18a') {
+      this.airbasePlanes.fa18a = (this.airbasePlanes.fa18a || 0) + 4;
+      if (flagship && flagship.carrierPlanes) {
+        flagship.carrierPlanes.ready.fa18a = (flagship.carrierPlanes.ready.fa18a || 0) + 2;
+      }
+    } else if (item.typeTag === 'air_s3a') {
+      this.airbasePlanes.s3a = (this.airbasePlanes.s3a || 0) + 4;
+      if (flagship && flagship.carrierPlanes) {
+        flagship.carrierPlanes.ready.s3a = (flagship.carrierPlanes.ready.s3a || 0) + 2;
+      }
+    } else if (item.typeTag === 'air_a6e') {
+      this.airbasePlanes.a6e = (this.airbasePlanes.a6e || 0) + 4;
+      if (flagship && flagship.carrierPlanes) {
+        flagship.carrierPlanes.ready.a6e = (flagship.carrierPlanes.ready.a6e || 0) + 2;
+      }
+    } else if (item.typeTag === 'air_e2c') {
+      this.airbasePlanes.e2c = (this.airbasePlanes.e2c || 0) + 2;
+      if (flagship && flagship.carrierPlanes) {
+        flagship.carrierPlanes.ready.e2c = (flagship.carrierPlanes.ready.e2c || 0) + 1;
+      }
+    } else if (item.typeTag === 'air_ea6b') {
+      this.airbasePlanes.ea6b = (this.airbasePlanes.ea6b || 0) + 2;
+      if (flagship && flagship.carrierPlanes) {
+        flagship.carrierPlanes.ready.ea6b = (flagship.carrierPlanes.ready.ea6b || 0) + 1;
+      }
+    } else if (item.typeTag === 'air_c2a') {
+      this.airbasePlanes.c2a = (this.airbasePlanes.c2a || 0) + 2;
+    } else if (item.typeTag === 'air_sh3f') {
+      this.airbasePlanes.sh3f = (this.airbasePlanes.sh3f || 0) + 4;
+      if (flagship && flagship.carrierPlanes) {
+        flagship.carrierPlanes.ready.sh3f = (flagship.carrierPlanes.ready.sh3f || 0) + 2;
+      }
+    } else if (item.typeTag === 'air_av8b') {
+      this.airbasePlanes.av8b = (this.airbasePlanes.av8b || 0) + 4;
+    } else if (item.typeTag === 'air_ch53') {
+      this.airbasePlanes.ch53 = (this.airbasePlanes.ch53 || 0) + 4;
+    } else if (item.typeTag === 'air_a10a') {
+      this.airbasePlanes.a10a = (this.airbasePlanes.a10a || 0) + 4;
+    } else if (item.typeTag === 'air_ah64a') {
+      this.airbasePlanes.ah64a = (this.airbasePlanes.ah64a || 0) + 4;
+    } else if (item.typeTag === 'air_ah1w') {
+      this.airbasePlanes.ah1w = (this.airbasePlanes.ah1w || 0) + 4;
+    } else if (item.typeTag === 'air_f15a') {
+      this.airbasePlanes.f15a = (this.airbasePlanes.f15a || 0) + 4;
+    } else if (item.typeTag === 'air_f16a') {
+      this.airbasePlanes.f16a = (this.airbasePlanes.f16a || 0) + 4;
+    } else if (item.typeTag === 'air_e3a') {
+      this.airbasePlanes.e3a = (this.airbasePlanes.e3a || 0) + 1;
+    } else if (item.typeTag === 'air_f111') {
+      this.airbasePlanes.f111 = (this.airbasePlanes.f111 || 0) + 4;
+    } else if (item.typeTag === 'air_c130') {
+      this.airbasePlanes.c130 = (this.airbasePlanes.c130 || 0) + 2;
+    }
+
+    this.addBannerAlert(`✈️【機隊補充】「${item.name}」已進駐起始前進基地航空庫存！`, 'player', 'capture', 5.0);
+    this.addCombatLog({
+      category: 'air',
+      sourceSide: 'player',
+      sourceName: '海軍航空兵部 (BuAer)',
+      targetName: item.name,
+      actionType: 'recon_spotted',
+      text: `✈️【航空戰力充實】${freeSandbox ? '【免CP沙盒配置】' : `耗費 ${item.cost} CP`}！${item.name} 戰機群已進駐起始前進基地機庫，可隨時自基地起飛或轉場！`,
+    });
+    return true;
+    return false;
+  }
+
+  private purchaseShipRequisition(item: RequisitionItem, customPos: Vector2D | undefined, freeSandbox: boolean): boolean {
+    soundEngine.playPlaneSortie();
+    let newShip: Ship | null = null;
+    const shipId = `player-req-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+    // 海軍艦艇單位固定自地圖西南邊緣海疆增援航向戰區
+    const mapBound = this.worldSize || 14000;
+    const edgeSpawnX = 800 + Math.random() * 1400;
+    const edgeSpawnY = mapBound - 350 - Math.random() * 400;
+    const warshipSpawnPos: Vector2D = { x: edgeSpawnX, y: edgeSpawnY };
+
+    if (item.typeTag === 'ohio_ssbn' || item.id === 'req-support-ohio-ssbn') {
+      const targetPos = customPos || (this.enemyShips.find(s => !s.isSunk)?.pos) || { x: 9500, y: 4500 };
+      this.fireOhioSSBNTridentStrike(targetPos);
+      return true;
+    } else if (item.typeTag === 'bb' || item.typeTag === 'bb_missouri') {
+      const isMo = item.typeTag === 'bb_missouri' || this.era === 'era3';
+      newShip = createPlayerBattleship(
+        shipId,
+        isMo
+          ? 'USS Missouri (BB-63 密蘇里號主力戰艦)'
+          : this.era === 'era1'
+          ? 'USS North Carolina (BB-55)'
+          : 'USS Iowa (BB-61)',
+        warshipSpawnPos,
+        this.era
+      );
+    } else if (item.typeTag === 'ca' || item.typeTag === 'ca_desmoines') {
+      newShip = createConvoyEscortShip(shipId, 'ca', warshipSpawnPos, this.era);
+      if (item.typeTag === 'ca_desmoines' || this.era === 'era3') {
+        newShip.name = 'USS Des Moines (CA-134 得梅因號自動裝填重巡)';
+        newShip.health = 3600;
+        newShip.maxHealth = 3600;
+      }
+    } else if (item.typeTag === 'cl') {
+      newShip = createConvoyEscortShip(shipId, 'cl', warshipSpawnPos, this.era);
+    } else if (item.typeTag === 'dd' || item.typeTag === 'dd_gearing' || item.typeTag === 'dd_sherman') {
+      if (this.era === 'era4' || item.typeTag === 'dd_sherman') {
+        newShip = createForrestShermanDD(shipId, 'USS Forrest Sherman (DD-931 驅逐艦)', warshipSpawnPos);
+      } else {
+        newShip = createConvoyEscortShip(shipId, 'dd', warshipSpawnPos, this.era);
+        if (item.typeTag === 'dd_gearing' || this.era === 'era3') {
+          newShip.name = 'USS Gearing (DD-710 基靈級雷達糾察驅逐艦)';
+          newShip.health = 1850;
+          newShip.maxHealth = 1850;
+        }
+      }
+    } else if (item.typeTag === 'ffg') {
+      newShip = createKnoxFFG(shipId, 'USS Knox (FFG-1052 巡防艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'ss') {
+      newShip = createConvoyEscortShip(shipId, 'ss', warshipSpawnPos, this.era);
+    } else if (item.typeTag === 'lst') {
+      newShip = (this.era === 'era4' || this.era === 'era5')
+        ? createNewportLST(shipId, this.era === 'era5' ? 'USS Newport (LST-1179 紐波特戰車登陸艦 現代化改型)' : 'USS Newport (LST-1179 紐波特級戰車登陸艦)', warshipSpawnPos, this.era)
+        : createLST(shipId, 'USS LST-491 戰車登陸艦', warshipSpawnPos, this.era);
+    } else if (item.typeTag === 'lcvp') {
+      newShip = this.era === 'era5'
+        ? createLCAC(shipId, 'LCAC-01 氣墊登陸艇', warshipSpawnPos)
+        : this.era === 'era4'
+        ? createLCM8(shipId, 'LCM-8 機械化登陸艇', warshipSpawnPos)
+        : createLCVP(shipId, 'LCVP 突擊登陸艇', warshipSpawnPos, this.era);
+    } else if (item.typeTag === 'cv63') {
+      newShip = createCV63(shipId, 'USS Kitty Hawk (CV-63 超級航空母艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'cg') {
+      newShip = createBelknapCG(shipId, 'USS Belknap (CG-26 導彈巡洋艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'ddg') {
+      newShip = createAdamsDDG(shipId, 'USS Charles F. Adams (DDG-2 導彈驅逐艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'lph') {
+      newShip = createLPHIwoJima(shipId, 'USS Iwo Jima (LPH-2 兩棲突擊艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'lcm8') {
+      newShip = createLCM8(shipId, 'LCM-8 機械化登陸艇', warshipSpawnPos);
+    } else if (item.typeTag === 'cvn') {
+      newShip = createCVNNimitz(shipId, 'USS Nimitz (CVN-68 超級核動力航空母艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'cg_tico') {
+      newShip = createTiconderogaCG(shipId, 'USS Ticonderoga (CG-47 神盾巡洋艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'cg_virginia') {
+      newShip = createVirginiaCGN(shipId, 'USS Virginia (CGN-38 核動力巡洋艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'bb_iowa_mod') {
+      newShip = createIowaModernizedBB(shipId, 'USS Iowa (BB-61 近代化改裝主力戰艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'dd_spruance') {
+      newShip = createSpruanceDD(shipId, 'USS Spruance (DD-963 反潛驅逐艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'ddg_kidd') {
+      newShip = createKiddDDG(shipId, 'USS Kidd (DDG-993 飛彈驅逐艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'ffg_ohp') {
+      newShip = createPerryFFG(shipId, 'USS Oliver Hazard Perry (FFG-7 巡防艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'ssn_la') {
+      newShip = createLosAngelesSSN(shipId, 'USS Los Angeles (SSN-688 攻擊核潛艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'lpd') {
+      newShip = createAustinLPD(shipId, 'USS Austin (LPD-4 兩棲船塢運輸艦)', warshipSpawnPos);
+    } else if (item.typeTag === 'lcac') {
+      newShip = createLCAC(shipId, 'LCAC-01 氣墊登陸艇', warshipSpawnPos);
+    }
+
+    if (newShip) {
+      newShip.heading = -Math.PI / 4; // 朝向東北戰區航進
+      this.playerShips.push(newShip);
+      this.applyUpgradesToShip(newShip);
+      this.addBannerAlert(`⚓【艦隊邊界增援】「${newShip.name}」自地圖邊緣駛入戰區！`, 'player', 'capture', 6.0);
+      this.addCombatLog({
+        category: 'naval',
+        sourceSide: 'player',
+        sourceName: '後勤調遣司令部',
+        targetName: newShip.name,
+        actionType: 'recon_spotted',
+        text: `⚓【海軍調遣就緒】${freeSandbox ? '【免CP沙盒建造】' : `耗費 ${item.cost} CP`} 調派「${newShip.name}」自地圖西南邊疆外海駛入戰區！火砲裝備、航向與戰術編隊已就緒！`,
+      });
+      return true;
+    }
     return false;
   }
 
@@ -10245,7 +9974,7 @@ export class GameEngine {
     }
   }
 
-  private updateEra3Mechanics(dt: number) {
+  private updateEra3Mechanics(_dt: number) {
     // 1. AD-3W 全域空中預警系統 (AEW Early Warning 6500m & GCI)
     const activeAEW = this.aircraft.find(
       (a) => a.side === 'player' && (a.model === 'ad3w' || a.role === 'aew') && a.state !== 'shot_down' && a.state !== 'landing'
@@ -10347,62 +10076,7 @@ export class GameEngine {
         }
       }
 
-      // 3a. 艦載 RBOC 金屬箔條干擾火箭 (Shipboard RBOC Chaff Rocket Mortars vs AShM)
-      if (ship.hasChaffLauncher) {
-        if (ship.chaffCooldown !== undefined && ship.chaffCooldown > 0) {
-          ship.chaffCooldown = Math.max(0, ship.chaffCooldown - dt);
-        }
-        if ((ship.chaffCooldown || 0) <= 0) {
-          const incomingAshm = this.projectiles.find(
-            (p) => !p.isDead && p.side === 'enemy' && p.type === 'missile_ashm' && dist(ship.pos, p.pos) <= 950
-          );
-          if (incomingAshm) {
-            ship.chaffCooldown = 18.0;
-            soundEngine.playPlaneSortie();
-
-            // 在船艦與飛彈間海面上射出金屬箔條雲假目標
-            const cloudPos = {
-              x: ship.pos.x + Math.cos(incomingAshm.heading + Math.PI * 0.45) * 260,
-              y: ship.pos.y + Math.sin(incomingAshm.heading + Math.PI * 0.45) * 260,
-            };
-            for (let c = 0; c < 14; c++) {
-              this.particles.push({
-                id: `ship-chaff-${Date.now()}-${c}`,
-                x: cloudPos.x + (Math.random() - 0.5) * 70,
-                y: cloudPos.y + (Math.random() - 0.5) * 70,
-                vx: (Math.random() - 0.5) * 10,
-                vy: (Math.random() - 0.5) * 10,
-                life: 4.5,
-                maxLife: 4.5,
-                radius: 12 + Math.random() * 8,
-                color: '#ECEFF1',
-                type: 'chaff_cloud',
-              });
-            }
-
-            if (!incomingAshm.isDecoyed) {
-              const decoyChance = this.getAshmChaffDecoyChance(incomingAshm);
-              if (Math.random() < decoyChance) {
-                incomingAshm.isDecoyed = true;
-                incomingAshm.decoyTargetPos = { ...cloudPos };
-                incomingAshm.targetPos = { ...cloudPos };
-                if (incomingAshm.isLeadMissile) {
-                  this.handleAshmLeaderDestroyed(incomingAshm);
-                }
-                this.addBannerAlert('📡【RBOC 艦載箔條干擾生效】海面金屬箔條雲成功誘騙來襲反艦飛彈！', 'player', 'alert', 4.5);
-                this.addCombatLog({
-                  category: 'aa',
-                  sourceSide: 'player',
-                  sourceName: `${ship.name} (RBOC 箔條迫擊砲)`,
-                  targetName: incomingAshm.attackerName || '來襲反艦飛彈',
-                  actionType: 'recon_spotted',
-                  text: `📡【艦載箔條誘騙成功】「${ship.name}」向海面射出金屬箔條干擾火箭！形成高雷達截面假目標雲，來襲飛彈尋標頭被引離真艦！`,
-                });
-              }
-            }
-          }
-        }
-      }
+      this.fireShipboardChaff(dt, ship);
 
       // 3b. 艦載 ASROC 反潛火箭助推魚雷發射系統 (Automatic Sonar Launch with Manual Target Override)
       if (ship.hasASROC) {
@@ -10534,6 +10208,87 @@ export class GameEngine {
       }
     }
 
+    this.updateEra4SamSites(dt, fanSongAlive);
+
+    // 5b. 時代四 華約/蘇聯野戰機動防空飛彈連 (SA-6 Kub / SA-9 Strela-1)
+    for (const gUnit of this.groundUnits) {
+      if (gUnit.isDestroyed || gUnit.side !== 'enemy' || gUnit.cooldown > 0) continue;
+      if (gUnit.type === 'opfor_sa6_kub') {
+        const targetPlane = this.aircraft.find(
+          (a) => this.isHostile(gUnit.side, a.side) && a.state !== 'shot_down' && dist(gUnit.pos, a.pos) <= (gUnit.range || 2800)
+        );
+        if (targetPlane) {
+          this.fireOpforMobileSAM(gUnit, targetPlane, '2K12 Kub (SA-6 增益)', 720, 760, 'command_radar', true);
+          gUnit.cooldown = gUnit.reloadTime || 5.2;
+        }
+      } else if (gUnit.type === 'opfor_sa9_strela1') {
+        const targetPlane = this.aircraft.find(
+          (a) => this.isHostile(gUnit.side, a.side) && a.state !== 'shot_down' && dist(gUnit.pos, a.pos) <= (gUnit.range || 1750)
+        );
+        if (targetPlane) {
+          this.fireOpforMobileSAM(gUnit, targetPlane, '9K31 Strela-1 (SA-9 長弓)', 580, 420, 'ir', false);
+          gUnit.cooldown = gUnit.reloadTime || 4.2;
+        }
+      }
+    }
+
+    this.updateEra4CoastalSites(dt);
+
+    // 6b. 美陸軍 MIM-72 榭樹 (Chaparral) 履帶防空飛彈車自動攔截
+    for (const gUnit of this.groundUnits) {
+      if (gUnit.isDestroyed || (gUnit.side !== 'player' && gUnit.side !== 'allied') || gUnit.type !== 'us_army_chaparral_sam') continue;
+      if (gUnit.cooldown <= 0) {
+        const targetPlane = this.aircraft.find(
+          (a) => this.isHostile(gUnit.side, a.side) && a.state !== 'shot_down' && dist(gUnit.pos, a.pos) <= 2000
+        );
+        if (targetPlane) {
+          this.fireChaparralSAM(gUnit, targetPlane);
+          gUnit.cooldown = 5.0;
+        }
+      }
+    }
+
+    // 6c. 大陸戰線前線據點動態爭奪與佔領 (Dynamic Frontline Push with Captureable Neutral & Hostile Bases)
+    this.updateMainlandInstallationCapture(dt);
+
+    // 7. OPFOR 蘇製戰術核武器絕望核反擊檢定 (OPFOR Desperate Nuclear Retaliation)
+    if (!this.hasOpforRetaliatedNuke) {
+      this.opforNukeCheckTimer = (this.opforNukeCheckTimer || 0) + dt;
+      if (this.opforNukeCheckTimer >= 3.0) {
+        this.opforNukeCheckTimer = 0;
+        this.checkOpforNuclearRetaliation();
+      }
+    }
+  }
+
+  // 6. 友軍 MIM-23 鷹式 (Hawk) 地對空防空飛彈發射連防空自動截擊
+  private updateEra4CoastalSites(dt: number): void {
+    for (const isl of this.islands) {
+      for (const inst of isl.installations) {
+        if (inst.isDestroyed || (inst.side !== 'player' && inst.side !== 'allied') || inst.type !== 'sam_hawk') continue;
+
+        inst.cooldown = Math.max(0, inst.cooldown - dt);
+
+        if (inst.cooldown <= 0 && (inst.samMissilesReady ?? 12) > 0) {
+          const samRange = inst.range || 2600;
+          const targetPlane = this.aircraft.find(
+            (a) =>
+              this.isHostile(inst.side, a.side) &&
+              a.state !== 'shot_down' &&
+              dist(inst.pos, a.pos) <= samRange
+          );
+
+          if (targetPlane) {
+            this.fireHawkSAM(inst, targetPlane);
+            inst.cooldown = inst.reloadTime || 3.5;
+            inst.samMissilesReady = (inst.samMissilesReady ?? 12) - 1;
+          }
+        }
+      }
+    }
+  }
+
+  private updateEra4SamSites(dt: number, fanSongAlive: boolean): void {
     for (const isl of this.islands) {
       for (const inst of isl.installations) {
         if (inst.isDestroyed || inst.side !== 'enemy' || (inst.type !== 'sa2_sam_site' && inst.type !== 'sa3_sam_site')) continue;
@@ -10565,77 +10320,63 @@ export class GameEngine {
         }
       }
     }
+  }
 
-    // 5b. 時代四 華約/蘇聯野戰機動防空飛彈連 (SA-6 Kub / SA-9 Strela-1)
-    for (const gUnit of this.groundUnits) {
-      if (gUnit.isDestroyed || gUnit.side !== 'enemy' || gUnit.cooldown > 0) continue;
-      if (gUnit.type === 'opfor_sa6_kub') {
-        const targetPlane = this.aircraft.find(
-          (a) => this.isHostile(gUnit.side, a.side) && a.state !== 'shot_down' && dist(gUnit.pos, a.pos) <= (gUnit.range || 2800)
-        );
-        if (targetPlane) {
-          this.fireOpforMobileSAM(gUnit, targetPlane, '2K12 Kub (SA-6 增益)', 720, 760, 'command_radar', true);
-          gUnit.cooldown = gUnit.reloadTime || 5.2;
-        }
-      } else if (gUnit.type === 'opfor_sa9_strela1') {
-        const targetPlane = this.aircraft.find(
-          (a) => this.isHostile(gUnit.side, a.side) && a.state !== 'shot_down' && dist(gUnit.pos, a.pos) <= (gUnit.range || 1750)
-        );
-        if (targetPlane) {
-          this.fireOpforMobileSAM(gUnit, targetPlane, '9K31 Strela-1 (SA-9 長弓)', 580, 420, 'ir', false);
-          gUnit.cooldown = gUnit.reloadTime || 4.2;
-        }
+  // 3a. 艦載 RBOC 金屬箔條干擾火箭 (Shipboard RBOC Chaff Rocket Mortars vs AShM)
+  private fireShipboardChaff(dt: number, ship: Ship): void {
+    if (ship.hasChaffLauncher) {
+      if (ship.chaffCooldown !== undefined && ship.chaffCooldown > 0) {
+        ship.chaffCooldown = Math.max(0, ship.chaffCooldown - dt);
       }
-    }
+      if ((ship.chaffCooldown || 0) <= 0) {
+        const incomingAshm = this.projectiles.find(
+          (p) => !p.isDead && p.side === 'enemy' && p.type === 'missile_ashm' && dist(ship.pos, p.pos) <= 950
+        );
+        if (incomingAshm) {
+          ship.chaffCooldown = 18.0;
+          soundEngine.playPlaneSortie();
 
-    // 6. 友軍 MIM-23 鷹式 (Hawk) 地對空防空飛彈發射連防空自動截擊
-    for (const isl of this.islands) {
-      for (const inst of isl.installations) {
-        if (inst.isDestroyed || (inst.side !== 'player' && inst.side !== 'allied') || inst.type !== 'sam_hawk') continue;
+          // 在船艦與飛彈間海面上射出金屬箔條雲假目標
+          const cloudPos = {
+            x: ship.pos.x + Math.cos(incomingAshm.heading + Math.PI * 0.45) * 260,
+            y: ship.pos.y + Math.sin(incomingAshm.heading + Math.PI * 0.45) * 260,
+          };
+          for (let c = 0; c < 14; c++) {
+            this.particles.push({
+              id: `ship-chaff-${Date.now()}-${c}`,
+              x: cloudPos.x + (Math.random() - 0.5) * 70,
+              y: cloudPos.y + (Math.random() - 0.5) * 70,
+              vx: (Math.random() - 0.5) * 10,
+              vy: (Math.random() - 0.5) * 10,
+              life: 4.5,
+              maxLife: 4.5,
+              radius: 12 + Math.random() * 8,
+              color: '#ECEFF1',
+              type: 'chaff_cloud',
+            });
+          }
 
-        inst.cooldown = Math.max(0, inst.cooldown - dt);
-
-        if (inst.cooldown <= 0 && (inst.samMissilesReady ?? 12) > 0) {
-          const samRange = inst.range || 2600;
-          const targetPlane = this.aircraft.find(
-            (a) =>
-              this.isHostile(inst.side, a.side) &&
-              a.state !== 'shot_down' &&
-              dist(inst.pos, a.pos) <= samRange
-          );
-
-          if (targetPlane) {
-            this.fireHawkSAM(inst, targetPlane);
-            inst.cooldown = inst.reloadTime || 3.5;
-            inst.samMissilesReady = (inst.samMissilesReady ?? 12) - 1;
+          if (!incomingAshm.isDecoyed) {
+            const decoyChance = this.getAshmChaffDecoyChance(incomingAshm);
+            if (Math.random() < decoyChance) {
+              incomingAshm.isDecoyed = true;
+              incomingAshm.decoyTargetPos = { ...cloudPos };
+              incomingAshm.targetPos = { ...cloudPos };
+              if (incomingAshm.isLeadMissile) {
+                this.handleAshmLeaderDestroyed(incomingAshm);
+              }
+              this.addBannerAlert('📡【RBOC 艦載箔條干擾生效】海面金屬箔條雲成功誘騙來襲反艦飛彈！', 'player', 'alert', 4.5);
+              this.addCombatLog({
+                category: 'aa',
+                sourceSide: 'player',
+                sourceName: `${ship.name} (RBOC 箔條迫擊砲)`,
+                targetName: incomingAshm.attackerName || '來襲反艦飛彈',
+                actionType: 'recon_spotted',
+                text: `📡【艦載箔條誘騙成功】「${ship.name}」向海面射出金屬箔條干擾火箭！形成高雷達截面假目標雲，來襲飛彈尋標頭被引離真艦！`,
+              });
+            }
           }
         }
-      }
-    }
-
-    // 6b. 美陸軍 MIM-72 榭樹 (Chaparral) 履帶防空飛彈車自動攔截
-    for (const gUnit of this.groundUnits) {
-      if (gUnit.isDestroyed || (gUnit.side !== 'player' && gUnit.side !== 'allied') || gUnit.type !== 'us_army_chaparral_sam') continue;
-      if (gUnit.cooldown <= 0) {
-        const targetPlane = this.aircraft.find(
-          (a) => this.isHostile(gUnit.side, a.side) && a.state !== 'shot_down' && dist(gUnit.pos, a.pos) <= 2000
-        );
-        if (targetPlane) {
-          this.fireChaparralSAM(gUnit, targetPlane);
-          gUnit.cooldown = 5.0;
-        }
-      }
-    }
-
-    // 6c. 大陸戰線前線據點動態爭奪與佔領 (Dynamic Frontline Push with Captureable Neutral & Hostile Bases)
-    this.updateMainlandInstallationCapture(dt);
-
-    // 7. OPFOR 蘇製戰術核武器絕望核反擊檢定 (OPFOR Desperate Nuclear Retaliation)
-    if (!this.hasOpforRetaliatedNuke) {
-      this.opforNukeCheckTimer = (this.opforNukeCheckTimer || 0) + dt;
-      if (this.opforNukeCheckTimer >= 3.0) {
-        this.opforNukeCheckTimer = 0;
-        this.checkOpforNuclearRetaliation();
       }
     }
   }
@@ -10684,8 +10425,453 @@ export class GameEngine {
       }
     }
 
-    // 3. 艦載防空飛彈系統 (Ship SAM Defenses: Aegis SM-2MR / Sea Sparrow / SM-1MR)
-    // 時代五神盾系統具備 4 個多目標追蹤射控通道，優先攔截來襲超音速反艦/巡弋飛彈，其次攔截敵超音速戰轟機
+    this.updatePlayerShipDefenses(dt);
+
+    this.updateSsnWeapons(dt);
+
+    this.updateSovietShipboardSam(dt);
+
+    // 5b. 蘇聯艦隊/奧斯卡核潛艇「白令海百枚彈著飽和齊射」協同突擊 (Bering Sea 100+ Saturation Alpha Strike)
+    const surfaceFriendlies = [...this.playerShips, ...this.alliedShips].filter(
+      (s) => !s.isSunk && !this.isSubmarine(s)
+    );
+    const prioritizedFriendlies = [...surfaceFriendlies].sort((a, b) => {
+      const scoreShip = (s: Ship) =>
+        s.isFlagship || s.type === 'cvn' || s.type === 'carrier'
+          ? 0
+          : s.type === 'cg_tico' || s.type === 'battleship' || s.type === 'bb_iowa_mod'
+          ? 1
+          : 2;
+      return scoreShip(a) - scoreShip(b);
+    });
+
+    this.enemyBeringSeaCoordTimer -= dt;
+    this.updateBeringSeaCoordination(prioritizedFriendlies);
+
+    this.updateEnemyShipTorpedoAttacks(dt, prioritizedFriendlies);
+
+    this.updateLandMissileSites(dt);
+
+    this.updateMobileAirDefenseUnits();
+
+    // 7. 大陸戰線前線據點動態爭奪與佔領
+    this.updateMainlandInstallationCapture(dt);
+
+    // 8. OPFOR 蘇聯戰略/戰術核武報復檢定 (時代五 MAD)
+    if (!this.hasOpforRetaliatedNuke) {
+      this.opforNukeCheckTimer = (this.opforNukeCheckTimer || 0) + dt;
+      if (this.opforNukeCheckTimer >= 3.0) {
+        this.opforNukeCheckTimer = 0;
+        this.checkOpforNuclearRetaliation();
+      }
+    }
+  }
+
+  // 6f. 友軍與敵軍地面裝甲自走防空車自動防空攔截 (LAV-AD / M163 VADS / 通古斯卡 2S6 / 箭-10)
+  private updateMobileAirDefenseUnits(): void {
+    for (const gUnit of this.groundUnits) {
+      if (gUnit.isDestroyed || gUnit.cooldown > 0) continue;
+
+      if (gUnit.side !== 'enemy' && (gUnit.type === 'usmc_lav_ad' || gUnit.type === 'us_m163_vads')) {
+        const targetPlane = this.aircraft.find((a) => this.isHostile(gUnit.side, a.side) && a.state !== 'shot_down' && dist(gUnit.pos, a.pos) <= 2000);
+        if (targetPlane) {
+          this.fireChaparralSAM(gUnit, targetPlane);
+          gUnit.cooldown = gUnit.type === 'usmc_lav_ad' ? 3.5 : 4.0;
+        }
+      } else if (
+        gUnit.side === 'enemy' &&
+        (gUnit.type === 'opfor_tunguska' ||
+          gUnit.type === 'opfor_strela10' ||
+          gUnit.type === 'opfor_sa8_osa' ||
+          gUnit.type === 'opfor_sa11_buk' ||
+          gUnit.type === 'opfor_sa15_tor')
+      ) {
+        const samRange =
+          gUnit.type === 'opfor_sa11_buk'
+            ? 3400
+            : gUnit.type === 'opfor_sa8_osa'
+            ? 2600
+            : gUnit.type === 'opfor_sa15_tor'
+            ? 2500
+            : gUnit.type === 'opfor_tunguska'
+            ? 2400
+            : 1850;
+        const canAntiMissile = gUnit.type === 'opfor_sa15_tor' || gUnit.type === 'opfor_sa11_buk' || gUnit.type === 'opfor_sa8_osa';
+
+        const incomingBluforMissile = canAntiMissile
+          ? this.projectiles.find(
+              (p) =>
+                !p.isDead &&
+                this.isHostile(gUnit.side, p.side) &&
+                (p.type === 'missile_ashm' || p.type === 'missile_cruise' || p.type === 'missile_ssm' || p.type === 'missile_arm') &&
+                dist(gUnit.pos, p.pos) <= samRange
+            )
+          : undefined;
+
+        if (incomingBluforMissile) {
+          const sysName =
+            gUnit.type === 'opfor_sa15_tor'
+              ? '9K330 Tor (SA-15 道爾垂直反飛彈)'
+              : gUnit.type === 'opfor_sa11_buk'
+              ? '9K37 Buk (SA-11 山毛櫸)'
+              : '9K33 Osa-AKM (SA-8 黃蜂)';
+          this.fireOpforMobileSAM(gUnit, incomingBluforMissile, sysName, 760, 720, 'command_radar', true);
+          gUnit.cooldown = gUnit.reloadTime || (gUnit.type === 'opfor_sa15_tor' ? 3.2 : 4.2);
+          continue;
+        }
+
+        const targetPlane = this.aircraft.find(
+          (a) => this.isHostile(gUnit.side, a.side) && a.state !== 'shot_down' && dist(gUnit.pos, a.pos) <= samRange
+        );
+        if (targetPlane) {
+          if (gUnit.type === 'opfor_tunguska') {
+            this.fireTunguskaSAM(gUnit, targetPlane);
+            gUnit.cooldown = 4.0;
+          } else if (gUnit.type === 'opfor_strela10') {
+            this.fireOpforMobileSAM(gUnit, targetPlane, '9K35 Strela-10 (SA-13 金花鼠)', 620, 480, 'ir', false);
+            gUnit.cooldown = gUnit.reloadTime || 3.8;
+          } else if (gUnit.type === 'opfor_sa8_osa') {
+            this.fireOpforMobileSAM(gUnit, targetPlane, '9K33 Osa-AKM (SA-8 黃蜂)', 690, 620, 'command_radar', true);
+            gUnit.cooldown = gUnit.reloadTime || 4.0;
+          } else if (gUnit.type === 'opfor_sa11_buk') {
+            this.fireOpforMobileSAM(gUnit, targetPlane, '9K37 Buk (SA-11 山毛櫸)', 790, 920, 'command_radar', true);
+            gUnit.cooldown = gUnit.reloadTime || 5.0;
+          } else if (gUnit.type === 'opfor_sa15_tor') {
+            this.fireOpforMobileSAM(gUnit, targetPlane, '9K330 Tor-M1 (SA-15 道爾)', 750, 700, 'command_radar', true);
+            gUnit.cooldown = gUnit.reloadTime || 3.2;
+          }
+        }
+      }
+    }
+  }
+
+  // 6. 陸基導向飛彈陣地防禦與打擊 (Land-based Missile Installations & Units in Era 5)
+  private updateLandMissileSites(dt: number): void {
+    for (const isl of this.islands) {
+      for (const inst of isl.installations) {
+        if (inst.isDestroyed) continue;
+
+        inst.cooldown = Math.max(0, inst.cooldown - dt);
+        if (inst.cooldown > 0) continue;
+
+        // 6a. 友軍 MIM-104 愛國者 (Patriot) 長程防空/反飛彈發射營 (Mach 4.5, 射程 3800m)
+        if (inst.side !== 'enemy' && (inst.type === 'sam_patriot' || inst.type === 'flak_battery')) {
+          const samRange = 3800;
+          // 優先攔截來襲敵方反艦/巡弋/彈道/潛射核飛彈 (ATBM 戰術與戰略彈道飛彈攔截能力)
+          const incomingAshm = this.projectiles.find(
+            (p) => !p.isDead && this.isHostile(inst.side, p.side) && (p.type === 'missile_ashm' || p.type === 'missile_cruise' || p.type === 'missile_ssm' || p.type === 'slbm_r39') && dist(inst.pos, p.pos) <= samRange
+          );
+          if (incomingAshm) {
+            this.firePatriotSAM(inst, incomingAshm);
+            inst.cooldown = 2.5;
+            continue;
+          }
+          // 其次攔截進入空域之敵方超音速戰機或轟炸機
+          const hostileJet = this.aircraft.find(
+            (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= samRange
+          );
+          if (hostileJet) {
+            this.firePatriotSAM(inst, hostileJet);
+            inst.cooldown = 3.5;
+            continue;
+          }
+        }
+
+        // 6b. 友軍岸置魚叉反艦飛彈連 (Coastal Harpoon Battery - 射程 4500m)
+        if (inst.side !== 'enemy' && inst.type === 'coastal_harpoon') {
+          const targetWarship = this.enemyShips.find((s) => !s.isSunk && !this.isSubmarine(s) && this.isHostile(inst.side, s.side) && dist(inst.pos, s.pos) <= 4500);
+          if (targetWarship) {
+            this.fireHarpoonMissile(inst, targetWarship);
+            inst.cooldown = 24.0;
+            continue;
+          }
+        }
+
+        // 6c. 友軍 BGM-109G 陸基戰斧巡弋飛彈連 (GLCM Site - 射程 6000m)
+        if (inst.side !== 'enemy' && inst.type === 'glcm_site') {
+          for (const targetIsl of this.islands) {
+            const enemyHQ = targetIsl.installations.find(
+              (i) => !i.isDestroyed && this.isHostile(inst.side, i.side) && (i.type === 'command_post' || i.type === 's300_sam_site' || i.type === 'radar_station') && dist(inst.pos, i.pos) <= 6000
+            );
+            if (enemyHQ) {
+              this.fireTomahawkCruiseMissile(inst, enemyHQ.pos, enemyHQ);
+              inst.cooldown = 40.0;
+              break;
+            }
+          }
+          continue;
+        }
+
+        // 6d. 敵軍 S-300PMU / SA-3 Pechora / SA-2 區域防空飛彈營
+        if (inst.side === 'enemy' && (inst.type === 's300_sam_site' || inst.type === 'sa3_sam_site' || inst.type === 'sa2_sam_site')) {
+          const isSA3 = inst.type === 'sa3_sam_site';
+          const samRange = isSA3 ? (inst.range || 2900) : 4200;
+          const targetPlayerPlane = this.aircraft.find(
+            (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= samRange
+          );
+          if (targetPlayerPlane) {
+            if (isSA3) {
+              this.fireSA3Missile(inst, targetPlayerPlane, true);
+              inst.cooldown = inst.reloadTime || 3.6;
+            } else {
+              this.fireS300SAM(inst, targetPlayerPlane);
+              inst.cooldown = 6.0;
+            }
+            continue;
+          }
+          if (!isSA3) {
+            const incomingTomahawk = this.projectiles.find(
+              (p) => !p.isDead && this.isHostile(inst.side, p.side) && (p.type === 'missile_cruise' || p.type === 'missile_ashm' || p.type === 'missile_ssm' || p.type === 'slbm_trident') && dist(inst.pos, p.pos) <= samRange
+            );
+            if (incomingTomahawk) {
+              this.fireS300SAM(inst, incomingTomahawk);
+              inst.cooldown = 4.0;
+              continue;
+            }
+          }
+        }
+
+        // 6e. 敵軍 4K51 邊界 (Rubezh / Redut) 岸置超重型反艦飛彈陣地 (射程 4800m)
+        if (inst.side === 'enemy' && (inst.type === 'coastal_rubezh' || inst.type === 'coastal_gun')) {
+          const targetPlayerShip = [...this.playerShips, ...this.alliedShips]
+            .filter(
+              (s) =>
+                !s.isSunk &&
+                !this.isSubmarine(s) &&
+                this.isHostile(inst.side, s.side) &&
+                dist(inst.pos, s.pos) <= 4800
+            )
+            .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
+          if (targetPlayerShip) {
+            this.fireSovietSaturationSalvo(inst, targetPlayerShip, 8);
+            inst.cooldown = 36.0;
+            continue;
+          }
+        }
+
+        // 6g. 敵軍 9K72 飛毛腿-B (Scud-B) 戰術彈道飛彈陣地 (射程 6500m, Mach 4.5, 1400 傷害)
+        if (inst.side === 'enemy' && inst.type === 'scud_site') {
+          const scudCandidates = [...this.playerShips, ...this.alliedShips].filter(
+            (s) => !s.isSunk && !this.isSubmarine(s) && this.isHostile(inst.side, s.side) && dist(inst.pos, s.pos) <= 6500
+          );
+          const targetPlayerShip =
+            scudCandidates.find((s) => s.type === 'cvn' || s.type === 'carrier' || s.type === 'battleship' || s.type === 'bb_iowa_mod' || s.type === 'cg_tico') ||
+            scudCandidates[0] ||
+            this.getFlagship();
+          const targetPlayerBase = !targetPlayerShip ? this.islands.find(isl => isl.isFriendlyBase)?.installations.find(i => !i.isDestroyed) : null;
+          if (targetPlayerShip && dist(inst.pos, targetPlayerShip.pos) <= 6500) {
+            this.fireScudMissile(inst, targetPlayerShip.pos, targetPlayerShip);
+            inst.cooldown = 32.0;
+            continue;
+          } else if (targetPlayerBase && dist(inst.pos, targetPlayerBase.pos) <= 6500) {
+            this.fireScudMissile(inst, targetPlayerBase.pos, targetPlayerBase);
+            inst.cooldown = 35.0;
+            continue;
+          }
+        }
+      }
+    }
+  }
+
+  private updateEnemyShipTorpedoAttacks(dt: number, prioritizedFriendlies: Ship[]): void {
+    for (const eShip of this.enemyShips) {
+      if (eShip.isSunk) continue;
+
+      if (eShip.torpedoCooldown !== undefined && eShip.torpedoCooldown > 0) {
+        eShip.torpedoCooldown = Math.max(0, eShip.torpedoCooldown - dt);
+      }
+
+      if ((eShip.torpedoCooldown || 0) <= 0) {
+        const syncCandidates = prioritizedFriendlies.filter((s) => dist(eShip.pos, s.pos) <= 5600);
+        const primaryTarget = syncCandidates[0] || this.getFlagship();
+
+        if (primaryTarget && dist(eShip.pos, primaryTarget.pos) <= 5600) {
+          if (eShip.type === 'ssgn_oscar') {
+            // 奧斯卡級水下傾斜發射井分波齊射 16 枚 P-700 花崗岩 (領彈高空資料鏈)
+            this.fireSovietSubSalvo(eShip, primaryTarget, 16, syncCandidates);
+            eShip.torpedoCooldown = 62.0 + Math.random() * 10.0;
+          } else if (eShip.type === 'cgn_kirov' || eShip.type === 'cvhg_kiev' || eShip.type === 'dd_sovremenny') {
+            const shipSalvo = eShip.type === 'cgn_kirov' ? 16 : eShip.type === 'cvhg_kiev' ? 12 : 8;
+            this.fireSovietSaturationSalvo(eShip, primaryTarget, shipSalvo, syncCandidates);
+            eShip.torpedoCooldown = eShip.type === 'cgn_kirov' ? 58.0 : eShip.type === 'cvhg_kiev' ? 52.0 : 46.0;
+          }
+        }
+      }
+
+      // 5c. 奧斯卡級與維克托 III 級核潛艇 53-65K 尾流自導重型魚雷近距獵殺
+      if (eShip.type === 'ssgn_oscar' || (this.isSubmarine(eShip) && eShip.subVariant === 'victor3') || eShip.subVariant === 'akula') {
+        const closeWarship = [...this.playerShips, ...this.alliedShips].find(
+          (s) => !s.isSunk && (!this.isSubmarine(s) || Boolean(s.isSpottedByEnemy)) && dist(eShip.pos, s.pos) <= 2600
+        );
+        if (closeWarship && (eShip.rocketCooldown || 0) <= 0) {
+          this.fireWakeHomingTorpedo(eShip, closeWarship);
+          eShip.rocketCooldown = 28.0;
+        }
+      }
+    }
+  }
+
+  private updateBeringSeaCoordination(prioritizedFriendlies: Ship[]): void {
+    if (this.enemyBeringSeaCoordTimer <= 0 && prioritizedFriendlies.length > 0) {
+      const coordStrikers = this.enemyShips.filter(
+        (e) =>
+          !e.isSunk &&
+          (e.type === 'ssgn_oscar' || e.type === 'cgn_kirov' || e.type === 'cvhg_kiev' || e.type === 'dd_sovremenny') &&
+          (e.torpedoCooldown || 0) <= 18.0 &&
+          prioritizedFriendlies.some((f) => dist(e.pos, f.pos) <= 6400)
+      );
+
+      if (coordStrikers.length >= 2) {
+        let fleetSalvoTotal = 0;
+        coordStrikers.forEach((eShip, idx) => {
+          const inRangeTargets = prioritizedFriendlies.filter((f) => dist(eShip.pos, f.pos) <= 6400);
+          const primaryTarget = inRangeTargets[0] || prioritizedFriendlies[0];
+          const salvoCount =
+            eShip.type === 'ssgn_oscar' || eShip.type === 'cgn_kirov'
+              ? 16
+              : eShip.type === 'cvhg_kiev'
+              ? 12
+              : 8;
+          fleetSalvoTotal += salvoCount;
+
+          if (eShip.type === 'ssgn_oscar') {
+            this.fireSovietSubSalvo(eShip, primaryTarget, salvoCount, inRangeTargets, idx * 0.25, true);
+          } else {
+            this.fireSovietSaturationSalvo(eShip, primaryTarget, salvoCount, inRangeTargets, idx * 0.25, true);
+          }
+          eShip.torpedoCooldown = 60.0 + Math.random() * 14.0;
+        });
+
+        // 若協同編隊總彈量低於 72 枚，升空 Tu-22M3 逆火超音速飛彈轟炸機群實施海空協同飽和突擊
+        let airSupplemental = 0;
+        if (fleetSalvoTotal < 72) {
+          this.triggerEnemyAirDoctrine('strike_fleet');
+          airSupplemental = Math.max(12, 80 - fleetSalvoTotal);
+          fleetSalvoTotal += airSupplemental;
+        }
+
+        this.addBannerAlert(
+          `🚨【白令海艦群協同飽和齊射！】蘇聯太平洋艦隊「基洛夫／奧斯卡／基輔／現代級」依艦種齊射各 8–16 枚，共傾瀉 ${fleetSalvoTotal} 枚超音速反艦飛彈！立即開啟神盾 SM-2MR、CIWS 與電子干擾！`,
+          'enemy',
+          'alert',
+          9.0
+        );
+        this.addCombatLog({
+          category: 'naval',
+          sourceSide: 'enemy',
+          sourceName: '蘇聯紅旗太平洋艦隊 協同打擊指揮部',
+          targetName: '美國海軍特遣艦隊群',
+          actionType: 'recon_spotted',
+          isCrit: true,
+          text: `🚨【白令海協同飽和反艦突擊 (Operation Bering Saturation)】敵 ${coordStrikers.length} 艘飛彈主戰艦艇／核潛艦${airSupplemental > 0 ? '及海航逆火轟炸機群' : ''}於同一時間窗啟動冷戰協同飽和齊射（單艦 8–16 枚分級配比），共 ${fleetSalvoTotal} 枚 P-700 花崗岩 / P-500 玄武岩 / P-270 白蛉超音速飛彈正掠海撲來！`,
+        });
+
+        this.enemyBeringSeaCoordTimer = 76.0 + Math.random() * 18.0;
+      } else {
+        this.enemyBeringSeaCoordTimer = 18.0;
+      }
+    }
+  }
+
+  // 5. OPFOR 水面艦艇與核潛艦系統 (Kirov, Sovremenny, Udaloy, Kiev, Oscar SSGN)
+  // 5a. 蘇聯艦載防空飛彈系統 (S-300F Fort VLS / SA-N-7 Shtil / SA-N-9 Kinzhal)
+  private updateSovietShipboardSam(dt: number): void {
+    for (const eShip of this.enemyShips) {
+      if (eShip.isSunk) continue;
+
+      if (eShip.samCooldown !== undefined && eShip.samCooldown > 0) {
+        eShip.samCooldown = Math.max(0, eShip.samCooldown - dt);
+      }
+
+      if ((eShip.samCooldown || 0) <= 0) {
+        const isKirov = eShip.type === 'cgn_kirov';
+        const isSovremenny = eShip.type === 'dd_sovremenny';
+        const isUdaloy = eShip.type === 'dd_udaloy';
+        const isKiev = eShip.type === 'cvhg_kiev';
+
+        if (isKirov || isSovremenny || isUdaloy || isKiev) {
+          const samRange = isKirov ? 4000 : isSovremenny ? 3500 : isKiev ? 3200 : 2800;
+          const samName = isKirov ? 'S-300F 堡壘 (SA-N-6 Fort VLS)' : isSovremenny ? 'SA-N-7 施基利 (Shtil)' : isUdaloy ? 'SA-N-9 匕首 (Kinzhal VLS)' : 'SA-N-3 戈布勒 (Goblet)';
+
+          // 優先攔截來襲之敵方反艦飛彈、巡弋飛彈與戰術/潛射彈道飛彈 (ATACMS / Trident II D5)
+          const incomingBluforMissile = this.projectiles.find(
+            (p) =>
+              !p.isDead &&
+              this.isHostile(eShip.side, p.side) &&
+              (p.type === 'missile_ashm' || p.type === 'missile_cruise' || p.type === 'missile_ssm' || (isKirov && p.type === 'slbm_trident')) &&
+              dist(eShip.pos, p.pos) <= samRange
+          );
+
+          if (incomingBluforMissile) {
+            this.fireSovietShipSAM(eShip, incomingBluforMissile, samName);
+            eShip.samCooldown = isKirov ? 2.5 : 4.0;
+          } else {
+            // 攔截進入防空圈之敵方在空戰機
+            const targetPlayerPlane = this.aircraft.find(
+              (a) => this.isHostile(eShip.side, a.side) && a.state !== 'shot_down' && dist(eShip.pos, a.pos) <= samRange
+            );
+            if (targetPlayerPlane) {
+              this.fireSovietShipSAM(eShip, targetPlayerPlane, samName);
+              eShip.samCooldown = isKirov ? 3.0 : 4.5;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // 4. 潛艦部隊現代化作戰 (Submarine Warfare in Era 5)
+  // BLUFOR SSN-688 洛杉磯級 (Los Angeles SSN): 潛射魚叉 UGM-84、Mk 48 ADCAP 線導重型魚雷、UGM-109 戰斧巡弋飛彈
+  private updateSsnWeapons(dt: number): void {
+    for (const sub of this.playerShips) {
+      if (sub.isSunk || sub.type !== 'ssn_la') continue;
+
+      if (sub.torpedoCooldown !== undefined && sub.torpedoCooldown > 0) {
+        sub.torpedoCooldown = Math.max(0, sub.torpedoCooldown - dt);
+      }
+      if (sub.harpoonCooldown !== undefined && sub.harpoonCooldown > 0) {
+        sub.harpoonCooldown = Math.max(0, sub.harpoonCooldown - dt);
+      }
+
+      // 4a. Mk 48 ADCAP 線導主被動重型魚雷 (射程 2800m, 55節極速 - 敵潛艦需已遭聲吶接觸定位)
+      if ((sub.torpedoCooldown || 0) <= 0) {
+        const targetHostile = this.enemyShips.find(
+          (s) => !s.isSunk && (!this.isSubmarine(s) || Boolean(s.isSpotted)) && dist(sub.pos, s.pos) <= 2800
+        );
+        if (targetHostile) {
+          this.fireMk48Torpedo(sub, targetHostile);
+          sub.torpedoCooldown = 18.0;
+        }
+      }
+
+      // 4b. UGM-84 潛射魚叉 (Sub-Harpoon) 膠囊破浪反艦飛彈 (射程 4200m)
+      if ((sub.harpoonCooldown || 0) <= 0 && (sub.readyHarpoons ?? 6) > 0) {
+        const targetShip = this.enemyShips.find((s) => !s.isSunk && !this.isSubmarine(s) && dist(sub.pos, s.pos) <= 4200);
+        if (targetShip) {
+          this.fireSubHarpoon(sub, targetShip);
+          sub.harpoonCooldown = 25.0;
+          sub.readyHarpoons = Math.max(0, (sub.readyHarpoons ?? 6) - 1);
+        }
+      }
+
+      // 4c. UGM-109 潛射戰斧對陸巡弋飛彈 (TLAM - 射程 6000m)
+      if (Math.random() < 0.05 * dt) {
+        for (const isl of this.islands) {
+          const enemyHqOrRadar = isl.installations.find(
+            (inst) => !inst.isDestroyed && inst.side === 'enemy' && (inst.type === 'command_post' || inst.type === 's300_sam_site' || inst.type === 'radar_station') && dist(sub.pos, inst.pos) <= 6000
+          );
+          if (enemyHqOrRadar) {
+            this.fireTomahawkCruiseMissile(sub, enemyHqOrRadar.pos, enemyHqOrRadar);
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  // 3. 艦載防空飛彈系統 (Ship SAM Defenses: Aegis SM-2MR / Sea Sparrow / SM-1MR)
+  // 時代五神盾系統具備 4 個多目標追蹤射控通道，優先攔截來襲超音速反艦/巡弋飛彈，其次攔截敵超音速戰轟機
+  private updatePlayerShipDefenses(dt: number): void {
     for (const ship of this.playerShips) {
       if (ship.isSunk) continue;
 
@@ -10850,7 +11036,7 @@ export class GameEngine {
               const decoyChance =
                 incomingThreat.type === 'missile_ashm'
                   ? this.getAshmChaffDecoyChance(incomingThreat)
-                  : incomingThreat.speed > 580 || incomingThreat.type === 'missile_ssm'
+                  : isSupersonicMissile(incomingThreat.speed) || incomingThreat.type === 'missile_ssm'
                   ? 0.45
                   : 0.76;
               if (Math.random() < decoyChance) {
@@ -10874,423 +11060,6 @@ export class GameEngine {
             }
           }
         }
-      }
-    }
-
-    // 4. 潛艦部隊現代化作戰 (Submarine Warfare in Era 5)
-    // BLUFOR SSN-688 洛杉磯級 (Los Angeles SSN): 潛射魚叉 UGM-84、Mk 48 ADCAP 線導重型魚雷、UGM-109 戰斧巡弋飛彈
-    for (const sub of this.playerShips) {
-      if (sub.isSunk || sub.type !== 'ssn_la') continue;
-
-      if (sub.torpedoCooldown !== undefined && sub.torpedoCooldown > 0) {
-        sub.torpedoCooldown = Math.max(0, sub.torpedoCooldown - dt);
-      }
-      if (sub.harpoonCooldown !== undefined && sub.harpoonCooldown > 0) {
-        sub.harpoonCooldown = Math.max(0, sub.harpoonCooldown - dt);
-      }
-
-      // 4a. Mk 48 ADCAP 線導主被動重型魚雷 (射程 2800m, 55節極速 - 敵潛艦需已遭聲吶接觸定位)
-      if ((sub.torpedoCooldown || 0) <= 0) {
-        const targetHostile = this.enemyShips.find(
-          (s) => !s.isSunk && (!this.isSubmarine(s) || Boolean(s.isSpotted)) && dist(sub.pos, s.pos) <= 2800
-        );
-        if (targetHostile) {
-          this.fireMk48Torpedo(sub, targetHostile);
-          sub.torpedoCooldown = 18.0;
-        }
-      }
-
-      // 4b. UGM-84 潛射魚叉 (Sub-Harpoon) 膠囊破浪反艦飛彈 (射程 4200m)
-      if ((sub.harpoonCooldown || 0) <= 0 && (sub.readyHarpoons ?? 6) > 0) {
-        const targetShip = this.enemyShips.find((s) => !s.isSunk && !this.isSubmarine(s) && dist(sub.pos, s.pos) <= 4200);
-        if (targetShip) {
-          this.fireSubHarpoon(sub, targetShip);
-          sub.harpoonCooldown = 25.0;
-          sub.readyHarpoons = Math.max(0, (sub.readyHarpoons ?? 6) - 1);
-        }
-      }
-
-      // 4c. UGM-109 潛射戰斧對陸巡弋飛彈 (TLAM - 射程 6000m)
-      if (Math.random() < 0.05 * dt) {
-        for (const isl of this.islands) {
-          const enemyHqOrRadar = isl.installations.find(
-            (inst) => !inst.isDestroyed && inst.side === 'enemy' && (inst.type === 'command_post' || inst.type === 's300_sam_site' || inst.type === 'radar_station') && dist(sub.pos, inst.pos) <= 6000
-          );
-          if (enemyHqOrRadar) {
-            this.fireTomahawkCruiseMissile(sub, enemyHqOrRadar.pos, enemyHqOrRadar);
-            break;
-          }
-        }
-      }
-    }
-
-    // 5. OPFOR 水面艦艇與核潛艦系統 (Kirov, Sovremenny, Udaloy, Kiev, Oscar SSGN)
-    // 5a. 蘇聯艦載防空飛彈系統 (S-300F Fort VLS / SA-N-7 Shtil / SA-N-9 Kinzhal)
-    for (const eShip of this.enemyShips) {
-      if (eShip.isSunk) continue;
-
-      if (eShip.samCooldown !== undefined && eShip.samCooldown > 0) {
-        eShip.samCooldown = Math.max(0, eShip.samCooldown - dt);
-      }
-
-      if ((eShip.samCooldown || 0) <= 0) {
-        const isKirov = eShip.type === 'cgn_kirov';
-        const isSovremenny = eShip.type === 'dd_sovremenny';
-        const isUdaloy = eShip.type === 'dd_udaloy';
-        const isKiev = eShip.type === 'cvhg_kiev';
-
-        if (isKirov || isSovremenny || isUdaloy || isKiev) {
-          const samRange = isKirov ? 4000 : isSovremenny ? 3500 : isKiev ? 3200 : 2800;
-          const samName = isKirov ? 'S-300F 堡壘 (SA-N-6 Fort VLS)' : isSovremenny ? 'SA-N-7 施基利 (Shtil)' : isUdaloy ? 'SA-N-9 匕首 (Kinzhal VLS)' : 'SA-N-3 戈布勒 (Goblet)';
-
-          // 優先攔截來襲之敵方反艦飛彈、巡弋飛彈與戰術/潛射彈道飛彈 (ATACMS / Trident II D5)
-          const incomingBluforMissile = this.projectiles.find(
-            (p) =>
-              !p.isDead &&
-              this.isHostile(eShip.side, p.side) &&
-              (p.type === 'missile_ashm' || p.type === 'missile_cruise' || p.type === 'missile_ssm' || (isKirov && p.type === 'slbm_trident')) &&
-              dist(eShip.pos, p.pos) <= samRange
-          );
-
-          if (incomingBluforMissile) {
-            this.fireSovietShipSAM(eShip, incomingBluforMissile, samName);
-            eShip.samCooldown = isKirov ? 2.5 : 4.0;
-          } else {
-            // 攔截進入防空圈之敵方在空戰機
-            const targetPlayerPlane = this.aircraft.find(
-              (a) => this.isHostile(eShip.side, a.side) && a.state !== 'shot_down' && dist(eShip.pos, a.pos) <= samRange
-            );
-            if (targetPlayerPlane) {
-              this.fireSovietShipSAM(eShip, targetPlayerPlane, samName);
-              eShip.samCooldown = isKirov ? 3.0 : 4.5;
-            }
-          }
-        }
-      }
-    }
-
-    // 5b. 蘇聯艦隊/奧斯卡核潛艇「白令海百枚彈著飽和齊射」協同突擊 (Bering Sea 100+ Saturation Alpha Strike)
-    const surfaceFriendlies = [...this.playerShips, ...this.alliedShips].filter(
-      (s) => !s.isSunk && !this.isSubmarine(s)
-    );
-    const prioritizedFriendlies = [...surfaceFriendlies].sort((a, b) => {
-      const scoreShip = (s: Ship) =>
-        s.isFlagship || s.type === 'cvn' || s.type === 'carrier'
-          ? 0
-          : s.type === 'cg_tico' || s.type === 'battleship' || s.type === 'bb_iowa_mod'
-          ? 1
-          : 2;
-      return scoreShip(a) - scoreShip(b);
-    });
-
-    this.enemyBeringSeaCoordTimer -= dt;
-    if (this.enemyBeringSeaCoordTimer <= 0 && prioritizedFriendlies.length > 0) {
-      const coordStrikers = this.enemyShips.filter(
-        (e) =>
-          !e.isSunk &&
-          (e.type === 'ssgn_oscar' || e.type === 'cgn_kirov' || e.type === 'cvhg_kiev' || e.type === 'dd_sovremenny') &&
-          (e.torpedoCooldown || 0) <= 18.0 &&
-          prioritizedFriendlies.some((f) => dist(e.pos, f.pos) <= 6400)
-      );
-
-      if (coordStrikers.length >= 2) {
-        let fleetSalvoTotal = 0;
-        coordStrikers.forEach((eShip, idx) => {
-          const inRangeTargets = prioritizedFriendlies.filter((f) => dist(eShip.pos, f.pos) <= 6400);
-          const primaryTarget = inRangeTargets[0] || prioritizedFriendlies[0];
-          const salvoCount =
-            eShip.type === 'ssgn_oscar' || eShip.type === 'cgn_kirov'
-              ? 16
-              : eShip.type === 'cvhg_kiev'
-              ? 12
-              : 8;
-          fleetSalvoTotal += salvoCount;
-
-          if (eShip.type === 'ssgn_oscar') {
-            this.fireSovietSubSalvo(eShip, primaryTarget, salvoCount, inRangeTargets, idx * 0.25, true);
-          } else {
-            this.fireSovietSaturationSalvo(eShip, primaryTarget, salvoCount, inRangeTargets, idx * 0.25, true);
-          }
-          eShip.torpedoCooldown = 60.0 + Math.random() * 14.0;
-        });
-
-        // 若協同編隊總彈量低於 72 枚，升空 Tu-22M3 逆火超音速飛彈轟炸機群實施海空協同飽和突擊
-        let airSupplemental = 0;
-        if (fleetSalvoTotal < 72) {
-          this.triggerEnemyAirDoctrine('strike_fleet');
-          airSupplemental = Math.max(12, 80 - fleetSalvoTotal);
-          fleetSalvoTotal += airSupplemental;
-        }
-
-        this.addBannerAlert(
-          `🚨【白令海艦群協同飽和齊射！】蘇聯太平洋艦隊「基洛夫／奧斯卡／基輔／現代級」依艦種齊射各 8–16 枚，共傾瀉 ${fleetSalvoTotal} 枚超音速反艦飛彈！立即開啟神盾 SM-2MR、CIWS 與電子干擾！`,
-          'enemy',
-          'alert',
-          9.0
-        );
-        this.addCombatLog({
-          category: 'naval',
-          sourceSide: 'enemy',
-          sourceName: '蘇聯紅旗太平洋艦隊 協同打擊指揮部',
-          targetName: '美國海軍特遣艦隊群',
-          actionType: 'recon_spotted',
-          isCrit: true,
-          text: `🚨【白令海協同飽和反艦突擊 (Operation Bering Saturation)】敵 ${coordStrikers.length} 艘飛彈主戰艦艇／核潛艦${airSupplemental > 0 ? '及海航逆火轟炸機群' : ''}於同一時間窗啟動冷戰協同飽和齊射（單艦 8–16 枚分級配比），共 ${fleetSalvoTotal} 枚 P-700 花崗岩 / P-500 玄武岩 / P-270 白蛉超音速飛彈正掠海撲來！`,
-        });
-
-        this.enemyBeringSeaCoordTimer = 76.0 + Math.random() * 18.0;
-      } else {
-        this.enemyBeringSeaCoordTimer = 18.0;
-      }
-    }
-
-    for (const eShip of this.enemyShips) {
-      if (eShip.isSunk) continue;
-
-      if (eShip.torpedoCooldown !== undefined && eShip.torpedoCooldown > 0) {
-        eShip.torpedoCooldown = Math.max(0, eShip.torpedoCooldown - dt);
-      }
-
-      if ((eShip.torpedoCooldown || 0) <= 0) {
-        const syncCandidates = prioritizedFriendlies.filter((s) => dist(eShip.pos, s.pos) <= 5600);
-        const primaryTarget = syncCandidates[0] || this.getFlagship();
-
-        if (primaryTarget && dist(eShip.pos, primaryTarget.pos) <= 5600) {
-          if (eShip.type === 'ssgn_oscar') {
-            // 奧斯卡級水下傾斜發射井分波齊射 16 枚 P-700 花崗岩 (領彈高空資料鏈)
-            this.fireSovietSubSalvo(eShip, primaryTarget, 16, syncCandidates);
-            eShip.torpedoCooldown = 62.0 + Math.random() * 10.0;
-          } else if (eShip.type === 'cgn_kirov' || eShip.type === 'cvhg_kiev' || eShip.type === 'dd_sovremenny') {
-            const shipSalvo = eShip.type === 'cgn_kirov' ? 16 : eShip.type === 'cvhg_kiev' ? 12 : 8;
-            this.fireSovietSaturationSalvo(eShip, primaryTarget, shipSalvo, syncCandidates);
-            eShip.torpedoCooldown = eShip.type === 'cgn_kirov' ? 58.0 : eShip.type === 'cvhg_kiev' ? 52.0 : 46.0;
-          }
-        }
-      }
-
-      // 5c. 奧斯卡級與維克托 III 級核潛艇 53-65K 尾流自導重型魚雷近距獵殺
-      if (eShip.type === 'ssgn_oscar' || (this.isSubmarine(eShip) && eShip.subVariant === 'victor3') || eShip.subVariant === 'akula') {
-        const closeWarship = [...this.playerShips, ...this.alliedShips].find(
-          (s) => !s.isSunk && (!this.isSubmarine(s) || Boolean(s.isSpottedByEnemy)) && dist(eShip.pos, s.pos) <= 2600
-        );
-        if (closeWarship && (eShip.rocketCooldown || 0) <= 0) {
-          this.fireWakeHomingTorpedo(eShip, closeWarship);
-          eShip.rocketCooldown = 28.0;
-        }
-      }
-    }
-
-    // 6. 陸基導向飛彈陣地防禦與打擊 (Land-based Missile Installations & Units in Era 5)
-    for (const isl of this.islands) {
-      for (const inst of isl.installations) {
-        if (inst.isDestroyed) continue;
-
-        inst.cooldown = Math.max(0, inst.cooldown - dt);
-        if (inst.cooldown > 0) continue;
-
-        // 6a. 友軍 MIM-104 愛國者 (Patriot) 長程防空/反飛彈發射營 (Mach 4.5, 射程 3800m)
-        if (inst.side !== 'enemy' && (inst.type === 'sam_patriot' || inst.type === 'flak_battery')) {
-          const samRange = 3800;
-          // 優先攔截來襲敵方反艦/巡弋/彈道/潛射核飛彈 (ATBM 戰術與戰略彈道飛彈攔截能力)
-          const incomingAshm = this.projectiles.find(
-            (p) => !p.isDead && this.isHostile(inst.side, p.side) && (p.type === 'missile_ashm' || p.type === 'missile_cruise' || p.type === 'missile_ssm' || p.type === 'slbm_r39') && dist(inst.pos, p.pos) <= samRange
-          );
-          if (incomingAshm) {
-            this.firePatriotSAM(inst, incomingAshm);
-            inst.cooldown = 2.5;
-            continue;
-          }
-          // 其次攔截進入空域之敵方超音速戰機或轟炸機
-          const hostileJet = this.aircraft.find(
-            (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= samRange
-          );
-          if (hostileJet) {
-            this.firePatriotSAM(inst, hostileJet);
-            inst.cooldown = 3.5;
-            continue;
-          }
-        }
-
-        // 6b. 友軍岸置魚叉反艦飛彈連 (Coastal Harpoon Battery - 射程 4500m)
-        if (inst.side !== 'enemy' && inst.type === 'coastal_harpoon') {
-          const targetWarship = this.enemyShips.find((s) => !s.isSunk && !this.isSubmarine(s) && this.isHostile(inst.side, s.side) && dist(inst.pos, s.pos) <= 4500);
-          if (targetWarship) {
-            this.fireHarpoonMissile(inst, targetWarship);
-            inst.cooldown = 24.0;
-            continue;
-          }
-        }
-
-        // 6c. 友軍 BGM-109G 陸基戰斧巡弋飛彈連 (GLCM Site - 射程 6000m)
-        if (inst.side !== 'enemy' && inst.type === 'glcm_site') {
-          for (const targetIsl of this.islands) {
-            const enemyHQ = targetIsl.installations.find(
-              (i) => !i.isDestroyed && this.isHostile(inst.side, i.side) && (i.type === 'command_post' || i.type === 's300_sam_site' || i.type === 'radar_station') && dist(inst.pos, i.pos) <= 6000
-            );
-            if (enemyHQ) {
-              this.fireTomahawkCruiseMissile(inst, enemyHQ.pos, enemyHQ);
-              inst.cooldown = 40.0;
-              break;
-            }
-          }
-          continue;
-        }
-
-        // 6d. 敵軍 S-300PMU / SA-3 Pechora / SA-2 區域防空飛彈營
-        if (inst.side === 'enemy' && (inst.type === 's300_sam_site' || inst.type === 'sa3_sam_site' || inst.type === 'sa2_sam_site')) {
-          const isSA3 = inst.type === 'sa3_sam_site';
-          const samRange = isSA3 ? (inst.range || 2900) : 4200;
-          const targetPlayerPlane = this.aircraft.find(
-            (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= samRange
-          );
-          if (targetPlayerPlane) {
-            if (isSA3) {
-              this.fireSA3Missile(inst, targetPlayerPlane, true);
-              inst.cooldown = inst.reloadTime || 3.6;
-            } else {
-              this.fireS300SAM(inst, targetPlayerPlane);
-              inst.cooldown = 6.0;
-            }
-            continue;
-          }
-          if (!isSA3) {
-            const incomingTomahawk = this.projectiles.find(
-              (p) => !p.isDead && this.isHostile(inst.side, p.side) && (p.type === 'missile_cruise' || p.type === 'missile_ashm' || p.type === 'missile_ssm' || p.type === 'slbm_trident') && dist(inst.pos, p.pos) <= samRange
-            );
-            if (incomingTomahawk) {
-              this.fireS300SAM(inst, incomingTomahawk);
-              inst.cooldown = 4.0;
-              continue;
-            }
-          }
-        }
-
-        // 6e. 敵軍 4K51 邊界 (Rubezh / Redut) 岸置超重型反艦飛彈陣地 (射程 4800m)
-        if (inst.side === 'enemy' && (inst.type === 'coastal_rubezh' || inst.type === 'coastal_gun')) {
-          const targetPlayerShip = [...this.playerShips, ...this.alliedShips]
-            .filter(
-              (s) =>
-                !s.isSunk &&
-                !this.isSubmarine(s) &&
-                this.isHostile(inst.side, s.side) &&
-                dist(inst.pos, s.pos) <= 4800
-            )
-            .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
-          if (targetPlayerShip) {
-            this.fireSovietSaturationSalvo(inst, targetPlayerShip, 8);
-            inst.cooldown = 36.0;
-            continue;
-          }
-        }
-
-        // 6g. 敵軍 9K72 飛毛腿-B (Scud-B) 戰術彈道飛彈陣地 (射程 6500m, Mach 4.5, 1400 傷害)
-        if (inst.side === 'enemy' && inst.type === 'scud_site') {
-          const scudCandidates = [...this.playerShips, ...this.alliedShips].filter(
-            (s) => !s.isSunk && !this.isSubmarine(s) && this.isHostile(inst.side, s.side) && dist(inst.pos, s.pos) <= 6500
-          );
-          const targetPlayerShip =
-            scudCandidates.find((s) => s.type === 'cvn' || s.type === 'carrier' || s.type === 'battleship' || s.type === 'bb_iowa_mod' || s.type === 'cg_tico') ||
-            scudCandidates[0] ||
-            this.getFlagship();
-          const targetPlayerBase = !targetPlayerShip ? this.islands.find(isl => isl.isFriendlyBase)?.installations.find(i => !i.isDestroyed) : null;
-          if (targetPlayerShip && dist(inst.pos, targetPlayerShip.pos) <= 6500) {
-            this.fireScudMissile(inst, targetPlayerShip.pos, targetPlayerShip);
-            inst.cooldown = 32.0;
-            continue;
-          } else if (targetPlayerBase && dist(inst.pos, targetPlayerBase.pos) <= 6500) {
-            this.fireScudMissile(inst, targetPlayerBase.pos, targetPlayerBase);
-            inst.cooldown = 35.0;
-            continue;
-          }
-        }
-      }
-    }
-
-    // 6f. 友軍與敵軍地面裝甲自走防空車自動防空攔截 (LAV-AD / M163 VADS / 通古斯卡 2S6 / 箭-10)
-    for (const gUnit of this.groundUnits) {
-      if (gUnit.isDestroyed || gUnit.cooldown > 0) continue;
-
-      if (gUnit.side !== 'enemy' && (gUnit.type === 'usmc_lav_ad' || gUnit.type === 'us_m163_vads')) {
-        const targetPlane = this.aircraft.find((a) => this.isHostile(gUnit.side, a.side) && a.state !== 'shot_down' && dist(gUnit.pos, a.pos) <= 2000);
-        if (targetPlane) {
-          this.fireChaparralSAM(gUnit, targetPlane);
-          gUnit.cooldown = gUnit.type === 'usmc_lav_ad' ? 3.5 : 4.0;
-        }
-      } else if (
-        gUnit.side === 'enemy' &&
-        (gUnit.type === 'opfor_tunguska' ||
-          gUnit.type === 'opfor_strela10' ||
-          gUnit.type === 'opfor_sa8_osa' ||
-          gUnit.type === 'opfor_sa11_buk' ||
-          gUnit.type === 'opfor_sa15_tor')
-      ) {
-        const samRange =
-          gUnit.type === 'opfor_sa11_buk'
-            ? 3400
-            : gUnit.type === 'opfor_sa8_osa'
-            ? 2600
-            : gUnit.type === 'opfor_sa15_tor'
-            ? 2500
-            : gUnit.type === 'opfor_tunguska'
-            ? 2400
-            : 1850;
-        const canAntiMissile = gUnit.type === 'opfor_sa15_tor' || gUnit.type === 'opfor_sa11_buk' || gUnit.type === 'opfor_sa8_osa';
-
-        const incomingBluforMissile = canAntiMissile
-          ? this.projectiles.find(
-              (p) =>
-                !p.isDead &&
-                this.isHostile(gUnit.side, p.side) &&
-                (p.type === 'missile_ashm' || p.type === 'missile_cruise' || p.type === 'missile_ssm' || p.type === 'missile_arm') &&
-                dist(gUnit.pos, p.pos) <= samRange
-            )
-          : undefined;
-
-        if (incomingBluforMissile) {
-          const sysName =
-            gUnit.type === 'opfor_sa15_tor'
-              ? '9K330 Tor (SA-15 道爾垂直反飛彈)'
-              : gUnit.type === 'opfor_sa11_buk'
-              ? '9K37 Buk (SA-11 山毛櫸)'
-              : '9K33 Osa-AKM (SA-8 黃蜂)';
-          this.fireOpforMobileSAM(gUnit, incomingBluforMissile, sysName, 760, 720, 'command_radar', true);
-          gUnit.cooldown = gUnit.reloadTime || (gUnit.type === 'opfor_sa15_tor' ? 3.2 : 4.2);
-          continue;
-        }
-
-        const targetPlane = this.aircraft.find(
-          (a) => this.isHostile(gUnit.side, a.side) && a.state !== 'shot_down' && dist(gUnit.pos, a.pos) <= samRange
-        );
-        if (targetPlane) {
-          if (gUnit.type === 'opfor_tunguska') {
-            this.fireTunguskaSAM(gUnit, targetPlane);
-            gUnit.cooldown = 4.0;
-          } else if (gUnit.type === 'opfor_strela10') {
-            this.fireOpforMobileSAM(gUnit, targetPlane, '9K35 Strela-10 (SA-13 金花鼠)', 620, 480, 'ir', false);
-            gUnit.cooldown = gUnit.reloadTime || 3.8;
-          } else if (gUnit.type === 'opfor_sa8_osa') {
-            this.fireOpforMobileSAM(gUnit, targetPlane, '9K33 Osa-AKM (SA-8 黃蜂)', 690, 620, 'command_radar', true);
-            gUnit.cooldown = gUnit.reloadTime || 4.0;
-          } else if (gUnit.type === 'opfor_sa11_buk') {
-            this.fireOpforMobileSAM(gUnit, targetPlane, '9K37 Buk (SA-11 山毛櫸)', 790, 920, 'command_radar', true);
-            gUnit.cooldown = gUnit.reloadTime || 5.0;
-          } else if (gUnit.type === 'opfor_sa15_tor') {
-            this.fireOpforMobileSAM(gUnit, targetPlane, '9K330 Tor-M1 (SA-15 道爾)', 750, 700, 'command_radar', true);
-            gUnit.cooldown = gUnit.reloadTime || 3.2;
-          }
-        }
-      }
-    }
-
-    // 7. 大陸戰線前線據點動態爭奪與佔領
-    this.updateMainlandInstallationCapture(dt);
-
-    // 8. OPFOR 蘇聯戰略/戰術核武報復檢定 (時代五 MAD)
-    if (!this.hasOpforRetaliatedNuke) {
-      this.opforNukeCheckTimer = (this.opforNukeCheckTimer || 0) + dt;
-      if (this.opforNukeCheckTimer >= 3.0) {
-        this.opforNukeCheckTimer = 0;
-        this.checkOpforNuclearRetaliation();
       }
     }
   }
@@ -11525,7 +11294,7 @@ export class GameEngine {
     const spawnPos: Vector2D = { x: 1200, y: 11000 }; // Submerged Ohio off-map
     const d = dist(spawnPos, targetPos);
     const angle = Math.atan2(targetPos.y - spawnPos.y, targetPos.x - spawnPos.x);
-    const speed = 820; // Mach 5+ ballistic plunge
+    const speed = MISSILE_SPEED.trident; // re-entry vehicle terminal plunge
     this.projectiles.push({
       id: `trident-${Date.now()}`,
       type: 'slbm_trident',
@@ -11570,7 +11339,7 @@ export class GameEngine {
     this.registerArtillerySignature(launcher.pos, launcher.side, launcher.name, launcher.type);
     const d = dist(launcher.pos, targetPos);
     const angle = Math.atan2(targetPos.y - launcher.pos.y, targetPos.x - launcher.pos.x);
-    const speed = 720;
+    const speed = MISSILE_SPEED.lance;
     const isAtacms = launcher.type === 'us_atacms_nuclear' || launcher.side !== 'enemy';
 
     this.projectiles.push({
@@ -11638,7 +11407,7 @@ export class GameEngine {
     this.registerArtillerySignature(launcher.pos, launcher.side, launcher.name, launcher.type);
     const d = dist(launcher.pos, targetPos);
     const angle = Math.atan2(targetPos.y - launcher.pos.y, targetPos.x - launcher.pos.x);
-    const speed = 700; // Mach 3.5 terminal speed
+    const speed = MISSILE_SPEED.atacms; // Mach 3 terminal
 
     this.projectiles.push({
       id: `atacms-${Date.now()}-${Math.random()}`,
@@ -11800,7 +11569,7 @@ export class GameEngine {
     this.registerArtillerySignature(launcher.pos, 'enemy', launcher.name, 'scud');
     const d = dist(launcher.pos, targetPos);
     const angle = Math.atan2(targetPos.y - launcher.pos.y, targetPos.x - launcher.pos.x);
-    const speed = 720; // Mach 4.5 terminal ballistic speed
+    const speed = MISSILE_SPEED.scud; // Mach 4.5 terminal
 
     this.projectiles.push({
       id: `scud-${Date.now()}-${Math.random()}`,
@@ -11845,7 +11614,7 @@ export class GameEngine {
     }
     const d = dist(sub.pos, targetShip.pos);
     const angle = Math.atan2(targetShip.pos.y - sub.pos.y, targetShip.pos.x - sub.pos.x);
-    const speed = 500;
+    const speed = MISSILE_SPEED.harpoon;
 
     soundEngine.playWaterSplash();
     for (let i = 0; i < 8; i++) {
@@ -11955,7 +11724,7 @@ export class GameEngine {
     const attackerName = `${origin.name} (BGM-109 / UGM-109 戰斧巡弋飛彈)`;
     const d = dist(origin.pos, targetPos);
     const angle = Math.atan2(targetPos.y - origin.pos.y, targetPos.x - origin.pos.x);
-    const speed = 510;
+    const speed = MISSILE_SPEED.tomahawk;
 
     this.projectiles.push({
       id: `tlam-${Date.now()}-${Math.random()}`,
@@ -12007,7 +11776,7 @@ export class GameEngine {
     }
 
     const salvoCount = salvoOverride ?? (this.era === 'era5' ? 16 : 4);
-    const speed = 640;
+    const speed = MISSILE_SPEED.granit;
     const dmg = 3100;
     const targetPool = extraTargets && extraTargets.length > 0 ? extraTargets : [targetShip];
 
@@ -12078,7 +11847,7 @@ export class GameEngine {
     const isAntiMissile = !('model' in target);
     const d = dist(inst.pos, target.pos);
     const angle = Math.atan2(target.pos.y - inst.pos.y, target.pos.x - inst.pos.x);
-    const speed = 850;
+    const speed = MISSILE_SPEED.patriot;
 
     this.projectiles.push({
       id: `patriot-${Date.now()}-${Math.random()}`,
@@ -12118,7 +11887,7 @@ export class GameEngine {
     const isAntiMissile = !('model' in target);
     const d = dist(inst.pos, target.pos);
     const angle = Math.atan2(target.pos.y - inst.pos.y, target.pos.x - inst.pos.x);
-    const speed = 880;
+    const speed = MISSILE_SPEED.s300;
 
     this.projectiles.push({
       id: `s300-${Date.now()}-${Math.random()}`,
@@ -12162,7 +11931,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const d = dist(unit.pos, target.pos);
     const angle = Math.atan2(target.pos.y - unit.pos.y, target.pos.x - unit.pos.x);
-    const speed = 680;
+    const speed = MISSILE_SPEED.tunguska;
 
     this.projectiles.push({
       id: `tunguska-${Date.now()}-${Math.random()}`,
@@ -12238,7 +12007,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const d = dist(inst.pos, targetPlane.pos);
     const angle = Math.atan2(targetPlane.pos.y - inst.pos.y, targetPlane.pos.x - inst.pos.x);
-    const speed = 670;
+    const speed = MISSILE_SPEED.sa3;
 
     this.projectiles.push({
       id: `sa3-${Date.now()}-${Math.random()}`,
@@ -12272,7 +12041,7 @@ export class GameEngine {
     const isAntiMissile = !('model' in target);
     const d = dist(ship.pos, target.pos);
     const angle = Math.atan2(target.pos.y - ship.pos.y, target.pos.x - ship.pos.x);
-    const speed = 720;
+    const speed = MISSILE_SPEED.sovietNavalSam;
 
     this.projectiles.push({
       id: `sov-sam-${Date.now()}-${Math.random()}`,
@@ -12404,8 +12173,8 @@ export class GameEngine {
         vel: { x: Math.cos(heading) * 210, y: Math.sin(heading) * 210 },
         heading,
         targetHeading: heading,
-        speed: 210,
-        maxSpeed: 210,
+        speed: getAircraftSpeed('tu22m3'),
+        maxSpeed: getAircraftSpeed('tu22m3'),
         altitude: 0.96,
         state: 'cruising',
         health: 1600,
@@ -12439,8 +12208,8 @@ export class GameEngine {
           vel: { x: Math.cos(heading) * 195, y: Math.sin(heading) * 195 },
           heading,
           targetHeading: heading,
-          speed: 195,
-          maxSpeed: 195,
+          speed: getAircraftSpeed('su27'),
+          maxSpeed: getAircraftSpeed('su27'),
           altitude: 0.94,
           state: 'cruising',
           health: 720,
@@ -12513,8 +12282,8 @@ export class GameEngine {
         vel: { x: Math.cos(heading) * 140, y: Math.sin(heading) * 140 },
         heading,
         targetHeading: heading,
-        speed: 140,
-        maxSpeed: 140,
+        speed: getAircraftSpeed('il28'),
+        maxSpeed: getAircraftSpeed('il28'),
         altitude: 0.92,
         state: 'cruising',
         health: 1200,
@@ -12548,8 +12317,8 @@ export class GameEngine {
           vel: { x: Math.cos(heading) * 165, y: Math.sin(heading) * 165 },
           heading,
           targetHeading: heading,
-          speed: 165,
-          maxSpeed: 165,
+          speed: getAircraftSpeed('mig21'),
+          maxSpeed: getAircraftSpeed('mig21'),
           altitude: 0.90,
           state: 'cruising',
           health: 550,
@@ -12575,7 +12344,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const d = dist(ship.pos, targetPos);
     const angle = Math.atan2(targetPos.y - ship.pos.y, targetPos.x - ship.pos.x);
-    const speed = 480;
+    const speed = MISSILE_SPEED.asroc;
 
     this.projectiles.push({
       id: `asroc-${Date.now()}-${Math.random()}`,
@@ -12656,7 +12425,7 @@ export class GameEngine {
     soundEngine.playRocketWhoosh();
     const d = dist(unit.pos, targetPlane.pos);
     const angle = Math.atan2(targetPlane.pos.y - unit.pos.y, targetPlane.pos.x - unit.pos.x);
-    const speed = 580;
+    const speed = MISSILE_SPEED.chaparral;
     this.projectiles.push({
       id: `chaparral-${Date.now()}-${Math.random()}`,
       type: 'missile_sam',
@@ -12799,10 +12568,10 @@ export class GameEngine {
           missile.missileHealth = 280; // 重型裝甲彈道飛彈 (Scud-B)
           missile.maxMissileHealth = 280;
         } else if (missile.type === 'missile_ashm') {
-          const hp = this.getAshmStructuralHealth(missile.ashmVariant, missile.speed || 500);
+          const hp = this.getAshmStructuralHealth(missile.ashmVariant, missile.speed);
           missile.missileHealth = hp;
           missile.maxMissileHealth = hp;
-        } else if ((missile.speed || 500) > 600) {
+        } else if (isSupersonicMissile(missile.speed)) {
           missile.missileHealth = 180;
           missile.maxMissileHealth = 180;
         } else {
@@ -13002,85 +12771,89 @@ export class GameEngine {
         }
       }
 
-      // 累積傷害耗盡：凌空擊碎引爆目標飛彈！(Single-Target Kill Confirmed)
-      if ((lockedMissile.missileHealth ?? 0) <= 0) {
-        lockedMissile.isDead = true;
-        soundEngine.playExplosion(false);
-        if (lockedMissile.isLeadMissile) {
-          this.handleAshmLeaderDestroyed(lockedMissile);
-        }
+      this.resolvePointDefenseKill(ship, lockedMissile, gunDesc);
+    }
+  }
 
-        // 凌空殉爆視覺特效
+  // 累積傷害耗盡：凌空擊碎引爆目標飛彈！(Single-Target Kill Confirmed)
+  private resolvePointDefenseKill(ship: Ship, lockedMissile: Projectile, gunDesc: string): void {
+    if ((lockedMissile.missileHealth ?? 0) <= 0) {
+      lockedMissile.isDead = true;
+      soundEngine.playExplosion(false);
+      if (lockedMissile.isLeadMissile) {
+        this.handleAshmLeaderDestroyed(lockedMissile);
+      }
+
+      // 凌空殉爆視覺特效
+      this.particles.push({
+        id: `ashm-kill-shock-${Date.now()}`,
+        x: lockedMissile.pos.x,
+        y: lockedMissile.pos.y,
+        vx: 0,
+        vy: 0,
+        life: 0.65,
+        maxLife: 0.65,
+        radius: 52,
+        color: '#FF6D00',
+        type: 'shockwave',
+        shape: 'ring',
+      });
+
+      for (let k = 0; k < 6; k++) {
         this.particles.push({
-          id: `ashm-kill-shock-${Date.now()}`,
+          id: `ashm-kill-puff-${Date.now()}-${k}`,
+          x: lockedMissile.pos.x + (Math.random() - 0.5) * 35,
+          y: lockedMissile.pos.y + (Math.random() - 0.5) * 35,
+          vx: (Math.random() - 0.5) * 8,
+          vy: (Math.random() - 0.5) * 8,
+          life: 2.0,
+          maxLife: 2.0,
+          radius: 22 + Math.random() * 10,
+          color: '#161A1E',
+          type: 'flak_puff',
+          rot: Math.random() * Math.PI * 2,
+          rotSpeed: (Math.random() - 0.5) * 0.4,
+        });
+      }
+
+      for (let sp = 0; sp < 16; sp++) {
+        const spAngle = Math.random() * Math.PI * 2;
+        const spSpeed = 90 + Math.random() * 160;
+        this.particles.push({
+          id: `ashm-kill-sp-${Date.now()}-${sp}`,
           x: lockedMissile.pos.x,
           y: lockedMissile.pos.y,
-          vx: 0,
-          vy: 0,
-          life: 0.65,
-          maxLife: 0.65,
-          radius: 52,
-          color: '#FF6D00',
-          type: 'shockwave',
-          shape: 'ring',
+          vx: Math.cos(spAngle) * spSpeed,
+          vy: Math.sin(spAngle) * spSpeed,
+          life: 0.5,
+          maxLife: 0.5,
+          radius: 2.4,
+          color: sp % 2 === 0 ? '#FFE082' : '#FF3D00',
+          type: 'spark',
         });
-
-        for (let k = 0; k < 6; k++) {
-          this.particles.push({
-            id: `ashm-kill-puff-${Date.now()}-${k}`,
-            x: lockedMissile.pos.x + (Math.random() - 0.5) * 35,
-            y: lockedMissile.pos.y + (Math.random() - 0.5) * 35,
-            vx: (Math.random() - 0.5) * 8,
-            vy: (Math.random() - 0.5) * 8,
-            life: 2.0,
-            maxLife: 2.0,
-            radius: 22 + Math.random() * 10,
-            color: '#161A1E',
-            type: 'flak_puff',
-            rot: Math.random() * Math.PI * 2,
-            rotSpeed: (Math.random() - 0.5) * 0.4,
-          });
-        }
-
-        for (let sp = 0; sp < 16; sp++) {
-          const spAngle = Math.random() * Math.PI * 2;
-          const spSpeed = 90 + Math.random() * 160;
-          this.particles.push({
-            id: `ashm-kill-sp-${Date.now()}-${sp}`,
-            x: lockedMissile.pos.x,
-            y: lockedMissile.pos.y,
-            vx: Math.cos(spAngle) * spSpeed,
-            vy: Math.sin(spAngle) * spSpeed,
-            life: 0.5,
-            maxLife: 0.5,
-            radius: 2.4,
-            color: sp % 2 === 0 ? '#FFE082' : '#FF3D00',
-            type: 'spark',
-          });
-        }
-
-        const interceptDist = Math.round(dist(ship.pos, lockedMissile.pos));
-        const missileName = lockedMissile.attackerName || '來襲掠海飛彈';
-
-        this.addBannerAlert(
-          `💥【CIWS 單一火控雷達精準擊落！】「${ship.name}」火控雷達緊咬目標，在艦舷外 ${interceptDist}m 凌空撕碎來襲「${missileName}」！`,
-          ship.side === 'player' ? 'player' : 'enemy',
-          'alert',
-          4.5
-        );
-
-        this.addCombatLog({
-          category: 'aa',
-          sourceSide: ship.side,
-          sourceName: `${ship.name} (${gunDesc})`,
-          targetName: missileName,
-          actionType: 'aa_down',
-          text: `💥【CIWS 密集火網凌空引爆】「${ship.name}」單一雷達火控通道精準追瞄！${gunDesc} 傾瀉密集脫殼穿甲彈幕，在艦舷外 ${interceptDist}m 凌空打碎引爆「${missileName}」！火控天線隨即轉向下一威脅！`,
-        });
-
-        // 擊落目標後立即釋放鎖定，讓火控雷達在次幀即刻轉向追瞄齊射波次中的下一枚飛彈
-        ship.ciwsTargetId = undefined;
       }
+
+      const interceptDist = Math.round(dist(ship.pos, lockedMissile.pos));
+      const missileName = lockedMissile.attackerName || '來襲掠海飛彈';
+
+      this.addBannerAlert(
+        `💥【CIWS 單一火控雷達精準擊落！】「${ship.name}」火控雷達緊咬目標，在艦舷外 ${interceptDist}m 凌空撕碎來襲「${missileName}」！`,
+        ship.side === 'player' ? 'player' : 'enemy',
+        'alert',
+        4.5
+      );
+
+      this.addCombatLog({
+        category: 'aa',
+        sourceSide: ship.side,
+        sourceName: `${ship.name} (${gunDesc})`,
+        targetName: missileName,
+        actionType: 'aa_down',
+        text: `💥【CIWS 密集火網凌空引爆】「${ship.name}」單一雷達火控通道精準追瞄！${gunDesc} 傾瀉密集脫殼穿甲彈幕，在艦舷外 ${interceptDist}m 凌空打碎引爆「${missileName}」！火控天線隨即轉向下一威脅！`,
+      });
+
+      // 擊落目標後立即釋放鎖定，讓火控雷達在次幀即刻轉向追瞄齊射波次中的下一枚飛彈
+      ship.ciwsTargetId = undefined;
     }
   }
 
@@ -13176,7 +12949,7 @@ export class GameEngine {
             interceptChance = 0.14;
           } else if (targetMissile.ashmVariant === 'p15_styx' || targetMissile.ashmVariant === 'ksr5_kelt') {
             interceptChance = 0.24;
-          } else if ((targetMissile.speed || 500) > 600 || targetMissile.type === 'missile_ssm') {
+          } else if (isSupersonicMissile(targetMissile.speed) || targetMissile.type === 'missile_ssm') {
             interceptChance = 0.10;
           }
           const roll = Math.random();
@@ -13237,7 +13010,7 @@ export class GameEngine {
 
     const d = dist(ship.pos, target.pos);
     const launchAngle = Math.atan2(target.pos.y - ship.pos.y, target.pos.x - ship.pos.x);
-    const speed = 640;
+    const speed = MISSILE_SPEED.standard;
 
     this.particles.push({
       id: `sam-flash-${Date.now()}`,
@@ -13331,7 +13104,7 @@ export class GameEngine {
     this.scheduleStaggeredMissileLaunch(ship, targets, salvoCount, {
       missileType: 'missile_ashm',
       missileName: 'RGM-84 魚叉掠海反艦飛彈',
-      speed: 500,
+      speed: MISSILE_SPEED.harpoon,
       damage: 2050,
       blastRadius: 55,
       isSeaSkimming: true,
@@ -13376,7 +13149,7 @@ export class GameEngine {
       this.scheduleStaggeredMissileLaunch(ship, targets, salvoCount, {
         missileType: 'missile_ashm',
         missileName: label,
-        speed: isMM40 ? 555 : 535,
+        speed: isMM40 ? MISSILE_SPEED.exocetMm40 : MISSILE_SPEED.exocetMm38,
         damage: isMM40 ? 1850 : 1650,
         blastRadius: 48,
         isSeaSkimming: true,
@@ -13405,7 +13178,7 @@ export class GameEngine {
       this.scheduleStaggeredMissileLaunch(ship, targets, salvoCount, {
         missileType: 'missile_ashm',
         missileName: 'RGM-84 魚叉掠海反艦飛彈 (北約/盟軍標準型)',
-        speed: 500,
+        speed: MISSILE_SPEED.harpoon,
         damage: 2050,
         blastRadius: 55,
         isSeaSkimming: true,
@@ -13431,7 +13204,7 @@ export class GameEngine {
     soundEngine.playRocketWhoosh();
     const d = dist(ship.pos, targetShip.pos);
     const angle = Math.atan2(targetShip.pos.y - ship.pos.y, targetShip.pos.x - ship.pos.x);
-    const speed = 500;
+    const speed = MISSILE_SPEED.harpoon;
     const isSingleArmOHP = 'type' in ship && ship.type === 'ffg_ohp' && ship.side === 'player';
 
     this.projectiles.push({
@@ -13528,7 +13301,7 @@ export class GameEngine {
         ? 12
         : 8;
     const salvoCount = salvoOverride ?? (this.era === 'era5' ? defaultEra5Count : isGranit ? 4 : 2);
-    const speed = isGranit ? 640 : isBazalt ? 660 : isMoskit ? 710 : 420;
+    const speed = isGranit ? MISSILE_SPEED.granit : isBazalt ? MISSILE_SPEED.bazalt : isMoskit ? MISSILE_SPEED.moskit : MISSILE_SPEED.styx;
     const dmg = isGranit ? 3100 : isBazalt ? 2800 : isMoskit ? 2700 : 2100;
     const ashmProfile: AshmFlightProfile = isGranit || isBazalt
       ? 'datalink_follower'
@@ -13574,7 +13347,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const d = dist(inst.pos, targetPlane.pos);
     const angle = Math.atan2(targetPlane.pos.y - inst.pos.y, targetPlane.pos.x - inst.pos.x);
-    const speed = 590;
+    const speed = MISSILE_SPEED.sa2;
 
     this.projectiles.push({
       id: `sa2-${Date.now()}-${Math.random()}`,
@@ -13629,7 +13402,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const d = dist(inst.pos, targetPlane.pos);
     const angle = Math.atan2(targetPlane.pos.y - inst.pos.y, targetPlane.pos.x - inst.pos.x);
-    const speed = 620;
+    const speed = MISSILE_SPEED.hawk;
 
     this.projectiles.push({
       id: `hawk-${Date.now()}-${Math.random()}`,
@@ -13670,7 +13443,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const d = dist(ship.pos, targetShip.pos);
     const angle = Math.atan2(targetShip.pos.y - ship.pos.y, targetShip.pos.x - ship.pos.x);
-    const speed = 360;
+    const speed = MISSILE_SPEED.styx;
 
     this.projectiles.push({
       id: `styx-${Date.now()}-${Math.random()}`,
@@ -13778,7 +13551,7 @@ export class GameEngine {
 
     soundEngine.playRocketWhoosh();
     const angle = Math.atan2(target.pos.y - plane.pos.y, target.pos.x - plane.pos.x);
-    const speed = aamType === 'aim7' ? 620 : 560;
+    const speed = aamType === 'aim7' ? MISSILE_SPEED.aim7 : MISSILE_SPEED.aim9;
     const aamName =
       this.era === 'era5'
         ? (aamType === 'aim7'
@@ -13835,7 +13608,7 @@ export class GameEngine {
     soundEngine.playRocketWhoosh();
     const d = dist(plane.pos, targetInst.pos);
     const angle = Math.atan2(targetInst.pos.y - plane.pos.y, targetInst.pos.x - plane.pos.x);
-    const speed = 640;
+    const speed = MISSILE_SPEED.shrike;
     const targetName = ('codeName' in targetInst && targetInst.codeName) || targetInst.name;
     const targetEntityType: Projectile['targetEntityType'] =
       'isSunk' in targetInst ? 'ship' : 'reloadTime' in targetInst ? 'installation' : 'ground';
@@ -13949,7 +13722,7 @@ export class GameEngine {
     soundEngine.playRocketWhoosh();
     const d = dist(plane.pos, targetPos);
     const angle = Math.atan2(targetPos.y - plane.pos.y, targetPos.x - plane.pos.x);
-    const speed = 460;
+    const speed = MISSILE_SPEED.bullpup;
 
     this.projectiles.push({
       id: `bullpup-${Date.now()}-${Math.random()}`,
@@ -14155,7 +13928,7 @@ export class GameEngine {
     soundEngine.playRocketWhoosh();
     const d = dist(plane.pos, targetInst.pos);
     const angle = Math.atan2(targetInst.pos.y - plane.pos.y, targetInst.pos.x - plane.pos.x);
-    const speed = 760;
+    const speed = MISSILE_SPEED.standardArm;
     const targetName = ('codeName' in targetInst && targetInst.codeName) || targetInst.name;
     const targetEntityType: Projectile['targetEntityType'] =
       'isSunk' in targetInst ? 'ship' : 'reloadTime' in targetInst ? 'installation' : 'ground';
@@ -14244,7 +14017,7 @@ export class GameEngine {
     soundEngine.playKlaxon();
     const d = dist(plane.pos, targetPos);
     const angle = Math.atan2(targetPos.y - plane.pos.y, targetPos.x - plane.pos.x);
-    const speed = 520;
+    const speed = MISSILE_SPEED.ksr5;
 
     this.projectiles.push({
       id: `ksr5-${Date.now()}-${Math.random()}`,
@@ -14862,7 +14635,7 @@ export class GameEngine {
     if (isCap) {
       const patrolCenter: Vector2D = { x: 8600, y: 5200 };
       const model = isEra5 ? (Math.random() < 0.5 ? 'f15a' : 'f16a') : isEra4 ? 'f4e' : 'f86';
-      const speed = isEra5 ? 175 : isEra4 ? 160 : 145;
+      const speed = getAircraftSpeed(model);
       const baseHealth = isEra5 ? 750 : isEra4 ? 680 : 520;
       const modelName = isEra5 ? (model === 'f15a' ? 'F-15A 鷹式超音速空優戰機' : 'F-16A 戰隼全天候戰機') : isEra4 ? 'F-4E 幽靈二式空優戰鬥機' : 'F-86 軍刀空優機';
       const pType = isEra5 ? 'aim9_sidewinder' : isEra4 ? 'aim9_sidewinder' : 'clean_guns';
@@ -14920,7 +14693,7 @@ export class GameEngine {
       const targetUnit = this.groundUnits.find((u) => u.side === 'enemy' && !u.isDestroyed);
       const targetPos: Vector2D = targetUnit ? { ...targetUnit.pos } : { x: 9200, y: 4800 };
       const model = isEra5 ? 'a10a' : isEra4 ? 'a7' : 'ad1';
-      const speed = isEra5 ? 130 : isEra4 ? 135 : 120;
+      const speed = getAircraftSpeed(model);
       const baseHealth = isEra5 ? 1100 : isEra4 ? 750 : 700;
       const modelName = isEra5 ? 'A-10A 雷霆二式裝甲獵殺機' : isEra4 ? 'A-7 海盜二式輕型攻擊機' : 'AD-1 天襲者密接打擊機';
       const pType = isEra5 ? 'agm65_maverick' : isEra4 ? 'bombs_snakeye_retarded' : (count % 2 === 0 ? 'hvar_rockets' : 'napalm_canister');
@@ -15002,44 +14775,44 @@ export class GameEngine {
 
     if (this.era === 'era1') {
       pool = [
-        { model: 'hurricane', role: 'fighter', modelName: '颶風式 Mk.II 戰鬥機', speed: 102, baseHealth: 420, payloadType: 'clean_guns', payloadName: '8x .303 白朗寧機槍', ammo: 2400, affiliation: '英國皇家空軍 (RAF)' },
-        { model: 'spitfire_v', role: 'fighter', modelName: '噴火式 Mk.V 戰鬥機', speed: 112, baseHealth: 420, payloadType: 'clean_guns', payloadName: '2x 20mm 機砲 + 4x .303', ammo: 1800, affiliation: '英國皇家空軍 (RAF)' },
-        { model: 'beaufighter', role: 'attacker', modelName: '雙頭怪 (Beaufighter) 打擊機', speed: 106, baseHealth: 620, payloadType: 'aerial_torpedo', payloadName: 'Mk 13 航空魚雷 / 4x 20mm', ammo: 1200, affiliation: '皇家空軍岸防司令部' },
-        { model: 'swordfish', role: 'torpedo_bomber', modelName: '劍魚魚雷轟炸機', speed: 74, baseHealth: 340, payloadType: 'aerial_torpedo', payloadName: '18吋航空重型魚雷', ammo: 600, affiliation: '皇家海軍航空隊 (FAA)' },
+        { model: 'hurricane', role: 'fighter', modelName: '颶風式 Mk.II 戰鬥機', speed: getAircraftSpeed('hurricane'), baseHealth: 420, payloadType: 'clean_guns', payloadName: '8x .303 白朗寧機槍', ammo: 2400, affiliation: '英國皇家空軍 (RAF)' },
+        { model: 'spitfire_v', role: 'fighter', modelName: '噴火式 Mk.V 戰鬥機', speed: getAircraftSpeed('spitfire_v'), baseHealth: 420, payloadType: 'clean_guns', payloadName: '2x 20mm 機砲 + 4x .303', ammo: 1800, affiliation: '英國皇家空軍 (RAF)' },
+        { model: 'beaufighter', role: 'attacker', modelName: '雙頭怪 (Beaufighter) 打擊機', speed: getAircraftSpeed('beaufighter'), baseHealth: 620, payloadType: 'aerial_torpedo', payloadName: 'Mk 13 航空魚雷 / 4x 20mm', ammo: 1200, affiliation: '皇家空軍岸防司令部' },
+        { model: 'swordfish', role: 'torpedo_bomber', modelName: '劍魚魚雷轟炸機', speed: getAircraftSpeed('swordfish'), baseHealth: 340, payloadType: 'aerial_torpedo', payloadName: '18吋航空重型魚雷', ammo: 600, affiliation: '皇家海軍航空隊 (FAA)' },
       ];
     } else if (this.era === 'era2') {
       pool = [
-        { model: 'spitfire_xiv', role: 'fighter', modelName: '噴火式 Mk.XIV (格里芬)', speed: 126, baseHealth: 460, payloadType: 'clean_guns', payloadName: '2x 20mm + 2x .50 機槍', ammo: 1600, affiliation: '英國皇家空軍 (RAF)' },
-        { model: 'tempest', role: 'fighter', modelName: '暴風式 Mk.V 戰鬥機', speed: 128, baseHealth: 520, payloadType: 'hvar_rockets', payloadName: '8x 航空火箭 / 4x 20mm', ammo: 1600, affiliation: '英國皇家空軍 (RAF)' },
-        { model: 'mosquito', role: 'attacker', modelName: '蚊式 (Mosquito FB.VI) 轟炸機', speed: 125, baseHealth: 580, payloadType: 'bombs_dual_500', payloadName: '雙聯 500lb 航彈 + 4x 20mm', ammo: 1400, affiliation: '英國皇家空軍 (RAF)' },
-        { model: 'lancaster', role: 'level_bomber', modelName: '蘭開斯特重型轟炸機', speed: 96, baseHealth: 980, payloadType: 'bombs_carpet_250', payloadName: '16枚連環地毯航彈', ammo: 1800, affiliation: '皇家空軍轟炸司令部' },
+        { model: 'spitfire_xiv', role: 'fighter', modelName: '噴火式 Mk.XIV (格里芬)', speed: getAircraftSpeed('spitfire_xiv'), baseHealth: 460, payloadType: 'clean_guns', payloadName: '2x 20mm + 2x .50 機槍', ammo: 1600, affiliation: '英國皇家空軍 (RAF)' },
+        { model: 'tempest', role: 'fighter', modelName: '暴風式 Mk.V 戰鬥機', speed: getAircraftSpeed('tempest'), baseHealth: 520, payloadType: 'hvar_rockets', payloadName: '8x 航空火箭 / 4x 20mm', ammo: 1600, affiliation: '英國皇家空軍 (RAF)' },
+        { model: 'mosquito', role: 'attacker', modelName: '蚊式 (Mosquito FB.VI) 轟炸機', speed: getAircraftSpeed('mosquito'), baseHealth: 580, payloadType: 'bombs_dual_500', payloadName: '雙聯 500lb 航彈 + 4x 20mm', ammo: 1400, affiliation: '英國皇家空軍 (RAF)' },
+        { model: 'lancaster', role: 'level_bomber', modelName: '蘭開斯特重型轟炸機', speed: getAircraftSpeed('lancaster'), baseHealth: 980, payloadType: 'bombs_carpet_250', payloadName: '16枚連環地毯航彈', ammo: 1800, affiliation: '皇家空軍轟炸司令部' },
       ];
     } else if (this.era === 'era3') {
       pool = [
-        { model: 'meteor', role: 'fighter', modelName: '流星 (Meteor F.8) 噴射戰鬥機', speed: 138, baseHealth: 520, payloadType: 'clean_guns', payloadName: '4x 20mm 西斯帕諾機砲', ammo: 1600, affiliation: '聯合國軍 / 皇家空軍' },
-        { model: 'rokaf_p51', role: 'fighter', modelName: 'F-51D 野馬式戰鬥機', speed: 122, baseHealth: 460, payloadType: 'clean_guns', payloadName: '6x .50 M2 機槍', ammo: 1800, affiliation: '大韓民國空軍 (ROKAF)' },
-        { model: 'sea_fury', role: 'attacker', modelName: '海怒 (Sea Fury FB.11) 艦載機', speed: 120, baseHealth: 500, payloadType: 'hvar_rockets', payloadName: '8x 60lb 火箭 + 4x 20mm', ammo: 1600, affiliation: '英聯邦特遣艦隊航空隊' },
-        { model: 'firefly_as5', role: 'attacker', modelName: '螢火蟲 (Firefly AS.5) 攻擊機', speed: 104, baseHealth: 490, payloadType: 'hvar_rockets', payloadName: 'ASH雷達 + 8x 火箭', ammo: 1200, affiliation: '英聯邦海軍特遣隊' },
+        { model: 'meteor', role: 'fighter', modelName: '流星 (Meteor F.8) 噴射戰鬥機', speed: getAircraftSpeed('meteor'), baseHealth: 520, payloadType: 'clean_guns', payloadName: '4x 20mm 西斯帕諾機砲', ammo: 1600, affiliation: '聯合國軍 / 皇家空軍' },
+        { model: 'rokaf_p51', role: 'fighter', modelName: 'F-51D 野馬式戰鬥機', speed: getAircraftSpeed('rokaf_p51'), baseHealth: 460, payloadType: 'clean_guns', payloadName: '6x .50 M2 機槍', ammo: 1800, affiliation: '大韓民國空軍 (ROKAF)' },
+        { model: 'sea_fury', role: 'attacker', modelName: '海怒 (Sea Fury FB.11) 艦載機', speed: getAircraftSpeed('sea_fury'), baseHealth: 500, payloadType: 'hvar_rockets', payloadName: '8x 60lb 火箭 + 4x 20mm', ammo: 1600, affiliation: '英聯邦特遣艦隊航空隊' },
+        { model: 'firefly_as5', role: 'attacker', modelName: '螢火蟲 (Firefly AS.5) 攻擊機', speed: getAircraftSpeed('firefly_as5'), baseHealth: 490, payloadType: 'hvar_rockets', payloadName: 'ASH雷達 + 8x 火箭', ammo: 1200, affiliation: '英聯邦海軍特遣隊' },
       ];
     } else if (this.era === 'era4') {
       pool = [
-        { model: 'f5a', role: 'fighter', modelName: 'F-5A 自由鬥士輕型戰機', speed: 160, baseHealth: 560, payloadType: 'aim9_sidewinder', payloadName: '2x AIM-9 響尾蛇 + 20mm機砲', ammo: 800, affiliation: '北約盟國戰術空軍' },
-        { model: 'mirage3', role: 'fighter', modelName: '幻象 IIIE 三角翼戰鬥機', speed: 168, baseHealth: 580, payloadType: 'aim9_sidewinder', payloadName: '魔術/響尾蛇 + 雙門德發機砲', ammo: 700, affiliation: '法國空軍 / 北約聯隊' },
-        { model: 'f104g', role: 'fighter', modelName: 'F-104G 星式超音速戰機', speed: 185, baseHealth: 550, payloadType: 'aim9_sidewinder', payloadName: '20mm 火神砲 + 響尾蛇飛彈', ammo: 750, affiliation: '西德聯邦海航 (MFG 2)' },
-        { model: 'a1h', role: 'attacker', modelName: 'A-1H 天襲者密接打擊機', speed: 115, baseHealth: 680, payloadType: 'bombs_snakeye_retarded', payloadName: '重裝航彈 + 4x 20mm 機砲', ammo: 1200, affiliation: '盟軍戰術空軍聯隊' },
-        { model: 'a37b', role: 'attacker', modelName: 'A-37B 蜻蜓式輕型攻擊機', speed: 130, baseHealth: 500, payloadType: 'bombs_snakeye_retarded', payloadName: 'GAU-2B 米尼岡機槍 + 航彈', ammo: 1500, affiliation: '南越空軍 (VNAF)' },
-        { model: 'hunter_fga9', role: 'attacker', modelName: '獵手 (Hunter FGA.9) 攻擊機', speed: 140, baseHealth: 580, payloadType: 'bombs_snakeye_retarded', payloadName: '4x 30mm 亞丁機砲 + 航彈', ammo: 1000, affiliation: '英國皇家空軍 (RAF)' },
+        { model: 'f5a', role: 'fighter', modelName: 'F-5A 自由鬥士輕型戰機', speed: getAircraftSpeed('f5a'), baseHealth: 560, payloadType: 'aim9_sidewinder', payloadName: '2x AIM-9 響尾蛇 + 20mm機砲', ammo: 800, affiliation: '北約盟國戰術空軍' },
+        { model: 'mirage3', role: 'fighter', modelName: '幻象 IIIE 三角翼戰鬥機', speed: getAircraftSpeed('mirage3'), baseHealth: 580, payloadType: 'aim9_sidewinder', payloadName: '魔術/響尾蛇 + 雙門德發機砲', ammo: 700, affiliation: '法國空軍 / 北約聯隊' },
+        { model: 'f104g', role: 'fighter', modelName: 'F-104G 星式超音速戰機', speed: getAircraftSpeed('f104g'), baseHealth: 550, payloadType: 'aim9_sidewinder', payloadName: '20mm 火神砲 + 響尾蛇飛彈', ammo: 750, affiliation: '西德聯邦海航 (MFG 2)' },
+        { model: 'a1h', role: 'attacker', modelName: 'A-1H 天襲者密接打擊機', speed: getAircraftSpeed('a1h'), baseHealth: 680, payloadType: 'bombs_snakeye_retarded', payloadName: '重裝航彈 + 4x 20mm 機砲', ammo: 1200, affiliation: '盟軍戰術空軍聯隊' },
+        { model: 'a37b', role: 'attacker', modelName: 'A-37B 蜻蜓式輕型攻擊機', speed: getAircraftSpeed('a37b'), baseHealth: 500, payloadType: 'bombs_snakeye_retarded', payloadName: 'GAU-2B 米尼岡機槍 + 航彈', ammo: 1500, affiliation: '南越空軍 (VNAF)' },
+        { model: 'hunter_fga9', role: 'attacker', modelName: '獵手 (Hunter FGA.9) 攻擊機', speed: getAircraftSpeed('hunter_fga9'), baseHealth: 580, payloadType: 'bombs_snakeye_retarded', payloadName: '4x 30mm 亞丁機砲 + 航彈', ammo: 1000, affiliation: '英國皇家空軍 (RAF)' },
       ];
     } else {
       // Era 5 Cold War NATO Coalition (Ceiling is SARH, AMRAAM not yet deployed)
       pool = [
-        { model: 'tornado_adv', role: 'fighter', modelName: '龍捲風 ADV F.3 全天候截擊機', speed: 195, baseHealth: 750, payloadType: 'aim7_sparrow', payloadName: '4x 天閃 (Skyflash) SARH + 響尾蛇', ammo: 600, affiliation: '英國皇家空軍 (RAF)' },
-        { model: 'f4f', role: 'fighter', modelName: 'F-4F 幽靈II式戰鬥機', speed: 165, baseHealth: 680, payloadType: 'aim7_sparrow', payloadName: '4x AIM-7 麻雀 (SARH) + 響尾蛇', ammo: 640, affiliation: '西德聯邦空軍 (Luftwaffe)' },
-        { model: 'mirage2000', role: 'fighter', modelName: '幻象 2000C 電傳飛控戰鬥機', speed: 205, baseHealth: 720, payloadType: 'aim7_sparrow', payloadName: '超級530D (SARH) + 魔術二型', ammo: 600, affiliation: '法國空軍 (Armée de l\'Air)' },
-        { model: 'tornado_gr1', role: 'attacker', modelName: '龍捲風 GR.1 遠程打擊機', speed: 175, baseHealth: 760, payloadType: 'rgm84_harpoon', payloadName: '海鷹/鸕鶿反艦飛彈 + 雙門27mm砲', ammo: 800, affiliation: '西德聯邦海航 (MFG 1)' },
-        { model: 'tornado_ids', role: 'attacker', modelName: '龍捲風 IDS 跑道壓制戰轟機', speed: 175, baseHealth: 760, payloadType: 'bombs_snakeye_retarded', payloadName: 'JP233 跑道集束子母彈藥撒佈器', ammo: 800, affiliation: '英國皇家空軍 (RAF)' },
-        { model: 'jaguar_gr1', role: 'attacker', modelName: '美洲豹 GR.1 戰術攻擊機', speed: 155, baseHealth: 650, payloadType: 'bombs_snakeye_retarded', payloadName: '翼上響尾蛇 + 蛇眼減速炸彈', ammo: 900, affiliation: '英法聯合特遣隊' },
-        { model: 'viggen_ja37', role: 'attacker', modelName: 'JA 37 雷式戰鬥攻擊機', speed: 190, baseHealth: 780, payloadType: 'rgm84_harpoon', payloadName: 'RBS-15F 重型反艦飛彈 + 30mm砲', ammo: 700, affiliation: '瑞典空軍 (Flygvapnet)' },
+        { model: 'tornado_adv', role: 'fighter', modelName: '龍捲風 ADV F.3 全天候截擊機', speed: getAircraftSpeed('tornado_adv'), baseHealth: 750, payloadType: 'aim7_sparrow', payloadName: '4x 天閃 (Skyflash) SARH + 響尾蛇', ammo: 600, affiliation: '英國皇家空軍 (RAF)' },
+        { model: 'f4f_phantom', role: 'fighter', modelName: 'F-4F 幽靈II式戰鬥機', speed: getAircraftSpeed('f4f_phantom'), baseHealth: 680, payloadType: 'aim7_sparrow', payloadName: '4x AIM-7 麻雀 (SARH) + 響尾蛇', ammo: 640, affiliation: '西德聯邦空軍 (Luftwaffe)' },
+        { model: 'mirage2000', role: 'fighter', modelName: '幻象 2000C 電傳飛控戰鬥機', speed: getAircraftSpeed('mirage2000'), baseHealth: 720, payloadType: 'aim7_sparrow', payloadName: '超級530D (SARH) + 魔術二型', ammo: 600, affiliation: '法國空軍 (Armée de l\'Air)' },
+        { model: 'tornado_gr1', role: 'attacker', modelName: '龍捲風 GR.1 遠程打擊機', speed: getAircraftSpeed('tornado_gr1'), baseHealth: 760, payloadType: 'rgm84_harpoon', payloadName: '海鷹/鸕鶿反艦飛彈 + 雙門27mm砲', ammo: 800, affiliation: '西德聯邦海航 (MFG 1)' },
+        { model: 'tornado_ids', role: 'attacker', modelName: '龍捲風 IDS 跑道壓制戰轟機', speed: getAircraftSpeed('tornado_ids'), baseHealth: 760, payloadType: 'bombs_snakeye_retarded', payloadName: 'JP233 跑道集束子母彈藥撒佈器', ammo: 800, affiliation: '英國皇家空軍 (RAF)' },
+        { model: 'jaguar_gr1', role: 'attacker', modelName: '美洲豹 GR.1 戰術攻擊機', speed: getAircraftSpeed('jaguar_gr1'), baseHealth: 650, payloadType: 'bombs_snakeye_retarded', payloadName: '翼上響尾蛇 + 蛇眼減速炸彈', ammo: 900, affiliation: '英法聯合特遣隊' },
+        { model: 'viggen_ja37', role: 'attacker', modelName: 'JA 37 雷式戰鬥攻擊機', speed: getAircraftSpeed('viggen_ja37'), baseHealth: 780, payloadType: 'rgm84_harpoon', payloadName: 'RBS-15F 重型反艦飛彈 + 30mm砲', ammo: 700, affiliation: '瑞典空軍 (Flygvapnet)' },
       ];
     }
 
@@ -15130,443 +14903,7 @@ export class GameEngine {
     const centerY = this.worldSize / 2;
     const ts = Date.now();
 
-    let sagTitle = '';
-    let sagShipsDef: Array<{
-      name: string;
-      codeName: string;
-      type: Ship['type'];
-      length: number;
-      width: number;
-      maxHealth: number;
-      speed: number;
-      flakRange: number;
-      turrets: Array<{
-        id?: string;
-        pos?: { x: number; y: number };
-        relX?: number;
-        relY?: number;
-        angle: number;
-        range: number;
-        damage: number;
-        cooldown: number;
-        maxCooldown?: number;
-        reloadTime?: number;
-        barrelCount?: number;
-        caliber: string;
-      }>;
-      hasSAM?: boolean;
-      samRange?: number;
-      samModel?: string;
-      hasHarpoon?: boolean;
-      ashmType?: 'harpoon' | 'exocet_mm40' | 'exocet_mm38';
-      hasCIWS?: boolean;
-      hasASROC?: boolean;
-      hasModernNavalGunAA?: boolean;
-      torpedoCooldown?: number;
-    }> = [];
-
-    if (this.era === 'era1') {
-      sagTitle = '英國皇家海軍東方艦隊 (Royal Navy Eastern Fleet SAG)';
-      sagShipsDef = [
-        {
-          name: 'HMS King George V (喬治五世號戰艦)',
-          codeName: 'HMS KGV (41)',
-          type: 'battleship',
-          length: 128,
-          width: 29,
-          maxHealth: 16000,
-          speed: 18,
-          flakRange: 1400,
-          turrets: [
-            { id: 'kgv-t1', pos: { x: 38, y: 0 }, angle: 0, range: 2600, damage: 1250, cooldown: 0, maxCooldown: 10, caliber: '14吋 Mk VII 四聯裝' },
-            { id: 'kgv-t2', pos: { x: 20, y: 0 }, angle: 0, range: 2600, damage: 850, cooldown: 0, maxCooldown: 9.5, caliber: '14吋 Mk VII 雙聯裝' },
-            { id: 'kgv-t3', pos: { x: -36, y: 0 }, angle: Math.PI, range: 2600, damage: 1250, cooldown: 0, maxCooldown: 10, caliber: '14吋 Mk VII 四聯裝' },
-            { id: 'kgv-dp1', pos: { x: 6, y: -12 }, angle: -Math.PI / 2, range: 1800, damage: 320, cooldown: 0, maxCooldown: 4.0, caliber: '5.25吋 高平兩用雙聯裝' },
-            { id: 'kgv-dp2', pos: { x: 6, y: 12 }, angle: Math.PI / 2, range: 1800, damage: 320, cooldown: 0, maxCooldown: 4.0, caliber: '5.25吋 高平兩用雙聯裝' },
-          ],
-        },
-        {
-          name: 'HMS Sheffield (謝菲爾德號輕巡洋艦)',
-          codeName: 'HMS Sheffield (C24)',
-          type: 'cruiser',
-          length: 98,
-          width: 18,
-          maxHealth: 8200,
-          speed: 22,
-          flakRange: 1200,
-          torpedoCooldown: 28,
-          turrets: [
-            { id: 'sheff-t1', pos: { x: 30, y: 0 }, angle: 0, range: 1800, damage: 420, cooldown: 0, maxCooldown: 5.0, caliber: '6吋 Mk XXIII 三聯裝 (A砲塔)' },
-            { id: 'sheff-t2', pos: { x: 16, y: 0 }, angle: 0, range: 1800, damage: 420, cooldown: 0, maxCooldown: 5.0, caliber: '6吋 Mk XXIII 三聯裝 (B背負砲塔)' },
-            { id: 'sheff-t3', pos: { x: -16, y: 0 }, angle: Math.PI, range: 1800, damage: 420, cooldown: 0, maxCooldown: 5.0, caliber: '6吋 Mk XXIII 三聯裝 (X背負砲塔)' },
-            { id: 'sheff-t4', pos: { x: -28, y: 0 }, angle: Math.PI, range: 1800, damage: 420, cooldown: 0, maxCooldown: 5.0, caliber: '6吋 Mk XXIII 三聯裝 (Y砲塔)' },
-            { id: 'sheff-dp1', pos: { x: 2, y: -8 }, angle: -Math.PI / 2, range: 1600, damage: 240, cooldown: 0, maxCooldown: 3.5, caliber: '4吋 Mk XVI 雙聯高平兩用砲' },
-            { id: 'sheff-dp2', pos: { x: 2, y: 8 }, angle: Math.PI / 2, range: 1600, damage: 240, cooldown: 0, maxCooldown: 3.5, caliber: '4吋 Mk XVI 雙聯高平兩用砲' },
-          ],
-        },
-        {
-          name: 'HMS Jervis (賈維斯號 J級驅逐艦)',
-          codeName: 'HMS Jervis (F00)',
-          type: 'destroyer',
-          length: 68,
-          width: 13,
-          maxHealth: 4200,
-          speed: 26,
-          flakRange: 1000,
-          torpedoCooldown: 20,
-          turrets: [
-            { id: 'jerv-t1', pos: { x: 20, y: 0 }, angle: 0, range: 1500, damage: 280, cooldown: 0, maxCooldown: 3.2, caliber: '4.7吋 Mk XII 雙聯裝 (A砲塔)' },
-            { id: 'jerv-t2', pos: { x: 9, y: 0 }, angle: 0, range: 1500, damage: 280, cooldown: 0, maxCooldown: 3.2, caliber: '4.7吋 Mk XII 雙聯裝 (B背負砲塔)' },
-            { id: 'jerv-t3', pos: { x: -18, y: 0 }, angle: Math.PI, range: 1500, damage: 280, cooldown: 0, maxCooldown: 3.2, caliber: '4.7吋 Mk XII 雙聯裝 (X砲塔)' },
-          ],
-        },
-      ];
-    } else if (this.era === 'era2') {
-      sagTitle = '英國皇家海軍第57特遣艦隊 (Royal Navy Task Force 57 SAG)';
-      sagShipsDef = [
-        {
-          name: 'HMS Duke of York (約克公爵號戰艦)',
-          codeName: 'HMS Duke of York (17)',
-          type: 'battleship',
-          length: 128,
-          width: 29,
-          maxHealth: 16800,
-          speed: 18,
-          flakRange: 1600,
-          turrets: [
-            { id: 'doy-t1', pos: { x: 38, y: 0 }, angle: 0, range: 2600, damage: 1350, cooldown: 0, maxCooldown: 9.5, caliber: '14吋 Mk VII (Type 284 雷達射控)' },
-            { id: 'doy-t2', pos: { x: 20, y: 0 }, angle: 0, range: 2600, damage: 900, cooldown: 0, maxCooldown: 9.0, caliber: '14吋 Mk VII 雙聯裝' },
-            { id: 'doy-t3', pos: { x: -36, y: 0 }, angle: Math.PI, range: 2600, damage: 1350, cooldown: 0, maxCooldown: 9.5, caliber: '14吋 Mk VII 四聯裝' },
-            { id: 'doy-dp1', pos: { x: 6, y: -12 }, angle: -Math.PI / 2, range: 1800, damage: 340, cooldown: 0, maxCooldown: 3.8, caliber: '5.25吋 VT近發雙聯裝' },
-            { id: 'doy-dp2', pos: { x: 6, y: 12 }, angle: Math.PI / 2, range: 1800, damage: 340, cooldown: 0, maxCooldown: 3.8, caliber: '5.25吋 VT近發雙聯裝' },
-          ],
-        },
-        {
-          name: 'HMS Belfast (貝爾法斯特號輕巡洋艦)',
-          codeName: 'HMS Belfast (C35)',
-          type: 'cruiser',
-          length: 102,
-          width: 19,
-          maxHealth: 8600,
-          speed: 22,
-          flakRange: 1400,
-          torpedoCooldown: 25,
-          turrets: [
-            { id: 'belf-t1', pos: { x: 32, y: 0 }, angle: 0, range: 1800, damage: 450, cooldown: 0, maxCooldown: 4.5, caliber: '6吋 Mk XXIII 三聯裝 (A砲塔)' },
-            { id: 'belf-t2', pos: { x: 17, y: 0 }, angle: 0, range: 1800, damage: 450, cooldown: 0, maxCooldown: 4.5, caliber: '6吋 Mk XXIII 三聯裝 (B砲塔)' },
-            { id: 'belf-t3', pos: { x: -17, y: 0 }, angle: Math.PI, range: 1800, damage: 450, cooldown: 0, maxCooldown: 4.5, caliber: '6吋 Mk XXIII 三聯裝 (X砲塔)' },
-            { id: 'belf-t4', pos: { x: -30, y: 0 }, angle: Math.PI, range: 1800, damage: 450, cooldown: 0, maxCooldown: 4.5, caliber: '6吋 Mk XXIII 三聯裝 (Y砲塔)' },
-            { id: 'belf-dp1', pos: { x: 0, y: -8 }, angle: -Math.PI / 2, range: 1600, damage: 260, cooldown: 0, maxCooldown: 3.2, caliber: '4吋 Mk XVI 雙聯裝高平砲' },
-            { id: 'belf-dp2', pos: { x: 0, y: 8 }, angle: Math.PI / 2, range: 1600, damage: 260, cooldown: 0, maxCooldown: 3.2, caliber: '4吋 Mk XVI 雙聯裝高平砲' },
-          ],
-        },
-        {
-          name: 'HMS Armada (阿瑪達號戰鬥級驅逐艦)',
-          codeName: 'HMS Armada (D14)',
-          type: 'destroyer',
-          length: 72,
-          width: 13,
-          maxHealth: 4500,
-          speed: 26,
-          flakRange: 1300,
-          torpedoCooldown: 20,
-          turrets: [
-            { id: 'arm-t1', pos: { x: 24, y: 0 }, angle: 0, range: 1600, damage: 340, cooldown: 0, maxCooldown: 2.8, caliber: '4.5吋 Mk IV 雙聯裝快砲 (A砲塔)' },
-            { id: 'arm-t2', pos: { x: 12, y: 0 }, angle: 0, range: 1600, damage: 340, cooldown: 0, maxCooldown: 2.8, caliber: '4.5吋 Mk IV 雙聯裝快砲 (B背負砲塔)' },
-            { id: 'arm-aa', pos: { x: -18, y: 0 }, angle: Math.PI, range: 1500, damage: 260, cooldown: 0, maxCooldown: 3.0, caliber: '4吋 QF Mk V 高平副砲' },
-          ],
-        },
-      ];
-    } else if (this.era === 'era3') {
-      sagTitle = '聯合國軍第95特遣艦隊 (UN Naval Task Force 95 SAG)';
-      sagShipsDef = [
-        {
-          name: 'HMS Belfast (貝爾法斯特號 · 聯合國遠東特遣旗艦)',
-          codeName: 'HMS Belfast (UN-C35)',
-          type: 'cruiser',
-          length: 104,
-          width: 19,
-          maxHealth: 9000,
-          speed: 22,
-          flakRange: 1600,
-          hasModernNavalGunAA: true,
-          turrets: [
-            { id: 'un-belf-t1', pos: { x: 32, y: 0 }, angle: 0, range: 2000, damage: 500, cooldown: 0, maxCooldown: 3.8, caliber: '6吋 自動填裝艦砲 (A砲塔)' },
-            { id: 'un-belf-t2', pos: { x: 17, y: 0 }, angle: 0, range: 2000, damage: 500, cooldown: 0, maxCooldown: 3.8, caliber: '6吋 自動填裝艦砲 (B背負砲塔)' },
-            { id: 'un-belf-t3', pos: { x: -17, y: 0 }, angle: Math.PI, range: 2000, damage: 500, cooldown: 0, maxCooldown: 3.8, caliber: '6吋 自動填裝艦砲 (X背負砲塔)' },
-            { id: 'un-belf-t4', pos: { x: -30, y: 0 }, angle: Math.PI, range: 2000, damage: 500, cooldown: 0, maxCooldown: 3.8, caliber: '6吋 自動填裝艦砲 (Y砲塔)' },
-            { id: 'un-belf-aa1', pos: { x: 0, y: -9 }, angle: -Math.PI / 2, range: 1600, damage: 280, cooldown: 0, maxCooldown: 2.2, caliber: '3"/50 VT 雙聯裝速射砲' },
-            { id: 'un-belf-aa2', pos: { x: 0, y: 9 }, angle: Math.PI / 2, range: 1600, damage: 280, cooldown: 0, maxCooldown: 2.2, caliber: '3"/50 VT 雙聯裝速射砲' },
-          ],
-        },
-        {
-          name: 'HMS Cossack (哥薩克號部族級驅逐艦)',
-          codeName: 'HMS Cossack (D03)',
-          type: 'destroyer',
-          length: 74,
-          width: 14,
-          maxHealth: 4800,
-          speed: 26,
-          flakRange: 1200,
-          torpedoCooldown: 22,
-          turrets: [
-            { id: 'coss-t1', pos: { x: 22, y: 0 }, angle: 0, range: 1600, damage: 340, cooldown: 0, maxCooldown: 2.8, caliber: '4.7吋 Mk XII 連環快砲 (A砲塔)' },
-            { id: 'coss-t2', pos: { x: 10, y: 0 }, angle: 0, range: 1600, damage: 340, cooldown: 0, maxCooldown: 2.8, caliber: '4.7吋 Mk XII 連環快砲 (B砲塔)' },
-            { id: 'coss-t3', pos: { x: -18, y: 0 }, angle: Math.PI, range: 1600, damage: 340, cooldown: 0, maxCooldown: 2.8, caliber: '4.7吋 Mk XII 連環快砲 (X砲塔)' },
-          ],
-        },
-        {
-          name: 'HMS Defender (保衛者號衛士級重驅逐艦)',
-          codeName: 'HMS Defender (D114)',
-          type: 'destroyer',
-          length: 78,
-          width: 14,
-          maxHealth: 5200,
-          speed: 26,
-          flakRange: 1400,
-          hasModernNavalGunAA: true,
-          torpedoCooldown: 20,
-          turrets: [
-            { id: 'def-t1', pos: { x: 26, y: 0 }, angle: 0, range: 1700, damage: 380, cooldown: 0, maxCooldown: 2.5, caliber: '4.5吋 Mk VI 全封閉雷達射控雙聯砲 (A砲塔)' },
-            { id: 'def-t2', pos: { x: 12, y: 0 }, angle: 0, range: 1700, damage: 380, cooldown: 0, maxCooldown: 2.5, caliber: '4.5吋 Mk VI 全封閉雷達射控雙聯砲 (B砲塔)' },
-            { id: 'def-t3', pos: { x: -20, y: 0 }, angle: Math.PI, range: 1700, damage: 380, cooldown: 0, maxCooldown: 2.5, caliber: '4.5吋 Mk VI 全封閉雷達射控雙聯砲 (X砲塔)' },
-          ],
-        },
-      ];
-    } else if (this.era === 'era4') {
-      const isNato = Math.random() < 0.5;
-      if (isNato) {
-        sagTitle = '北約大西洋常設艦隊 (NATO STANAVFORLANT SAG)';
-        sagShipsDef = [
-          {
-            name: 'HMS Sheffield (Type 42 飛彈驅逐艦)',
-            codeName: 'HMS Sheffield (D80)',
-            type: 'ddg',
-            length: 88,
-            width: 16,
-            maxHealth: 6800,
-            speed: 24,
-            flakRange: 1400,
-            hasModernNavalGunAA: true,
-            hasSAM: true,
-            samRange: 3200,
-            samModel: 'Sea Dart (海鏢) 區域防空飛彈',
-            torpedoCooldown: 25,
-            turrets: [
-              { id: 'shef42-t1', pos: { x: 24, y: 0 }, angle: 0, range: 1800, damage: 480, cooldown: 0, maxCooldown: 2.5, caliber: '4.5吋 Mk 8 全自動艦砲' },
-              { id: 'shef42-sam', pos: { x: 8, y: 0 }, angle: 0, range: 3200, damage: 950, cooldown: 0, maxCooldown: 8.0, caliber: 'Sea Dart (海鏢) 雙臂防空飛彈' },
-            ],
-          },
-          {
-            name: 'HMS Andromeda (利安達級巡防艦)',
-            codeName: 'HMS Andromeda (F57)',
-            type: 'destroyer',
-            length: 80,
-            width: 15,
-            maxHealth: 5500,
-            speed: 24,
-            flakRange: 1200,
-            hasHarpoon: true,
-            ashmType: 'exocet_mm38',
-            hasSAM: true,
-            samRange: 2400,
-            samModel: 'Sea Wolf (海狼) 點防空飛彈',
-            torpedoCooldown: 25,
-            turrets: [
-              { id: 'andro-sam', pos: { x: 18, y: 0 }, angle: 0, range: 2400, damage: 750, cooldown: 0, maxCooldown: 6.0, caliber: 'Sea Wolf (海狼) 短程防空飛彈' },
-              { id: 'andro-ashm', pos: { x: -14, y: 0 }, angle: 0, range: 4000, damage: 1650, cooldown: 0, maxCooldown: 24.0, caliber: 'Exocet (飛魚 MM38) 掠海反艦飛彈' },
-            ],
-          },
-        ];
-      } else {
-        sagTitle = '日本海上自衛隊護衛艦群 (JMSDF Escort Flotilla SAG)';
-        sagShipsDef = [
-          {
-            name: 'JDS Haruna 榛名號直升機護衛艦 (DDH-141)',
-            codeName: 'JDS Haruna (DDH-141)',
-            type: 'ddg',
-            length: 104,
-            width: 18,
-            maxHealth: 7400,
-            speed: 24,
-            flakRange: 1300,
-            hasModernNavalGunAA: true,
-            hasASROC: true,
-            hasSAM: true,
-            samRange: 2600,
-            samModel: 'RIM-7 海麻雀防空飛彈',
-            torpedoCooldown: 25,
-            turrets: [
-              { id: 'haruna-t1', pos: { x: 32, y: 0 }, angle: 0, range: 1800, damage: 500, cooldown: 0, maxCooldown: 2.5, caliber: '54倍徑 5吋砲 (Mk 42)' },
-              { id: 'haruna-t2', pos: { x: 18, y: 0 }, angle: 0, range: 1800, damage: 500, cooldown: 0, maxCooldown: 2.5, caliber: '54倍徑 5吋砲 (Mk 42)' },
-              { id: 'haruna-sam', pos: { x: -24, y: 0 }, angle: Math.PI, range: 2600, damage: 850, cooldown: 0, maxCooldown: 7.0, caliber: 'RIM-7 海麻雀防空飛彈' },
-            ],
-          },
-          {
-            name: 'JDS Takatsuki 高月號護衛艦 (DD-164)',
-            codeName: 'JDS Takatsuki (DD-164)',
-            type: 'destroyer',
-            length: 86,
-            width: 16,
-            maxHealth: 5600,
-            speed: 25,
-            flakRange: 1200,
-            hasModernNavalGunAA: true,
-            hasASROC: true,
-            torpedoCooldown: 25,
-            turrets: [
-              { id: 'taka-t1', pos: { x: 26, y: 0 }, angle: 0, range: 1800, damage: 500, cooldown: 0, maxCooldown: 2.5, caliber: '54倍徑 5吋砲 (Mk 42)' },
-              { id: 'taka-t2', pos: { x: -22, y: 0 }, angle: Math.PI, range: 1800, damage: 500, cooldown: 0, maxCooldown: 2.5, caliber: '54倍徑 5吋砲 (Mk 42)' },
-            ],
-          },
-        ];
-      }
-    } else {
-      // Era 5
-      const isNato = Math.random() < 0.5;
-      if (isNato) {
-        sagTitle = '北約海上打擊部隊 (NATO Striking Fleet Atlantic SAG)';
-        sagShipsDef = [
-          {
-            name: 'HMS Gloucester 格洛斯特號 (Type 42 Batch 2 飛彈驅逐艦)',
-            codeName: 'HMS Gloucester (D96)',
-            type: 'ddg_kidd',
-            length: 95,
-            width: 16,
-            maxHealth: 7200,
-            speed: 24,
-            flakRange: 1400,
-            hasModernNavalGunAA: true,
-            hasCIWS: true,
-            hasSAM: true,
-            samRange: 3400,
-            samModel: 'Sea Dart Mod 2 區域防空飛彈',
-            torpedoCooldown: 25,
-            turrets: [
-              { id: 'glou-t1', pos: { x: 26, y: 0 }, angle: 0, range: 1800, damage: 520, cooldown: 0, maxCooldown: 2.5, caliber: '4.5吋 Mk 8 全自動艦砲' },
-              { id: 'glou-sam', pos: { x: 10, y: 0 }, angle: 0, range: 3400, damage: 1050, cooldown: 0, maxCooldown: 7.0, caliber: 'Sea Dart Mod 2 雙臂防空飛彈' },
-            ],
-          },
-          {
-            name: 'FGS Bremen 不萊梅號 (F122 巡防艦)',
-            codeName: 'FGS Bremen (F207)',
-            type: 'ffg_ohp',
-            length: 84,
-            width: 15,
-            maxHealth: 6000,
-            speed: 25,
-            flakRange: 1300,
-            hasModernNavalGunAA: true,
-            hasHarpoon: true,
-            ashmType: 'harpoon',
-            hasCIWS: true,
-            hasSAM: true,
-            samRange: 2800,
-            samModel: 'NSSMS 北約海麻雀防空飛彈',
-            torpedoCooldown: 25,
-            turrets: [
-              { id: 'brem-t1', pos: { x: 24, y: 0 }, angle: 0, range: 1800, damage: 420, cooldown: 0, maxCooldown: 1.8, caliber: '奧托梅萊拉 76mm 快砲' },
-              { id: 'brem-sam', pos: { x: -18, y: 0 }, angle: Math.PI, range: 2800, damage: 850, cooldown: 0, maxCooldown: 6.5, caliber: 'NSSMS 八聯裝北約海麻雀' },
-            ],
-          },
-          {
-            name: 'FS Tourville 圖爾維爾號 (F67 飛彈驅逐艦)',
-            codeName: 'FS Tourville (D610)',
-            type: 'dd_spruance',
-            length: 98,
-            width: 16,
-            maxHealth: 6600,
-            speed: 25,
-            flakRange: 1300,
-            hasModernNavalGunAA: true,
-            hasHarpoon: true,
-            ashmType: 'exocet_mm40',
-            hasCIWS: true,
-            hasASROC: true,
-            hasSAM: true,
-            samRange: 2600,
-            samModel: '海響尾蛇 (Crotale) 點防空飛彈',
-            torpedoCooldown: 25,
-            turrets: [
-              { id: 'tour-t1', pos: { x: 26, y: 0 }, angle: 0, range: 1800, damage: 460, cooldown: 0, maxCooldown: 2.2, caliber: '100mm/55 Mod 68 快砲' },
-              { id: 'tour-sam', pos: { x: -22, y: 0 }, angle: Math.PI, range: 2600, damage: 800, cooldown: 0, maxCooldown: 6.0, caliber: 'Crotale (海響尾蛇) 防空飛彈' },
-            ],
-          },
-        ];
-      } else {
-        sagTitle = '日本海上自衛隊八八艦隊 (JMSDF Eight-Eight Escort Flotilla SAG)';
-        sagShipsDef = [
-          {
-            name: 'JDS Shirane 白根號直升機護衛艦 (DDH-143)',
-            codeName: 'JDS Shirane (DDH-143)',
-            type: 'ddg_kidd',
-            length: 108,
-            width: 18,
-            maxHealth: 7800,
-            speed: 24,
-            flakRange: 1400,
-            hasModernNavalGunAA: true,
-            hasCIWS: true,
-            hasASROC: true,
-            hasSAM: true,
-            samRange: 2800,
-            samModel: 'RIM-7F 短程海麻雀防空飛彈',
-            torpedoCooldown: 25,
-            turrets: [
-              { id: 'shirane-t1', pos: { x: 34, y: 0 }, angle: 0, range: 1800, damage: 520, cooldown: 0, maxCooldown: 2.5, caliber: '54倍徑 5吋速射砲 (Mk 42)' },
-              { id: 'shirane-t2', pos: { x: 20, y: 0 }, angle: 0, range: 1800, damage: 520, cooldown: 0, maxCooldown: 2.5, caliber: '54倍徑 5吋速射砲 (Mk 42)' },
-              { id: 'shirane-sam', pos: { x: -28, y: 0 }, angle: Math.PI, range: 2800, damage: 880, cooldown: 0, maxCooldown: 6.5, caliber: '短程海麻雀防空飛彈' },
-            ],
-          },
-          {
-            name: 'JDS Asagiri 朝霧號飛彈護衛艦 (DD-151)',
-            codeName: 'JDS Asagiri (DD-151)',
-            type: 'ffg_ohp',
-            length: 90,
-            width: 16,
-            maxHealth: 6400,
-            speed: 25,
-            flakRange: 1300,
-            hasModernNavalGunAA: true,
-            hasHarpoon: true,
-            ashmType: 'harpoon',
-            hasCIWS: true,
-            hasASROC: true,
-            hasSAM: true,
-            samRange: 2800,
-            samModel: 'RIM-7M 海麻雀防空飛彈',
-            torpedoCooldown: 25,
-            turrets: [
-              { id: 'asagiri-t1', pos: { x: 25, y: 0 }, angle: 0, range: 1800, damage: 420, cooldown: 0, maxCooldown: 1.8, caliber: '奧托 76mm 快砲 (DART)' },
-              { id: 'asagiri-sam', pos: { x: -22, y: 0 }, angle: Math.PI, range: 2800, damage: 850, cooldown: 0, maxCooldown: 6.5, caliber: '海麻雀防空飛彈' },
-            ],
-          },
-          {
-            name: 'JDS Hatsuyuki 初雪號護衛艦 (DD-122)',
-            codeName: 'JDS Hatsuyuki (DD-122)',
-            type: 'ffg_ohp',
-            length: 86,
-            width: 15,
-            maxHealth: 5800,
-            speed: 25,
-            flakRange: 1300,
-            hasModernNavalGunAA: true,
-            hasHarpoon: true,
-            ashmType: 'harpoon',
-            hasCIWS: true,
-            hasASROC: true,
-            hasSAM: true,
-            samRange: 2800,
-            samModel: 'RIM-7E 海麻雀防空飛彈',
-            torpedoCooldown: 25,
-            turrets: [
-              { id: 'hatsu-t1', pos: { x: 24, y: 0 }, angle: 0, range: 1800, damage: 420, cooldown: 0, maxCooldown: 1.8, caliber: '奧托 76mm 快砲 (DART)' },
-              { id: 'hatsu-sam', pos: { x: -20, y: 0 }, angle: Math.PI, range: 2800, damage: 850, cooldown: 0, maxCooldown: 6.5, caliber: '海麻雀防空飛彈' },
-            ],
-          },
-        ];
-      }
-    }
+    const { title: sagTitle, ships: sagShipsDef } = getAlliedSagFleet(this.era);
 
     // 生成水面打擊群艦艇
     sagShipsDef.forEach((def, idx) => {
@@ -15601,22 +14938,26 @@ export class GameEngine {
         maxWeaponControlHealth: def.maxHealth,
         isSunk: false,
         sinkProgress: 0,
-        turrets: def.turrets.map((t) => ({
+        turrets: def.turrets.map((t) => {
+          const gun = getNavalGunPerformance(t.caliber);
+          const reload = gun?.reloadTime ?? t.reloadTime ?? t.maxCooldown ?? 4.0;
+          return {
           relX: t.relX ?? t.pos?.x ?? 0,
           relY: t.relY ?? t.pos?.y ?? 0,
           pos: t.pos,
           caliber: t.caliber,
-          range: t.range,
+          range: gun?.range ?? getNavalLauncherRange(t.caliber) ?? t.range,
           cooldown: t.cooldown,
-          reloadTime: t.reloadTime ?? t.maxCooldown ?? 4.0,
-          maxCooldown: t.maxCooldown ?? t.reloadTime ?? 4.0,
+          reloadTime: reload,
+          maxCooldown: gun ? reload : t.maxCooldown ?? t.reloadTime ?? 4.0,
           barrelCount: t.barrelCount ?? 2,
           angle: t.angle,
           arcMin: -Math.PI * 0.85,
           arcMax: Math.PI * 0.85,
-          damage: t.damage,
+          damage: gun?.damage ?? t.damage,
           id: t.id,
-        })),
+          };
+        }),
         flakRange: def.flakRange,
         flakCooldown: 0,
         hasHarpoon: def.hasHarpoon,
@@ -15844,229 +15185,6 @@ export class GameEngine {
   // ══════════════════════════════════════════════════════════
   // 定期增援循環 (Replenishment & Scheduled Convoys)
   // ══════════════════════════════════════════════════════════
-
-  private replenishAirbasePlanes() {
-    if (this.era === 'era1') {
-      this.airbasePlanes.b17 = (this.airbasePlanes.b17 || 0) + 1;
-      this.airbasePlanes.b25 = (this.airbasePlanes.b25 || 0) + 1;
-      this.airbasePlanes.p40 = (this.airbasePlanes.p40 || 0) + 2;
-      this.airbasePlanes.p36a = (this.airbasePlanes.p36a || 0) + 2;
-      this.airbasePlanes.p39d = (this.airbasePlanes.p39d || 0) + 1;
-      this.airbasePlanes.a20 = (this.airbasePlanes.a20 || 0) + 2;
-      this.airbasePlanes.f4f = (this.airbasePlanes.f4f || 0) + 2;
-      this.airbasePlanes.sbd = (this.airbasePlanes.sbd || 0) + 1;
-      this.airbasePlanes.tbd = (this.airbasePlanes.tbd || 0) + 1;
-      this.airbasePlanes.c47 = (this.airbasePlanes.c47 || 0) + 1;
-    } else if (this.era === 'era2') {
-      this.airbasePlanes.b24 = (this.airbasePlanes.b24 || 0) + 1;
-      this.airbasePlanes.b17_late = (this.airbasePlanes.b17_late || 0) + 1;
-      this.airbasePlanes.p51 = (this.airbasePlanes.p51 || 0) + 2;
-      this.airbasePlanes.p47 = (this.airbasePlanes.p47 || 0) + 2;
-      this.airbasePlanes.p38 = (this.airbasePlanes.p38 || 0) + 1;
-      this.airbasePlanes.f6f = (this.airbasePlanes.f6f || 0) + 2;
-      this.airbasePlanes.f4u = (this.airbasePlanes.f4u || 0) + 2;
-      this.airbasePlanes.sb2c = (this.airbasePlanes.sb2c || 0) + 1;
-      this.airbasePlanes.tbf = (this.airbasePlanes.tbf || 0) + 1;
-      this.airbasePlanes.c47 = (this.airbasePlanes.c47 || 0) + 1;
-    } else if (this.era === 'era3') {
-      this.airbasePlanes.b29 = (this.airbasePlanes.b29 || 0) + 1;
-      this.airbasePlanes.f86 = (this.airbasePlanes.f86 || 0) + 2;
-      this.airbasePlanes.f82 = (this.airbasePlanes.f82 || 0) + 1;
-      this.airbasePlanes.a26 = (this.airbasePlanes.a26 || 0) + 2;
-      this.airbasePlanes.f9f = (this.airbasePlanes.f9f || 0) + 2;
-      this.airbasePlanes.f2h = (this.airbasePlanes.f2h || 0) + 2;
-      this.airbasePlanes.ad1 = (this.airbasePlanes.ad1 || 0) + 2;
-      this.airbasePlanes.f4u4 = (this.airbasePlanes.f4u4 || 0) + 1;
-      this.airbasePlanes.af_guardian = (this.airbasePlanes.af_guardian || 0) + 1;
-      this.airbasePlanes.c47 = (this.airbasePlanes.c47 || 0) + 1;
-    } else if (this.era === 'era4') {
-      this.airbasePlanes.f4e = (this.airbasePlanes.f4e || 0) + 2;
-      this.airbasePlanes.a7 = (this.airbasePlanes.a7 || 0) + 2;
-      this.airbasePlanes.a6 = (this.airbasePlanes.a6 || 0) + 1;
-      this.airbasePlanes.f105 = (this.airbasePlanes.f105 || 0) + 1;
-      this.airbasePlanes.a1h = (this.airbasePlanes.a1h || 0) + 1;
-      this.airbasePlanes.a37b = (this.airbasePlanes.a37b || 0) + 1;
-      this.airbasePlanes.f5a = (this.airbasePlanes.f5a || 0) + 1;
-      this.airbasePlanes.f104g = (this.airbasePlanes.f104g || 0) + 1;
-      this.airbasePlanes.a4 = (this.airbasePlanes.a4 || 0) + 2;
-      this.airbasePlanes.f8 = (this.airbasePlanes.f8 || 0) + 1;
-      this.airbasePlanes.b52 = (this.airbasePlanes.b52 || 0) + 1;
-      this.airbasePlanes.uh1 = (this.airbasePlanes.uh1 || 0) + 2;
-      this.airbasePlanes.ah1 = (this.airbasePlanes.ah1 || 0) + 1;
-    } else {
-      // Era 5 Cold War modern jet air wing
-      this.airbasePlanes.b52 = (this.airbasePlanes.b52 || 0) + 1;
-      this.airbasePlanes.f111 = (this.airbasePlanes.f111 || 0) + 1;
-      this.airbasePlanes.a10a = (this.airbasePlanes.a10a || 0) + 2;
-      this.airbasePlanes.ah64a = (this.airbasePlanes.ah64a || 0) + 2;
-      this.airbasePlanes.ah1w = (this.airbasePlanes.ah1w || 0) + 2;
-      this.airbasePlanes.f15a = (this.airbasePlanes.f15a || 0) + 2;
-      this.airbasePlanes.f16a = (this.airbasePlanes.f16a || 0) + 2;
-      this.airbasePlanes.e3a = (this.airbasePlanes.e3a || 0) + 1;
-      this.airbasePlanes.c130 = (this.airbasePlanes.c130 || 0) + 1;
-      this.airbasePlanes.f14a = (this.airbasePlanes.f14a || 0) + 2;
-      this.airbasePlanes.fa18a = (this.airbasePlanes.fa18a || 0) + 2;
-      this.airbasePlanes.a6e = (this.airbasePlanes.a6e || 0) + 1;
-      this.airbasePlanes.ea6b = (this.airbasePlanes.ea6b || 0) + 1;
-      this.airbasePlanes.s3a = (this.airbasePlanes.s3a || 0) + 1;
-      this.airbasePlanes.av8b = (this.airbasePlanes.av8b || 0) + 1;
-      this.airbasePlanes.e2c = (this.airbasePlanes.e2c || 0) + 1;
-      this.airbasePlanes.sh3f = (this.airbasePlanes.sh3f || 0) + 1;
-      this.airbasePlanes.ch53 = (this.airbasePlanes.ch53 || 0) + 1;
-      this.airbasePlanes.c2a = (this.airbasePlanes.c2a || 0) + 1;
-    }
-    this.addCombatLog({
-      category: 'air',
-      sourceSide: 'player',
-      sourceName: '後勤航空輸送隊',
-      targetName: '前進航空基地',
-      actionType: 'recon_spotted',
-      text: `📦【基地航空補充】後方輸送機隊降落 Henderson Field，戰鬥機與攻擊機庫存獲得全面補充！`,
-    });
-  }
-
-  private spawnConvoyReinforcement() {
-    const basePos = this.friendlyBase?.center || { x: 2000, y: 12400 };
-    const landingPos: Vector2D = { x: basePos.x + 360, y: basePos.y - 200 };
-
-    const isEra5 = this.era === 'era5';
-    const isEra4 = this.era === 'era4';
-
-    // 1. Add Ground unit to base
-    let unitType: GroundUnitType;
-    let uName: string;
-
-    if (isEra5) {
-      const r = Math.random();
-      if (r < 0.25) {
-        unitType = 'us_m1ip_abrams';
-        uName = '美陸軍 M1IP 艾布蘭主力戰車排';
-      } else if (r < 0.45) {
-        unitType = 'us_m60a1_rise';
-        uName = '美陸戰隊 M60A1 RISE 爆反戰車排';
-      } else if (r < 0.65) {
-        unitType = 'usmc_lav25';
-        uName = 'USMC LAV-25 輪式裝甲偵察排';
-      } else if (r < 0.85) {
-        unitType = 'usmc_aav7a1';
-        uName = 'USMC AAV-7A1 兩棲突擊車排';
-      } else {
-        unitType = 'usmc_rifle_83';
-        uName = 'USMC 83年式 陸戰步兵加強班';
-      }
-    } else if (isEra4) {
-      const r = Math.random();
-      if (r < 0.3) {
-        unitType = 'usmc_armor_m48';
-        uName = '美陸軍 M48A3 巴頓主力戰車排';
-      } else if (r < 0.55) {
-        unitType = 'usmc_lvtp5a1';
-        uName = 'USMC LVTP-5A1 兩棲裝甲突擊車排';
-      } else if (r < 0.8) {
-        unitType = 'us_army_m113_mech';
-        uName = '美陸軍 M113 ACAV 裝甲騎兵排';
-      } else {
-        unitType = 'usmc_air_assault_65';
-        uName = 'USMC 陸戰隊空中突擊步兵排';
-      }
-    } else {
-      unitType =
-        this.era === 'era1'
-          ? Math.random() < 0.4
-            ? 'usmc_rifle_42'
-            : Math.random() < 0.7
-            ? 'usmc_lvt_42'
-            : 'usmc_armor_m3'
-          : Math.random() < 0.4
-          ? 'usmc_rifle_45'
-          : Math.random() < 0.7
-          ? 'usmc_lvt_45'
-          : 'usmc_armor_m4';
-
-      uName =
-        unitType === 'usmc_rifle_42'
-          ? 'USMC 陸戰步兵排 (1942)'
-          : unitType === 'usmc_rifle_45'
-          ? 'USMC 陸戰突擊步兵排 (1945)'
-          : unitType === 'usmc_lvt_42'
-          ? 'USMC LVT-1 水牛兩棲機步排'
-          : unitType === 'usmc_lvt_45'
-          ? 'USMC LVT-4 水牛兩棲突擊排'
-          : unitType === 'usmc_armor_m3'
-          ? 'USMC M3 斯圖亞特戰車排'
-          : 'USMC M4A2 薛曼中戰車排';
-    }
-
-    const newUnit = createGroundUnit(`usmc-reinf-${Date.now()}`, unitType, uName, 'player', this.era, {
-      x: basePos.x + (Math.random() - 0.5) * 80,
-      y: basePos.y + (Math.random() - 0.5) * 80,
-    });
-    this.groundUnits.push(newUnit);
-
-    // 2. Add Landing Craft
-    let craft: Ship;
-    if (isEra5) {
-      craft = Math.random() < 0.7
-        ? createLCAC(`player-lcac-reinf-${Date.now()}`, `LCAC-${Math.floor(Math.random() * 80) + 10} 氣墊登陸艇`, landingPos)
-        : createNewportLST(`player-lst-reinf-${Date.now()}`, `LST-1179 紐波特戰車登陸艦 (現代化型)`, landingPos, this.era);
-    } else if (isEra4) {
-      craft = Math.random() < 0.65
-        ? createLCM8(`player-lcm-reinf-${Date.now()}`, `LCM-8 機械化登陸艇 (Mike-${Math.floor(Math.random() * 80) + 10})`, landingPos)
-        : createNewportLST(`player-lst-reinf-${Date.now()}`, `LST-1179 紐波特級戰車登陸艦`, landingPos, this.era);
-    } else {
-      const craftType = Math.random() < 0.65 ? 'lcvp' : 'lst';
-      craft =
-        craftType === 'lcvp'
-          ? createLCVP(`player-lcvp-reinf-${Date.now()}`, `LCVP 突擊登陸艇 (PA-${Math.floor(Math.random() * 80) + 10})`, landingPos, this.era)
-          : createLST(`player-lst-reinf-${Date.now()}`, `LST-${Math.floor(Math.random() * 400) + 400} 戰車登陸艦`, landingPos, this.era);
-    }
-    this.playerShips.push(craft);
-
-    // 3. Add Naval Escort
-    const escortPos: Vector2D = { x: basePos.x + 480, y: basePos.y - 280 };
-    let escortShip: Ship;
-
-    if (isEra5) {
-      const r = Math.random();
-      if (r < 0.35) {
-        escortShip = createPerryFFG(`player-escort-${Date.now()}`, 'USS Oliver Hazard Perry (FFG-7)', escortPos);
-      } else if (r < 0.65) {
-        escortShip = createSpruanceDD(`player-escort-${Date.now()}`, 'USS Spruance (DD-963)', escortPos);
-      } else if (r < 0.85) {
-        escortShip = createKiddDDG(`player-escort-${Date.now()}`, 'USS Kidd (DDG-993)', escortPos);
-      } else {
-        escortShip = createTiconderogaCG(`player-escort-${Date.now()}`, 'USS Ticonderoga (CG-47 神盾巡洋艦)', escortPos);
-      }
-    } else if (isEra4) {
-      const r = Math.random();
-      if (r < 0.4) {
-        escortShip = createKnoxFFG(`player-escort-${Date.now()}`, 'USS Knox (FF-1052 諾克斯級巡防艦)', escortPos);
-      } else if (r < 0.75) {
-        escortShip = createAdamsDDG(`player-escort-${Date.now()}`, 'USS Charles F. Adams (DDG-2 飛彈驅逐艦)', escortPos);
-      } else {
-        escortShip = createBelknapCG(`player-escort-${Date.now()}`, 'USS Belknap (CG-26 貝爾納普級飛彈巡洋艦)', escortPos);
-      }
-    } else if (this.era === 'era2' && Math.random() < 0.2) {
-      escortShip = createCVE(`player-cve-${Date.now()}`, 'USS Casablanca (CVE-55 護航航母)', escortPos, this.era);
-    } else {
-      const escortType = this.nextConvoyEscort;
-      escortShip = createConvoyEscortShip(`player-escort-${Date.now()}`, escortType, escortPos, this.era);
-      const escorts: ('ss' | 'dd' | 'cl' | 'ca')[] = ['ss', 'dd', 'cl', 'ca'];
-      this.nextConvoyEscort = escorts[Math.floor(Math.random() * escorts.length)];
-    }
-    this.playerShips.push(escortShip);
-    this.applyUpgradesToShip(escortShip);
-
-    soundEngine.playPlaneSortie();
-    this.addCombatLog({
-      category: 'naval',
-      sourceSide: 'player',
-      sourceName: isEra5 ? '大西洋/太平洋第6/7艦隊後勤支援群' : isEra4 ? '西太平洋後勤支援艦隊 (CTF-73)' : '太平洋後勤輸送總隊',
-      targetName: '前進海空基地',
-      actionType: 'recon_spotted',
-      text: `🚢⚓【海運船團抵達基地！】「${craft.name}」與「${uName}」靠泊！伴隨護航艦「${escortShip.name}」加入作戰序列！`,
-    });
-  }
 
   private spawnTokyoExpressDD() {
     const spawnPos: Vector2D = { x: 8600, y: 1400 };
@@ -16681,110 +15799,7 @@ export class GameEngine {
           proj.isDead = true;
         }
       } else if (proj.type === 'torpedo') {
-        // Mk 24 / Mk 34 / Mk 46 / APR-2 聲自導反潛魚雷主動導引鎖定 (Acoustic Homing Tracking: turnRate 3.5)
-        const isHoming = proj.isAcousticHoming || this.era === 'era3' || this.era === 'era4' || this.era === 'era5';
-        const allShips = [...this.playerShips, ...this.alliedShips, ...this.enemyShips];
-        const targetShips = allShips.filter((s) => !s.isSunk && this.isHostile(proj.side, s.side));
-        if (isHoming) {
-          const targets = targetShips;
-          let bestTarget: Ship | null = null;
-          let bestDist = 1800;
-
-          // Priority 1: spotted submarine (or close terminal acoustic capture within 480m)
-          for (const target of targets) {
-            if (target.isSunk || !this.isSubmarine(target)) continue;
-            const d = dist(proj.pos, target.pos);
-            const isTargetKnown =
-              (target.side === 'enemy' ? Boolean(target.isSpotted) : Boolean(target.isSpottedByEnemy)) || d < 480;
-            if (isTargetKnown && d < 1800 && d < bestDist) {
-              bestDist = d;
-              bestTarget = target;
-            }
-          }
-
-          // Priority 2: surface ships
-          if (!bestTarget) {
-            for (const target of targets) {
-              if (target.isSunk) continue;
-              const d = dist(proj.pos, target.pos);
-              if (d < 1600 && d < bestDist) {
-                bestDist = d;
-                bestTarget = target;
-              }
-            }
-          }
-
-          if (bestTarget) {
-            const desiredAngle = Math.atan2(bestTarget.pos.y - proj.pos.y, bestTarget.pos.x - proj.pos.x);
-            let diff = desiredAngle - proj.heading;
-            while (diff > Math.PI) diff -= Math.PI * 2;
-            while (diff < -Math.PI) diff += Math.PI * 2;
-            const turnRate = (proj.turnRate || 3.5) * dt;
-            if (Math.abs(diff) < turnRate) proj.heading = desiredAngle;
-            else proj.heading += Math.sign(diff) * turnRate;
-            proj.vel.x = Math.cos(proj.heading) * proj.speed;
-            proj.vel.y = Math.sin(proj.heading) * proj.speed;
-          }
-
-          // Periodic acoustic sonar ping concentric ring
-          proj.acousticPingTimer = (proj.acousticPingTimer || 1.5) - dt;
-          if (proj.acousticPingTimer <= 0) {
-            proj.acousticPingTimer = 1.5;
-            this.particles.push({
-              id: `sonar-ping-${Date.now()}-${Math.random()}`,
-              x: proj.pos.x,
-              y: proj.pos.y,
-              vx: 0,
-              vy: 0,
-              life: 0.7,
-              maxLife: 0.7,
-              radius: 30,
-              color: '#00E5FF',
-              type: 'shockwave',
-              shape: 'ring',
-            });
-          }
-        }
-
-        proj.pos.x += proj.vel.x * dt;
-        proj.pos.y += proj.vel.y * dt;
-        proj.distanceTraveled += proj.speed * dt;
-
-        // Foamy bubble wake particle trail behind speeding torpedo
-        if (Math.random() < 0.6) {
-          this.particles.push({
-            id: `torp-wake-${Date.now()}-${Math.random()}`,
-            x: proj.pos.x - Math.cos(proj.heading) * 10,
-            y: proj.pos.y - Math.sin(proj.heading) * 10,
-            vx: (Math.random() - 0.5) * 3,
-            vy: (Math.random() - 0.5) * 3,
-            life: 0.5,
-            maxLife: 0.5,
-            radius: 2.6,
-            color: 'rgba(224, 247, 250, 0.7)',
-            type: 'smoke',
-          });
-        }
-
-        for (const isl of this.islands) {
-          if (isPointInPolygon(proj.pos, isl.points)) {
-            this.detonateProjectile(proj);
-            proj.isDead = true;
-            break;
-          }
-        }
-
-        for (const ship of targetShips) {
-          if (!ship.isSunk && distToShipHull(proj.pos, ship) < ship.width * 0.75 + 14) {
-            this.detonateProjectile(proj, ship);
-            proj.isDead = true;
-            break;
-          }
-        }
-
-        if (proj.distanceTraveled >= proj.maxDistance) {
-          proj.isDead = true;
-        }
+        this.updateTorpedoProjectile(dt, proj);
       } else if (proj.type === 'bomb') {
         // True Ballistic Trajectory: Bomb flies directly toward target coordinates
         const bombSpeed = proj.speed || 280;
@@ -16810,157 +15825,11 @@ export class GameEngine {
           proj.isDead = true;
         }
       } else if (proj.type === 'hedgehog') {
-        const step = proj.speed * dt;
-        proj.distanceTraveled += step;
-        proj.flightProgress = Math.min(1, proj.distanceTraveled / Math.max(1, proj.maxDistance));
-        proj.pos.x = proj.originPos.x + (proj.targetPos.x - proj.originPos.x) * proj.flightProgress;
-        proj.pos.y = proj.originPos.y + (proj.targetPos.y - proj.originPos.y) * proj.flightProgress;
-
-        // Parabolic arc altitude
-        proj.arcAltitude = Math.sin(proj.flightProgress * Math.PI) * 45;
-
-        // Check contact hit during terminal phase (progress > 0.85) or when landing
-        if (proj.flightProgress >= 0.85) {
-          const directHitSub = this.enemyShips.find(
-            (e) => this.isSubmarine(e) && !e.isSunk && dist(proj.pos, e.pos) < 32
-          );
-          if (directHitSub) {
-            this.detonateProjectile(proj, directHitSub);
-            proj.isDead = true;
-          }
-        }
-
-        if (proj.flightProgress >= 1 && !proj.isDead) {
-          proj.isDead = true;
-          // Contact mortar entered water without hitting submarine -> harmless water splash, no detonation
-          soundEngine.playWaterSplash();
-          this.particles.push({
-            id: `hh-splash-${Date.now()}-${Math.random()}`,
-            x: proj.pos.x,
-            y: proj.pos.y,
-            vx: (Math.random() - 0.5) * 8,
-            vy: (Math.random() - 0.5) * 8,
-            life: 0.5,
-            maxLife: 0.5,
-            radius: 12,
-            color: '#80DEEA',
-            type: 'geyser',
-            shape: 'ring',
-          });
-        }
+        this.updateHedgehogProjectile(dt, proj);
       } else if (proj.type === 'rocket') {
-        proj.pos.x += proj.vel.x * dt;
-        proj.pos.y += proj.vel.y * dt;
-        proj.distanceTraveled += proj.speed * dt;
-
-        // Trail smoke and propellant sparks
-        if (Math.random() < 0.6) {
-          this.particles.push({
-            id: `r-smoke-${Date.now()}-${Math.random()}`,
-            x: proj.pos.x,
-            y: proj.pos.y,
-            vx: (Math.random() - 0.5) * 8,
-            vy: (Math.random() - 0.5) * 8,
-            life: 0.32,
-            maxLife: 0.32,
-            radius: 3.5,
-            color: 'rgba(255, 235, 150, 0.7)',
-            type: 'smoke',
-          });
-        }
-
-        const allShips = [...this.playerShips, ...this.alliedShips, ...this.enemyShips];
-        const targetShips = allShips.filter((s) => !s.isSunk && this.isHostile(proj.side, s.side));
-        for (const ship of targetShips) {
-          if (!ship.isSunk && distToShipHull(proj.pos, ship) < ship.width * 0.75 + 12) {
-            this.detonateProjectile(proj, ship);
-            proj.isDead = true;
-            break;
-          }
-        }
-
-        if (!proj.isDead) {
-          for (const isl of this.islands) {
-            for (const inst of isl.installations) {
-              if (!inst.isDestroyed && this.isHostile(proj.side, inst.side) && dist(proj.pos, inst.pos) < 28) {
-                this.detonateProjectile(proj);
-                proj.isDead = true;
-                break;
-              }
-            }
-            if (proj.isDead) break;
-          }
-        }
-
-        if (proj.distanceTraveled >= proj.maxDistance) {
-          this.detonateProjectile(proj);
-          proj.isDead = true;
-        }
+        this.updateRocketProjectile(dt, proj);
       } else if (proj.type === 'bullet') {
-        proj.pos.x += proj.vel.x * dt;
-        proj.pos.y += proj.vel.y * dt;
-        proj.distanceTraveled += proj.speed * dt;
-
-        const targetPlanes = this.aircraft.filter((a) => this.isHostile(proj.side, a.side) && a.state !== 'shot_down');
-        for (const p of targetPlanes) {
-          if (dist(proj.pos, p.pos) < 20) {
-            p.health -= proj.damage;
-            proj.isDead = true;
-            if (p.health <= 0) this.killPlane(p);
-            break;
-          }
-        }
-
-        // 步槍與機槍對地面作戰單位實體碰撞判定 (Ground Unit Bullet Impact)
-        // 建制傷害隨目標組織度下降微幅提升 (組織度低於50%時最多增加50%建制傷害)
-        if (!proj.isDead) {
-          for (const u of this.groundUnits) {
-            if (!u.isDestroyed && !u.embarkedInShipId && this.isHostile(proj.side, u.side) && dist(proj.pos, u.pos) < 26) {
-              const currentOrg = u.organization ?? 100;
-              const orgDmgScale = currentOrg < 50 ? 1.0 + 0.5 * (1.0 - currentOrg / 50) : 1.0;
-              const urbanCoverMod = u.isInUrbanCover ? 0.50 : 1.0;
-              const dmg = Math.round(proj.damage * orgDmgScale * (1 - (u.armor || 0.2) * 0.35) * urbanCoverMod);
-              u.health = Math.max(0, u.health - dmg);
-              u.strength = Math.max(0, Math.round((u.health / u.maxHealth) * 100));
-              u.organization = Math.max(0, currentOrg - (u.isInUrbanCover ? 2 : 4));
-              if (u.organization < 20) u.disorganized = true;
-
-              // 遭受槍砲直射火力打擊產生火力壓制 (若為M61火神光束則壓制更劇烈)
-              u.suppression = Math.min(100, (u.suppression || 0) + (proj.isBeamTracer ? 20 : 12));
-              u.suppressionTimer = 5.0;
-              u.isSuppressed = u.suppression >= 30;
-              u.isPinned = u.suppression >= 75;
-
-              proj.isDead = true;
-
-              if (u.health <= 0 || u.strength <= 0) {
-                u.isDestroyed = true;
-                soundEngine.playExplosion(false);
-                if (u.side === 'enemy') {
-                  this.casualties.enemyGroundLost++;
-                  this.resourcePoints += 40;
-                  this.totalCpEarned += 40;
-                } else {
-                  this.casualties.playerGroundLost++;
-                }
-                this.addCombatLog({
-                  category: 'naval',
-                  sourceSide: proj.side,
-                  sourceName: proj.attackerName || (proj.side === 'player' ? '友軍地面部隊' : '敵軍部隊'),
-                  targetName: u.name,
-                  actionType: 'gun_hit',
-                  damage: dmg,
-                  text: `💥【步火交鋒突破】「${u.name}」在密集火力壓制下建制被徹底擊潰消滅！`,
-                });
-              }
-              break;
-            }
-          }
-        }
-
-        if (proj.distanceTraveled >= proj.maxDistance) {
-          proj.isDead = true;
-        }
+        this.updateBulletProjectile(dt, proj);
       } else if (
         proj.type === 'missile_aam' ||
         proj.type === 'missile_sam' ||
@@ -16971,712 +15840,776 @@ export class GameEngine {
         proj.type === 'slbm_trident' ||
         proj.type === 'slbm_r39'
       ) {
-        // ══════════════════════════════════════════════════════════
-        // 導向飛彈與戰術彈道飛彈運動、主動尋標轉向與反飛彈防禦攔截 (Missile Guidance & Interception)
-        // ══════════════════════════════════════════════════════════
-        let targetPos: Vector2D | null = null;
+        if (this.updateGuidedMissile(dt, proj)) continue;
+      }
+    }
+  }
 
-        if (proj.targetEntityId) {
-          if (proj.targetEntityType === 'aircraft') {
-            const p = this.aircraft.find((a) => a.id === proj.targetEntityId && a.state !== 'shot_down');
-            if (p) targetPos = p.pos;
-          } else if (proj.targetEntityType === 'projectile') {
-            const pr = this.projectiles.find((p) => p.id === proj.targetEntityId && !p.isDead);
-            if (pr) targetPos = pr.pos;
-          } else if (proj.targetEntityType === 'ship') {
-            const allShips = [...this.playerShips, ...this.enemyShips, ...this.alliedShips];
-            const s = allShips.find(
-              (sh) => sh.id === proj.targetEntityId && !sh.isSunk && this.isHostile(proj.side, sh.side)
-            );
-            if (s) targetPos = s.pos;
-          } else if (proj.targetEntityType === 'installation') {
-            const inst = this.findTargetInstallation(proj.targetEntityId);
-            if (inst) targetPos = inst.pos;
-          } else if (proj.targetEntityType === 'ground') {
-            const g = this.groundUnits.find((u) => u.id === proj.targetEntityId && !u.isDestroyed);
-            if (g) targetPos = g.pos;
-          }
-        }
+  /** AAM / SAM / anti-ship / cruise / ballistic missile guidance, fuzing and countermeasure decoys. */
+  private updateGuidedMissile(dt: number, proj: Projectile): boolean {
+    // ══════════════════════════════════════════════════════════
+    // 導向飛彈與戰術彈道飛彈運動、主動尋標轉向與反飛彈防禦攔截 (Missile Guidance & Interception)
+    // ══════════════════════════════════════════════════════════
+    let targetPos: Vector2D | null = null;
 
-        if (!targetPos && proj.targetPos) {
-          targetPos = proj.targetPos;
-        }
+    if (proj.targetEntityId) {
+      if (proj.targetEntityType === 'aircraft') {
+        const p = this.aircraft.find((a) => a.id === proj.targetEntityId && a.state !== 'shot_down');
+        if (p) targetPos = p.pos;
+      } else if (proj.targetEntityType === 'projectile') {
+        const pr = this.projectiles.find((p) => p.id === proj.targetEntityId && !p.isDead);
+        if (pr) targetPos = pr.pos;
+      } else if (proj.targetEntityType === 'ship') {
+        const allShips = [...this.playerShips, ...this.enemyShips, ...this.alliedShips];
+        const s = allShips.find(
+          (sh) => sh.id === proj.targetEntityId && !sh.isSunk && this.isHostile(proj.side, sh.side)
+        );
+        if (s) targetPos = s.pos;
+      } else if (proj.targetEntityType === 'installation') {
+        const inst = this.findTargetInstallation(proj.targetEntityId);
+        if (inst) targetPos = inst.pos;
+      } else if (proj.targetEntityType === 'ground') {
+        const g = this.groundUnits.find((u) => u.id === proj.targetEntityId && !u.isDestroyed);
+        if (g) targetPos = g.pos;
+      }
+    }
 
-        // ════ 歷史史實校正 3: AIM-7 麻雀半主動雷達 (SARH) 機首持續波照準錐 (±50°) 與地雜波盲區 ════
-        if (proj.type === 'missile_aam' && proj.guidanceType === 'semi_active_radar' && !proj.lostLock) {
-          if (proj.sarhIlluminatorId) {
-            const illPlane = this.aircraft.find((a) => a.id === proj.sarhIlluminatorId && a.state !== 'shot_down');
-            if (!illPlane) {
-              proj.lostLock = true;
-            } else if (targetPos) {
-              const angToTarget = Math.atan2(targetPos.y - illPlane.pos.y, targetPos.x - illPlane.pos.x);
-              let relAngle = angToTarget - illPlane.heading;
-              while (relAngle > Math.PI) relAngle -= Math.PI * 2;
-              while (relAngle < -Math.PI) relAngle += Math.PI * 2;
-              if (Math.abs(relAngle) > (Math.PI * 50) / 180) {
-                proj.lostLock = true;
-                if (illPlane.side === 'player') {
-                  this.addCombatLog({
-                    category: 'air',
-                    sourceSide: illPlane.side,
-                    sourceName: illPlane.name,
-                    targetName: 'AIM-7 麻雀',
-                    actionType: 'recon_spotted',
-                    text: `📡【雷達照準錐脫鎖】「${illPlane.name}」機首照射夾角偏轉逾50°！AIM-7 失去連續波照射，飛彈失控飄移！`,
-                  });
-                }
-              }
-            }
-          }
-          // 地雜波盲區 (Ground Clutter Blindness): 若目標處於超低空，早期無都卜勒脈衝雷達淹沒於地表雜波
-          if (!proj.lostLock && proj.targetEntityId) {
-            const targetPlane = this.aircraft.find((a) => a.id === proj.targetEntityId);
-            if (targetPlane && (targetPlane.altitude || 0.5) < 0.28 && Math.random() < 0.04) {
-              proj.lostLock = true;
-              this.addCombatLog({
-                category: 'air',
-                sourceSide: proj.side,
-                sourceName: proj.attackerName || 'AIM-7',
-                targetName: targetPlane.name,
-                actionType: 'recon_spotted',
-                text: `📡【地雜波盲區脫靶】敵機「${targetPlane.name}」利用超低空掠地，雷達回波湮沒於熱帶叢林地雜波中！AIM-7 脫鎖！`,
-              });
-            }
-          }
-        }
+    if (!targetPos && proj.targetPos) {
+      targetPos = proj.targetPos;
+    }
 
-        if (proj.lostLock) {
-          targetPos = null;
-        }
+    this.updateSarhIllumination(proj, targetPos);
 
-        if (targetPos) {
-          let desiredAngle = Math.atan2(targetPos.y - proj.pos.y, targetPos.x - proj.pos.x);
-          const distToTarget = dist(proj.pos, targetPos);
+    if (proj.lostLock) {
+      targetPos = null;
+    }
 
-          // 歷史反艦飛彈 (AShM) 動態彈道高度、終端躍升俯衝與終端蛇行機動
-          if (proj.type === 'missile_ashm' && !proj.isDecoyed) {
-            if (proj.ashmProfile === 'pop_up_dive') {
-              // RGM-84 / AGM-84 魚叉：巡航掠海 (0.18) -> 距離 540m 時躍升爬高 (0.62) 隨後俯衝砸穿甲板
-              if (distToTarget < 540 && distToTarget > 190) {
-                proj.missileAltitude = Math.min(0.62, (proj.missileAltitude ?? 0.18) + 1.8 * dt);
-              } else if (distToTarget <= 190) {
-                proj.missileAltitude = Math.max(0.14, (proj.missileAltitude ?? 0.62) - 2.6 * dt);
-              } else {
-                proj.missileAltitude = 0.18;
-              }
-            } else if (proj.ashmProfile === 'ultra_sea_skim') {
-              // MM40 / MM38 飛魚：全程極限緊貼浪尖 (0.07) 直插水線
-              proj.missileAltitude = 0.07;
-            } else if (proj.ashmProfile === 'datalink_leader') {
-              // P-700 / P-500 領彈：高空偵察與資料鏈中繼 (0.88)，終端 600m 俯衝
-              proj.missileAltitude = distToTarget < 600 ? Math.max(0.20, (distToTarget / 600) * 0.88) : 0.88;
-            } else if (proj.ashmProfile === 'datalink_follower') {
-              // P-700 / P-500 跟隨彈：核對領彈是否仍健在，若領彈遭摧毀則立即降級資料鏈精度
-              if (proj.leadMissileId && !proj.datalinkLost) {
-                const leaderProj = this.projectiles.find((p) => p.id === proj.leadMissileId);
-                if (leaderProj && (leaderProj.isDead || leaderProj.isDecoyed)) {
-                  proj.datalinkLost = true;
-                  proj.turnRate = Math.max(1.8, (proj.turnRate || 3.6) * 0.56);
-                }
-              }
-              proj.missileAltitude = 0.17;
-            } else if (proj.ashmProfile === 'supersonic_sprint') {
-              // P-270 白蛉：超音速極低空突防 (0.11) + 距離 1150m 內進行高G終端 S 型蛇行規避
-              proj.missileAltitude = 0.11;
-              if (distToTarget < 1150 && distToTarget > 120) {
-                proj.terminalWeavePhase = (proj.terminalWeavePhase ?? 0) + dt * 7.5;
-                desiredAngle += Math.sin(proj.terminalWeavePhase) * 0.34;
-              }
-            } else if (proj.ashmProfile === 'high_plunge') {
-              // Kh-22 / KSR-5：高空巡航大俯衝
-              proj.missileAltitude = distToTarget < 700 ? Math.max(0.18, (distToTarget / 700) * 0.90) : 0.90;
-            }
-          }
+    this.steerMissileTowardTarget(dt, proj, targetPos);
 
-          let diff = desiredAngle - proj.heading;
-          while (diff > Math.PI) diff -= Math.PI * 2;
-          while (diff < -Math.PI) diff += Math.PI * 2;
-          const turnStep = (proj.turnRate || 3.5) * dt;
-          if (Math.abs(diff) < turnStep) {
-            proj.heading = desiredAngle;
+    proj.pos.x += proj.vel.x * dt;
+    proj.pos.y += proj.vel.y * dt;
+    proj.distanceTraveled += proj.speed * dt;
+
+    // 火箭推進發動機白煙與尾焰粒子 (Exocet / Harpoon 低煙低可視；蘇聯 P-700/P-270/P-15 濃烈尾跡)
+    const isBallistic = proj.type === 'missile_ssm' || !!proj.isSLBM || proj.type === 'slbm_trident' || proj.type === 'slbm_r39';
+    const isLowSmokeAshm =
+      proj.type === 'missile_ashm' &&
+      (proj.ashmVariant === 'exocet_mm40' ||
+        proj.ashmVariant === 'exocet_mm38' ||
+        proj.ashmVariant === 'harpoon_rgm84' ||
+        proj.ashmVariant === 'harpoon_ugm84' ||
+        proj.ashmVariant === 'harpoon_agm84');
+    const smokeProb = isBallistic ? 0.95 : isLowSmokeAshm ? 0.35 : 0.75;
+    if (Math.random() < smokeProb) {
+      const tailDist = isBallistic ? 18 : 12;
+      const tx = proj.pos.x - Math.cos(proj.heading) * tailDist;
+      const ty = proj.pos.y - Math.sin(proj.heading) * tailDist - (proj.missileAltitude ? proj.missileAltitude * 18 : 0);
+      const ashmSmokeColor =
+        proj.ashmVariant === 'exocet_mm40' || proj.ashmVariant === 'exocet_mm38'
+          ? 'rgba(224, 247, 250, 0.38)'
+          : proj.ashmVariant === 'harpoon_rgm84' || proj.ashmVariant === 'harpoon_ugm84' || proj.ashmVariant === 'harpoon_agm84'
+          ? 'rgba(236, 239, 241, 0.48)'
+          : 'rgba(255, 112, 67, 0.75)';
+      this.particles.push({
+        id: `m-smoke-${Date.now()}-${Math.random()}`,
+        x: tx + (Math.random() - 0.5) * 4,
+        y: ty + (Math.random() - 0.5) * 4,
+        vx: -Math.cos(proj.heading) * 20 + (Math.random() - 0.5) * 8,
+        vy: -Math.sin(proj.heading) * 20 + (Math.random() - 0.5) * 8,
+        life: isBallistic ? 0.65 : isLowSmokeAshm ? 0.30 : 0.45,
+        maxLife: isBallistic ? 0.65 : isLowSmokeAshm ? 0.30 : 0.45,
+        radius: isBallistic ? 5.5 : isLowSmokeAshm ? 2.4 : 3.5,
+        color: proj.type === 'missile_ashm' ? ashmSmokeColor : isBallistic ? 'rgba(255, 171, 0, 0.85)' : 'rgba(245, 245, 245, 0.75)',
+        type: 'smoke',
+      });
+    }
+
+    // 誘餌引離判定：若飛彈被誘騙且抵達誘餌空域/海面，凌空自毀引爆
+    if (proj.isDecoyed && targetPos && dist(proj.pos, targetPos) < 65) {
+      proj.isDead = true;
+      soundEngine.playExplosion(false);
+      if (proj.isLeadMissile) {
+        this.handleAshmLeaderDestroyed(proj);
+      }
+      this.particles.push({
+        id: `decoyed-blast-${Date.now()}`,
+        x: proj.pos.x,
+        y: proj.pos.y,
+        vx: 0,
+        vy: 0,
+        life: 0.6,
+        maxLife: 0.6,
+        radius: 40,
+        color: '#80DEEA',
+        type: 'shockwave',
+        shape: 'ring',
+      });
+      return true;
+    }
+
+    // A. 反飛彈與反戰術/潛射彈道飛彈攔截 (Anti-Missile & ATBM Interception)
+    if (proj.isInterceptionMissile || proj.targetEntityType === 'projectile') {
+      const targetProj = this.projectiles.find(
+        (p) => !p.isDead && p.id === proj.targetEntityId && dist(proj.pos, p.pos) < 36
+      );
+      if (targetProj) {
+        let interceptChance = 0.85;
+        const isSLBM = !!targetProj.isSLBM || targetProj.type === 'slbm_trident' || targetProj.type === 'slbm_r39';
+        const isTBM = targetProj.type === 'missile_ssm' || isSLBM;
+
+        if (isSLBM) {
+          // 洲際潛射彈道飛彈終端超高速突防，唯頂級 ATBM (Patriot PAC-2 / 神盾 SM-2 / S-300) 有有限攔截機會
+          const att = proj.attackerName || '';
+          if (att.includes('愛國者') || att.includes('Patriot') || att.includes('神盾') || att.includes('SM-2') || att.includes('S-300') || att.includes('48N6')) {
+            interceptChance = 0.34;
           } else {
-            proj.heading += Math.sign(diff) * turnStep;
+            interceptChance = 0.10;
           }
-          proj.vel.x = Math.cos(proj.heading) * proj.speed;
-          proj.vel.y = Math.sin(proj.heading) * proj.speed;
+        } else if (isTBM) {
+          const att = proj.attackerName || '';
+          if (att.includes('愛國者') || att.includes('Patriot') || att.includes('神盾') || att.includes('SM-2') || att.includes('S-300') || att.includes('48N6')) {
+            interceptChance = 0.72;
+          } else if (att.includes('Sea Dart') || att.includes('Shtil') || att.includes('施基利') || att.includes('SM-1')) {
+            interceptChance = 0.42;
+          } else if (att.includes('海麻雀') || att.includes('Sparrow') || att.includes('Sea Wolf') || att.includes('Crotale') || att.includes('Kinzhal') || att.includes('匕首')) {
+            interceptChance = 0.22;
+          } else {
+            interceptChance = 0.15;
+          }
+        } else if (targetProj.type === 'missile_ashm') {
+          const isEra5 = this.era === 'era5';
+          if (targetProj.ashmVariant === 'exocet_mm40' || targetProj.ashmVariant === 'exocet_mm38') {
+            // 超低空飛魚貼海飛行掩蔽於海面雜波，中長程防空飛彈難以穩定鎖定
+            interceptChance = isEra5 ? 0.56 : 0.42;
+          } else if (targetProj.ashmVariant === 'p270_moskit') {
+            // 3 馬赫超音速貼海與終端蛇行
+            interceptChance = isEra5 ? 0.60 : 0.45;
+          } else if (targetProj.ashmVariant === 'p700_granit' || targetProj.ashmVariant === 'p500_bazalt') {
+            interceptChance = targetProj.isLeadMissile ? 0.90 : isEra5 ? 0.74 : 0.58;
+          } else if (targetProj.ashmVariant === 'kh22_burya') {
+            interceptChance = isEra5 ? 0.64 : 0.48;
+          } else if (targetProj.ashmVariant === 'p15_styx' || targetProj.ashmVariant === 'ksr5_kelt') {
+            interceptChance = 0.82;
+          } else {
+            interceptChance = isEra5 ? 0.78 : 0.62;
+          }
+        } else if (targetProj.type === 'missile_cruise') {
+          interceptChance = 0.80;
         }
 
-        proj.pos.x += proj.vel.x * dt;
-        proj.pos.y += proj.vel.y * dt;
-        proj.distanceTraveled += proj.speed * dt;
-
-        // 火箭推進發動機白煙與尾焰粒子 (Exocet / Harpoon 低煙低可視；蘇聯 P-700/P-270/P-15 濃烈尾跡)
-        const isBallistic = proj.type === 'missile_ssm' || !!proj.isSLBM || proj.type === 'slbm_trident' || proj.type === 'slbm_r39';
-        const isLowSmokeAshm =
-          proj.type === 'missile_ashm' &&
-          (proj.ashmVariant === 'exocet_mm40' ||
-            proj.ashmVariant === 'exocet_mm38' ||
-            proj.ashmVariant === 'harpoon_rgm84' ||
-            proj.ashmVariant === 'harpoon_ugm84' ||
-            proj.ashmVariant === 'harpoon_agm84');
-        const smokeProb = isBallistic ? 0.95 : isLowSmokeAshm ? 0.35 : 0.75;
-        if (Math.random() < smokeProb) {
-          const tailDist = isBallistic ? 18 : 12;
-          const tx = proj.pos.x - Math.cos(proj.heading) * tailDist;
-          const ty = proj.pos.y - Math.sin(proj.heading) * tailDist - (proj.missileAltitude ? proj.missileAltitude * 18 : 0);
-          const ashmSmokeColor =
-            proj.ashmVariant === 'exocet_mm40' || proj.ashmVariant === 'exocet_mm38'
-              ? 'rgba(224, 247, 250, 0.38)'
-              : proj.ashmVariant === 'harpoon_rgm84' || proj.ashmVariant === 'harpoon_ugm84' || proj.ashmVariant === 'harpoon_agm84'
-              ? 'rgba(236, 239, 241, 0.48)'
-              : 'rgba(255, 112, 67, 0.75)';
-          this.particles.push({
-            id: `m-smoke-${Date.now()}-${Math.random()}`,
-            x: tx + (Math.random() - 0.5) * 4,
-            y: ty + (Math.random() - 0.5) * 4,
-            vx: -Math.cos(proj.heading) * 20 + (Math.random() - 0.5) * 8,
-            vy: -Math.sin(proj.heading) * 20 + (Math.random() - 0.5) * 8,
-            life: isBallistic ? 0.65 : isLowSmokeAshm ? 0.30 : 0.45,
-            maxLife: isBallistic ? 0.65 : isLowSmokeAshm ? 0.30 : 0.45,
-            radius: isBallistic ? 5.5 : isLowSmokeAshm ? 2.4 : 3.5,
-            color: proj.type === 'missile_ashm' ? ashmSmokeColor : isBallistic ? 'rgba(255, 171, 0, 0.85)' : 'rgba(245, 245, 245, 0.75)',
-            type: 'smoke',
-          });
-        }
-
-        // 誘餌引離判定：若飛彈被誘騙且抵達誘餌空域/海面，凌空自毀引爆
-        if (proj.isDecoyed && targetPos && dist(proj.pos, targetPos) < 65) {
+        if (Math.random() > interceptChance) {
+          // 攔截脫靶
           proj.isDead = true;
-          soundEngine.playExplosion(false);
-          if (proj.isLeadMissile) {
-            this.handleAshmLeaderDestroyed(proj);
-          }
           this.particles.push({
-            id: `decoyed-blast-${Date.now()}`,
+            id: `miss-${Date.now()}`,
             x: proj.pos.x,
             y: proj.pos.y,
             vx: 0,
             vy: 0,
-            life: 0.6,
-            maxLife: 0.6,
-            radius: 40,
-            color: '#80DEEA',
+            life: 0.4,
+            maxLife: 0.4,
+            radius: 26,
+            color: '#FFA000',
             type: 'shockwave',
             shape: 'ring',
           });
-          continue;
+          if (isTBM) {
+            this.addCombatLog({
+              category: 'aa',
+              sourceSide: proj.side,
+              sourceName: proj.attackerName || '防空飛彈',
+              targetName: '來襲戰術彈道飛彈',
+              actionType: 'recon_spotted',
+              text: `⚠️【TBM 攔截脫靶】${proj.attackerName || '防空飛彈'} 與超音速俯衝之彈道飛彈失之交臂，引信未能有效破片殺傷！`,
+            });
+          }
+          return true;
         }
 
-        // A. 反飛彈與反戰術/潛射彈道飛彈攔截 (Anti-Missile & ATBM Interception)
-        if (proj.isInterceptionMissile || proj.targetEntityType === 'projectile') {
-          const targetProj = this.projectiles.find(
-            (p) => !p.isDead && p.id === proj.targetEntityId && dist(proj.pos, p.pos) < 36
-          );
-          if (targetProj) {
-            let interceptChance = 0.85;
-            const isSLBM = !!targetProj.isSLBM || targetProj.type === 'slbm_trident' || targetProj.type === 'slbm_r39';
-            const isTBM = targetProj.type === 'missile_ssm' || isSLBM;
+        soundEngine.playExplosion(false);
+        targetProj.isDead = true;
+        proj.isDead = true;
+        if (targetProj.isLeadMissile) {
+          this.handleAshmLeaderDestroyed(targetProj);
+        }
+        this.particles.push({
+          id: `intercept-blast-${Date.now()}`,
+          x: proj.pos.x,
+          y: proj.pos.y,
+          vx: 0,
+          vy: 0,
+          life: 0.7,
+          maxLife: 0.7,
+          radius: isTBM ? 56 : 42,
+          color: isTBM ? '#FFD700' : '#00E5FF',
+          type: 'shockwave',
+          shape: 'ring',
+        });
+        this.particles.push({
+          id: `intercept-flash-${Date.now()}`,
+          x: proj.pos.x,
+          y: proj.pos.y,
+          vx: 0,
+          vy: 0,
+          life: 0.4,
+          maxLife: 0.4,
+          radius: isTBM ? 34 : 20,
+          color: '#FFFFFF',
+          type: 'flak_puff',
+          shape: 'circle',
+        });
 
-            if (isSLBM) {
-              // 洲際潛射彈道飛彈終端超高速突防，唯頂級 ATBM (Patriot PAC-2 / 神盾 SM-2 / S-300) 有有限攔截機會
-              const att = proj.attackerName || '';
-              if (att.includes('愛國者') || att.includes('Patriot') || att.includes('神盾') || att.includes('SM-2') || att.includes('S-300') || att.includes('48N6')) {
-                interceptChance = 0.34;
-              } else {
-                interceptChance = 0.10;
-              }
-            } else if (isTBM) {
-              const att = proj.attackerName || '';
-              if (att.includes('愛國者') || att.includes('Patriot') || att.includes('神盾') || att.includes('SM-2') || att.includes('S-300') || att.includes('48N6')) {
-                interceptChance = 0.72;
-              } else if (att.includes('Sea Dart') || att.includes('Shtil') || att.includes('施基利') || att.includes('SM-1')) {
-                interceptChance = 0.42;
-              } else if (att.includes('海麻雀') || att.includes('Sparrow') || att.includes('Sea Wolf') || att.includes('Crotale') || att.includes('Kinzhal') || att.includes('匕首')) {
-                interceptChance = 0.22;
-              } else {
-                interceptChance = 0.15;
-              }
-            } else if (targetProj.type === 'missile_ashm') {
-              const isEra5 = this.era === 'era5';
-              if (targetProj.ashmVariant === 'exocet_mm40' || targetProj.ashmVariant === 'exocet_mm38') {
-                // 超低空飛魚貼海飛行掩蔽於海面雜波，中長程防空飛彈難以穩定鎖定
-                interceptChance = isEra5 ? 0.56 : 0.42;
-              } else if (targetProj.ashmVariant === 'p270_moskit') {
-                // 3 馬赫超音速貼海與終端蛇行
-                interceptChance = isEra5 ? 0.60 : 0.45;
-              } else if (targetProj.ashmVariant === 'p700_granit' || targetProj.ashmVariant === 'p500_bazalt') {
-                interceptChance = targetProj.isLeadMissile ? 0.90 : isEra5 ? 0.74 : 0.58;
-              } else if (targetProj.ashmVariant === 'kh22_burya') {
-                interceptChance = isEra5 ? 0.64 : 0.48;
-              } else if (targetProj.ashmVariant === 'p15_styx' || targetProj.ashmVariant === 'ksr5_kelt') {
-                interceptChance = 0.82;
-              } else {
-                interceptChance = isEra5 ? 0.78 : 0.62;
-              }
-            } else if (targetProj.type === 'missile_cruise') {
-              interceptChance = 0.80;
-            }
+        if (isTBM) {
+          const isAtacms = targetProj.attackerName?.includes('ATACMS') || targetProj.side === 'player' || targetProj.side === 'allied';
+          const tbmName = isAtacms ? 'MGM-140 ATACMS 戰術彈道飛彈' : '9K72 飛毛腿-B (Scud-B) 彈道飛彈';
+          this.addBannerAlert(`🎯【TBM 戰術彈道飛彈末端攔截成功！】防空飛彈成功凌空打爆來襲 ${tbmName}！`, proj.side === 'enemy' ? 'enemy' : 'player', 'alert', 5.5);
+          this.addCombatLog({
+            category: 'aa',
+            sourceSide: proj.side,
+            sourceName: proj.attackerName || '防空飛彈系統',
+            targetName: tbmName,
+            actionType: 'recon_spotted',
+            isCrit: true,
+            text: `🎯【TBM 反飛彈攔截成功】${proj.attackerName || '防空系統'} 雷達精確引導近炸破片凌空殉爆，成功摧毀超音速俯衝之 ${tbmName}！`,
+          });
+        } else if (targetProj.type === 'missile_cruise') {
+          this.addBannerAlert('🎯【防禦攔截成功！】防空飛彈成功凌空打爆來襲巡弋飛彈！', proj.side === 'enemy' ? 'enemy' : 'player', 'alert', 5.0);
+          this.addCombatLog({
+            category: 'aa',
+            sourceSide: proj.side,
+            sourceName: proj.attackerName || '防空飛彈射控系統',
+            targetName: '來襲巡弋飛彈',
+            actionType: 'recon_spotted',
+            text: `🎯【反巡弋飛彈防禦成功】防空飛彈雷達導引近炸引信凌空殉爆！成功粉碎來襲之低空巡弋飛彈！`,
+          });
+        } else {
+          this.addBannerAlert('🎯【防禦攔截成功！】防空飛彈成功凌空打爆來襲反艦飛彈！', proj.side === 'enemy' ? 'enemy' : 'player', 'alert', 5.0);
+          this.addCombatLog({
+            category: 'aa',
+            sourceSide: proj.side,
+            sourceName: proj.attackerName || '防空飛彈射控系統',
+            targetName: '來襲反艦飛彈',
+            actionType: 'recon_spotted',
+            text: `🎯【反飛彈防禦攔截成功】防空飛彈雷達導引近炸引信凌空殉爆！成功粉碎來襲之掠海反艦飛彈！`,
+          });
+        }
+      }
+    }
 
-            if (Math.random() > interceptChance) {
-              // 攔截脫靶
+    this.applyMissileProximityFuzeVsAircraft(proj);
+
+    // C. 反艦飛彈與巡弋飛彈/戰術飛彈命中水面艦艇 (AShM / TASM / SSM vs Ship - 潛水艇深潛免疫)
+    if (!proj.isDead && (proj.type === 'missile_ashm' || proj.type === 'missile_cruise' || proj.type === 'missile_ssm')) {
+      const allShips = [...this.playerShips, ...this.enemyShips, ...this.alliedShips];
+      const targetShips = allShips.filter((s) => !s.isSunk && this.isHostile(proj.side, s.side) && !this.isSubmarine(s));
+      for (const ship of targetShips) {
+        if (!ship.isSunk && distToShipHull(proj.pos, ship) < ship.width * 0.75 + 16) {
+          this.detonateProjectile(proj, ship);
+          proj.isDead = true;
+          break;
+        }
+      }
+    }
+
+    // D. 巡弋飛彈、反輻射飛彈與戰術彈道飛彈命中雷達陣地與陸基要塞 (Cruise / ARM / SSM vs Radar / SAM / Installations)
+    if (!proj.isDead && (proj.type === 'missile_arm' || proj.type === 'missile_cruise' || proj.type === 'missile_ssm')) {
+      for (const isl of this.islands) {
+        for (const inst of isl.installations) {
+          if (!inst.isDestroyed && this.isHostile(proj.side, inst.side) && dist(proj.pos, inst.pos) < 46) {
+            this.detonateProjectile(proj);
+            proj.isDead = true;
+            break;
+          }
+        }
+        if (proj.isDead) break;
+      }
+    }
+
+    // E. 戰術彈道飛彈 (MGM-140 ATACMS / 9K72 Scud-B) 命中敵方地面作戰部隊
+    if (!proj.isDead && proj.type === 'missile_ssm') {
+      for (const u of this.groundUnits) {
+        if (!u.isDestroyed && !u.embarkedInShipId && this.isHostile(proj.side, u.side) && dist(proj.pos, u.pos) < 42) {
+          this.detonateProjectile(proj);
+          proj.isDead = true;
+          break;
+        }
+      }
+    }
+
+    // F. 撞擊島嶼陸地 (僅反艦飛彈受陸地地形阻擋，巡弋飛彈與戰術彈道飛彈自由飛越/灌頂俯衝)
+    if (!proj.isDead && proj.type === 'missile_ashm') {
+      for (const isl of this.islands) {
+        if (isPointInPolygon(proj.pos, isl.points)) {
+          this.detonateProjectile(proj);
+          proj.isDead = true;
+          break;
+        }
+      }
+    }
+
+    // G. 到達目標座標直接灌頂引爆 (Terminal Ballistic Plunge on Target Position)
+    if (!proj.isDead && (proj.type === 'missile_ssm' || proj.type === 'slbm_trident' || proj.type === 'slbm_r39') && targetPos && dist(proj.pos, targetPos) < 45) {
+      this.detonateProjectile(proj);
+      proj.isDead = true;
+    }
+
+    // H. 超出最大射程自毀
+    if (proj.distanceTraveled >= proj.maxDistance) {
+      proj.isDead = true;
+      this.detonateProjectile(proj);
+    }
+    return false;
+  }
+
+  // B. 空空 / 防空飛彈近炸敵機 (AAM & SAM vs Aircraft)
+  private applyMissileProximityFuzeVsAircraft(proj: Projectile): void {
+    if (!proj.isDead && (proj.type === 'missile_aam' || proj.type === 'missile_sam')) {
+      if (!proj.isDecoyed) {
+        const targetPlanes = this.aircraft.filter((a) => this.isHostile(proj.side, a.side) && a.state !== 'shot_down');
+        for (const plane of targetPlanes) {
+          if (dist(proj.pos, plane.pos) < 34) {
+            // 機動規避動作判定：若戰機正處於大G機動破轉，早期飛彈超載受限高機率脫靶
+            if (plane.isEvading && Math.random() < 0.55) {
+              soundEngine.playExplosion(false);
               proj.isDead = true;
               this.particles.push({
-                id: `miss-${Date.now()}`,
+                id: `near-miss-${Date.now()}`,
                 x: proj.pos.x,
                 y: proj.pos.y,
                 vx: 0,
                 vy: 0,
-                life: 0.4,
-                maxLife: 0.4,
-                radius: 26,
-                color: '#FFA000',
+                life: 0.5,
+                maxLife: 0.5,
+                radius: 32,
+                color: '#FFAB00',
                 type: 'shockwave',
                 shape: 'ring',
               });
-              if (isTBM) {
-                this.addCombatLog({
-                  category: 'aa',
-                  sourceSide: proj.side,
-                  sourceName: proj.attackerName || '防空飛彈',
-                  targetName: '來襲戰術彈道飛彈',
-                  actionType: 'recon_spotted',
-                  text: `⚠️【TBM 攔截脫靶】${proj.attackerName || '防空飛彈'} 與超音速俯衝之彈道飛彈失之交臂，引信未能有效破片殺傷！`,
-                });
-              }
-              continue;
+              this.addCombatLog({
+                category: 'aa',
+                sourceSide: 'player',
+                sourceName: plane.name,
+                targetName: proj.attackerName || '導向飛彈',
+                actionType: 'recon_spotted',
+                text: `💨【高G機動破轉避開！】「${plane.name}」大過載劇烈破轉，敵飛彈超載脫靶於舷側近距擦過爆炸！`,
+              });
+              break;
             }
 
             soundEngine.playExplosion(false);
-            targetProj.isDead = true;
+            plane.health -= proj.damage;
             proj.isDead = true;
-            if (targetProj.isLeadMissile) {
-              this.handleAshmLeaderDestroyed(targetProj);
-            }
+
             this.particles.push({
-              id: `intercept-blast-${Date.now()}`,
+              id: `sam-air-blast-${Date.now()}`,
               x: proj.pos.x,
               y: proj.pos.y,
               vx: 0,
               vy: 0,
-              life: 0.7,
-              maxLife: 0.7,
-              radius: isTBM ? 56 : 42,
-              color: isTBM ? '#FFD700' : '#00E5FF',
+              life: 0.55,
+              maxLife: 0.55,
+              radius: 38,
+              color: '#FF6D00',
               type: 'shockwave',
               shape: 'ring',
             });
-            this.particles.push({
-              id: `intercept-flash-${Date.now()}`,
-              x: proj.pos.x,
-              y: proj.pos.y,
-              vx: 0,
-              vy: 0,
-              life: 0.4,
-              maxLife: 0.4,
-              radius: isTBM ? 34 : 20,
-              color: '#FFFFFF',
-              type: 'flak_puff',
-              shape: 'circle',
+
+            const isLethalHit = plane.health <= 0;
+            this.addCombatLog({
+              category: 'aa',
+              sourceSide: proj.side,
+              sourceName: proj.attackerName || '導向飛彈',
+              targetName: plane.name,
+              actionType: 'aa_down',
+              damage: proj.damage,
+              text: isLethalHit
+                ? `🎯💥【SPLASH! 敵機凌空爆毀！】${proj.attackerName || '導向飛彈'} 近炸引信精準引爆戰鬥部！「${plane.name}」化作巨型火球當空解體擊墜！`
+                : `💥【飛彈近炸破甲】${proj.attackerName || '導向飛彈'} 於「${plane.name}」近距凌空引爆！高能預製破片造成 ${proj.damage} 點重創！`,
             });
 
-            if (isTBM) {
-              const isAtacms = targetProj.attackerName?.includes('ATACMS') || targetProj.side === 'player' || targetProj.side === 'allied';
-              const tbmName = isAtacms ? 'MGM-140 ATACMS 戰術彈道飛彈' : '9K72 飛毛腿-B (Scud-B) 彈道飛彈';
-              this.addBannerAlert(`🎯【TBM 戰術彈道飛彈末端攔截成功！】防空飛彈成功凌空打爆來襲 ${tbmName}！`, proj.side === 'enemy' ? 'enemy' : 'player', 'alert', 5.5);
-              this.addCombatLog({
-                category: 'aa',
-                sourceSide: proj.side,
-                sourceName: proj.attackerName || '防空飛彈系統',
-                targetName: tbmName,
-                actionType: 'recon_spotted',
-                isCrit: true,
-                text: `🎯【TBM 反飛彈攔截成功】${proj.attackerName || '防空系統'} 雷達精確引導近炸破片凌空殉爆，成功摧毀超音速俯衝之 ${tbmName}！`,
-              });
-            } else if (targetProj.type === 'missile_cruise') {
-              this.addBannerAlert('🎯【防禦攔截成功！】防空飛彈成功凌空打爆來襲巡弋飛彈！', proj.side === 'enemy' ? 'enemy' : 'player', 'alert', 5.0);
-              this.addCombatLog({
-                category: 'aa',
-                sourceSide: proj.side,
-                sourceName: proj.attackerName || '防空飛彈射控系統',
-                targetName: '來襲巡弋飛彈',
-                actionType: 'recon_spotted',
-                text: `🎯【反巡弋飛彈防禦成功】防空飛彈雷達導引近炸引信凌空殉爆！成功粉碎來襲之低空巡弋飛彈！`,
-              });
-            } else {
-              this.addBannerAlert('🎯【防禦攔截成功！】防空飛彈成功凌空打爆來襲反艦飛彈！', proj.side === 'enemy' ? 'enemy' : 'player', 'alert', 5.0);
-              this.addCombatLog({
-                category: 'aa',
-                sourceSide: proj.side,
-                sourceName: proj.attackerName || '防空飛彈射控系統',
-                targetName: '來襲反艦飛彈',
-                actionType: 'recon_spotted',
-                text: `🎯【反飛彈防禦攔截成功】防空飛彈雷達導引近炸引信凌空殉爆！成功粉碎來襲之掠海反艦飛彈！`,
-              });
+            if (isLethalHit) {
+              this.killPlane(plane);
             }
+            break;
           }
-        }
-
-        // B. 空空 / 防空飛彈近炸敵機 (AAM & SAM vs Aircraft)
-        if (!proj.isDead && (proj.type === 'missile_aam' || proj.type === 'missile_sam')) {
-          if (!proj.isDecoyed) {
-            const targetPlanes = this.aircraft.filter((a) => this.isHostile(proj.side, a.side) && a.state !== 'shot_down');
-            for (const plane of targetPlanes) {
-              if (dist(proj.pos, plane.pos) < 34) {
-                // 機動規避動作判定：若戰機正處於大G機動破轉，早期飛彈超載受限高機率脫靶
-                if (plane.isEvading && Math.random() < 0.55) {
-                  soundEngine.playExplosion(false);
-                  proj.isDead = true;
-                  this.particles.push({
-                    id: `near-miss-${Date.now()}`,
-                    x: proj.pos.x,
-                    y: proj.pos.y,
-                    vx: 0,
-                    vy: 0,
-                    life: 0.5,
-                    maxLife: 0.5,
-                    radius: 32,
-                    color: '#FFAB00',
-                    type: 'shockwave',
-                    shape: 'ring',
-                  });
-                  this.addCombatLog({
-                    category: 'aa',
-                    sourceSide: 'player',
-                    sourceName: plane.name,
-                    targetName: proj.attackerName || '導向飛彈',
-                    actionType: 'recon_spotted',
-                    text: `💨【高G機動破轉避開！】「${plane.name}」大過載劇烈破轉，敵飛彈超載脫靶於舷側近距擦過爆炸！`,
-                  });
-                  break;
-                }
-
-                soundEngine.playExplosion(false);
-                plane.health -= proj.damage;
-                proj.isDead = true;
-
-                this.particles.push({
-                  id: `sam-air-blast-${Date.now()}`,
-                  x: proj.pos.x,
-                  y: proj.pos.y,
-                  vx: 0,
-                  vy: 0,
-                  life: 0.55,
-                  maxLife: 0.55,
-                  radius: 38,
-                  color: '#FF6D00',
-                  type: 'shockwave',
-                  shape: 'ring',
-                });
-
-                const isLethalHit = plane.health <= 0;
-                this.addCombatLog({
-                  category: 'aa',
-                  sourceSide: proj.side,
-                  sourceName: proj.attackerName || '導向飛彈',
-                  targetName: plane.name,
-                  actionType: 'aa_down',
-                  damage: proj.damage,
-                  text: isLethalHit
-                    ? `🎯💥【SPLASH! 敵機凌空爆毀！】${proj.attackerName || '導向飛彈'} 近炸引信精準引爆戰鬥部！「${plane.name}」化作巨型火球當空解體擊墜！`
-                    : `💥【飛彈近炸破甲】${proj.attackerName || '導向飛彈'} 於「${plane.name}」近距凌空引爆！高能預製破片造成 ${proj.damage} 點重創！`,
-                });
-
-                if (isLethalHit) {
-                  this.killPlane(plane);
-                }
-                break;
-              }
-            }
-          }
-        }
-
-        // C. 反艦飛彈與巡弋飛彈/戰術飛彈命中水面艦艇 (AShM / TASM / SSM vs Ship - 潛水艇深潛免疫)
-        if (!proj.isDead && (proj.type === 'missile_ashm' || proj.type === 'missile_cruise' || proj.type === 'missile_ssm')) {
-          const allShips = [...this.playerShips, ...this.enemyShips, ...this.alliedShips];
-          const targetShips = allShips.filter((s) => !s.isSunk && this.isHostile(proj.side, s.side) && !this.isSubmarine(s));
-          for (const ship of targetShips) {
-            if (!ship.isSunk && distToShipHull(proj.pos, ship) < ship.width * 0.75 + 16) {
-              this.detonateProjectile(proj, ship);
-              proj.isDead = true;
-              break;
-            }
-          }
-        }
-
-        // D. 巡弋飛彈、反輻射飛彈與戰術彈道飛彈命中雷達陣地與陸基要塞 (Cruise / ARM / SSM vs Radar / SAM / Installations)
-        if (!proj.isDead && (proj.type === 'missile_arm' || proj.type === 'missile_cruise' || proj.type === 'missile_ssm')) {
-          for (const isl of this.islands) {
-            for (const inst of isl.installations) {
-              if (!inst.isDestroyed && this.isHostile(proj.side, inst.side) && dist(proj.pos, inst.pos) < 46) {
-                this.detonateProjectile(proj);
-                proj.isDead = true;
-                break;
-              }
-            }
-            if (proj.isDead) break;
-          }
-        }
-
-        // E. 戰術彈道飛彈 (MGM-140 ATACMS / 9K72 Scud-B) 命中敵方地面作戰部隊
-        if (!proj.isDead && proj.type === 'missile_ssm') {
-          for (const u of this.groundUnits) {
-            if (!u.isDestroyed && !u.embarkedInShipId && this.isHostile(proj.side, u.side) && dist(proj.pos, u.pos) < 42) {
-              this.detonateProjectile(proj);
-              proj.isDead = true;
-              break;
-            }
-          }
-        }
-
-        // F. 撞擊島嶼陸地 (僅反艦飛彈受陸地地形阻擋，巡弋飛彈與戰術彈道飛彈自由飛越/灌頂俯衝)
-        if (!proj.isDead && proj.type === 'missile_ashm') {
-          for (const isl of this.islands) {
-            if (isPointInPolygon(proj.pos, isl.points)) {
-              this.detonateProjectile(proj);
-              proj.isDead = true;
-              break;
-            }
-          }
-        }
-
-        // G. 到達目標座標直接灌頂引爆 (Terminal Ballistic Plunge on Target Position)
-        if (!proj.isDead && (proj.type === 'missile_ssm' || proj.type === 'slbm_trident' || proj.type === 'slbm_r39') && targetPos && dist(proj.pos, targetPos) < 45) {
-          this.detonateProjectile(proj);
-          proj.isDead = true;
-        }
-
-        // H. 超出最大射程自毀
-        if (proj.distanceTraveled >= proj.maxDistance) {
-          proj.isDead = true;
-          this.detonateProjectile(proj);
         }
       }
     }
   }
 
-  private detonateProjectile(proj: Projectile, directHitShip?: Ship) {
-    // ══════════════════════════════════════════════════════════
-    // 時代三 Mk 4 / Mk 6 戰術原子彈終極引爆 (Tactical Nuclear Detonation)
-    // 消耗 4500 CP · 全島範圍覆蓋 (半徑 520m) · 瞬間汽化守備要塞部隊與防空陣地
-    // ══════════════════════════════════════════════════════════
-    // ══════════════════════════════════════════════════════════
-    // 戰略與戰術核武器終極引爆系統 (Strategic & Tactical Nuclear Detonations)
-    // B-52 百萬噸熱核武器 (750m) / B61 戰術核武器 (420m) / OPFOR 戰術核反撲 (450m) / B-29 Mk 4 (220m)
-    // ══════════════════════════════════════════════════════════
-    if (
-      proj.bombType === 'tactical_nuke' ||
-      proj.bombType === 'b52_megaton_nuke' ||
-      proj.bombType === 'tactical_b61_nuke' ||
-      proj.bombType === 'opfor_tactical_nuke' ||
-      proj.isNuclear
-    ) {
-      const isMegaton = proj.bombType === 'b52_megaton_nuke';
-      const isB61 = proj.bombType === 'tactical_b61_nuke';
-      const isOpfor = proj.bombType === 'opfor_tactical_nuke';
-      const blastRad = isMegaton ? 750 : (isB61 ? 420 : (isOpfor ? 450 : 220));
-      const nukeDamage = isMegaton ? 250000 : (isB61 ? 90000 : (isOpfor ? 100000 : 120000));
-      const nukeDuration = isMegaton ? 12.0 : 8.5;
+  private steerMissileTowardTarget(dt: number, proj: Projectile, targetPos: Vector2D | null): void {
+    if (targetPos) {
+      let desiredAngle = Math.atan2(targetPos.y - proj.pos.y, targetPos.x - proj.pos.x);
+      const distToTarget = dist(proj.pos, targetPos);
 
-      this.nuclearFlash = isMegaton ? 2.0 : 1.35;
-      soundEngine.playExplosion(true);
-      soundEngine.playGunSalvo(true);
+      // 歷史反艦飛彈 (AShM) 動態彈道高度、終端躍升俯衝與終端蛇行機動
+      if (proj.type === 'missile_ashm' && !proj.isDecoyed) {
+        if (proj.ashmProfile === 'pop_up_dive') {
+          // RGM-84 / AGM-84 魚叉：巡航掠海 (0.18) -> 距離 540m 時躍升爬高 (0.62) 隨後俯衝砸穿甲板
+          if (distToTarget < 540 && distToTarget > 190) {
+            proj.missileAltitude = Math.min(0.62, (proj.missileAltitude ?? 0.18) + 1.8 * dt);
+          } else if (distToTarget <= 190) {
+            proj.missileAltitude = Math.max(0.14, (proj.missileAltitude ?? 0.62) - 2.6 * dt);
+          } else {
+            proj.missileAltitude = 0.18;
+          }
+        } else if (proj.ashmProfile === 'ultra_sea_skim') {
+          // MM40 / MM38 飛魚：全程極限緊貼浪尖 (0.07) 直插水線
+          proj.missileAltitude = 0.07;
+        } else if (proj.ashmProfile === 'datalink_leader') {
+          // P-700 / P-500 領彈：高空偵察與資料鏈中繼 (0.88)，終端 600m 俯衝
+          proj.missileAltitude = distToTarget < 600 ? Math.max(0.20, (distToTarget / 600) * 0.88) : 0.88;
+        } else if (proj.ashmProfile === 'datalink_follower') {
+          // P-700 / P-500 跟隨彈：核對領彈是否仍健在，若領彈遭摧毀則立即降級資料鏈精度
+          if (proj.leadMissileId && !proj.datalinkLost) {
+            const leaderProj = this.projectiles.find((p) => p.id === proj.leadMissileId);
+            if (leaderProj && (leaderProj.isDead || leaderProj.isDecoyed)) {
+              proj.datalinkLost = true;
+              proj.turnRate = Math.max(1.8, (proj.turnRate || 3.6) * 0.56);
+            }
+          }
+          proj.missileAltitude = 0.17;
+        } else if (proj.ashmProfile === 'supersonic_sprint') {
+          // P-270 白蛉：超音速極低空突防 (0.11) + 距離 1150m 內進行高G終端 S 型蛇行規避
+          proj.missileAltitude = 0.11;
+          if (distToTarget < 1150 && distToTarget > 120) {
+            proj.terminalWeavePhase = (proj.terminalWeavePhase ?? 0) + dt * 7.5;
+            desiredAngle += Math.sin(proj.terminalWeavePhase) * 0.34;
+          }
+        } else if (proj.ashmProfile === 'high_plunge') {
+          // Kh-22 / KSR-5：高空巡航大俯衝
+          proj.missileAltitude = distToTarget < 700 ? Math.max(0.18, (distToTarget / 700) * 0.90) : 0.90;
+        }
+      }
 
-      const hitIsland = this.islands.find((isl) => dist(isl.center, proj.pos) < isl.radius + 200);
-      const islName = hitIsland?.name || '目標戰略島嶼防區';
+      let diff = desiredAngle - proj.heading;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      const turnStep = (proj.turnRate || 3.5) * dt;
+      if (Math.abs(diff) < turnStep) {
+        proj.heading = desiredAngle;
+      } else {
+        proj.heading += Math.sign(diff) * turnStep;
+      }
+      proj.vel.x = Math.cos(proj.heading) * proj.speed;
+      proj.vel.y = Math.sin(proj.heading) * proj.speed;
+    }
+  }
 
-      this.nuclearDetonations.push({
-        id: `nuke-${Date.now()}-${Math.random()}`,
-        x: proj.pos.x,
-        y: proj.pos.y,
-        radius: 0,
-        maxRadius: blastRad,
-        timer: 0,
-        duration: nukeDuration,
-        targetIslandName: islName,
-      });
-
-      // 1. 引爆點周圍工事摧毀判定
-      let vaporizedInst = 0;
-      let hqDamaged = false;
-      for (const isl of this.islands) {
-        for (const inst of isl.installations) {
-          if (!inst.isDestroyed && this.isHostile(proj.side, inst.side) && dist(proj.pos, inst.pos) <= blastRad) {
-            if (inst.type === 'command_post') {
-              const hqNukeDmg = Math.round(inst.maxHealth * (isMegaton ? 0.85 : 0.65));
-              inst.health = Math.max(0, inst.health - hqNukeDmg);
-              hqDamaged = true;
-              if (inst.health <= 0) {
-                inst.isDestroyed = true;
-                vaporizedInst++;
-                if (inst.side === 'enemy') {
-                  this.casualties.enemyInstallationsLost++;
-                  this.score.installationsDestroyed++;
-                } else {
-                  this.casualties.playerInstallationsLost++;
-                }
-              }
-            } else {
-              inst.health = 0;
-              inst.isDestroyed = true;
-              vaporizedInst++;
-              if (inst.side === 'enemy') {
-                this.casualties.enemyInstallationsLost++;
-                this.score.installationsDestroyed++;
-              } else {
-                this.casualties.playerInstallationsLost++;
-              }
+  // ════ 歷史史實校正 3: AIM-7 麻雀半主動雷達 (SARH) 機首持續波照準錐 (±50°) 與地雜波盲區 ════
+  private updateSarhIllumination(proj: Projectile, targetPos: Vector2D | null): void {
+    if (proj.type === 'missile_aam' && proj.guidanceType === 'semi_active_radar' && !proj.lostLock) {
+      if (proj.sarhIlluminatorId) {
+        const illPlane = this.aircraft.find((a) => a.id === proj.sarhIlluminatorId && a.state !== 'shot_down');
+        if (!illPlane) {
+          proj.lostLock = true;
+        } else if (targetPos) {
+          const angToTarget = Math.atan2(targetPos.y - illPlane.pos.y, targetPos.x - illPlane.pos.x);
+          let relAngle = angToTarget - illPlane.heading;
+          while (relAngle > Math.PI) relAngle -= Math.PI * 2;
+          while (relAngle < -Math.PI) relAngle += Math.PI * 2;
+          if (Math.abs(relAngle) > (Math.PI * 50) / 180) {
+            proj.lostLock = true;
+            if (illPlane.side === 'player') {
+              this.addCombatLog({
+                category: 'air',
+                sourceSide: illPlane.side,
+                sourceName: illPlane.name,
+                targetName: 'AIM-7 麻雀',
+                actionType: 'recon_spotted',
+                text: `📡【雷達照準錐脫鎖】「${illPlane.name}」機首照射夾角偏轉逾50°！AIM-7 失去連續波照射，飛彈失控飄移！`,
+              });
             }
           }
         }
       }
+      // 地雜波盲區 (Ground Clutter Blindness): 若目標處於超低空，早期無都卜勒脈衝雷達淹沒於地表雜波
+      if (!proj.lostLock && proj.targetEntityId) {
+        const targetPlane = this.aircraft.find((a) => a.id === proj.targetEntityId);
+        if (targetPlane && (targetPlane.altitude || 0.5) < 0.28 && Math.random() < 0.04) {
+          proj.lostLock = true;
+          this.addCombatLog({
+            category: 'air',
+            sourceSide: proj.side,
+            sourceName: proj.attackerName || 'AIM-7',
+            targetName: targetPlane.name,
+            actionType: 'recon_spotted',
+            text: `📡【地雜波盲區脫靶】敵機「${targetPlane.name}」利用超低空掠地，雷達回波湮沒於熱帶叢林地雜波中！AIM-7 脫鎖！`,
+          });
+        }
+      }
+    }
+  }
 
-      // 2. 汽化引爆點周圍所有敵對地面作戰部隊，並對 EMP 影響圈 (1.4x) 施加電子癱瘓壓制
-      let vaporizedGround = 0;
+  private updateBulletProjectile(dt: number, proj: Projectile): void {
+    proj.pos.x += proj.vel.x * dt;
+    proj.pos.y += proj.vel.y * dt;
+    proj.distanceTraveled += proj.speed * dt;
+
+    const targetPlanes = this.aircraft.filter((a) => this.isHostile(proj.side, a.side) && a.state !== 'shot_down');
+    for (const p of targetPlanes) {
+      if (dist(proj.pos, p.pos) < 20) {
+        p.health -= proj.damage;
+        proj.isDead = true;
+        if (p.health <= 0) this.killPlane(p);
+        break;
+      }
+    }
+
+    // 步槍與機槍對地面作戰單位實體碰撞判定 (Ground Unit Bullet Impact)
+    // 建制傷害隨目標組織度下降微幅提升 (組織度低於50%時最多增加50%建制傷害)
+    if (!proj.isDead) {
       for (const u of this.groundUnits) {
-        if (!u.isDestroyed && this.isHostile(proj.side, u.side)) {
-          const dGround = dist(proj.pos, u.pos);
-          if (dGround <= blastRad) {
-            u.health = 0;
-            u.strength = 0;
-            u.organization = 0;
+        if (!u.isDestroyed && !u.embarkedInShipId && this.isHostile(proj.side, u.side) && dist(proj.pos, u.pos) < 26) {
+          const currentOrg = u.organization ?? 100;
+          const orgDmgScale = currentOrg < 50 ? 1.0 + 0.5 * (1.0 - currentOrg / 50) : 1.0;
+          const urbanCoverMod = u.isInUrbanCover ? 0.50 : 1.0;
+          const dmg = Math.round(proj.damage * orgDmgScale * (1 - (u.armor || 0.2) * 0.35) * urbanCoverMod);
+          u.health = Math.max(0, u.health - dmg);
+          u.strength = Math.max(0, Math.round((u.health / u.maxHealth) * 100));
+          u.organization = Math.max(0, currentOrg - (u.isInUrbanCover ? 2 : 4));
+          if (u.organization < 20) u.disorganized = true;
+
+          // 遭受槍砲直射火力打擊產生火力壓制 (若為M61火神光束則壓制更劇烈)
+          u.suppression = Math.min(100, (u.suppression || 0) + (proj.isBeamTracer ? 20 : 12));
+          u.suppressionTimer = 5.0;
+          u.isSuppressed = u.suppression >= 30;
+          u.isPinned = u.suppression >= 75;
+
+          proj.isDead = true;
+
+          if (u.health <= 0 || u.strength <= 0) {
             u.isDestroyed = true;
-            vaporizedGround++;
+            soundEngine.playExplosion(false);
             if (u.side === 'enemy') {
               this.casualties.enemyGroundLost++;
+              this.resourcePoints += 40;
+              this.totalCpEarned += 40;
             } else {
               this.casualties.playerGroundLost++;
             }
-          } else if (dGround <= blastRad * 1.4) {
-            // 核電磁脈衝 (EMP) 衝擊波造成電子射控與指揮壓制
-            u.suppression = 100;
-            u.suppressionTimer = 10.0;
-            u.isSuppressed = true;
-            u.isPinned = true;
-            u.disorganized = true;
-            u.organization = Math.max(0, u.organization - 45);
+            this.addCombatLog({
+              category: 'naval',
+              sourceSide: proj.side,
+              sourceName: proj.attackerName || (proj.side === 'player' ? '友軍地面部隊' : '敵軍部隊'),
+              targetName: u.name,
+              actionType: 'gun_hit',
+              damage: dmg,
+              text: `💥【步火交鋒突破】「${u.name}」在密集火力壓制下建制被徹底擊潰消滅！`,
+            });
           }
+          break;
         }
       }
-
-      // 3. 毀滅周圍敵對艦艇並對 EMP 範圍內敵艦實施雷達/SAM 電子癱瘓
-      const allShips = [...this.playerShips, ...this.enemyShips, ...this.alliedShips];
-      const candidateShips = allShips.filter((s) => !s.isSunk && this.isHostile(proj.side, s.side));
-      for (const s of candidateShips) {
-        const dShip = dist(proj.pos, s.pos);
-        if (dShip <= blastRad * 0.85) {
-          s.health = Math.max(0, s.health - (isMegaton ? 24000 : 9000));
-          if (s.health <= 0) this.sinkShip(s);
-        }
-        if (!s.isSunk && dShip <= blastRad * 1.4) {
-          s.samCooldown = Math.max(s.samCooldown || 0, 12.0);
-          s.ciwsCooldown = Math.max(s.ciwsCooldown || 0, 8.0);
-        }
-      }
-
-      const isTrident = proj.type === 'slbm_trident';
-      const isR39 = proj.type === 'slbm_r39';
-      const isNuclearSSM = proj.type === 'missile_ssm' && proj.isNuclear;
-      const alertTitle = isTrident
-        ? '☢️【UGM-133 三叉戟-D5 潛射戰略熱核毀滅】8枚 W88 分導核彈頭落地！戰區電磁脈衝癱瘓敵防空！'
-        : isR39
-        ? '☢️⚠️【蘇聯颱風級 R-39 潛射重型核反擊引爆！】10枚分導核彈頭落地！EMP 癱瘓大範圍雷達通訊！'
-        : isNuclearSSM
-        ? (isOpfor
-          ? '☢️⚠️【敵軍 9K72 戰術核彈道飛彈引爆！】高爆熱核衝擊波橫掃防區！'
-          : '☢️【MGM-140B 戰術核彈道飛彈引爆！】W70 熱核彈頭精準抹除目標要塞並觸發 EMP 癱瘓！')
-        : isMegaton
-        ? '☢️【B-52 百萬噸級戰略熱核引爆】B28/B41 氫彈震撼引爆！全戰區半徑 750m 焦土火球衝天並觸發 EMP！'
-        : isB61
-        ? '☢️【B61 戰術核打擊引爆】半徑 420m 戰術熱核火球吞噬天際！防空陣地與部隊瞬間汽化！'
-        : isOpfor
-        ? '☢️⚠️【敵軍戰術核航彈引爆！】敵方核彈於戰區引爆！我方陣容承受衝擊波毀滅打擊！'
-        : `☢️【代號：天罰——戰術核打擊引爆】半徑 220m 戰術熱核火球吞噬天際！防空陣地與部隊瞬間汽化！`;
-
-      this.addBannerAlert(
-        `${alertTitle}${hqDamaged ? '（地下坑道指揮所深居地下受損生還）' : ''}`,
-        isOpfor || isR39 ? 'enemy' : 'player',
-        'sunk',
-        9.0
-      );
-      this.addCombatLog({
-        category: 'air',
-        sourceSide: isOpfor || isR39 ? 'enemy' : 'player',
-        sourceName: proj.attackerName || '戰略/戰術核打擊力量',
-        targetName: islName,
-        actionType: 'bomb_crit',
-        isCrit: true,
-        damage: nukeDamage,
-        text: `☢️【核打擊終極震撼引爆】${alertTitle} 瞬間汽化 ${vaporizedInst} 處工事與 ${vaporizedGround} 個守備連隊${hqDamaged ? '；地下坑道指揮所深居花崗岩坑道承受重創生還！' : '！'}`,
-      });
-      return;
     }
 
-    // ══════════════════════════════════════════════════════════
-    // 凝固汽油燃燒彈引爆 (Napalm Firestorm Detonation)
-    // 燃燒罐觸地撕裂，化為數十米高溫焦土火海與滾滾濃煙，灼燒工事與步兵連隊
-    // ══════════════════════════════════════════════════════════
-    if (proj.isNapalm || proj.bombType === 'napalm_canister') {
-      soundEngine.playExplosion(false);
-      this.addBannerAlert('🔥【凝固汽油烈焰火海】凝固汽油燃燒彈引爆！目標陣地化為數十米高溫焦土火海！', 'player', 'down', 4.5);
-      // Spawn 22 lingering flame particles with life 5.5-7.5s and rolling black smoke
-      for (let f = 0; f < 22; f++) {
-        const fireOffsetDist = Math.random() * 55;
-        const fireAngle = Math.random() * Math.PI * 2;
-        const fx = proj.pos.x + Math.cos(fireAngle) * fireOffsetDist;
-        const fy = proj.pos.y + Math.sin(fireAngle) * fireOffsetDist;
-        this.particles.push({
-          id: `napalm-fire-${Date.now()}-${f}-${Math.random()}`,
-          x: fx,
-          y: fy,
-          vx: (Math.random() - 0.5) * 6,
-          vy: -6 - Math.random() * 10,
-          life: 5.5 + Math.random() * 2.5,
-          maxLife: 8.0,
-          radius: 7 + Math.random() * 7,
-          color: f % 3 === 0 ? '#FF1744' : f % 3 === 1 ? '#FF6D00' : '#FFD600',
-          type: 'fire',
-        });
+    if (proj.distanceTraveled >= proj.maxDistance) {
+      proj.isDead = true;
+    }
+  }
+
+  private updateRocketProjectile(dt: number, proj: Projectile): void {
+    proj.pos.x += proj.vel.x * dt;
+    proj.pos.y += proj.vel.y * dt;
+    proj.distanceTraveled += proj.speed * dt;
+
+    // Trail smoke and propellant sparks
+    if (Math.random() < 0.6) {
+      this.particles.push({
+        id: `r-smoke-${Date.now()}-${Math.random()}`,
+        x: proj.pos.x,
+        y: proj.pos.y,
+        vx: (Math.random() - 0.5) * 8,
+        vy: (Math.random() - 0.5) * 8,
+        life: 0.32,
+        maxLife: 0.32,
+        radius: 3.5,
+        color: 'rgba(255, 235, 150, 0.7)',
+        type: 'smoke',
+      });
+    }
+
+    const allShips = [...this.playerShips, ...this.alliedShips, ...this.enemyShips];
+    const targetShips = allShips.filter((s) => !s.isSunk && this.isHostile(proj.side, s.side));
+    for (const ship of targetShips) {
+      if (!ship.isSunk && distToShipHull(proj.pos, ship) < ship.width * 0.75 + 12) {
+        this.detonateProjectile(proj, ship);
+        proj.isDead = true;
+        break;
       }
-      for (let s = 0; s < 10; s++) {
-        const sx = proj.pos.x + (Math.random() - 0.5) * 45;
-        const sy = proj.pos.y + (Math.random() - 0.5) * 45;
-        this.particles.push({
-          id: `napalm-smoke-${Date.now()}-${s}-${Math.random()}`,
-          x: sx,
-          y: sy,
-          vx: (Math.random() - 0.5) * 10,
-          vy: -12 - Math.random() * 14,
-          life: 4.5 + Math.random() * 2.0,
-          maxLife: 6.5,
-          radius: 14 + Math.random() * 12,
-          color: 'rgba(18, 20, 24, 0.88)',
-          type: 'smoke',
-        });
-      }
+    }
+
+    if (!proj.isDead) {
       for (const isl of this.islands) {
         for (const inst of isl.installations) {
-          if (!inst.isDestroyed && this.isHostile(proj.side, inst.side) && dist(proj.pos, inst.pos) <= 65) {
-            inst.health -= 1200;
-            if (inst.health <= 0) {
-              inst.isDestroyed = true;
-              this.casualties.enemyInstallationsLost++;
-              this.score.installationsDestroyed++;
-            }
+          if (!inst.isDestroyed && this.isHostile(proj.side, inst.side) && dist(proj.pos, inst.pos) < 28) {
+            this.detonateProjectile(proj);
+            proj.isDead = true;
+            break;
           }
         }
+        if (proj.isDead) break;
       }
-      for (const u of this.groundUnits) {
-        if (!u.isDestroyed && this.isHostile(proj.side, u.side) && dist(proj.pos, u.pos) <= 65) {
-          u.health -= 900;
-          u.organization = Math.max(0, u.organization - 75);
-          if (u.health <= 0) {
-            u.isDestroyed = true;
-            this.casualties.enemyGroundLost++;
-          }
-        }
-      }
-      return;
     }
+
+    if (proj.distanceTraveled >= proj.maxDistance) {
+      this.detonateProjectile(proj);
+      proj.isDead = true;
+    }
+  }
+
+  private updateHedgehogProjectile(dt: number, proj: Projectile): void {
+    const step = proj.speed * dt;
+    proj.distanceTraveled += step;
+    proj.flightProgress = Math.min(1, proj.distanceTraveled / Math.max(1, proj.maxDistance));
+    proj.pos.x = proj.originPos.x + (proj.targetPos.x - proj.originPos.x) * proj.flightProgress;
+    proj.pos.y = proj.originPos.y + (proj.targetPos.y - proj.originPos.y) * proj.flightProgress;
+
+    // Parabolic arc altitude
+    proj.arcAltitude = Math.sin(proj.flightProgress * Math.PI) * 45;
+
+    // Check contact hit during terminal phase (progress > 0.85) or when landing
+    if (proj.flightProgress >= 0.85) {
+      const directHitSub = this.enemyShips.find(
+        (e) => this.isSubmarine(e) && !e.isSunk && dist(proj.pos, e.pos) < 32
+      );
+      if (directHitSub) {
+        this.detonateProjectile(proj, directHitSub);
+        proj.isDead = true;
+      }
+    }
+
+    if (proj.flightProgress >= 1 && !proj.isDead) {
+      proj.isDead = true;
+      // Contact mortar entered water without hitting submarine -> harmless water splash, no detonation
+      soundEngine.playWaterSplash();
+      this.particles.push({
+        id: `hh-splash-${Date.now()}-${Math.random()}`,
+        x: proj.pos.x,
+        y: proj.pos.y,
+        vx: (Math.random() - 0.5) * 8,
+        vy: (Math.random() - 0.5) * 8,
+        life: 0.5,
+        maxLife: 0.5,
+        radius: 12,
+        color: '#80DEEA',
+        type: 'geyser',
+        shape: 'ring',
+      });
+    }
+  }
+
+  private updateTorpedoProjectile(dt: number, proj: Projectile): void {
+    // Mk 24 / Mk 34 / Mk 46 / APR-2 聲自導反潛魚雷主動導引鎖定 (Acoustic Homing Tracking: turnRate 3.5)
+    const isHoming = proj.isAcousticHoming || this.era === 'era3' || this.era === 'era4' || this.era === 'era5';
+    const allShips = [...this.playerShips, ...this.alliedShips, ...this.enemyShips];
+    const targetShips = allShips.filter((s) => !s.isSunk && this.isHostile(proj.side, s.side));
+    if (isHoming) {
+      const targets = targetShips;
+      let bestTarget: Ship | null = null;
+      let bestDist = 1800;
+
+      // Priority 1: spotted submarine (or close terminal acoustic capture within 480m)
+      for (const target of targets) {
+        if (target.isSunk || !this.isSubmarine(target)) continue;
+        const d = dist(proj.pos, target.pos);
+        const isTargetKnown =
+          (target.side === 'enemy' ? Boolean(target.isSpotted) : Boolean(target.isSpottedByEnemy)) || d < 480;
+        if (isTargetKnown && d < 1800 && d < bestDist) {
+          bestDist = d;
+          bestTarget = target;
+        }
+      }
+
+      // Priority 2: surface ships
+      if (!bestTarget) {
+        for (const target of targets) {
+          if (target.isSunk) continue;
+          const d = dist(proj.pos, target.pos);
+          if (d < 1600 && d < bestDist) {
+            bestDist = d;
+            bestTarget = target;
+          }
+        }
+      }
+
+      if (bestTarget) {
+        const desiredAngle = Math.atan2(bestTarget.pos.y - proj.pos.y, bestTarget.pos.x - proj.pos.x);
+        let diff = desiredAngle - proj.heading;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        const turnRate = (proj.turnRate || 3.5) * dt;
+        if (Math.abs(diff) < turnRate) proj.heading = desiredAngle;
+        else proj.heading += Math.sign(diff) * turnRate;
+        proj.vel.x = Math.cos(proj.heading) * proj.speed;
+        proj.vel.y = Math.sin(proj.heading) * proj.speed;
+      }
+
+      // Periodic acoustic sonar ping concentric ring
+      proj.acousticPingTimer = (proj.acousticPingTimer || 1.5) - dt;
+      if (proj.acousticPingTimer <= 0) {
+        proj.acousticPingTimer = 1.5;
+        this.particles.push({
+          id: `sonar-ping-${Date.now()}-${Math.random()}`,
+          x: proj.pos.x,
+          y: proj.pos.y,
+          vx: 0,
+          vy: 0,
+          life: 0.7,
+          maxLife: 0.7,
+          radius: 30,
+          color: '#00E5FF',
+          type: 'shockwave',
+          shape: 'ring',
+        });
+      }
+    }
+
+    proj.pos.x += proj.vel.x * dt;
+    proj.pos.y += proj.vel.y * dt;
+    proj.distanceTraveled += proj.speed * dt;
+
+    // Foamy bubble wake particle trail behind speeding torpedo
+    if (Math.random() < 0.6) {
+      this.particles.push({
+        id: `torp-wake-${Date.now()}-${Math.random()}`,
+        x: proj.pos.x - Math.cos(proj.heading) * 10,
+        y: proj.pos.y - Math.sin(proj.heading) * 10,
+        vx: (Math.random() - 0.5) * 3,
+        vy: (Math.random() - 0.5) * 3,
+        life: 0.5,
+        maxLife: 0.5,
+        radius: 2.6,
+        color: 'rgba(224, 247, 250, 0.7)',
+        type: 'smoke',
+      });
+    }
+
+    for (const isl of this.islands) {
+      if (isPointInPolygon(proj.pos, isl.points)) {
+        this.detonateProjectile(proj);
+        proj.isDead = true;
+        break;
+      }
+    }
+
+    for (const ship of targetShips) {
+      if (!ship.isSunk && distToShipHull(proj.pos, ship) < ship.width * 0.75 + 14) {
+        this.detonateProjectile(proj, ship);
+        proj.isDead = true;
+        break;
+      }
+    }
+
+    if (proj.distanceTraveled >= proj.maxDistance) {
+      proj.isDead = true;
+    }
+  }
+
+  private detonateProjectile(proj: Projectile, directHitShip?: Ship) {
+    if (this.applyNuclearDetonation(proj)) return;
+
+    if (this.applyNapalmImpact(proj)) return;
 
     const isLarge = proj.damage > 250;
     soundEngine.playExplosion(isLarge);
@@ -17685,117 +16618,7 @@ export class GameEngine {
     const isTorpedo = proj.type === 'torpedo';
     const onIsland = this.islands.some((isl) => isPointInPolygon(proj.pos, isl.points));
 
-    if (isBomb) {
-      // 1. Initial High-Intensity Shockwave Ring
-      this.particles.push({
-        id: `bomb-shock-${Date.now()}`,
-        x: proj.pos.x,
-        y: proj.pos.y,
-        vx: 0,
-        vy: 0,
-        life: 0.65,
-        maxLife: 0.65,
-        radius: proj.blastRadius * 1.5,
-        color: '#FF6D00',
-        type: 'shockwave',
-        shape: 'ring',
-      });
-
-      // 2. High-heat rolling fireball core (烈焰向外翻滾膨脹)
-      for (let f = 0; f < 4; f++) {
-        const fAng = (f * Math.PI) / 2 + Math.random() * 0.5;
-        const fSpd = 14 + Math.random() * 22;
-        this.particles.push({
-          id: `bomb-fire-${Date.now()}-${f}`,
-          x: proj.pos.x + (Math.random() - 0.5) * 8,
-          y: proj.pos.y + (Math.random() - 0.5) * 8,
-          vx: Math.cos(fAng) * fSpd,
-          vy: Math.sin(fAng) * fSpd,
-          life: 0.55 + Math.random() * 0.3,
-          maxLife: 0.85,
-          radius: 14 + Math.random() * 12,
-          color: f % 2 === 0 ? '#FF3D00' : '#FFD54F',
-          type: 'fire',
-        });
-      }
-
-      // 3. Billowing dark explosion smoke clouds (滾滾灰黑濃煙)
-      for (let s = 0; s < 3; s++) {
-        this.particles.push({
-          id: `bomb-smoke-${Date.now()}-${s}`,
-          x: proj.pos.x + (Math.random() - 0.5) * 16,
-          y: proj.pos.y + (Math.random() - 0.5) * 16,
-          vx: (Math.random() - 0.5) * 8,
-          vy: -10 - Math.random() * 16,
-          life: 1.6 + Math.random() * 0.8,
-          maxLife: 2.4,
-          radius: 16 + Math.random() * 14,
-          color: 'rgba(22, 26, 32, 0.85)',
-          type: 'smoke',
-        });
-      }
-
-      if (onIsland) {
-        // 地面炸彈：噴濺碎石與土石破片
-        for (let d = 0; d < 6; d++) {
-          const ang = Math.random() * Math.PI * 2;
-          const spd = 40 + Math.random() * 70;
-          this.particles.push({
-            id: `bomb-dirt-${Date.now()}-${d}`,
-            x: proj.pos.x,
-            y: proj.pos.y,
-            vx: Math.cos(ang) * spd,
-            vy: Math.sin(ang) * spd,
-            life: 0.7,
-            maxLife: 0.7,
-            radius: 8 + Math.random() * 8,
-            color: '#8D6E63',
-            type: 'smoke',
-          });
-        }
-      } else {
-        // 海面炸彈：巨型沖天水柱與環形浮沫
-        this.particles.push({
-          id: `bomb-geyser-${Date.now()}`,
-          x: proj.pos.x,
-          y: proj.pos.y,
-          vx: 0,
-          vy: 0,
-          life: 1.1,
-          maxLife: 1.1,
-          radius: Math.max(36, proj.blastRadius * 0.95),
-          color: '#E0F7FA',
-          type: 'geyser',
-        });
-        this.particles.push({
-          id: `bomb-splash-foam-${Date.now()}`,
-          x: proj.pos.x,
-          y: proj.pos.y,
-          vx: 0,
-          vy: 0,
-          life: 1.4,
-          maxLife: 1.4,
-          radius: Math.max(30, proj.blastRadius * 0.8),
-          color: 'rgba(255, 255, 255, 0.75)',
-          type: 'splash',
-          shape: 'ring',
-        });
-      }
-    } else {
-      this.particles.push({
-        id: `shock-${Date.now()}`,
-        x: proj.pos.x,
-        y: proj.pos.y,
-        vx: 0,
-        vy: 0,
-        life: 0.5,
-        maxLife: 0.5,
-        radius: proj.blastRadius * 1.35,
-        color: isTorpedo ? '#80DEEA' : '#FFA726',
-        type: 'shockwave',
-        shape: 'ring',
-      });
-    }
+    this.applyBombImpact(proj, isBomb, isTorpedo, onIsland);
     const allShips = [...this.playerShips, ...this.enemyShips, ...this.alliedShips];
     const candidateShips = directHitShip
       ? (this.isHostile(proj.side, directHitShip.side) ? [directHitShip] : [])
@@ -18132,81 +16955,7 @@ export class GameEngine {
       });
     }
 
-    // ══════════════════════════════════════════════════════════
-    // 地面陸軍部隊受損運算 (Ground Unit Damage & Dual Parameters)
-    // 1. 建制度 (STR / Health): 戰壕、散兵坑與裝甲掩蔽大幅吸收破片傷害 (直擊傷害折減)
-    // 2. 組織度 (ORG / Morale): 猛烈航彈爆震與破片引發嚴重震盪恐慌、通信中斷與士氣受挫
-    // ══════════════════════════════════════════════════════════
-    for (const unit of this.groundUnits) {
-      if (unit.isDestroyed || unit.embarkedInShipId) continue;
-      if (this.isHostile(proj.side, unit.side) && dist(proj.pos, unit.pos) <= proj.blastRadius + 24) {
-        const attacker = proj.attackerName || (proj.side === 'player' ? '特遣航空隊' : '敵機');
-        const unitArmor = unit.armor || 0.25;
-
-        // 史實掩蔽減傷: 地面掩體與散兵坑使直接生命值(建制度)傷害大幅減少 (35%~45% 實質折減)
-        // 建制傷害隨組織度下降微幅提升 (組織度低於50%時最多增加50%建制傷害)
-        // 城市戰掩體防護: 部隊在城市/城鎮/定居點內享空襲航彈減傷 70% (受擊僅30%)、重砲直射減傷 50%
-        const coverReduction = proj.type === 'bomb' ? 0.38 : proj.type === 'rocket' ? 0.45 : 0.60;
-        const currentOrg = unit.organization ?? 100;
-        const orgDmgScale = currentOrg < 50 ? 1.0 + 0.5 * (1.0 - currentOrg / 50) : 1.0;
-        const urbanCoverMod = unit.isInUrbanCover
-          ? (proj.type === 'bomb' || proj.type === 'rocket' ? 0.30 : 0.50)
-          : 1.0;
-        const isBunkerBusterMod = proj.isBunkerBuster ? 1.7 : 1.0;
-        const physicalDmg = Math.round(proj.damage * (1 - unitArmor * (proj.isBunkerBuster ? 0.1 : 0.4)) * coverReduction * orgDmgScale * urbanCoverMod * isBunkerBusterMod);
-        unit.health = Math.max(0, unit.health - physicalDmg);
-        unit.strength = Math.max(0, Math.round((unit.health / unit.maxHealth) * 100));
-
-        // 爆震與彈幕對「組織度」造成劇烈震盪衝擊
-        const baseOrgDmg = proj.type === 'bomb' ? 24 : proj.type === 'rocket' ? 18 : 12;
-        const orgLoss = Math.min(60, Math.round((baseOrgDmg + (proj.damage / 50)) * (unit.isInUrbanCover ? 0.45 : 1.0)));
-        unit.organization = Math.max(0, (unit.organization ?? 100) - orgLoss);
-
-        if (unit.organization < 20) {
-          unit.disorganized = true;
-        }
-
-        // 火力壓制值 (Suppression) 判定: 航彈/火箭/砲火覆蓋帶來 30%~80% 速度懲罰
-        const hitSuppression = proj.type === 'bomb' ? 45 : proj.type === 'rocket' ? 35 : 25;
-        unit.suppression = Math.min(100, (unit.suppression || 0) + hitSuppression);
-        unit.suppressionTimer = 6.0;
-        unit.isSuppressed = unit.suppression >= 30;
-        unit.isPinned = unit.suppression >= 75;
-
-        // Combat Log 戰況播報
-        this.addCombatLog({
-          category: proj.type === 'bomb' ? 'air' : 'naval',
-          sourceSide: proj.side,
-          sourceName: attacker,
-          targetName: unit.name,
-          actionType: proj.type === 'bomb' ? 'bomb_hit' : 'gun_hit',
-          damage: physicalDmg,
-          text: `💥【火力覆蓋震盪】${attacker} 火力落入「${unit.name}」陣地！工事吸收部分殺傷 (-${physicalDmg} HP / 建制度 ${unit.strength}%)，劇烈爆震使部隊士氣受挫 (組織度 -${orgLoss}% -> ${Math.round(unit.organization)}%)！`,
-        });
-
-        // 建制度過低 (STR / Health 歸零) -> 徹底消滅瓦解
-        if (unit.health <= 0 || unit.strength <= 0) {
-          unit.isDestroyed = true;
-          soundEngine.playExplosion(false);
-          if (unit.side === 'enemy') {
-            this.casualties.enemyGroundLost++;
-            this.resourcePoints += 40;
-            this.totalCpEarned += 40;
-          } else {
-            this.casualties.playerGroundLost++;
-          }
-          this.addCombatLog({
-            category: 'naval',
-            sourceSide: proj.side,
-            sourceName: attacker,
-            targetName: unit.name,
-            actionType: 'gun_hit',
-            damage: physicalDmg,
-            text: `💥【建制徹底瓦解】「${unit.name}」兵員武器遭受毀滅性重創，建制度歸零，整支部隊被全殲消滅！`,
-          });
-        }
-      }
-    }
+    this.applyBlastToGroundUnits(proj);
 
     // ════ M39 DPICM 集束子母彈微爆轟散射 (Steel Rain Submunition Bursts) ════
     if (proj.isClusterSubmunition && proj.clusterBombletsCount) {
@@ -18239,12 +16988,33 @@ export class GameEngine {
       }
     }
 
+    this.applyBlastToInstallations(proj);
+
     // ══════════════════════════════════════════════════════════
-    // 地面固定設施受擊運算 (Fixed Installations Air Defense & Dispersion)
-    // 1. 史實判定: 高空或俯衝轟炸對掩體/掩蔽固定工事有天然散佈誤差，不一定每次空襲都成功直擊
-    // 2. 混凝土/沙袋裝甲工事加成: 大幅吸收衝擊波，避免一擊必殺
-    // 3. 雙方皆可受損 (支援友軍設施防衛與敵軍要塞攻略)
+    // 平民設施與難民營附帶損害檢驗 (Civilian & Refugee Collateral Damage)
+    // 誤擊平民區或難民收容營扣除 15 CP，並觸發司令部軍紀訓誡
     // ══════════════════════════════════════════════════════════
+    if (proj.side === 'player') {
+      for (const isl of this.islands) {
+        for (const inst of isl.installations) {
+          if (inst.isCivilian && !inst.isDestroyed) {
+            const zR = inst.civilianZoneRadius || 160;
+            if (dist(proj.pos, inst.pos) <= zR) {
+              this.triggerCivilianCollateralPenalty(inst, proj.attackerName || '我方戰機 / 艦砲');
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // 地面固定設施受擊運算 (Fixed Installations Air Defense & Dispersion)
+  // 1. 史實判定: 高空或俯衝轟炸對掩體/掩蔽固定工事有天然散佈誤差，不一定每次空襲都成功直擊
+  // 2. 混凝土/沙袋裝甲工事加成: 大幅吸收衝擊波，避免一擊必殺
+  // 3. 雙方皆可受損 (支援友軍設施防衛與敵軍要塞攻略)
+  // ══════════════════════════════════════════════════════════
+  private applyBlastToInstallations(proj: Projectile): void {
     for (const isl of this.islands) {
       for (const inst of isl.installations) {
         if (inst.isDestroyed) continue;
@@ -18388,23 +17158,429 @@ export class GameEngine {
         }
       }
     }
+  }
 
-    // ══════════════════════════════════════════════════════════
-    // 平民設施與難民營附帶損害檢驗 (Civilian & Refugee Collateral Damage)
-    // 誤擊平民區或難民收容營扣除 15 CP，並觸發司令部軍紀訓誡
-    // ══════════════════════════════════════════════════════════
-    if (proj.side === 'player') {
+  // ══════════════════════════════════════════════════════════
+  // 地面陸軍部隊受損運算 (Ground Unit Damage & Dual Parameters)
+  // 1. 建制度 (STR / Health): 戰壕、散兵坑與裝甲掩蔽大幅吸收破片傷害 (直擊傷害折減)
+  // 2. 組織度 (ORG / Morale): 猛烈航彈爆震與破片引發嚴重震盪恐慌、通信中斷與士氣受挫
+  // ══════════════════════════════════════════════════════════
+  private applyBlastToGroundUnits(proj: Projectile): void {
+    for (const unit of this.groundUnits) {
+      if (unit.isDestroyed || unit.embarkedInShipId) continue;
+      if (this.isHostile(proj.side, unit.side) && dist(proj.pos, unit.pos) <= proj.blastRadius + 24) {
+        const attacker = proj.attackerName || (proj.side === 'player' ? '特遣航空隊' : '敵機');
+        const unitArmor = unit.armor || 0.25;
+
+        // 史實掩蔽減傷: 地面掩體與散兵坑使直接生命值(建制度)傷害大幅減少 (35%~45% 實質折減)
+        // 建制傷害隨組織度下降微幅提升 (組織度低於50%時最多增加50%建制傷害)
+        // 城市戰掩體防護: 部隊在城市/城鎮/定居點內享空襲航彈減傷 70% (受擊僅30%)、重砲直射減傷 50%
+        const coverReduction = proj.type === 'bomb' ? 0.38 : proj.type === 'rocket' ? 0.45 : 0.60;
+        const currentOrg = unit.organization ?? 100;
+        const orgDmgScale = currentOrg < 50 ? 1.0 + 0.5 * (1.0 - currentOrg / 50) : 1.0;
+        const urbanCoverMod = unit.isInUrbanCover
+          ? (proj.type === 'bomb' || proj.type === 'rocket' ? 0.30 : 0.50)
+          : 1.0;
+        const isBunkerBusterMod = proj.isBunkerBuster ? 1.7 : 1.0;
+        const physicalDmg = Math.round(proj.damage * (1 - unitArmor * (proj.isBunkerBuster ? 0.1 : 0.4)) * coverReduction * orgDmgScale * urbanCoverMod * isBunkerBusterMod);
+        unit.health = Math.max(0, unit.health - physicalDmg);
+        unit.strength = Math.max(0, Math.round((unit.health / unit.maxHealth) * 100));
+
+        // 爆震與彈幕對「組織度」造成劇烈震盪衝擊
+        const baseOrgDmg = proj.type === 'bomb' ? 24 : proj.type === 'rocket' ? 18 : 12;
+        const orgLoss = Math.min(60, Math.round((baseOrgDmg + (proj.damage / 50)) * (unit.isInUrbanCover ? 0.45 : 1.0)));
+        unit.organization = Math.max(0, (unit.organization ?? 100) - orgLoss);
+
+        if (unit.organization < 20) {
+          unit.disorganized = true;
+        }
+
+        // 火力壓制值 (Suppression) 判定: 航彈/火箭/砲火覆蓋帶來 30%~80% 速度懲罰
+        const hitSuppression = proj.type === 'bomb' ? 45 : proj.type === 'rocket' ? 35 : 25;
+        unit.suppression = Math.min(100, (unit.suppression || 0) + hitSuppression);
+        unit.suppressionTimer = 6.0;
+        unit.isSuppressed = unit.suppression >= 30;
+        unit.isPinned = unit.suppression >= 75;
+
+        // Combat Log 戰況播報
+        this.addCombatLog({
+          category: proj.type === 'bomb' ? 'air' : 'naval',
+          sourceSide: proj.side,
+          sourceName: attacker,
+          targetName: unit.name,
+          actionType: proj.type === 'bomb' ? 'bomb_hit' : 'gun_hit',
+          damage: physicalDmg,
+          text: `💥【火力覆蓋震盪】${attacker} 火力落入「${unit.name}」陣地！工事吸收部分殺傷 (-${physicalDmg} HP / 建制度 ${unit.strength}%)，劇烈爆震使部隊士氣受挫 (組織度 -${orgLoss}% -> ${Math.round(unit.organization)}%)！`,
+        });
+
+        // 建制度過低 (STR / Health 歸零) -> 徹底消滅瓦解
+        if (unit.health <= 0 || unit.strength <= 0) {
+          unit.isDestroyed = true;
+          soundEngine.playExplosion(false);
+          if (unit.side === 'enemy') {
+            this.casualties.enemyGroundLost++;
+            this.resourcePoints += 40;
+            this.totalCpEarned += 40;
+          } else {
+            this.casualties.playerGroundLost++;
+          }
+          this.addCombatLog({
+            category: 'naval',
+            sourceSide: proj.side,
+            sourceName: attacker,
+            targetName: unit.name,
+            actionType: 'gun_hit',
+            damage: physicalDmg,
+            text: `💥【建制徹底瓦解】「${unit.name}」兵員武器遭受毀滅性重創，建制度歸零，整支部隊被全殲消滅！`,
+          });
+        }
+      }
+    }
+  }
+
+  private applyBombImpact(proj: Projectile, isBomb: boolean, isTorpedo: boolean, onIsland: boolean): void {
+    if (isBomb) {
+      // 1. Initial High-Intensity Shockwave Ring
+      this.particles.push({
+        id: `bomb-shock-${Date.now()}`,
+        x: proj.pos.x,
+        y: proj.pos.y,
+        vx: 0,
+        vy: 0,
+        life: 0.65,
+        maxLife: 0.65,
+        radius: proj.blastRadius * 1.5,
+        color: '#FF6D00',
+        type: 'shockwave',
+        shape: 'ring',
+      });
+
+      // 2. High-heat rolling fireball core (烈焰向外翻滾膨脹)
+      for (let f = 0; f < 4; f++) {
+        const fAng = (f * Math.PI) / 2 + Math.random() * 0.5;
+        const fSpd = 14 + Math.random() * 22;
+        this.particles.push({
+          id: `bomb-fire-${Date.now()}-${f}`,
+          x: proj.pos.x + (Math.random() - 0.5) * 8,
+          y: proj.pos.y + (Math.random() - 0.5) * 8,
+          vx: Math.cos(fAng) * fSpd,
+          vy: Math.sin(fAng) * fSpd,
+          life: 0.55 + Math.random() * 0.3,
+          maxLife: 0.85,
+          radius: 14 + Math.random() * 12,
+          color: f % 2 === 0 ? '#FF3D00' : '#FFD54F',
+          type: 'fire',
+        });
+      }
+
+      // 3. Billowing dark explosion smoke clouds (滾滾灰黑濃煙)
+      for (let s = 0; s < 3; s++) {
+        this.particles.push({
+          id: `bomb-smoke-${Date.now()}-${s}`,
+          x: proj.pos.x + (Math.random() - 0.5) * 16,
+          y: proj.pos.y + (Math.random() - 0.5) * 16,
+          vx: (Math.random() - 0.5) * 8,
+          vy: -10 - Math.random() * 16,
+          life: 1.6 + Math.random() * 0.8,
+          maxLife: 2.4,
+          radius: 16 + Math.random() * 14,
+          color: 'rgba(22, 26, 32, 0.85)',
+          type: 'smoke',
+        });
+      }
+
+      if (onIsland) {
+        // 地面炸彈：噴濺碎石與土石破片
+        for (let d = 0; d < 6; d++) {
+          const ang = Math.random() * Math.PI * 2;
+          const spd = 40 + Math.random() * 70;
+          this.particles.push({
+            id: `bomb-dirt-${Date.now()}-${d}`,
+            x: proj.pos.x,
+            y: proj.pos.y,
+            vx: Math.cos(ang) * spd,
+            vy: Math.sin(ang) * spd,
+            life: 0.7,
+            maxLife: 0.7,
+            radius: 8 + Math.random() * 8,
+            color: '#8D6E63',
+            type: 'smoke',
+          });
+        }
+      } else {
+        // 海面炸彈：巨型沖天水柱與環形浮沫
+        this.particles.push({
+          id: `bomb-geyser-${Date.now()}`,
+          x: proj.pos.x,
+          y: proj.pos.y,
+          vx: 0,
+          vy: 0,
+          life: 1.1,
+          maxLife: 1.1,
+          radius: Math.max(36, proj.blastRadius * 0.95),
+          color: '#E0F7FA',
+          type: 'geyser',
+        });
+        this.particles.push({
+          id: `bomb-splash-foam-${Date.now()}`,
+          x: proj.pos.x,
+          y: proj.pos.y,
+          vx: 0,
+          vy: 0,
+          life: 1.4,
+          maxLife: 1.4,
+          radius: Math.max(30, proj.blastRadius * 0.8),
+          color: 'rgba(255, 255, 255, 0.75)',
+          type: 'splash',
+          shape: 'ring',
+        });
+      }
+    } else {
+      this.particles.push({
+        id: `shock-${Date.now()}`,
+        x: proj.pos.x,
+        y: proj.pos.y,
+        vx: 0,
+        vy: 0,
+        life: 0.5,
+        maxLife: 0.5,
+        radius: proj.blastRadius * 1.35,
+        color: isTorpedo ? '#80DEEA' : '#FFA726',
+        type: 'shockwave',
+        shape: 'ring',
+      });
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // 凝固汽油燃燒彈引爆 (Napalm Firestorm Detonation)
+  // 燃燒罐觸地撕裂，化為數十米高溫焦土火海與滾滾濃煙，灼燒工事與步兵連隊
+  // ══════════════════════════════════════════════════════════
+  /** Napalm canister: burning ground fire; true when the detonation is fully handled. */
+  private applyNapalmImpact(proj: Projectile): boolean {
+    if (proj.isNapalm || proj.bombType === 'napalm_canister') {
+      soundEngine.playExplosion(false);
+      this.addBannerAlert('🔥【凝固汽油烈焰火海】凝固汽油燃燒彈引爆！目標陣地化為數十米高溫焦土火海！', 'player', 'down', 4.5);
+      // Spawn 22 lingering flame particles with life 5.5-7.5s and rolling black smoke
+      for (let f = 0; f < 22; f++) {
+        const fireOffsetDist = Math.random() * 55;
+        const fireAngle = Math.random() * Math.PI * 2;
+        const fx = proj.pos.x + Math.cos(fireAngle) * fireOffsetDist;
+        const fy = proj.pos.y + Math.sin(fireAngle) * fireOffsetDist;
+        this.particles.push({
+          id: `napalm-fire-${Date.now()}-${f}-${Math.random()}`,
+          x: fx,
+          y: fy,
+          vx: (Math.random() - 0.5) * 6,
+          vy: -6 - Math.random() * 10,
+          life: 5.5 + Math.random() * 2.5,
+          maxLife: 8.0,
+          radius: 7 + Math.random() * 7,
+          color: f % 3 === 0 ? '#FF1744' : f % 3 === 1 ? '#FF6D00' : '#FFD600',
+          type: 'fire',
+        });
+      }
+      for (let s = 0; s < 10; s++) {
+        const sx = proj.pos.x + (Math.random() - 0.5) * 45;
+        const sy = proj.pos.y + (Math.random() - 0.5) * 45;
+        this.particles.push({
+          id: `napalm-smoke-${Date.now()}-${s}-${Math.random()}`,
+          x: sx,
+          y: sy,
+          vx: (Math.random() - 0.5) * 10,
+          vy: -12 - Math.random() * 14,
+          life: 4.5 + Math.random() * 2.0,
+          maxLife: 6.5,
+          radius: 14 + Math.random() * 12,
+          color: 'rgba(18, 20, 24, 0.88)',
+          type: 'smoke',
+        });
+      }
       for (const isl of this.islands) {
         for (const inst of isl.installations) {
-          if (inst.isCivilian && !inst.isDestroyed) {
-            const zR = inst.civilianZoneRadius || 160;
-            if (dist(proj.pos, inst.pos) <= zR) {
-              this.triggerCivilianCollateralPenalty(inst, proj.attackerName || '我方戰機 / 艦砲');
+          if (!inst.isDestroyed && this.isHostile(proj.side, inst.side) && dist(proj.pos, inst.pos) <= 65) {
+            inst.health -= 1200;
+            if (inst.health <= 0) {
+              inst.isDestroyed = true;
+              this.casualties.enemyInstallationsLost++;
+              this.score.installationsDestroyed++;
             }
           }
         }
       }
+      for (const u of this.groundUnits) {
+        if (!u.isDestroyed && this.isHostile(proj.side, u.side) && dist(proj.pos, u.pos) <= 65) {
+          u.health -= 900;
+          u.organization = Math.max(0, u.organization - 75);
+          if (u.health <= 0) {
+            u.isDestroyed = true;
+            this.casualties.enemyGroundLost++;
+          }
+        }
+      }
+      return true;
     }
+    return false;
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // 時代三 Mk 4 / Mk 6 戰術原子彈終極引爆 (Tactical Nuclear Detonation)
+  // 消耗 4500 CP · 全島範圍覆蓋 (半徑 520m) · 瞬間汽化守備要塞部隊與防空陣地
+  // ══════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════
+  // 戰略與戰術核武器終極引爆系統 (Strategic & Tactical Nuclear Detonations)
+  // B-52 百萬噸熱核武器 (750m) / B61 戰術核武器 (420m) / OPFOR 戰術核反撲 (450m) / B-29 Mk 4 (220m)
+  // ══════════════════════════════════════════════════════════
+  /** Nuclear / megaton weapons; true when the detonation is fully handled. */
+  private applyNuclearDetonation(proj: Projectile): boolean {
+    if (
+      proj.bombType === 'tactical_nuke' ||
+      proj.bombType === 'b52_megaton_nuke' ||
+      proj.bombType === 'tactical_b61_nuke' ||
+      proj.bombType === 'opfor_tactical_nuke' ||
+      proj.isNuclear
+    ) {
+      const isMegaton = proj.bombType === 'b52_megaton_nuke';
+      const isB61 = proj.bombType === 'tactical_b61_nuke';
+      const isOpfor = proj.bombType === 'opfor_tactical_nuke';
+      const blastRad = isMegaton ? 750 : (isB61 ? 420 : (isOpfor ? 450 : 220));
+      const nukeDamage = isMegaton ? 250000 : (isB61 ? 90000 : (isOpfor ? 100000 : 120000));
+      const nukeDuration = isMegaton ? 12.0 : 8.5;
+
+      this.nuclearFlash = isMegaton ? 2.0 : 1.35;
+      soundEngine.playExplosion(true);
+      soundEngine.playGunSalvo(true);
+
+      const hitIsland = this.islands.find((isl) => dist(isl.center, proj.pos) < isl.radius + 200);
+      const islName = hitIsland?.name || '目標戰略島嶼防區';
+
+      this.nuclearDetonations.push({
+        id: `nuke-${Date.now()}-${Math.random()}`,
+        x: proj.pos.x,
+        y: proj.pos.y,
+        radius: 0,
+        maxRadius: blastRad,
+        timer: 0,
+        duration: nukeDuration,
+        targetIslandName: islName,
+      });
+
+      // 1. 引爆點周圍工事摧毀判定
+      let vaporizedInst = 0;
+      let hqDamaged = false;
+      for (const isl of this.islands) {
+        for (const inst of isl.installations) {
+          if (!inst.isDestroyed && this.isHostile(proj.side, inst.side) && dist(proj.pos, inst.pos) <= blastRad) {
+            if (inst.type === 'command_post') {
+              const hqNukeDmg = Math.round(inst.maxHealth * (isMegaton ? 0.85 : 0.65));
+              inst.health = Math.max(0, inst.health - hqNukeDmg);
+              hqDamaged = true;
+              if (inst.health <= 0) {
+                inst.isDestroyed = true;
+                vaporizedInst++;
+                if (inst.side === 'enemy') {
+                  this.casualties.enemyInstallationsLost++;
+                  this.score.installationsDestroyed++;
+                } else {
+                  this.casualties.playerInstallationsLost++;
+                }
+              }
+            } else {
+              inst.health = 0;
+              inst.isDestroyed = true;
+              vaporizedInst++;
+              if (inst.side === 'enemy') {
+                this.casualties.enemyInstallationsLost++;
+                this.score.installationsDestroyed++;
+              } else {
+                this.casualties.playerInstallationsLost++;
+              }
+            }
+          }
+        }
+      }
+
+      // 2. 汽化引爆點周圍所有敵對地面作戰部隊，並對 EMP 影響圈 (1.4x) 施加電子癱瘓壓制
+      let vaporizedGround = 0;
+      for (const u of this.groundUnits) {
+        if (!u.isDestroyed && this.isHostile(proj.side, u.side)) {
+          const dGround = dist(proj.pos, u.pos);
+          if (dGround <= blastRad) {
+            u.health = 0;
+            u.strength = 0;
+            u.organization = 0;
+            u.isDestroyed = true;
+            vaporizedGround++;
+            if (u.side === 'enemy') {
+              this.casualties.enemyGroundLost++;
+            } else {
+              this.casualties.playerGroundLost++;
+            }
+          } else if (dGround <= blastRad * 1.4) {
+            // 核電磁脈衝 (EMP) 衝擊波造成電子射控與指揮壓制
+            u.suppression = 100;
+            u.suppressionTimer = 10.0;
+            u.isSuppressed = true;
+            u.isPinned = true;
+            u.disorganized = true;
+            u.organization = Math.max(0, u.organization - 45);
+          }
+        }
+      }
+
+      // 3. 毀滅周圍敵對艦艇並對 EMP 範圍內敵艦實施雷達/SAM 電子癱瘓
+      const allShips = [...this.playerShips, ...this.enemyShips, ...this.alliedShips];
+      const candidateShips = allShips.filter((s) => !s.isSunk && this.isHostile(proj.side, s.side));
+      for (const s of candidateShips) {
+        const dShip = dist(proj.pos, s.pos);
+        if (dShip <= blastRad * 0.85) {
+          s.health = Math.max(0, s.health - (isMegaton ? 24000 : 9000));
+          if (s.health <= 0) this.sinkShip(s);
+        }
+        if (!s.isSunk && dShip <= blastRad * 1.4) {
+          s.samCooldown = Math.max(s.samCooldown || 0, 12.0);
+          s.ciwsCooldown = Math.max(s.ciwsCooldown || 0, 8.0);
+        }
+      }
+
+      const isTrident = proj.type === 'slbm_trident';
+      const isR39 = proj.type === 'slbm_r39';
+      const isNuclearSSM = proj.type === 'missile_ssm' && proj.isNuclear;
+      const alertTitle = isTrident
+        ? '☢️【UGM-133 三叉戟-D5 潛射戰略熱核毀滅】8枚 W88 分導核彈頭落地！戰區電磁脈衝癱瘓敵防空！'
+        : isR39
+        ? '☢️⚠️【蘇聯颱風級 R-39 潛射重型核反擊引爆！】10枚分導核彈頭落地！EMP 癱瘓大範圍雷達通訊！'
+        : isNuclearSSM
+        ? (isOpfor
+          ? '☢️⚠️【敵軍 9K72 戰術核彈道飛彈引爆！】高爆熱核衝擊波橫掃防區！'
+          : '☢️【MGM-140B 戰術核彈道飛彈引爆！】W70 熱核彈頭精準抹除目標要塞並觸發 EMP 癱瘓！')
+        : isMegaton
+        ? '☢️【B-52 百萬噸級戰略熱核引爆】B28/B41 氫彈震撼引爆！全戰區半徑 750m 焦土火球衝天並觸發 EMP！'
+        : isB61
+        ? '☢️【B61 戰術核打擊引爆】半徑 420m 戰術熱核火球吞噬天際！防空陣地與部隊瞬間汽化！'
+        : isOpfor
+        ? '☢️⚠️【敵軍戰術核航彈引爆！】敵方核彈於戰區引爆！我方陣容承受衝擊波毀滅打擊！'
+        : `☢️【代號：天罰——戰術核打擊引爆】半徑 220m 戰術熱核火球吞噬天際！防空陣地與部隊瞬間汽化！`;
+
+      this.addBannerAlert(
+        `${alertTitle}${hqDamaged ? '（地下坑道指揮所深居地下受損生還）' : ''}`,
+        isOpfor || isR39 ? 'enemy' : 'player',
+        'sunk',
+        9.0
+      );
+      this.addCombatLog({
+        category: 'air',
+        sourceSide: isOpfor || isR39 ? 'enemy' : 'player',
+        sourceName: proj.attackerName || '戰略/戰術核打擊力量',
+        targetName: islName,
+        actionType: 'bomb_crit',
+        isCrit: true,
+        damage: nukeDamage,
+        text: `☢️【核打擊終極震撼引爆】${alertTitle} 瞬間汽化 ${vaporizedInst} 處工事與 ${vaporizedGround} 個守備連隊${hqDamaged ? '；地下坑道指揮所深居花崗岩坑道承受重創生還！' : '！'}`,
+      });
+      return true;
+    }
+    return false;
   }
 
   private sinkShip(ship: Ship) {
@@ -18582,7 +17758,7 @@ export class GameEngine {
     ];
     if (plane.payloadType && casPayloads.includes(plane.payloadType)) return true;
     // 具備低空對地掃射能力的攻擊機/支援機
-    if (['ah1', 'ov10', 'a4', 'a6a', 'a7', 'f105', 'ad1', 'a20', 'a26', 'su7', 'il10', 'p47'].includes(plane.model)) {
+    if (GROUND_STRAFING_MODELS.has(plane.model)) {
       return true;
     }
     return false;

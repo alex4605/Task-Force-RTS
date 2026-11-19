@@ -6,7 +6,6 @@ import {
   PAYLOAD_CATALOG,
   PayloadOption,
 } from '../types/game';
-import { Language, getTranslation } from '../game/i18n';
 import {
   X,
   Crosshair,
@@ -24,7 +23,6 @@ interface ArmamentModalProps {
   era: Era;
   activePayloads: Record<AircraftRole, AircraftPayloadType>;
   onSelectPayload: (role: AircraftRole, payload: AircraftPayloadType) => void;
-  lang?: Language;
 }
 
 export const ArmamentModal: React.FC<ArmamentModalProps> = ({
@@ -33,7 +31,6 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
   era,
   activePayloads,
   onSelectPayload,
-  lang = 'zh',
 }) => {
   const [activeRoleFilter, setActiveRoleFilter] = useState<AircraftRole | 'all'>('all');
 
@@ -47,7 +44,6 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
-  const t = getTranslation(lang);
 
   const roleConfigs: {
     role: AircraftRole;
@@ -59,7 +55,7 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
   }[] = [
     {
       role: 'fighter',
-      title: lang === 'zh' ? '戰鬥機外掛配置 (FIGHTERS)' : 'Carrier Fighters (Fighters)',
+      title: '戰鬥機外掛配置 (FIGHTERS)',
       planes:
         era === 'era5'
           ? 'F-14A Tomcat / F/A-18A Hornet / F-15A Eagle / F-16A Falcon'
@@ -118,7 +114,7 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
     },
     {
       role: 'dive_bomber',
-      title: lang === 'zh' ? '俯衝/戰術攻擊機主武裝 (DIVE & STRIKE)' : 'Dive Bombers & Strike',
+      title: '俯衝/戰術攻擊機主武裝 (DIVE & STRIKE)',
       planes:
         era === 'era5'
           ? 'A-6E Intruder / AV-8B Harrier II / F-111 Aardvark'
@@ -173,7 +169,7 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
     },
     {
       role: 'torpedo_bomber',
-      title: lang === 'zh' ? '魚雷打擊機／反潛配置 (TORPEDO & ASW)' : 'Torpedo & ASW Bombers',
+      title: '魚雷打擊機／反潛配置 (TORPEDO & ASW)',
       planes:
         era === 'era5'
           ? 'S-3A Viking / SH-3F Sea King / P-3C Orion (聲納浮標 + Mk 46)'
@@ -220,7 +216,7 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
     },
     {
       role: 'attacker',
-      title: lang === 'zh' ? '重型攻擊／電戰與對地支援 (ATTACKERS & CAS)' : 'Heavy Attackers & SEAD',
+      title: '重型攻擊／電戰與對地支援 (ATTACKERS & CAS)',
       planes:
         era === 'era5'
           ? 'EA-6B Prowler / A-10A Warthog / AH-64A Apache / AH-1W'
@@ -280,7 +276,7 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
     },
     {
       role: 'level_bomber',
-      title: lang === 'zh' ? '遠程重轟炸機彈艙掛載 (STRATEGIC BOMBERS)' : 'Heavy Strategic Bombers',
+      title: '遠程重轟炸機彈艙掛載 (STRATEGIC BOMBERS)',
       planes:
         era === 'era5'
           ? 'B-52G Stratofortress 同溫層堡壘 (8x AGM-84 魚叉反艦飛彈 / 108枚地毯轟炸)'
@@ -340,7 +336,7 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
     },
     {
       role: 'scout',
-      title: lang === 'zh' ? '水上偵察與預警機群 (RECON & AEW)' : 'Reconnaissance & AEW',
+      title: '水上偵察與預警機群 (RECON & AEW)',
       planes:
         era === 'era5'
           ? 'E-2C Hawkeye / E-3A Sentry / C-2A / C-130'
@@ -390,10 +386,10 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
             </div>
             <div>
               <div className="text-[10px] text-[#90CAF9] tracking-widest uppercase font-bold">
-                {t.armamentSubtitle}
+                {'AIRCRAFT ORDNANCE & PAYLOAD RECONFIGURATION'}
               </div>
               <h2 className="text-base font-bold text-[#E0F7FA]">
-                {t.armamentTitle}
+                戰機外掛武裝整備庫
               </h2>
             </div>
           </div>
@@ -415,7 +411,7 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            {lang === 'zh' ? '全兵種 (ALL)' : 'All Roles'}
+            全兵種 (ALL)
           </button>
           {roleConfigs.map((c) => (
             <button
@@ -471,7 +467,7 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
                         <div className="space-y-1.5">
                           <div className="flex items-start justify-between gap-2">
                             <span className="font-bold text-xs text-[#E0F7FA]">
-                              {lang === 'zh' ? opt.nameZh : opt.name}
+                              {opt.name}
                             </span>
                             {isSelected && (
                               <span className="p-0.5 bg-[#00E676] text-black rounded-full shrink-0">
@@ -499,11 +495,11 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
                         {/* Weapon Stat Badges */}
                         <div className="mt-2.5 pt-2 border-t border-[#1E3A5F]/60 flex items-center justify-between text-[10px] text-slate-400">
                           <div>
-                            <span className="text-slate-500">{t.damage}: </span>
+                            <span className="text-slate-500">戰鬥部傷害: </span>
                             <span className="text-[#00E676] font-bold">{opt.damage}</span>
                           </div>
                           <div>
-                            <span className="text-slate-500">{t.speedMod}: </span>
+                            <span className="text-slate-500">航速修正: </span>
                             <span className={opt.speedModifier >= 1 ? 'text-[#80DEEA]' : 'text-amber-400'}>
                               {opt.speedModifier >= 1
                                 ? `+${Math.round((opt.speedModifier - 1) * 100)}%`
@@ -511,7 +507,7 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
                             </span>
                           </div>
                           <div>
-                            <span className="text-slate-500">{t.blastRadius}: </span>
+                            <span className="text-slate-500">爆炸半徑: </span>
                             <span className="text-sky-300">{opt.blastRadius || 0}m</span>
                           </div>
                         </div>
@@ -527,15 +523,13 @@ export const ArmamentModal: React.FC<ArmamentModalProps> = ({
         {/* Footer */}
         <div className="flex items-center justify-between pt-2 border-t border-[#1E3A5F]">
           <div className="text-[11px] text-slate-400">
-            {lang === 'zh'
-              ? '掛載修改即刻生效於新起飛波次。在航飛機需返航降落重新裝彈。'
-              : 'Payload reconfiguration applies immediately to subsequent sorties. Airborne units rearm on landing.'}
+            掛載修改即刻生效於新起飛波次。在航飛機需返航降落重新裝彈。
           </div>
           <button
             onClick={onClose}
             className="px-6 py-2 bg-[#1976D2] hover:bg-[#1565C0] text-white font-bold rounded transition-colors shadow"
           >
-            {lang === 'zh' ? '確認關閉 (CLOSE)' : 'Close Matrix'}
+            確認關閉 (CLOSE)
           </button>
         </div>
       </div>

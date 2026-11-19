@@ -10,8 +10,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ship-cvn',
         category: 'ships',
-        name: 'USS Nimitz (CVN-68 核動力航空母艦)',
-        nameZh: '尼米茲號核動力航母 (CVN-68)',
+        name: '尼米茲號核動力航母 (CVN-68)',
         cost: 1550,
         era: 'era5',
         badge: '雙核反應爐+CIWS+海麻雀',
@@ -22,8 +21,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ship-cg-tico',
         category: 'ships',
-        name: 'USS Ticonderoga (CG-47 提康德羅加級神盾巡洋艦)',
-        nameZh: '提康德羅加級神盾巡洋艦 (CG-47)',
+        name: '提康德羅加級神盾巡洋艦 (CG-47)',
         cost: 880,
         era: 'era5',
         badge: 'SPY-1A神盾+SM-2MR+CIWS+魚叉',
@@ -34,8 +32,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ship-cg-virginia',
         category: 'ships',
-        name: 'USS Virginia (CGN-38 維吉尼亞級核動力導向飛彈巡洋艦)',
-        nameZh: '維吉尼亞級核巡洋艦 (CGN-38)',
+        name: '維吉尼亞級核巡洋艦 (CGN-38)',
         cost: 820,
         era: 'era5',
         badge: '雙核動力+雙臂Mk26+魚叉',
@@ -46,8 +43,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ship-bb-iowa-mod',
         category: 'ships',
-        name: 'USS Iowa (BB-61 現代化改裝主力戰艦)',
-        nameZh: '愛荷華號現代化改裝戰艦 (BB-61)',
+        name: '愛荷華號現代化改裝戰艦 (BB-61)',
         cost: 1250,
         era: 'era5',
         badge: '406mm巨砲+戰斧+魚叉+4座方陣',
@@ -58,8 +54,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ship-dd-spruance',
         category: 'ships',
-        name: 'USS Spruance (DD-963 史普魯恩斯級驅逐艦)',
-        nameZh: '史普魯恩斯級長程驅逐艦 (DD-963)',
+        name: '史普魯恩斯級長程驅逐艦 (DD-963)',
         cost: 560,
         era: 'era5',
         badge: '全燃氣渦輪+反潛+魚叉+CIWS',
@@ -70,8 +65,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ship-ddg-kidd',
         category: 'ships',
-        name: 'USS Kidd (DDG-993 紀德級導向飛彈驅逐艦)',
-        nameZh: '紀德級導向飛彈驅逐艦 (DDG-993)',
+        name: '紀德級導向飛彈驅逐艦 (DDG-993)',
         cost: 640,
         era: 'era5',
         badge: '雙臂Mk 26+SM-2MR區域防空',
@@ -82,8 +76,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ship-ffg-ohp',
         category: 'ships',
-        name: 'USS Oliver Hazard Perry (FFG-7 派里級巡防艦)',
-        nameZh: '派里級導向飛彈巡防艦 (FFG-7)',
+        name: '派里級導向飛彈巡防艦 (FFG-7)',
         cost: 420,
         era: 'era5',
         badge: '單臂Mk 13+方陣CIWS+魚叉',
@@ -94,8 +87,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ship-ssn-la',
         category: 'ships',
-        name: 'USS Los Angeles (SSN-688 洛杉磯級核動力攻擊潛艦)',
-        nameZh: '洛杉磯級核動力攻擊潛艦 (SSN-688)',
+        name: '洛杉磯級核動力攻擊潛艦 (SSN-688)',
         cost: 480,
         era: 'era5',
         badge: '33kt極速水下+Mk48線導魚雷+魚叉',
@@ -106,8 +98,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ship-lph',
         category: 'ships',
-        name: 'USS Tarawa / Iwo Jima (兩棲突擊艦)',
-        nameZh: '塔拉瓦／硫磺島級兩棲突擊艦',
+        name: '塔拉瓦／硫磺島級兩棲突擊艦',
         cost: 580,
         era: 'era5',
         badge: 'AV-8B垂直起降+CH-53突擊',
@@ -118,8 +109,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ship-lpd',
         category: 'ships',
-        name: 'USS Austin (LPD-4 奧斯汀級兩棲船塢運輸艦)',
-        nameZh: '奧斯汀級兩棲船塢運輸艦 (LPD-4)',
+        name: '奧斯汀級兩棲船塢運輸艦 (LPD-4)',
         cost: 460,
         era: 'era5',
         badge: '泛水塢穴+LCAC/AAV裝卸載',
@@ -130,8 +120,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ship-lcac',
         category: 'ships',
-        name: 'LCAC Landing Craft Air Cushion (高速氣墊登陸艇)',
-        nameZh: 'LCAC 氣墊登陸載具',
+        name: 'LCAC 氣墊登陸載具',
         cost: 160,
         era: 'era5',
         badge: '40kt高速掠海/直接越障搶灘',
@@ -142,8 +131,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-support-ohio-ssbn',
         category: 'ships',
-        name: 'USS Ohio (SSBN-726 俄亥俄級戰略核潛艦 · 三叉戟核打擊)',
-        nameZh: '俄亥俄級戰略核潛艦 (SSBN-726 · 三叉戟 SLBM)',
+        name: '俄亥俄級戰略核潛艦 (SSBN-726 · 三叉戟 SLBM)',
         cost: 1000,
         era: 'era5',
         badge: '三叉戟II D5 潛射核彈·MIRV分導熱核',
@@ -156,8 +144,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-f14a',
         category: 'aircraft',
-        name: 'F-14A Tomcat Fleet Air Superiority Fighter (+4架)',
-        nameZh: 'F-14A 雄貓可變後掠翼重型戰鬥機 (+4架)',
+        name: 'F-14A 雄貓可變後掠翼重型戰鬥機 (+4架)',
         cost: 360,
         era: 'era5',
         badge: 'AIM-54鳳凰超遠程BVR/反飛彈',
@@ -168,8 +155,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-fa18a',
         category: 'aircraft',
-        name: 'F/A-18A Hornet Strike Fighter Flight (+4架)',
-        nameZh: 'F/A-18A 大黃蜂多用途打擊戰鬥機 (+4架)',
+        name: 'F/A-18A 大黃蜂多用途打擊戰鬥機 (+4架)',
         cost: 320,
         era: 'era5',
         badge: '空優格鬥+魚叉掠海反艦雙能',
@@ -180,8 +166,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-s3a',
         category: 'aircraft',
-        name: 'S-3A Viking Carrier ASW Aircraft (+4架)',
-        nameZh: 'S-3A 維京艦載長程雙噴射反潛機 (+4架)',
+        name: 'S-3A 維京艦載長程雙噴射反潛機 (+4架)',
         cost: 260,
         era: 'era5',
         badge: 'APS-116雷達+聲吶浮標+魚叉',
@@ -192,8 +177,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-a6e',
         category: 'aircraft',
-        name: 'A-6E Intruder TRAM Heavy Attack Flight (+4架)',
-        nameZh: 'A-6E 侵入者全天候攻擊機 (+4架)',
+        name: 'A-6E 侵入者全天候攻擊機 (+4架)',
         cost: 290,
         era: 'era5',
         badge: 'TRAM光電紅外夜視+雷射穿甲',
@@ -204,8 +188,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-e2c',
         category: 'aircraft',
-        name: 'E-2C Hawkeye Carrier Airborne Early Warning (+2架)',
-        nameZh: 'E-2C 鷹眼艦載空中早期預警機 (+2架)',
+        name: 'E-2C 鷹眼艦載空中早期預警機 (+2架)',
         cost: 350,
         era: 'era5',
         badge: 'APS-125旋轉雷達罩+神盾指管',
@@ -216,8 +199,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-ea6b',
         category: 'aircraft',
-        name: 'EA-6B Prowler Electronic Warfare Flight (+2架)',
-        nameZh: 'EA-6B 徘徊者電子作戰機 (+2架)',
+        name: 'EA-6B 徘徊者電子作戰機 (+2架)',
         cost: 320,
         era: 'era5',
         badge: 'ALQ-99電戰干擾+AGM-88 HARM',
@@ -228,8 +210,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-c2a',
         category: 'aircraft',
-        name: 'C-2A Greyhound Carrier Onboard Delivery (+2架)',
-        nameZh: 'C-2A 灰狗艦載運輸機 (+2架)',
+        name: 'C-2A 灰狗艦載運輸機 (+2架)',
         cost: 180,
         era: 'era5',
         badge: '特快後勤補給與傘兵空投',
@@ -240,8 +221,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-sh3f',
         category: 'aircraft',
-        name: 'SH-3F Sea King Heavy ASW Helicopter (+4架)',
-        nameZh: 'SH-3F 海王遠洋重型反潛直升機 (+4架)',
+        name: 'SH-3F 海王遠洋重型反潛直升機 (+4架)',
         cost: 220,
         era: 'era5',
         badge: 'AQS-13吊放聲吶+反潛魚雷',
@@ -252,8 +232,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-av8b',
         category: 'aircraft',
-        name: 'AV-8B Harrier II V/STOL Attack Flight (+4架)',
-        nameZh: 'AV-8B 海獵鷹II 垂直起降攻擊機 (+4架)',
+        name: 'AV-8B 海獵鷹II 垂直起降攻擊機 (+4架)',
         cost: 270,
         era: 'era5',
         badge: '垂直短場起降+25mm機砲',
@@ -264,8 +243,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-ch53',
         category: 'aircraft',
-        name: 'CH-53 Sea Stallion Heavy Transport Helicopter (+2架)',
-        nameZh: 'CH-53 海種馬重型運輸突擊直升機 (+2架)',
+        name: 'CH-53 海種馬重型運輸突擊直升機 (+2架)',
         cost: 250,
         era: 'era5',
         badge: '重裝甲吊運與大兵力機降',
@@ -278,8 +256,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-a10a',
         category: 'aircraft',
-        name: 'A-10A Thunderbolt II Close Air Support Flight (+4架)',
-        nameZh: 'A-10A 疣豬攻擊機 (裝甲開罐器) (+4架)',
+        name: 'A-10A 疣豬攻擊機 (裝甲開罐器) (+4架)',
         cost: 310,
         era: 'era5',
         badge: '30mm GAU-8復仇者機砲+小牛飛彈',
@@ -290,8 +267,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-ah64a',
         category: 'aircraft',
-        name: 'AH-64A Apache Attack Helicopter Flight (+4架)',
-        nameZh: 'AH-64A 阿帕契重裝武裝直升機 (+4架)',
+        name: 'AH-64A 阿帕契重裝武裝直升機 (+4架)',
         cost: 340,
         era: 'era5',
         badge: '16枚地獄火攻頂飛彈+30mm鏈砲',
@@ -302,8 +278,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-ah1w',
         category: 'aircraft',
-        name: 'AH-1W SuperCobra Marine Attack Helicopter (+4架)',
-        nameZh: 'AH-1W 超級眼鏡蛇武裝直升機 (+4架)',
+        name: 'AH-1W 超級眼鏡蛇武裝直升機 (+4架)',
         cost: 280,
         era: 'era5',
         badge: '雙發渦輪+拖式飛彈+響尾蛇空空',
@@ -314,8 +289,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-f15a',
         category: 'aircraft',
-        name: 'F-15A Eagle Air Superiority Fighter (+4架)',
-        nameZh: 'F-15A 鷹式純空優戰鬥機 (+4架)',
+        name: 'F-15A 鷹式純空優戰鬥機 (+4架)',
         cost: 380,
         era: 'era5',
         badge: '純制空霸主+AIM-7F麻雀+9L全向響尾蛇',
@@ -326,8 +300,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-f16a',
         category: 'aircraft',
-        name: 'F-16A Fighting Falcon Multirole Fighter (+4架)',
-        nameZh: 'F-16A 戰隼超音速多用途戰機 (+4架)',
+        name: 'F-16A 戰隼超音速多用途戰機 (+4架)',
         cost: 300,
         era: 'era5',
         badge: '線傳飛控高敏捷+小牛飛彈',
@@ -338,8 +311,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-e3a',
         category: 'aircraft',
-        name: 'E-3A Sentry AWACS Radar Plane (+1架)',
-        nameZh: 'E-3A 哨兵望樓預警機 (+1架)',
+        name: 'E-3A 哨兵望樓預警機 (+1架)',
         cost: 480,
         era: 'era5',
         badge: '波音707巨型雷達罩+全圖情資',
@@ -350,8 +322,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-f111',
         category: 'aircraft',
-        name: 'F-111 Aardvark Supersonic Strike Bomber (+2架)',
-        nameZh: 'F-111 土豚超音速變後掠翼轟炸機 (+2架)',
+        name: 'F-111 土豚超音速變後掠翼轟炸機 (+2架)',
         cost: 390,
         era: 'era5',
         badge: '地形跟隨雷達+低空高速穿透+鋪路炸彈',
@@ -362,8 +333,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-b52-modern',
         category: 'aircraft',
-        name: 'B-52G Stratofortress Heavy Cruise Missile Bomber (+2架)',
-        nameZh: 'B-52G 同溫層堡壘巡弋飛彈重轟炸機 (+2架)',
+        name: 'B-52G 同溫層堡壘巡弋飛彈重轟炸機 (+2架)',
         cost: 460,
         era: 'era5',
         badge: '魚叉長程反艦+巨型地毯覆蓋轟炸',
@@ -374,8 +344,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-c130',
         category: 'aircraft',
-        name: 'C-130 Hercules Tactical Air Transport (+2架)',
-        nameZh: 'C-130 大力士戰術空投運輸機 (+2架)',
+        name: 'C-130 大力士戰術空投運輸機 (+2架)',
         cost: 200,
         era: 'era5',
         badge: '戰術空投重型物資與傘兵',
@@ -388,8 +357,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-army-rifle-83',
         category: 'ground',
-        name: 'US Army 1983 Rifle Squad (美陸軍步槍班 83年型)',
-        nameZh: '美陸軍步槍班 (83\')',
+        name: '美陸軍步槍班 (83\')',
         cost: 160,
         era: 'era5',
         badge: 'M16A2+M249班機槍+AT4火箭',
@@ -400,8 +368,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-usmc-rifle-83',
         category: 'ground',
-        name: 'USMC Marine Rifle Squad (83\') (陸戰步槍班 83年型)',
-        nameZh: '陸戰步槍班 (83\')',
+        name: '陸戰步槍班 (83\')',
         cost: 180,
         era: 'era5',
         badge: 'SMAW攻堅火箭+M16A2勇猛搶灘',
@@ -412,8 +379,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-dragon-atgm',
         category: 'ground',
-        name: 'M47 Dragon ATGM Anti-Tank Missile Team (反戰車飛彈班)',
-        nameZh: '反戰車飛彈班 (M47)',
+        name: '反戰車飛彈班 (M47)',
         cost: 220,
         era: 'era5',
         badge: 'M47龍式線導破甲飛彈',
@@ -424,8 +390,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-aav7a1',
         category: 'ground',
-        name: 'USMC AAV-7A1 Amphibious Assault Vehicle (兩棲突擊載具)',
-        nameZh: 'AAV-7A1 兩棲突擊載具',
+        name: 'AAV-7A1 兩棲突擊載具',
         cost: 320,
         era: 'era5',
         badge: '水陸浮渡搶灘+Mk 19榴彈砲',
@@ -436,8 +401,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-lav25',
         category: 'ground',
-        name: 'USMC LAV-25 Light Armored Vehicle (輪型裝甲偵察車)',
-        nameZh: 'LAV-25 輪型裝甲偵察車',
+        name: 'LAV-25 輪型裝甲偵察車',
         cost: 280,
         era: 'era5',
         badge: '25mm M242鏈砲+高速機動',
@@ -448,8 +412,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-m2-bradley',
         category: 'ground',
-        name: 'M2 Bradley Infantry Fighting Vehicle (布雷德利機步戰車)',
-        nameZh: 'M2 布雷德利裝甲機步戰車',
+        name: 'M2 布雷德利裝甲機步戰車',
         cost: 380,
         era: 'era5',
         badge: '雙聯TOW-2反戰車飛彈+25mm鏈砲',
@@ -460,8 +423,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-m60a1-rise',
         category: 'ground',
-        name: 'USMC M60A1 RISE Passive Main Battle Tank (主力戰車)',
-        nameZh: 'M60A1 RISE (Passive) 主力戰車',
+        name: 'M60A1 RISE (Passive) 主力戰車',
         cost: 420,
         era: 'era5',
         badge: '105mm線膛砲+ERA反應裝甲',
@@ -472,8 +434,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-m1ip-abrams',
         category: 'ground',
-        name: 'M1IP Abrams Improved Performance MBT (艾布蘭主力戰車)',
-        nameZh: 'M1IP 艾布蘭主力戰車',
+        name: 'M1IP 艾布蘭主力戰車',
         cost: 580,
         era: 'era5',
         badge: '複合裝甲+1500HP燃氣渦輪+105mm',
@@ -484,8 +445,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-m198-155',
         category: 'ground',
-        name: 'M198 155mm Medium Towed Howitzer (155mm 重榴彈砲)',
-        nameZh: 'M198 155mm 牽引重榴彈砲',
+        name: 'M198 155mm 牽引重榴彈砲',
         cost: 300,
         era: 'era5',
         badge: '雙模打擊：遠程曲射+直瞄坦克平射',
@@ -496,8 +456,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-lav-ad',
         category: 'ground',
-        name: 'USMC LAV-AD Air Defense Light Armored Vehicle (輪型防空車)',
-        nameZh: 'LAV-AD 輪型防空自走砲車',
+        name: 'LAV-AD 輪型防空自走砲車',
         cost: 390,
         era: 'era5',
         badge: '25mm格林火神+8x刺針防空飛彈',
@@ -508,8 +467,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-m163-vads',
         category: 'ground',
-        name: 'M163 VADS Vulcan Air Defense System (火神防空自走砲)',
-        nameZh: 'M163 火神防空自走砲',
+        name: 'M163 火神防空自走砲',
         cost: 360,
         era: 'era5',
         badge: '20mm M61A1火神 3000發/分密集彈幕',
@@ -520,8 +478,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-m270-mlrs',
         category: 'ground',
-        name: 'M270 MLRS Multiple Launch Rocket System (多管火箭系統)',
-        nameZh: 'M270 MLRS 多管火箭系統',
+        name: 'M270 MLRS 多管火箭系統',
         cost: 480,
         era: 'era5',
         badge: '12x 227mm M39集束子母彈·鋼鐵之雨',
@@ -532,8 +489,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-m270-atacms',
         category: 'ground',
-        name: 'MGM-140 ATACMS Tactical Ballistic Missile TEL (陸軍戰術飛彈車)',
-        nameZh: 'MGM-140 ATACMS 戰術飛彈發射車',
+        name: 'MGM-140 ATACMS 戰術飛彈發射車',
         cost: 750,
         era: 'era5',
         badge: 'M57碉堡剋星·6500m點穴毀滅',
@@ -544,8 +500,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-m109a6',
         category: 'ground',
-        name: 'M109A6 Paladin 155mm SPG (帕拉丁自走砲)',
-        nameZh: 'M109A6 帕拉丁 155mm 數位自走砲',
+        name: 'M109A6 帕拉丁 155mm 數位自走砲',
         cost: 540,
         era: 'era5',
         badge: '數位射控·極速反砲擊 (Counter-Battery)',
@@ -556,8 +511,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-atacms-nuclear',
         category: 'ground',
-        name: 'MGM-140/Lance Nuclear-Tipped Tactical Missile TEL (戰術核彈頭發射車)',
-        nameZh: 'MGM-140 戰術核彈頭 SSM 發射車',
+        name: 'MGM-140 戰術核彈頭 SSM 發射車',
         cost: 800,
         era: 'era5',
         badge: 'W70/W85 戰術熱核彈頭·6500m毀滅打擊',
@@ -568,8 +522,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-engineer',
         category: 'ground',
-        name: 'USN Seabees Combat Engineer Platoon (戰鬥工兵排)',
-        nameZh: 'USN Seabees 戰鬥工兵排',
+        name: 'USN Seabees 戰鬥工兵排',
         cost: 180,
         era: 'era5',
         badge: '愛國者陣地闢建+深水大港修造',
@@ -582,8 +535,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-fac-sam-patriot',
         category: 'installations',
-        name: 'MIM-104 Patriot Long-Range SAM Battalion (愛國者防空飛彈營)',
-        nameZh: 'MIM-104 愛國者長程防空飛彈營',
+        name: 'MIM-104 愛國者長程防空飛彈營',
         cost: 550,
         era: 'era5',
         badge: 'AN/MPQ-53相列雷達+超長程反飛彈',
@@ -595,8 +547,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-fac-sam-hawk',
         category: 'installations',
-        name: 'MIM-23 Improved HAWK SAM Battery (霍克防空飛彈連)',
-        nameZh: 'MIM-23 霍克改進型防空飛彈連',
+        name: 'MIM-23 霍克改進型防空飛彈連',
         cost: 380,
         era: 'era5',
         badge: '半主動雷達導引SAM',
@@ -608,8 +559,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-fac-fob',
         category: 'installations',
-        name: 'Forward Operating Base Tactical Command Post (前進作戰基地 FOB)',
-        nameZh: '前進作戰基地 (FOB) 戰術指揮所',
+        name: '前進作戰基地 (FOB) 戰術指揮所',
         cost: 450,
         era: 'era5',
         badge: '直升機停機坪+全域指管',
@@ -621,8 +571,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-fac-m1-240mm',
         category: 'installations',
-        name: 'M1 240mm "Black Dragon" Fixed Heavy Howitzer Battery (強化要塞240mm巨砲)',
-        nameZh: 'M1 240mm「黑龍」固定式重砲台',
+        name: 'M1 240mm「黑龍」固定式重砲台',
         cost: 380,
         era: 'era5',
         badge: '3800m超重型固定岸砲',
@@ -635,7 +584,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
         id: 'req-fac-dockyard',
         category: 'installations',
         name: '前線應急修護浮塢碼頭',
-        nameZh: '前線應急修護浮塢碼頭',
         cost: 260,
         era: 'era5',
         badge: '艦體損害搶修',
@@ -648,7 +596,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
         id: 'req-fac-major-naval-port',
         category: 'installations',
         name: '正規深水軍港突堤',
-        nameZh: '正規深水軍港突堤',
         cost: 420,
         era: 'era5',
         badge: '深水突堤起重港埠',
@@ -661,7 +608,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
         id: 'req-fac-airfield',
         category: 'installations',
         name: '前進野戰機場跑道',
-        nameZh: '前進野戰機場跑道',
         cost: 320,
         era: 'era5',
         badge: '現代噴射戰機起降基石',
@@ -674,7 +620,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
         id: 'req-fac-radar',
         category: 'installations',
         name: '現代化超長程對空搜索雷達哨',
-        nameZh: '現代化超長程對空搜索雷達哨',
         cost: 250,
         era: 'era5',
         badge: '6000m 超長程早期預警',
@@ -687,7 +632,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
         id: 'req-fac-supply-depot',
         category: 'installations',
         name: '戰地輜重補給樞紐',
-        nameZh: '戰地輜重補給樞紐',
         cost: 200,
         era: 'era5',
         badge: '裝備建制修整+2.5%/s',
@@ -700,7 +644,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
         id: 'req-fac-field-hospital',
         category: 'installations',
         name: '戰地野戰醫院',
-        nameZh: '戰地野戰醫院',
         cost: 160,
         era: 'era5',
         badge: '人員救護整編+3.0%/s',
@@ -721,8 +664,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ship-cv63',
         category: 'ships',
-        name: 'USS Kitty Hawk (CV-63 超級航空母艦)',
-        nameZh: '小鷹號超級航母 (CV-63)',
+        name: '小鷹號超級航母 (CV-63)',
         cost: 1350,
         era: 'era4',
         badge: '斜角甲板+海麻雀SAM',
@@ -733,8 +675,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ship-cg',
         category: 'ships',
-        name: 'USS Belknap (CG-26 導彈巡洋艦)',
-        nameZh: '貝爾納普級導彈巡洋艦 (CG-26)',
+        name: '貝爾納普級導彈巡洋艦 (CG-26)',
         cost: 750,
         era: 'era4',
         badge: '雙聯梗犬SAM (2200m)',
@@ -745,8 +686,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ship-ddg',
         category: 'ships',
-        name: 'USS Charles F. Adams (DDG-2 導彈驅逐艦)',
-        nameZh: '亞當斯級導彈驅逐艦 (DDG-2)',
+        name: '亞當斯級導彈驅逐艦 (DDG-2)',
         cost: 480,
         era: 'era4',
         badge: '韃靼人SAM (1800m)',
@@ -757,8 +697,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ship-lph',
         category: 'ships',
-        name: 'USS Iwo Jima (LPH-2 硫磺島級兩棲突擊艦)',
-        nameZh: '硫磺島級兩棲突擊艦 (LPH-2)',
+        name: '硫磺島級兩棲突擊艦 (LPH-2)',
         cost: 520,
         era: 'era4',
         badge: '垂直包圍登陸',
@@ -769,8 +708,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ship-lcm8',
         category: 'ships',
-        name: 'LCM-8 機械化登陸艇 (Mike Boat)',
-        nameZh: 'LCM-8 機械化重裝登陸艇',
+        name: 'LCM-8 機械化重裝登陸艇',
         cost: 120,
         era: 'era4',
         badge: '重戰車搶灘',
@@ -781,8 +719,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ship-ss',
         category: 'ships',
-        name: 'USS Tang (SS-563 高速柴電攻擊潛艦)',
-        nameZh: '刺尾鯛級攻擊潛艦 (SS-563)',
+        name: '刺尾鯛級攻擊潛艦 (SS-563)',
         cost: 280,
         era: 'era4',
         badge: '水下伏擊+反潛',
@@ -793,8 +730,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ship-dd',
         category: 'ships',
-        name: 'USS Forrest Sherman (DD-931 驅逐艦)',
-        nameZh: '雪曼級主力驅逐艦 (DD-931)',
+        name: '雪曼級主力驅逐艦 (DD-931)',
         cost: 440,
         era: 'era4',
         badge: 'Mk 42 5吋全自動砲+ASROC',
@@ -805,8 +741,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ship-ffg',
         category: 'ships',
-        name: 'USS Knox (FFG-1052 諾克斯級巡防艦)',
-        nameZh: '諾克斯級反潛巡防艦 (FFG-1052)',
+        name: '諾克斯級反潛巡防艦 (FFG-1052)',
         cost: 390,
         era: 'era4',
         badge: '艦艏ASROC八聯裝+直升機坪',
@@ -819,8 +754,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-f4j',
         category: 'aircraft',
-        name: 'F-4J Phantom II Fighter Flight (艦載超音速戰機)',
-        nameZh: 'F-4J 幽靈II 全天候超音速戰鬥機 (+4架)',
+        name: 'F-4J 幽靈II 全天候超音速戰鬥機 (+4架)',
         cost: 260,
         era: 'era4',
         badge: '麻雀+響尾蛇空空飛彈',
@@ -831,8 +765,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-f8',
         category: 'aircraft',
-        name: 'F-8 Crusader Fighter Flight (最後的十字軍近戰機)',
-        nameZh: 'F-8 十字軍近戰機 (+4架)',
+        name: 'F-8 十字軍近戰機 (+4架)',
         cost: 220,
         era: 'era4',
         badge: '可變傾角翼+4門20mm',
@@ -843,8 +776,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-a6a',
         category: 'aircraft',
-        name: 'A-6A Intruder All-Weather Strike Flight (全天候重攻擊機)',
-        nameZh: 'A-6A 入侵者全天候重型攻擊機 (+4架)',
+        name: 'A-6A 入侵者全天候重型攻擊機 (+4架)',
         cost: 280,
         era: 'era4',
         badge: 'DIANE雷達轟炸',
@@ -855,8 +787,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-a4',
         category: 'aircraft',
-        name: 'A-4 Skyhawk Light Attack Flight (天鷹輕型攻擊機)',
-        nameZh: 'A-4 天鷹輕型高速突擊攻擊機 (+4架)',
+        name: 'A-4 天鷹輕型高速突擊攻擊機 (+4架)',
         cost: 210,
         era: 'era4',
         badge: '小巧機動+蛇眼炸彈',
@@ -867,8 +798,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-b52',
         category: 'aircraft',
-        name: 'B-52 Stratofortress Heavy Bomber (同溫層堡壘戰略轟炸機)',
-        nameZh: 'B-52 巨型同溫層堡壘戰略重轟炸機 (+2架)',
+        name: 'B-52 巨型同溫層堡壘戰略重轟炸機 (+2架)',
         cost: 550,
         era: 'era4',
         badge: '36枚巨量地毯轟炸',
@@ -879,8 +809,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-f105',
         category: 'aircraft',
-        name: 'F-105G Thunderchief Wild Weasel (野鼬防空網壓制機)',
-        nameZh: 'F-105G 雷公防空壓制野鼬機 (+4架)',
+        name: 'F-105G 雷公防空壓制野鼬機 (+4架)',
         cost: 320,
         era: 'era4',
         badge: 'AGM-45百strike反輻射飛彈',
@@ -891,8 +820,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-a7',
         category: 'aircraft',
-        name: 'A-7 Corsair II Light Attack Flight (海盜II戰術攻擊機)',
-        nameZh: 'A-7 海盜II 輕型戰術攻擊機 (+4架)',
+        name: 'A-7 海盜II 輕型戰術攻擊機 (+4架)',
         cost: 240,
         era: 'era4',
         badge: 'AGM-62白眼電視導引炸彈',
@@ -903,8 +831,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-ah1',
         category: 'aircraft',
-        name: 'AH-1G Cobra Attack Helicopter Flight (眼鏡蛇武裝直升機)',
-        nameZh: 'AH-1G 眼鏡蛇武裝直升機 (+4架)',
+        name: 'AH-1G 眼鏡蛇武裝直升機 (+4架)',
         cost: 220,
         era: 'era4',
         badge: '旋轉機砲+火箭巢',
@@ -915,8 +842,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-uh1',
         category: 'aircraft',
-        name: 'UH-1D Huey Airmobile Assault Flight (休伊空中突擊機隊)',
-        nameZh: 'UH-1D 休伊空中突擊直升機 (+4架)',
+        name: 'UH-1D 休伊空中突擊直升機 (+4架)',
         cost: 180,
         era: 'era4',
         badge: '垂直機動機降任何陸地',
@@ -927,8 +853,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-ov10',
         category: 'aircraft',
-        name: 'OV-10A Bronco Forward Air Control Flight (野馬前進空中管制)',
-        nameZh: 'OV-10A 野馬前進空中管制機 (+4架)',
+        name: 'OV-10A 野馬前進空中管制機 (+4架)',
         cost: 160,
         era: 'era4',
         badge: '戰場標定+FFAR火箭',
@@ -939,8 +864,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-c1',
         category: 'aircraft',
-        name: 'C-1 Trader Paratrooper Transport Flight (貿易者艦載傘兵空投機)',
-        nameZh: 'C-1 貿易者艦載傘兵空投機 (+2架)',
+        name: 'C-1 貿易者艦載傘兵空投機 (+2架)',
         cost: 190,
         era: 'era4',
         badge: '全域空投傘兵突擊',
@@ -951,8 +875,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-sh2',
         category: 'aircraft',
-        name: 'SH-2 Seasprite LAMPS I ASW Helicopter (+4架)',
-        nameZh: 'SH-2 海妖艦載輕型反潛直升機 (+4架)',
+        name: 'SH-2 海妖艦載輕型反潛直升機 (+4架)',
         cost: 200,
         era: 'era4',
         badge: '聲納浮標+Mk 46聲導魚雷',
@@ -963,8 +886,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-p3',
         category: 'aircraft',
-        name: 'P-3C Orion Maritime Patrol Bomber (+2架)',
-        nameZh: 'P-3C 獵戶座遠程海上巡邏機 (+2架)',
+        name: 'P-3C 獵戶座遠程海上巡邏機 (+2架)',
         cost: 340,
         era: 'era4',
         badge: 'MAD磁異探測+重型魚雷艙',
@@ -977,8 +899,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-air-assault',
         category: 'ground',
-        name: 'USMC Airmobile Assault Platoon (空中突擊步兵排)',
-        nameZh: 'USMC 空中突擊/直升機機降突擊排 (1965)',
+        name: 'USMC 空中突擊/直升機機降突擊排 (1965)',
         cost: 160,
         era: 'era4',
         badge: '垂直機動+M16步槍',
@@ -989,8 +910,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-m48',
         category: 'ground',
-        name: 'USMC M48A3 Patton Main Battle Tank Platoon (巴頓主力戰車排)',
-        nameZh: 'USMC M48A3 巴頓主力戰車排',
+        name: 'USMC M48A3 巴頓主力戰車排',
         cost: 350,
         era: 'era4',
         badge: '90mm M41主砲+重裝甲',
@@ -1001,8 +921,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-ontos',
         category: 'ground',
-        name: 'USMC M50 Ontos 6-Rifle Anti-Tank Vehicle (昂圖斯六聯無後座力砲戰車)',
-        nameZh: 'USMC M50 昂圖斯六聯無後座力砲戰車排',
+        name: 'USMC M50 昂圖斯六聯無後座力砲戰車排',
         cost: 260,
         era: 'era4',
         badge: '6聯裝106mm無後座力砲',
@@ -1013,8 +932,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-usmc-lvtp5a1',
         category: 'ground',
-        name: 'USMC LVTP-5A1 Armored Amphibious Assault Vehicle (兩棲登陸履帶車)',
-        nameZh: 'USMC LVTP-5A1 兩棲重裝步戰車排',
+        name: 'USMC LVTP-5A1 兩棲重裝步戰車排',
         cost: 290,
         era: 'era4',
         badge: '水陸兩棲+重載機步',
@@ -1025,8 +943,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-artillery',
         category: 'ground',
-        name: 'USMC M114 155mm Heavy Howitzer Battery (155mm 重榴彈砲排)',
-        nameZh: 'USMC M114 155mm 重榴彈砲排',
+        name: 'USMC M114 155mm 重榴彈砲排',
         cost: 250,
         era: 'era4',
         badge: '全島重砲射程覆蓋',
@@ -1037,8 +954,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-engineer',
         category: 'ground',
-        name: 'USN Seabees Combat Engineer Platoon (戰鬥工兵排)',
-        nameZh: 'USN Seabees 戰鬥工兵排',
+        name: 'USN Seabees 戰鬥工兵排',
         cost: 160,
         era: 'era4',
         badge: '工事闢建+前進基地',
@@ -1049,8 +965,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-army-rifle-65',
         category: 'ground',
-        name: 'US Army 1965 Rifle Platoon (美陸軍步槍排)',
-        nameZh: '美陸軍 1965 年型前線常規步槍排',
+        name: '美陸軍 1965 年型前線常規步槍排',
         cost: 140,
         era: 'era4',
         badge: 'M16A1+M60機槍火力組',
@@ -1061,8 +976,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-m113-mech',
         category: 'ground',
-        name: 'US Army M113 Mechanized Infantry Platoon (M113機步排)',
-        nameZh: 'M113 裝甲運兵機械化步兵排',
+        name: 'M113 裝甲運兵機械化步兵排',
         cost: 260,
         era: 'era4',
         badge: '全履帶裝甲+點50重機槍',
@@ -1073,8 +987,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-chaparral-sam',
         category: 'ground',
-        name: 'MIM-72 Chaparral Mobile SAM Platoon (榭樹野戰防空飛彈排)',
-        nameZh: 'MIM-72 榭樹野戰履帶防空飛彈排',
+        name: 'MIM-72 榭樹野戰履帶防空飛彈排',
         cost: 380,
         era: 'era4',
         badge: '4聯裝響尾蛇防空飛彈',
@@ -1085,8 +998,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-m109',
         category: 'ground',
-        name: 'M109 155mm Self-Propelled Howitzer (M109 自走榴彈砲)',
-        nameZh: 'M109 155mm 履帶自走榴彈砲',
+        name: 'M109 155mm 履帶自走榴彈砲',
         cost: 480,
         era: 'era4',
         badge: '155mm履帶重砲·反砲火壓制',
@@ -1099,8 +1011,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-fac-sam-hawk',
         category: 'installations',
-        name: 'MIM-23 HAWK Surface-to-Air Missile Battery (霍克防空飛彈陣地)',
-        nameZh: 'MIM-23 霍克防空飛彈連',
+        name: 'MIM-23 霍克防空飛彈連',
         cost: 380,
         era: 'era4',
         badge: '半主動雷達導引SAM',
@@ -1112,8 +1023,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-fac-fob',
         category: 'installations',
-        name: 'Forward Operating Base Tactical Command Post (前進作戰基地 FOB)',
-        nameZh: '前進作戰基地 (FOB) 戰術指揮所',
+        name: '前進作戰基地 (FOB) 戰術指揮所',
         cost: 450,
         era: 'era4',
         badge: '停機坪+全域指管',
@@ -1125,8 +1035,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-fac-m1-240mm',
         category: 'installations',
-        name: 'M1 240mm "Black Dragon" Fixed Heavy Howitzer Battery (M1 240mm 黑龍重砲)',
-        nameZh: 'M1 240mm「黑龍」固定式重砲台',
+        name: 'M1 240mm「黑龍」固定式重砲台',
         cost: 360,
         era: 'era4',
         badge: '3600m重型固定榴彈砲',
@@ -1139,7 +1048,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
         id: 'req-fac-dockyard',
         category: 'installations',
         name: '前線應急修護浮塢碼頭',
-        nameZh: '前線應急修護浮塢碼頭',
         cost: 260,
         era: 'era4',
         badge: '艦體損害搶修',
@@ -1152,7 +1060,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
         id: 'req-fac-major-naval-port',
         category: 'installations',
         name: '正規深水軍港突堤',
-        nameZh: '正規深水軍港突堤',
         cost: 420,
         era: 'era4',
         badge: '深水突堤起重港埠',
@@ -1165,7 +1072,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
         id: 'req-fac-airfield',
         category: 'installations',
         name: '前進野戰機場跑道',
-        nameZh: '前進野戰機場跑道',
         cost: 320,
         era: 'era4',
         badge: '全天候前線起降',
@@ -1178,7 +1084,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
         id: 'req-fac-radar',
         category: 'installations',
         name: 'SPS-40 遠程對空搜索雷達哨',
-        nameZh: 'SPS-40 遠程對空搜索雷達哨',
         cost: 220,
         era: 'era4',
         badge: '遠程雷達預警',
@@ -1191,7 +1096,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
         id: 'req-fac-supply-depot',
         category: 'installations',
         name: '戰地輜重補給樞紐',
-        nameZh: '戰地輜重補給樞紐',
         cost: 200,
         era: 'era4',
         badge: '裝備建制修整',
@@ -1204,7 +1108,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
         id: 'req-fac-field-hospital',
         category: 'installations',
         name: '戰地野戰醫院',
-        nameZh: '戰地野戰醫院',
         cost: 160,
         era: 'era4',
         badge: '傷員救護整編',
@@ -1224,12 +1127,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       id: 'req-ship-bb',
       category: 'ships',
       name:
-        era === 'era3'
-          ? 'USS Missouri (BB-63 1950 密蘇里號冷戰戰艦)'
-          : era === 'era2'
-          ? 'USS Missouri (BB-63 密蘇里號戰列艦)'
-          : 'USS North Carolina (BB-55 北卡羅來納號戰列艦)',
-      nameZh:
         era === 'era3'
           ? '密蘇里號冷戰戰艦 (BB-63)'
           : era === 'era2'
@@ -1257,12 +1154,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       category: 'ships',
       name:
         era === 'era3'
-          ? 'USS Des Moines (CA-134 得梅因號自動裝填重巡)'
-          : era === 'era2'
-          ? 'USS Baltimore (CA-68 巴爾的摩號重巡洋艦)'
-          : 'USS San Francisco (CA-38 舊金山號重巡洋艦)',
-      nameZh:
-        era === 'era3'
           ? '得梅因號重巡洋艦 (CA-134)'
           : era === 'era2'
           ? '巴爾的摩號重巡洋艦 (CA-68)'
@@ -1288,12 +1179,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       id: 'req-ship-cl',
       category: 'ships',
       name:
-        era === 'era3'
-          ? 'USS Worcester (CL-144 伍斯特號雙平全自動巡洋艦)'
-          : era === 'era2'
-          ? 'USS Cleveland (CL-55 克里夫蘭號輕巡洋艦)'
-          : 'USS Atlanta (CL-51 亞特蘭大號防空巡洋艦)',
-      nameZh:
         era === 'era3'
           ? '伍斯特號防空巡洋艦 (CL-144)'
           : era === 'era2'
@@ -1321,12 +1206,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       category: 'ships',
       name:
         era === 'era3'
-          ? 'USS Gearing (DD-710 基靈級驅逐艦 · 刺蝟砲)'
-          : era === 'era2'
-          ? 'USS Johnston (DD-557 約翰斯頓號驅逐艦 · 刺蝟砲)'
-          : 'USS Fletcher (DD-445 弗萊徹號主力驅逐艦)',
-      nameZh:
-        era === 'era3'
           ? '基靈級驅逐艦 (DD-710 · 刺蝟砲)'
           : era === 'era2'
           ? '約翰斯頓號驅逐艦 (DD-557 · 刺蝟砲)'
@@ -1352,12 +1231,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       id: 'req-ship-ss',
       category: 'ships',
       name:
-        era === 'era3'
-          ? 'USS Tang (SS-563 刺尾鯛號高速柴電潛艦)'
-          : era === 'era2'
-          ? 'USS Balao (SS-285 白魚號主力潛艦)'
-          : 'USS Gato (SS-212 貓鯊號艦隊型潛艦)',
-      nameZh:
         era === 'era3'
           ? '刺尾鯛號高速柴電潛艦 (SS-563)'
           : era === 'era2'
@@ -1385,12 +1258,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       category: 'ships',
       name:
         era === 'era3'
-          ? 'USS LST-1153 (大型快速戰車登陸艦)'
-          : era === 'era2'
-          ? 'USS LST-491 (戰車登陸艦)'
-          : 'USS LST-391 (戰車登陸艦)',
-      nameZh:
-        era === 'era3'
           ? '快速戰車登陸艦 (LST-1153)'
           : era === 'era2'
           ? '戰車登陸艦 (LST-491)'
@@ -1406,12 +1273,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       id: 'req-ship-lcvp',
       category: 'ships',
       name:
-        era === 'era3'
-          ? 'LCU / LCVP 重裝突擊登陸艇'
-          : era === 'era2'
-          ? 'LCVP 希金斯登陸艇 (PA-45)'
-          : 'LCVP 希金斯突擊艇 (PA-1)',
-      nameZh:
         era === 'era3'
           ? '兩棲突擊登陸艇 (LCVP/LCU)'
           : '突擊登陸艇 (LCVP 希金斯艇)',
@@ -1433,12 +1294,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       category: 'aircraft',
       name:
         era === 'era3'
-          ? 'F9F Panther / F-86 Sabre Flight (噴射戰鬥機隊)'
-          : era === 'era2'
-          ? 'F6F Hellcat / P-51 Mustang Flight (主力戰鬥機隊)'
-          : 'F4F Wildcat / P-40 Warhawk Flight (艦載與陸基戰鬥機隊)',
-      nameZh:
-        era === 'era3'
           ? 'F9F/F-86 噴射戰鬥機隊 (+4架)'
           : era === 'era2'
           ? 'F6F/P-51 主力戰鬥機隊 (+4架)'
@@ -1459,12 +1314,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       id: 'req-air-dive',
       category: 'aircraft',
       name:
-        era === 'era3'
-          ? 'AD-1 Skyraider Attack Flight (天襲者重攻擊隊)'
-          : era === 'era2'
-          ? 'SB2C Helldiver Flight (地獄俯衝者中隊)'
-          : 'SBD Dauntless Flight (無畏式俯衝轟炸機隊)',
-      nameZh:
         era === 'era3'
           ? 'AD-1 天襲者重攻擊隊 (+4架)'
           : era === 'era2'
@@ -1490,12 +1339,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       category: 'aircraft',
       name:
         era === 'era3'
-          ? 'AF-2 Guardian ASW Flight (獵潛衛士反潛攻擊機隊)'
-          : era === 'era2'
-          ? 'TBF Avenger Torpedo Flight (復仇者魚雷攻擊中隊)'
-          : 'TBD Devastator Torpedo Flight (毀滅者魚雷轟炸機隊)',
-      nameZh:
-        era === 'era3'
           ? 'AF-2 獵潛衛士反潛機隊 (+4架)'
           : era === 'era2'
           ? 'TBF 復仇者魚雷攻擊隊 (+4架)'
@@ -1519,12 +1362,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       id: 'req-air-heavy-bomber',
       category: 'aircraft',
       name:
-        era === 'era3'
-          ? 'B-29 Superfortress Flight (超級堡壘戰略重轟隊)'
-          : era === 'era2'
-          ? 'B-24 Liberator Flight (解放者遠程重轟隊)'
-          : 'B-17 Flying Fortress Flight (飛行堡壘四發重轟隊)',
-      nameZh:
         era === 'era3'
           ? 'B-29 超級堡壘戰略轟炸隊 (+2架)'
           : era === 'era2'
@@ -1550,12 +1387,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       category: 'aircraft',
       name:
         era === 'era3'
-          ? 'A-26 Invader Attack Flight (侵略者重型攻擊隊)'
-          : era === 'era2'
-          ? 'P-47 Thunderbolt Fighter-Bomber (雷霆戰轟機中隊)'
-          : 'A-20 Havoc Strike Attacker (浩劫突擊攻擊機中隊)',
-      nameZh:
-        era === 'era3'
           ? 'A-26 侵略者重型攻擊隊 (+4架)'
           : era === 'era2'
           ? 'P-47 雷霆戰轟機中隊 (+4架)'
@@ -1575,8 +1406,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
     {
       id: 'req-air-c47',
       category: 'aircraft',
-      name: 'C-47 Skytrain Airborne Troop Transport (戰術傘兵運輸機)',
-      nameZh: 'C-47 空中列車傘兵運輸機 (+2架)',
+      name: 'C-47 空中列車傘兵運輸機 (+2架)',
       cost: 210,
       era,
       badge: '全時代傘兵空降',
@@ -1592,8 +1422,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-jet-f9f',
         category: 'aircraft',
-        name: 'F9F-2 Panther Jet Flight (黑豹噴射戰機隊)',
-        nameZh: 'F9F 黑豹噴射戰鬥機 (+4架)',
+        name: 'F9F 黑豹噴射戰鬥機 (+4架)',
         cost: 240,
         era: 'era3',
         badge: '噴射空優',
@@ -1604,8 +1433,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-jet-f2h',
         category: 'aircraft',
-        name: 'F2H-2 Banshee Twin-Jet Flight (女妖噴射截擊機隊)',
-        nameZh: 'F2H 女妖雙發噴射機 (+4架)',
+        name: 'F2H 女妖雙發噴射機 (+4架)',
         cost: 260,
         era: 'era3',
         badge: '高空攔截',
@@ -1616,8 +1444,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-aew-ad3w',
         category: 'aircraft',
-        name: 'AD-3W Skyraider AEW Radar Sentry (空中預警機)',
-        nameZh: 'AD-3W 全域空中預警機 (+1架)',
+        name: 'AD-3W 全域空中預警機 (+1架)',
         cost: 280,
         era: 'era3',
         badge: '6500m千里眼',
@@ -1628,8 +1455,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-air-sar-ho3s1',
         category: 'aircraft',
-        name: 'HO3S-1 Dragonfly SAR Helicopter (搜救醫療直升機)',
-        nameZh: 'HO3S-1 搜救直升機 (+1架)',
+        name: 'HO3S-1 搜救直升機 (+1架)',
         cost: 220,
         era: 'era3',
         badge: '天使打撈',
@@ -1649,12 +1475,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       id: 'req-ground-infantry',
       category: 'ground',
       name:
-        era === 'era3'
-          ? 'USMC Marine Rifle Platoon (1950 M14/無後座力砲)'
-          : era === 'era2'
-          ? 'USMC Marine Assault Platoon (1945 M1/巴祖卡/噴火器)'
-          : 'USMC Marine Rifle Platoon (1942 M1903/BAR)',
-      nameZh:
         era === 'era3'
           ? '陸戰突擊步兵排 (1950 M14/無後座力砲)'
           : era === 'era2'
@@ -1682,10 +1502,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       category: 'ground',
       name:
         era === 'era3'
-          ? 'USMC M114 155mm Howitzer Battery (155mm 重榴彈砲排)'
-          : 'USMC M2A1 105mm Howitzer Battery (105mm 砲兵支援排)',
-      nameZh:
-        era === 'era3'
           ? 'M114 155mm 重榴彈砲排'
           : 'M2A1 105mm 砲兵支援排',
       cost: era === 'era3' ? 240 : 190,
@@ -1705,12 +1521,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       id: 'req-ground-armor',
       category: 'ground',
       name:
-        era === 'era3'
-          ? 'USMC M46 Patton Tank Platoon (M46 巴頓主力戰車排)'
-          : era === 'era2'
-          ? 'USMC M4A2 Sherman Tank Platoon (M4A2 薛曼中戰車排)'
-          : 'USMC M3 Stuart Light Tank Platoon (M3 斯圖亞特輕戰車排)',
-      nameZh:
         era === 'era3'
           ? 'M46 巴頓主力戰車排'
           : era === 'era2'
@@ -1738,12 +1548,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       category: 'ground',
       name:
         era === 'era3'
-          ? 'USMC LVT-P5 Buffalo (LVT-P5 兩棲重裝步戰排)'
-          : era === 'era2'
-          ? 'USMC LVT-4 Buffalo (LVT-4 水牛兩棲突擊排)'
-          : 'USMC LVT-1 Buffalo (LVT-1 水牛兩棲機步排)',
-      nameZh:
-        era === 'era3'
           ? 'LVT-P5 兩棲重裝步戰排'
           : era === 'era2'
           ? 'LVT-4 水牛兩棲突擊排'
@@ -1770,12 +1574,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       category: 'ground',
       name:
         era === 'era3'
-          ? 'USN Seabees Modernized Combat Engineers (現代化工兵營)'
-          : era === 'era2'
-          ? 'USN Seabees Assault Engineers (戰鬥工兵排)'
-          : 'USN Seabees Combat Engineers (工兵工程排)',
-      nameZh:
-        era === 'era3'
           ? '現代化工兵營 (Seabees 1950)'
           : era === 'era2'
           ? '戰鬥工兵排 (Seabees 1945)'
@@ -1794,8 +1592,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-m4-calliope',
         category: 'ground',
-        name: 'M4A3 Sherman Calliope T34 MLRS (雪曼管風琴火箭車)',
-        nameZh: 'M4A3 雪曼「管風琴」60聯裝火箭車',
+        name: 'M4A3 雪曼「管風琴」60聯裝火箭車',
         cost: 380,
         era: 'era2',
         badge: 'T34 60聯裝4.5吋火箭·飽和齊射',
@@ -1806,8 +1603,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-m7-priest',
         category: 'ground',
-        name: 'M7 Priest 105mm HMC (M7 牧師式自走砲)',
-        nameZh: 'M7 牧師式 105mm 自走砲',
+        name: 'M7 牧師式 105mm 自走砲',
         cost: 320,
         era: 'era2',
         badge: '105mm自走速射砲·反砲擊',
@@ -1820,8 +1616,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
     ground.push({
       id: 'req-ground-m44-spg',
       category: 'ground',
-      name: 'M44 155mm Self-Propelled Howitzer (M44 自走榴彈砲)',
-      nameZh: 'M44 155mm 自走榴彈砲',
+      name: 'M44 155mm 自走榴彈砲',
       cost: 390,
       era: 'era3',
       badge: '155mm巨砲·全自動反砲擊',
@@ -1840,12 +1635,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       id: 'req-fac-heavy-aa',
       category: 'installations',
       name:
-        era === 'era3'
-          ? '100mm 重型防空砲連 (雷達射控高射砲堡)'
-          : era === 'era2'
-          ? '重型防空砲堡 (127mm 雙聯高平砲 / 四聯博福斯)'
-          : '高地防空高射砲哨 (90mm M1 / 40mm 博福斯)',
-      nameZh:
         era === 'era3'
           ? '100mm 雷達射控防空砲堡'
           : era === 'era2'
@@ -1872,12 +1661,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       category: 'installations',
       name:
         era === 'era3'
-          ? '152mm 雙聯自動岸防加農砲台 (雷達射控)'
-          : era === 'era2'
-          ? '203mm 雙聯岸防重砲台 (加固混凝土掩體)'
-          : '高地要塞海防砲台 (140mm 單裝加農砲)',
-      nameZh:
-        era === 'era3'
           ? '152mm 自動岸防加農砲台'
           : era === 'era2'
           ? '203mm 雙聯岸防重砲台'
@@ -1903,11 +1686,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
     {
       id: 'req-fac-m1-240mm',
       category: 'installations',
-      name:
-        era === 'era1'
-          ? 'M1918 240mm Fixed Heavy Siege Howitzer (240mm 重型固定榴彈砲)'
-          : 'M1 240mm "Black Dragon" Fixed Heavy Howitzer (M1 240mm 黑龍固定重砲)',
-      nameZh: era === 'era1' ? 'M1918 240mm 固定式重砲台' : 'M1 240mm「黑龍」固定式重砲台',
+      name: era === 'era1' ? 'M1918 240mm 固定式重砲台' : 'M1 240mm「黑龍」固定式重砲台',
       cost: 340,
       era,
       badge: era === 'era1' ? '2800m超重砲台' : '3200-3400m黑龍重砲',
@@ -1928,12 +1707,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       id: 'req-fac-radar',
       category: 'installations',
       name:
-        era === 'era3'
-          ? 'AN/SPS-6 3D 遠程對空搜索雷達哨'
-          : era === 'era2'
-          ? '早期對空對海預警電探哨 (SK-2/二二號電探站)'
-          : '早期警戒對空電探哨 (CXAM/二一號電探站)',
-      nameZh:
         era === 'era3'
           ? 'AN/SPS-6 3D 遠程雷達站'
           : era === 'era2'
@@ -1960,12 +1733,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       category: 'installations',
       name:
         era === 'era3'
-          ? '核化防護深層地下坑道指揮所 (Era 3 戰略核心)'
-          : era === 'era2'
-          ? '鋼筋混凝土強化防空指揮所 (Era 2 指揮所)'
-          : '木質土木被覆掩體指揮所 (Era 1 指揮所)',
-      nameZh:
-        era === 'era3'
           ? '深層地下坑道指揮所'
           : era === 'era2'
           ? '鋼筋混凝土防空指揮所'
@@ -1991,12 +1758,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       category: 'installations',
       name:
         era === 'era3'
-          ? '地下恆溫戰略核武與油彈庫'
-          : era === 'era2'
-          ? '強化裝甲水泥戰備油彈庫'
-          : '木箱被覆戰備油彈堆置所',
-      nameZh:
-        era === 'era3'
           ? '地下戰略油彈庫'
           : era === 'era2'
           ? '強化水泥戰備油彈庫'
@@ -2019,12 +1780,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       category: 'installations',
       name:
         era === 'era3'
-          ? '現代化船舶電氣修理浮塢'
-          : era === 'era2'
-          ? '鋼質戰地修護浮塢碼頭'
-          : '前線應急修護浮塢碼頭',
-      nameZh:
-        era === 'era3'
           ? '現代化修護浮塢碼頭'
           : '戰地修護塢 (Repair Yard)',
       cost: 220,
@@ -2038,13 +1793,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
     {
       id: 'req-fac-pontoon-pier',
       category: 'installations',
-      name:
-        era === 'era3'
-          ? '重型全金屬浮箱人工棧橋港'
-          : era === 'era2'
-          ? '浮式人工棧橋港碼頭'
-          : '木質急造浮式人工棧橋港',
-      nameZh: '浮式人工棧橋港 (急造港口)',
+      name: '浮式人工棧橋港 (急造港口)',
       cost: 180,
       era,
       badge: '搶灘補給線',
@@ -2057,12 +1806,6 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       id: 'req-fac-major-port',
       category: 'installations',
       name:
-        era === 'era3'
-          ? '冷戰戰略海軍深水基地 (防波堤與油庫樞紐)'
-          : era === 'era2'
-          ? '正規深水軍港 (全功能水泥突堤碼頭)'
-          : '深水錨地與木造突堤碼頭',
-      nameZh:
         era === 'era3'
           ? '戰略海軍深水基地'
           : '正規深水軍港 (戰略基地港)',
@@ -2077,13 +1820,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
     {
       id: 'req-fac-supply-depot',
       category: 'installations',
-      name:
-        era === 'era3'
-          ? '現代化後勤維修與物資樞紐'
-          : era === 'era2'
-          ? '戰地輜重樞紐 (Supply Depot)'
-          : '野戰輜重糧抹彈藥堆積所',
-      nameZh: '戰地輜重樞紐 (Supply Depot)',
+      name: '戰地輜重樞紐 (Supply Depot)',
       cost: 150,
       era,
       badge: '軍需物資儲備',
@@ -2095,13 +1832,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
     {
       id: 'req-fac-field-hospital',
       category: 'installations',
-      name:
-        era === 'era3'
-          ? '現代化戰地後送防護野戰醫院'
-          : era === 'era2'
-          ? '戰地野戰醫院 (外科手術方艙)'
-          : '帳棚野戰救護站 (Field Hospital)',
-      nameZh: '戰地野戰醫院 (Field Hospital)',
+      name: '戰地野戰醫院 (Field Hospital)',
       cost: 160,
       era,
       badge: '傷員救護整編',
@@ -2113,13 +1844,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
     {
       id: 'req-fac-forward-airfield',
       category: 'installations',
-      name:
-        era === 'era3'
-          ? '混凝土全天候噴射機前進基地'
-          : era === 'era2'
-          ? 'PSP鋼板前進野戰機場 (Airfield)'
-          : '壓實珊瑚砂前進跑道航空站',
-      nameZh: '前進野戰機場 (Airfield)',
+      name: '前進野戰機場 (Airfield)',
       cost: 320,
       era,
       badge: '空戰前哨',
@@ -2131,13 +1856,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
     {
       id: 'req-fac-battalion-cp',
       category: 'installations',
-      name:
-        era === 'era3'
-          ? '前進合成戰鬥群營指揮所 (Battalion CP)'
-          : era === 'era2'
-          ? '營級作戰前進指揮所 (Battalion CP)'
-          : '陸戰隊營戰術指揮所 (Battalion CP)',
-      nameZh: '營指揮所 (Battalion CP)',
+      name: '營指揮所 (Battalion CP)',
       cost: 250,
       era,
       badge: '呼叫支援樞紐',
@@ -2150,6 +1869,3 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
 
   return [...ships, ...aircraft, ...ground, ...installations];
 }
-
-// Backwards-compatible export for default era 1
-export const REQUISITION_CATALOG: RequisitionItem[] = getRequisitionCatalog('era1');

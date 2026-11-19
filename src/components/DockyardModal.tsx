@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import { Ship, FleetUpgrades, Era } from '../types/game';
-import { Language, getTranslation } from '../game/i18n';
 import { Wrench, Shield, Plane, Crosshair, X, Sparkles, Anchor, Zap, Radar, ArrowRight } from 'lucide-react';
 import { soundEngine } from '../game/audio';
 
@@ -17,7 +16,6 @@ interface DockyardModalProps {
   onSetEra: (era: Era) => void;
   onNextSector?: () => void;
   canAdvance?: boolean;
-  lang?: Language;
 }
 
 export const DockyardModal: React.FC<DockyardModalProps> = ({
@@ -33,7 +31,6 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
   onSetEra,
   onNextSector,
   canAdvance = false,
-  lang = 'zh',
 }) => {
   useEffect(() => {
     if (!isOpen) return;
@@ -45,7 +42,6 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
-  const t = getTranslation(lang);
 
   const handleRepair = () => {
     if (stars >= 2) {
@@ -75,68 +71,56 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
   }[] = [
     {
       key: 'hullArmorLevel',
-      name: t.upgradeHullArmor,
+      name: '艦體鋼裝甲強化 (Hull Armor)',
       level: upgrades.hullArmorLevel,
       cost: upgrades.hullArmorLevel + 1,
       desc:
-        lang === 'zh'
-          ? '重裝甲雙層防禦，減少 15% 砲擊與魚雷實體傷害'
-          : 'Reinforced dual steel armor reduces shell and torpedo penetration by 15%',
+        '重裝甲雙層防禦，減少 15% 砲擊與魚雷實體傷害',
       icon: <Shield className="w-4 h-4 text-[#80DEEA]" />,
     },
     {
       key: 'aaFirepowerLevel',
-      name: t.upgradeAaFirepower,
+      name: '全艦防空火網延伸 (AA Barrage Range)',
       level: upgrades.aaFirepowerLevel,
       cost: upgrades.aaFirepowerLevel + 1,
       desc:
-        lang === 'zh'
-          ? '升級 VT 無線電近發引信，防空射程 +15% 並提升攔截率'
-          : 'VT proximity radar fuses extend fleet flak range by 15% and increase intercept lethality',
+        '升級 VT 無線電近發引信，防空射程 +15% 並提升攔截率',
       icon: <Crosshair className="w-4 h-4 text-[#FFD54F]" />,
     },
     {
       key: 'carrierCapacityLevel',
-      name: t.upgradeCarrierCapacity,
+      name: '飛行甲板機庫擴建 (Carrier Capacity)',
       level: upgrades.carrierCapacityLevel,
       cost: upgrades.carrierCapacityLevel + 2,
       desc:
-        lang === 'zh'
-          ? '改建雙層機庫與甲板繫留，每種戰備飛機上限 +2 架'
-          : 'Double-deck hangar expansion increases ready air wing reserves by +2 per type',
+        '改建雙層機庫與甲板繫留，每種戰備飛機上限 +2 架',
       icon: <Plane className="w-4 h-4 text-[#00E676]" />,
     },
     {
       key: 'radarRangeLevel',
-      name: t.upgradeRadarRange,
+      name: '高空搜索雷達強化 (Radar Detection)',
       level: upgrades.radarRangeLevel,
       cost: upgrades.radarRangeLevel + 1,
       desc:
-        lang === 'zh'
-          ? '升級 CXAM / SK 早期預警雷達，提前探測敵方遠程機群'
-          : 'CXAM and SK air search radar arrays detect inbound strike packages at 6,000m+',
+        '升級 CXAM / SK 早期預警雷達，提前探測敵方遠程機群',
       icon: <Zap className="w-4 h-4 text-[#4DD0E1]" />,
     },
     {
       key: 'artilleryDamageLevel',
-      name: t.upgradeArtilleryDamage,
+      name: '穿甲主砲彈道火控 (Gunfire Accuracy)',
       level: upgrades.artilleryDamageLevel,
       cost: upgrades.artilleryDamageLevel + 1,
       desc:
-        lang === 'zh'
-          ? '火控光學測距儀與穿甲彈藥強化，主砲殺傷力 +20%'
-          : 'Enhanced optical rangefinders and heavy AP shells boost naval gunfire damage by 20%',
+        '火控光學測距儀與穿甲彈藥強化，主砲殺傷力 +20%',
       icon: <Anchor className="w-4 h-4 text-amber-300" />,
     },
     {
       key: 'depthChargeSonarLevel',
-      name: t.upgradeDepthChargeSonar,
+      name: '主動聲納與反潛深彈 (Sonar & ASW)',
       level: upgrades.depthChargeSonarLevel,
       cost: upgrades.depthChargeSonarLevel + 1,
       desc:
-        lang === 'zh'
-          ? '升級主動艦殼聲納與深水炸彈／刺蝟砲裝藥，聲納半徑 +18%、反潛傷害 +20%'
-          : 'Upgrade active hull sonar arrays and ASW warheads (+18% sonar range, +20% ASW damage)',
+        '升級主動艦殼聲納與深水炸彈／刺蝟砲裝藥，聲納半徑 +18%、反潛傷害 +20%',
       icon: <Radar className="w-4 h-4 text-emerald-300" />,
     },
   ];
@@ -152,10 +136,10 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
             </div>
             <div>
               <div className="text-[10px] text-[#90CAF9] tracking-widest uppercase font-bold">
-                {t.dockyardSubtitle}
+                {'PEARL HARBOR NAVAL SHIPYARD & MODERNIZATION'}
               </div>
               <h2 className="text-base font-bold text-[#E0F7FA]">
-                {t.dockyardTitle}
+                珍珠港海軍造船廠
               </h2>
             </div>
           </div>
@@ -164,7 +148,7 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
             <div className="flex items-center gap-1.5 px-3 py-1 bg-[#0B1E34] border border-amber-500/70 rounded text-[#FFD54F] font-bold shadow-sm">
               <span>★</span>
               <span className="tabular-nums text-sm">{stars}</span>
-              <span className="text-[10px] text-[#90CAF9]">{t.stars}</span>
+              <span className="text-[10px] text-[#90CAF9]">功勳星徽</span>
             </div>
             <button
               onClick={onClose}
@@ -180,10 +164,10 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
           <div className="space-y-1">
             <div className="font-bold text-sm text-[#00E5FF] flex items-center gap-1.5">
               <Anchor className="w-4 h-4 text-cyan-300" />
-              <span>{t.repairFleet}</span>
+              <span>艦隊損害管制與大修</span>
             </div>
             <p className="text-[11px] text-slate-300 leading-relaxed">
-              {t.repairFleetDesc}
+              消耗功勳星徽，徹底修復所有戰艦裝甲並補滿航母機庫戰備飛機。
             </p>
           </div>
           <button
@@ -195,7 +179,7 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
                 : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
             }`}
           >
-            <span>{lang === 'zh' ? '損害管制大修 (消耗 2★)' : 'Overhaul Fleet (2★)'}</span>
+            <span>損害管制大修 (消耗 2★)</span>
           </button>
         </div>
 
@@ -203,10 +187,10 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
         <div className="bg-[#040C16] border border-[#1E3A5F] rounded-lg p-3.5 space-y-2.5 shadow-md">
           <div className="flex items-center gap-1.5 font-bold text-sm text-[#80DEEA]">
             <Sparkles className="w-4 h-4 text-[#FFD54F]" />
-            <span>{t.eraSelection}</span>
+            <span>特遣艦隊時代跨越</span>
           </div>
           <p className="text-[11px] text-slate-300">
-            {t.eraSelectionDesc}
+            切換太平洋戰爭前期、後期快速航母艦隊或冷戰噴射艦隊編制。
           </p>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 pt-1">
@@ -220,14 +204,12 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
                   : 'bg-[#071322] border-[#1E3A5F] hover:border-[#80DEEA]'
               }`}
             >
-              <div className="font-bold text-xs text-[#E0F7FA]">{t.era1}</div>
+              <div className="font-bold text-xs text-[#E0F7FA]">時代一 (1942)</div>
               <div className="text-[10px] text-amber-300 font-semibold mt-0.5">
                 ENTERPRISE CV-6
               </div>
               <div className="text-[9.5px] text-slate-400 mt-1 leading-relaxed">
-                {lang === 'zh'
-                  ? '野貓／無畏／破壞者／北卡羅來納'
-                  : 'F4F / SBD / TBD / North Carolina'}
+                野貓／無畏／破壞者／北卡羅來納
               </div>
             </button>
 
@@ -241,14 +223,12 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
                   : 'bg-[#071322] border-[#1E3A5F] hover:border-[#80DEEA]'
               }`}
             >
-              <div className="font-bold text-xs text-[#E0F7FA]">{t.era2}</div>
+              <div className="font-bold text-xs text-[#E0F7FA]">時代二 (1944-45)</div>
               <div className="text-[10px] text-amber-300 font-semibold mt-0.5">
                 ESSEX CV-9 FLEET
               </div>
               <div className="text-[9.5px] text-slate-400 mt-1 leading-relaxed">
-                {lang === 'zh'
-                  ? '地獄貓／海盜／俯衝者／復仇者／密蘇里'
-                  : 'F6F / F4U / SB2C / TBF / Missouri'}
+                地獄貓／海盜／俯衝者／復仇者／密蘇里
               </div>
             </button>
 
@@ -262,14 +242,12 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
                   : 'bg-[#071322] border-[#1E3A5F] hover:border-[#80DEEA]'
               }`}
             >
-              <div className="font-bold text-xs text-[#E0F7FA]">{t.era3}</div>
+              <div className="font-bold text-xs text-[#E0F7FA]">時代三 (1950-53)</div>
               <div className="text-[10px] text-cyan-300 font-semibold mt-0.5">
                 ORISKANY CV-34 JET
               </div>
               <div className="text-[9.5px] text-slate-400 mt-1 leading-relaxed">
-                {lang === 'zh'
-                  ? '黑豹／女妖／天襲者／衛士／米格走廊'
-                  : 'F9F / F2H / AD-1 / Guardian / MiG Alley'}
+                黑豹／女妖／天襲者／衛士／米格走廊
               </div>
             </button>
 
@@ -283,14 +261,12 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
                   : 'bg-[#071322] border-[#1E3A5F] hover:border-[#80DEEA]'
               }`}
             >
-              <div className="font-bold text-xs text-[#E0F7FA]">{t.era4}</div>
+              <div className="font-bold text-xs text-[#E0F7FA]">時代四 (1965-73)</div>
               <div className="text-[10px] text-emerald-300 font-semibold mt-0.5">
                 KITTY HAWK CV-63
               </div>
               <div className="text-[9.5px] text-slate-400 mt-1 leading-relaxed">
-                {lang === 'zh'
-                  ? '小鷹號／幽靈／入侵者／雷公／飛彈體系'
-                  : 'CV-63 / F-4 / A-6 / F-105 / Missiles'}
+                小鷹號／幽靈／入侵者／雷公／飛彈體系
               </div>
             </button>
 
@@ -304,14 +280,12 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
                   : 'bg-[#071322] border-[#1E3A5F] hover:border-[#80DEEA]'
               }`}
             >
-              <div className="font-bold text-xs text-[#E0F7FA]">{t.era5}</div>
+              <div className="font-bold text-xs text-[#E0F7FA]">時代五 (1973-91)</div>
               <div className="text-[10px] text-purple-300 font-semibold mt-0.5">
                 NIMITZ CVN-68
               </div>
               <div className="text-[9.5px] text-slate-400 mt-1 leading-relaxed">
-                {lang === 'zh'
-                  ? '神盾巡洋艦／F-14A 鳳凰／戰斧／白令海飽和'
-                  : 'Aegis / F-14A Phoenix / Tomahawk / ASW'}
+                神盾巡洋艦／F-14A 鳳凰／戰斧／白令海飽和
               </div>
             </button>
           </div>
@@ -321,7 +295,7 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
         <div className="bg-[#040C16] border border-[#1E3A5F] rounded-lg p-3.5 space-y-3 shadow-md">
           <div className="font-bold text-sm text-[#FFD54F] flex items-center gap-1.5">
             <Zap className="w-4 h-4 text-amber-400" />
-            <span>{t.upgradesTitle}</span>
+            <span>艦隊科技與戰術現代化研發</span>
           </div>
 
           <div className="space-y-2">
@@ -352,7 +326,7 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
                       : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
                   }`}
                 >
-                  <span>{lang === 'zh' ? `升級 (${item.cost}★)` : `Upgrade (${item.cost}★)`}</span>
+                  <span>{`升級 (${item.cost}★)`}</span>
                 </button>
               </div>
             ))}
@@ -369,7 +343,7 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
               }}
               className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded transition-colors shadow flex items-center gap-1.5"
             >
-              <span>{t.nextSector}</span>
+              <span>晉級下一作戰分區 (NEXT SECTOR)</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           )}
@@ -377,7 +351,7 @@ export const DockyardModal: React.FC<DockyardModalProps> = ({
             onClick={onClose}
             className="px-6 py-2 bg-[#1976D2] hover:bg-[#1565C0] text-white font-bold rounded transition-colors shadow"
           >
-            {lang === 'zh' ? '完成並返回 (CLOSE)' : 'Done (Close)'}
+            完成並返回 (CLOSE)
           </button>
         </div>
       </div>

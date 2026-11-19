@@ -434,7 +434,6 @@ export interface PayloadOption {
   id: AircraftPayloadType;
   role: AircraftRole;
   name: string;
-  nameZh: string;
   desc: string;
   badge: string;
   era: 'era1' | 'era2' | 'era3' | 'era4' | 'era5' | 'both' | 'all';
@@ -452,8 +451,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   clean_guns: {
     id: 'clean_guns',
     role: 'fighter',
-    name: 'Clean Air Superiority (CAP)',
-    nameZh: '純空優截擊 (無外掛)',
+    name: '純空優截擊 (無外掛)',
     desc: '僅攜帶機槍/機砲與流線副油箱。航速最快，專職奪取制空權與阻截敵轟炸機隊。',
     badge: 'CAP 空優',
     era: 'both',
@@ -469,8 +467,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   hvar_rockets: {
     id: 'hvar_rockets',
     role: 'fighter',
-    name: 'HVAR 5" High Velocity Rockets',
-    nameZh: 'HVAR 5吋航空火箭彈',
+    name: 'HVAR 5吋航空火箭彈',
     desc: '掛載 8 枚高速火箭。500米超遠距掠海連射，重創敵方驅逐艦、防空陣地與碉堡。',
     badge: '8x 火箭',
     era: 'both',
@@ -486,8 +483,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   bomb_500: {
     id: 'bomb_500',
     role: 'fighter',
-    name: '500lb GP Bomb Strike',
-    nameZh: '500磅通用航彈 (對海/對地攻擊)',
+    name: '500磅通用航彈 (對海/對地攻擊)',
     desc: '機腹掛載 500 磅通用航彈。各式戰機皆可改掛！高空投擲命中率受風速與機動影響，但一旦直接命中將造成毀滅性重創！',
     badge: '500lb 航彈',
     era: 'both',
@@ -503,8 +499,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   bomb_1000: {
     id: 'bomb_1000',
     role: 'dive_bomber',
-    name: '1,000lb Armor-Piercing Bomb',
-    nameZh: '1000磅穿甲炸彈 (重型打擊)',
+    name: '1000磅穿甲炸彈 (重型打擊)',
     desc: '海軍標準穿甲航彈。高空俯衝或重裝水平轟炸，直接命中穿透戰艦裝甲甲板引爆彈藥庫！直擊威力極為致命！',
     badge: '1000lb 穿甲',
     era: 'both',
@@ -520,8 +515,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   bombs_dual_500: {
     id: 'bombs_dual_500',
     role: 'dive_bomber',
-    name: 'Dual 500lb Bombs',
-    nameZh: '雙聯 500磅航彈 (面狀覆蓋)',
+    name: '雙聯 500磅航彈 (面狀覆蓋)',
     desc: '雙枚 500 磅通用航彈。投彈波及面廣，迅速壓制敵方驅逐艦、防空陣地與碉堡。',
     badge: '2x 500lb 雙彈',
     era: 'both',
@@ -537,8 +531,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   bomb_1600: {
     id: 'bomb_1600',
     role: 'dive_bomber',
-    name: '1,600lb Super Armor-Piercing',
-    nameZh: '1600磅超重型穿甲彈 (終極毀滅)',
+    name: '1600磅超重型穿甲彈 (終極毀滅)',
     desc: '針對巨型主力艦設計的重型炸彈。毀滅性破壞力，直擊穿透大和級與重裝甲航母！',
     badge: '1600lb 超重AP',
     era: 'era2',
@@ -554,8 +547,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   aerial_torpedo: {
     id: 'aerial_torpedo',
     role: 'torpedo_bomber',
-    name: 'Mk 13 Aerial Torpedo',
-    nameZh: 'Mk 13 高速航空魚雷 (反艦重創)',
+    name: 'Mk 13 高速航空魚雷 (反艦重創)',
     desc: '掠海釋放重型航空魚雷。改良推進機構大幅提升水中航速！從水線下直穿艦底裝甲，忽略65%裝甲造成毀滅性結構破壞。',
     badge: 'Mk13 高速魚雷',
     era: 'both',
@@ -571,8 +563,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   depth_bombs: {
     id: 'depth_bombs',
     role: 'torpedo_bomber',
-    name: '4x ASW Depth Charges / Coastal Strike',
-    nameZh: '4聯裝航空深水炸彈 (反潛壓制)',
+    name: '4聯裝航空深水炸彈 (反潛壓制)',
     desc: '機腹掛載 4 枚航空深水炸彈。連續投擲覆蓋水面，全面獵殺伏擊潛艇與近海要塞。',
     badge: '4x 深彈',
     era: 'both',
@@ -588,8 +579,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   scout_fuel: {
     id: 'scout_fuel',
     role: 'scout',
-    name: 'Long-Range Recon & Artillery Spotting',
-    nameZh: '長程空中觀測 (主砲校射引導)',
+    name: '長程空中觀測 (主砲校射引導)',
     desc: '加裝長程副油箱與偵察相機。揭開群島大範圍迷霧，並為友軍戰艦巡洋艦提供 +25% 射程與校射修正！',
     badge: '長程校射',
     era: 'both',
@@ -605,8 +595,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   scout_depth_charge: {
     id: 'scout_depth_charge',
     role: 'scout',
-    name: 'Light ASW Depth Charge Patrol',
-    nameZh: '輕型反潛巡邏武裝',
+    name: '輕型反潛巡邏武裝',
     desc: '雙浮筒下掛載 2 枚輕型航空深水炸彈。偵察同時兼具反潛巡邏自立攻擊能力。',
     badge: '輕反潛',
     era: 'both',
@@ -622,8 +611,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   bombs_carpet_250: {
     id: 'bombs_carpet_250',
     role: 'level_bomber',
-    name: '16x 250lb Carpet Bombing Strike',
-    nameZh: '16-24枚 250磅地毯式地表轟炸',
+    name: '16-24枚 250磅地毯式地表轟炸',
     desc: '重型轟炸機專用！機腹彈艙滿載 16-24 枚高爆航彈連續投擲，大面積地毯式覆蓋灘頭、步兵、砲兵陣地與港口！',
     badge: '地毯轟炸',
     era: 'both',
@@ -639,8 +627,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   bombs_quad_500: {
     id: 'bombs_quad_500',
     role: 'level_bomber',
-    name: '8-16x 500lb General Purpose Cluster',
-    nameZh: '8-16枚 500磅通用航彈集群',
+    name: '8-16枚 500磅通用航彈集群',
     desc: '重轟炸機/雙發攻擊機通用！8-16枚通用航彈連續密集轟炸，兼具貫穿力與毀滅範圍。',
     badge: '500lb 彈群',
     era: 'both',
@@ -656,8 +643,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   bombs_dual_1000: {
     id: 'bombs_dual_1000',
     role: 'level_bomber',
-    name: '4-8x 1,000lb Armor Piercing Salvo',
-    nameZh: '4-8枚 1000磅穿甲重型炸彈',
+    name: '4-8枚 1000磅穿甲重型炸彈',
     desc: '重型轟炸機穿甲專屬！自萬呎高空呼嘯落下，貫穿戰艦與要塞厚重裝甲！',
     badge: '千磅重轟',
     era: 'both',
@@ -673,8 +659,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   bomb_1600_ap: {
     id: 'bomb_1600_ap',
     role: 'level_bomber',
-    name: '2-4x 1,600lb Super AP Blockbusters',
-    nameZh: '2-4枚 1600磅超重型穿甲巨彈',
+    name: '2-4枚 1600磅超重型穿甲巨彈',
     desc: '美軍最大口徑航空穿甲彈！專打超級戰列艦核心裝甲艙與地下永久要塞工事！',
     badge: '1600lb 巨型穿甲',
     era: 'era2',
@@ -690,8 +675,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   mixed_bombs_rockets: {
     id: 'mixed_bombs_rockets',
     role: 'attacker',
-    name: 'Mixed HVAR Rockets & 500lb Bombs',
-    nameZh: '火箭彈與航彈混編掛載 (雙重打擊)',
+    name: '火箭彈與航彈混編掛載 (雙重打擊)',
     desc: '攻擊機雙重任務配置！4枚 HVAR 5吋火箭遠距壓制防空，隨後俯衝投下 2枚 500磅通用炸彈滅頂直擊！',
     badge: '火箭+炸彈 混編',
     era: 'both',
@@ -707,8 +691,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   asw_depth_bombs: {
     id: 'asw_depth_bombs',
     role: 'attacker',
-    name: 'Heavy ASW Depth Bomb Cluster',
-    nameZh: '重型航空深水炸彈群 (反潛特化)',
+    name: '重型航空深水炸彈群 (反潛特化)',
     desc: '攻擊機與魚雷機反潛特化！6枚重型反潛深彈連續投放，水下震盪激波全面撕裂伏擊潛水艦！',
     badge: '6x 重型深彈',
     era: 'both',
@@ -724,8 +707,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   tiny_tim_rocket: {
     id: 'tiny_tim_rocket',
     role: 'attacker',
-    name: '11.75" Tiny Tim Heavy Penetration Rocket',
-    nameZh: '小蒂姆 11.75吋 重型穿甲火箭',
+    name: '小蒂姆 11.75吋 重型穿甲火箭',
     desc: '二戰末期至韓戰美軍最大型空射反艦/破障火箭！重達1,284磅，500磅穿甲戰鬥部可貫穿花崗岩碉堡與戰列艦主裝甲。',
     badge: '小蒂姆 穿甲火箭',
     era: 'era3',
@@ -741,8 +723,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   napalm_canister: {
     id: 'napalm_canister',
     role: 'fighter',
-    name: 'Napalm Firebomb Canister Strike',
-    nameZh: '凝固汽油燃燒彈 (廣域火海)',
+    name: '凝固汽油燃燒彈 (廣域火海)',
     desc: '韓戰美軍海空軍廣泛使用之凝固汽油燃燒罐。投擲後化為烈焰火海，長達數十秒持續灼燒敵方坑道、陣地與露天砲位！',
     badge: '凝固汽油彈',
     era: 'era3',
@@ -758,8 +739,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   asw_torpedo: {
     id: 'asw_torpedo',
     role: 'torpedo_bomber',
-    name: 'Mk 24/34 Acoustic Homing ASW Torpedo',
-    nameZh: '聲自導反潛航空魚雷 (主動鎖定)',
+    name: '聲自導反潛航空魚雷 (主動鎖定)',
     desc: '冷戰初期聲自導反潛魚雷。入水後自動搜尋水下螺旋槳噪聲進行主動導引鎖定，精準追蹤敵潛艇！',
     badge: '聲自導反潛魚雷',
     era: 'era3',
@@ -775,8 +755,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   bomb_2000: {
     id: 'bomb_2000',
     role: 'dive_bomber',
-    name: '2,000lb Low-Drag General Purpose Heavy Bomb',
-    nameZh: '2000磅低阻通用重型炸彈 (巨型爆破)',
+    name: '2000磅低阻通用重型炸彈 (巨型爆破)',
     desc: '巨型空投炸彈，巨大的裝藥量能造成極大範圍震盪與破壞，直接摧毀深水港口突堤與重型岸防砲台。',
     badge: '2000lb 巨炸彈',
     era: 'era3',
@@ -792,8 +771,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   tactical_nuke: {
     id: 'tactical_nuke',
     role: 'level_bomber',
-    name: 'Mk 4 / Mk 6 Tactical Nuclear Bomb',
-    nameZh: 'Mk 4 / Mk 6 戰術原子彈 (☢️ 4500 CP 戰略打擊)',
+    name: 'Mk 4 / Mk 6 戰術原子彈 (☢️ 4500 CP 戰略打擊)',
     desc: '冷戰戰略威懾終極兵器。自 B-29 超高空彈艙投下，於目標島嶼上空引爆毀滅性核分裂反應，瞬間汽化全島要塞工事與守備部隊！伴隨極高政治代價（消耗 4,500 CP）。',
     badge: '☢️ 4500 CP 戰術核武',
     era: 'era3',
@@ -809,8 +787,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   aim9_sidewinder: {
     id: 'aim9_sidewinder',
     role: 'fighter',
-    name: 'AIM-9 Sidewinder IR Heat-Seeking Missile',
-    nameZh: 'AIM-9 響尾蛇紅外線導引空空飛彈',
+    name: 'AIM-9 響尾蛇紅外線導引空空飛彈',
     desc: '近身格鬥王者。鎖定敵機噴射尾氣，發射後自動追蹤敵機，命中即造成致命破片毀滅！',
     badge: 'AIM-9 響尾蛇',
     era: 'era4',
@@ -826,8 +803,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   aim7_sparrow: {
     id: 'aim7_sparrow',
     role: 'fighter',
-    name: 'AIM-7 Sparrow SARH Long-Range Missile',
-    nameZh: 'AIM-7 麻雀半主動雷達導引空空飛彈',
+    name: 'AIM-7 麻雀半主動雷達導引空空飛彈',
     desc: '超視距（BVR）雷達截擊導引飛彈。可用於超遠程獵殺敵戰機，並可攔截逼近的空艦反艦飛彈！',
     badge: 'AIM-7 麻雀',
     era: 'era4',
@@ -843,8 +819,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   agm12_bullpup: {
     id: 'agm12_bullpup',
     role: 'attacker',
-    name: 'AGM-12 Bullpup Radio-Guided Air-to-Surface Missile',
-    nameZh: 'AGM-12 犢牛犬無線電導引空艦/空地飛彈',
+    name: 'AGM-12 犢牛犬無線電導引空艦/空地飛彈',
     desc: '第一代實戰化精準導引反艦飛彈。飛行員以手動操縱桿指揮飛彈撲向敵艦水線或重型岸防工事，威力巨大！',
     badge: '犢牛犬空艦飛彈',
     era: 'era4',
@@ -860,8 +835,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   agm45_shrike: {
     id: 'agm45_shrike',
     role: 'attacker',
-    name: 'AGM-45 Shrike Anti-Radiation Missile (ARM)',
-    nameZh: 'AGM-45 百靈鳥反輻射飛彈 (防空雷達壓制)',
+    name: 'AGM-45 百靈鳥反輻射飛彈 (防空雷達壓制)',
     desc: '野鼬（Wild Weasel）任務核心！鎖定敵方 Fan Song 雷達陣地之電磁輻射自動尋標，癱瘓防空飛彈指揮網！',
     badge: 'AGM-45 反輻射',
     era: 'era4',
@@ -877,8 +851,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   agm62_walleye: {
     id: 'agm62_walleye',
     role: 'dive_bomber',
-    name: 'AGM-62 Walleye TV-Guided Glide Bomb',
-    nameZh: 'AGM-62 鼓眼魚電視導引精確滑翔炸彈',
+    name: 'AGM-62 鼓眼魚電視導引精確滑翔炸彈',
     desc: '電視光學對比鎖定滑翔炸彈。高空投下後電視鏡頭鎖定目標，精準撲向指揮所、橋樑與港口設施！',
     badge: '電視導引滑翔彈',
     era: 'era4',
@@ -894,8 +867,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   bombs_snakeye_retarded: {
     id: 'bombs_snakeye_retarded',
     role: 'attacker',
-    name: 'Mk 82 Snakeye High-Drag Retarded Bombs',
-    nameZh: 'Mk 82 蛇眼高阻減速炸彈組 (超低空高速突防)',
+    name: 'Mk 82 蛇眼高阻減速炸彈組 (超低空高速突防)',
     desc: '折疊減速傘片翼面設計。攻擊機以超低空高速掠過敵艦或陣地投擲，炸彈展開十字阻力翼減速，防止破片傷及本機。',
     badge: '6x 蛇眼減速彈',
     era: 'era4',
@@ -911,8 +883,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   b52_megaton_carpet: {
     id: 'b52_megaton_carpet',
     role: 'level_bomber',
-    name: 'B-52 BUFF Arc Light 108-Bomb Carpet Strike',
-    nameZh: 'B-52 弧光行動 108枚重型地毯式航彈走廊',
+    name: 'B-52 弧光行動 108枚重型地毯式航彈走廊',
     desc: '傳奇 B-52D 巨型同溫層堡壘！內置加外掛共 108 枚 500lb / 750lb 航彈，在目標島嶼劃出 2000 米地動山搖之毀滅走廊！',
     badge: '108枚 弧光走廊',
     era: 'era4',
@@ -928,8 +899,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   ffar_rockets_pod: {
     id: 'ffar_rockets_pod',
     role: 'attacker',
-    name: '70mm FFAR / 20mm Vulcan Gun Pods',
-    nameZh: '70mm 密集火箭巢與 20mm 機砲莢艙',
+    name: '70mm 密集火箭巢與 20mm 機砲莢艙',
     desc: '眼鏡蛇攻擊直升機與前進空中管制機專屬。高密度火箭齊射與每分鐘 6000 發火神旋轉機砲，壓制地面與水上快艇。',
     badge: '火箭巢+機砲',
     era: 'era4',
@@ -945,8 +915,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   helo_assault_troops: {
     id: 'helo_assault_troops',
     role: 'rescue',
-    name: 'USMC Heliborne Vertical Envelopment Air Assault',
-    nameZh: '海軍陸戰隊直升機垂直包圍空中突擊隊',
+    name: '海軍陸戰隊直升機垂直包圍空中突擊隊',
     desc: 'CH-46 海騎士或 UH-1 休伊直升機搭載全副武裝陸戰隊空中突擊班。不受灘頭地形限制，直接機降至島上任意內陸高地或敵後！',
     badge: '垂直機動突擊',
     era: 'era4',
@@ -962,8 +931,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   c1_paratroopers: {
     id: 'c1_paratroopers',
     role: 'scout',
-    name: 'C-1 Trader Airborne Parachute Assault Drop',
-    nameZh: 'C-1 貿易商型 傘兵高空戰術空投突擊',
+    name: 'C-1 貿易商型 傘兵高空戰術空投突擊',
     desc: '航艦起飛之雙發艦載運輸機。飛抵目標島嶼上空連續釋放傘兵分隊，白色降落傘群自天而降，突擊敵後防線！',
     badge: 'C-1 傘兵空降',
     era: 'era4',
@@ -979,8 +947,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   asw_acoustic_torpedo: {
     id: 'asw_acoustic_torpedo',
     role: 'torpedo_bomber',
-    name: 'Mk 46 Acoustic Homing ASW Torpedo',
-    nameZh: 'Mk 46 主動聲自導航空反潛魚雷',
+    name: 'Mk 46 主動聲自導航空反潛魚雷',
     desc: 'SH-2 海妖直升機與 P-3C 獵戶座專用主動聲自導航空反潛魚雷。入水降落傘脫離後自動啟動主動高頻聲納，追蹤敵潛艇！',
     badge: 'Mk 46 航空聲導魚雷',
     era: 'era4',
@@ -996,8 +963,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   b52_megaton_nuke: {
     id: 'b52_megaton_nuke',
     role: 'level_bomber',
-    name: 'B28 / B41 Megaton Strategic Thermonuclear Weapon',
-    nameZh: 'B28 / B41 戰略百萬噸級熱核重彈 (☢️ 900 CP)',
+    name: 'B28 / B41 戰略百萬噸級熱核重彈 (☢️ 900 CP)',
     desc: 'B-52 巨型同溫層堡壘專屬平流層萬噸級熱核打擊武器。萬米高空投擲，產生毀滅性熱核反應與 EMP 電磁脈衝，瞬間汽化方圓 750m 內一切陣地！消耗 900 CP，將觸發 OPFOR 相互保證毀滅 (MAD) 核報復！',
     badge: '☢️ 900 CP 戰略熱核',
     era: 'era5',
@@ -1013,8 +979,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   tactical_b61_nuke: {
     id: 'tactical_b61_nuke',
     role: 'attacker',
-    name: 'B61 / B43 Variable-Yield Tactical Nuclear Bomb',
-    nameZh: 'B61 / B43 戰術核炸彈 (☢️ 4000 CP 低空投擲)',
+    name: 'B61 / B43 戰術核炸彈 (☢️ 4000 CP 低空投擲)',
     desc: 'F-4、A-6、A-4 戰轟機專用低空核武器。配備尼龍減速傘，可在極低高度高速投擲後安全拉升脫離，精準汽化要塞工事！消耗 4,000 CP。',
     badge: '☢️ 4000 CP 戰術核武',
     era: 'era4',
@@ -1030,8 +995,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   opfor_tactical_nuke: {
     id: 'opfor_tactical_nuke',
     role: 'level_bomber',
-    name: 'RDS-4 / 8U49 Soviet Tactical Nuclear Strike',
-    nameZh: 'RDS-4 蘇聯特遣戰術核突襲 (OPFOR 絕望反擊)',
+    name: 'RDS-4 蘇聯特遣戰術核突襲 (OPFOR 絕望反擊)',
     desc: 'OPFOR 於總部危急時發動之絕望核反擊，由 Il-28 突破防線投向特遣隊！',
     badge: '☢️ 敵軍絕望核武',
     era: 'era4',
@@ -1047,8 +1011,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   aim7_aim9_combo: {
     id: 'aim7_aim9_combo',
     role: 'fighter',
-    name: 'AIM-7 Sparrow + AIM-9 Sidewinder Dual CAP',
-    nameZh: '麻雀+響尾蛇 雙重空優混編 (BVR超視距+格鬥)',
+    name: '麻雀+響尾蛇 雙重空優混編 (BVR超視距+格鬥)',
     desc: '海軍與空軍幽靈戰機全天候標準空優配置！配備 2 枚 AIM-7 麻雀半主動雷達導引飛彈（2400m 遠程攔截）及 2 枚 AIM-9 響尾蛇紅外導引飛彈（近戰纏鬥），兼顧超視距與近身格鬥！',
     badge: '麻雀+響尾蛇 雙制空',
     era: 'era4',
@@ -1064,8 +1027,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   gbu10_laser_paveway: {
     id: 'gbu10_laser_paveway',
     role: 'attacker',
-    name: 'GBU-10 Paveway I 2,000lb Laser-Guided Bomb',
-    nameZh: 'GBU-10 鋪路雷射導引穿甲炸彈 (外科手術式打擊)',
+    name: 'GBU-10 鋪路雷射導引穿甲炸彈 (外科手術式打擊)',
     desc: '雷射導引精確打擊劃時代兵器！由機載雷射標定儀鎖定地面核心目標，重型2000磅穿甲戰鬥部精準沿雷達反射光束直撲要害，重創地下指揮所、大型岸防砲台與防空雷達！',
     badge: 'GBU-10 雷射導引',
     era: 'era4',
@@ -1081,8 +1043,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   cbu_cluster_bombs: {
     id: 'cbu_cluster_bombs',
     role: 'attacker',
-    name: 'CBU-24 / Mk 20 Rockeye Cluster Submunitions',
-    nameZh: 'CBU-24 / Rockeye 廣域集束子母彈群',
+    name: 'CBU-24 / Rockeye 廣域集束子母彈群',
     desc: '廣域面狀壓制彈藥。高空投下後外殼炸開，數百枚高爆子彈藥形成覆蓋網，瞬間摧毀灘頭雷達、露天高射機槍陣地與輕裝步兵連！',
     badge: 'CBU 集束子母彈',
     era: 'era4',
@@ -1098,8 +1059,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   blu27_napalm: {
     id: 'blu27_napalm',
     role: 'attacker',
-    name: 'BLU-27 750lb Napalm Firebomb Canister Salvo',
-    nameZh: 'BLU-27 凝固汽油燃燒彈 (叢林火海焦土覆蓋)',
+    name: 'BLU-27 凝固汽油燃燒彈 (叢林火海焦土覆蓋)',
     desc: '經典越戰近接空中支援燃燒彈！低空投擲後引燃鋁熱凝固汽油，造成長達75m的滾滾烈焰火海，持續焚燒叢林碉堡、防空掩體與坑道守軍！',
     badge: 'BLU-27 凝固汽油',
     era: 'era4',
@@ -1115,8 +1075,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   agm78_standard_arm: {
     id: 'agm78_standard_arm',
     role: 'attacker',
-    name: 'AGM-78 Standard ARM Long-Range Anti-Radiation Missile',
-    nameZh: 'AGM-78 標準長程反輻射飛彈 (野鼬3600m防空壓制)',
+    name: 'AGM-78 標準長程反輻射飛彈 (野鼬3600m防空壓制)',
     desc: '海軍標準防空飛彈改裝之重型反輻射導引飛彈！射程高達 3600m，具備記憶尋標雷達，即使敵 Fan Song 雷達關機仍可依舊鎖定並將雷達天線粉碎！',
     badge: 'AGM-78 超長程ARM',
     era: 'era4',
@@ -1132,8 +1091,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   mer_iron_bombs: {
     id: 'mer_iron_bombs',
     role: 'attacker',
-    name: 'MER-7 Heavy Multiple Ejector Rack 18-24x 500lb Ripple',
-    nameZh: 'MER 多聯掛架 18-24枚 500lb 通用高爆彈群',
+    name: 'MER 多聯掛架 18-24枚 500lb 通用高爆彈群',
     desc: 'F-105 雷公、A-6 入侵者與 B-52 特有重載配置！多聯裝彈架（MER）於目標上空以 0.1 秒間隔連環投下 18 枚 500 磅低阻炸彈，撕裂整個防禦走廊！',
     badge: 'MER 18枚彈幕',
     era: 'era4',
@@ -1149,8 +1107,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   rgm84_harpoon: {
     id: 'rgm84_harpoon',
     role: 'attacker',
-    name: 'AGM-84 / RGM-84 Harpoon Anti-Ship Cruise Missile',
-    nameZh: '魚叉主動雷達導引反艦巡弋飛彈 (掠海突防)',
+    name: '魚叉主動雷達導引反艦巡弋飛彈 (掠海突防)',
     desc: '海軍全天候掠海反艦主力飛彈！主動雷達終端尋標，具備末端跳躍俯衝穿甲打擊能力，能重創一切水面驅逐艦與巡洋艦！',
     badge: '魚叉反艦飛彈',
     era: 'era5',
@@ -1166,8 +1123,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   aim54_phoenix: {
     id: 'aim54_phoenix',
     role: 'fighter',
-    name: 'AIM-54 Phoenix Long-Range Air-to-Air Missile',
-    nameZh: 'AIM-54 鳳凰超遠程主動雷達空空飛彈 (BVR/反飛彈)',
+    name: 'AIM-54 鳳凰超遠程主動雷達空空飛彈 (BVR/反飛彈)',
     desc: 'F-14A 雄貓戰鬥機專屬之長程空空霸主！配合 AWG-9 雷達射程達 5000m，可同時截擊超音速轟炸機並摧毀空中來襲之敵方反艦巡弋飛彈！',
     badge: '鳳凰超長程BVR',
     era: 'era5',
@@ -1183,8 +1139,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   p700_granit: {
     id: 'p700_granit',
     role: 'attacker',
-    name: 'P-700 Granit (SS-N-19 Shipwreck) Heavy Supersonic AShM',
-    nameZh: 'P-700 花崗岩超音速重型反艦巡弋飛彈 (蜂群飽和突防)',
+    name: 'P-700 花崗岩超音速重型反艦巡弋飛彈 (蜂群飽和突防)',
     desc: '蘇聯海軍基洛夫級與奧斯卡級專屬重型反艦巡弋飛彈！7公噸巨型彈體以2.5馬赫高速群體突防，配備蜂群領航演算法，毀滅航艦戰鬥群！',
     badge: 'P-700 花崗岩超音速',
     era: 'era5',
@@ -1200,8 +1155,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   kh22_burya: {
     id: 'kh22_burya',
     role: 'level_bomber',
-    name: 'Kh-22 Burya (AS-4 Kitchen) Long-Range Supersonic AShM',
-    nameZh: 'Kh-22 暴風雨超音速高空俯衝重型反艦飛彈',
+    name: 'Kh-22 暴風雨超音速高空俯衝重型反艦飛彈',
     desc: 'Tu-22M3 逆火與 Tu-95 專屬反艦殺手！自高空釋放後加速至 4 馬赫，以大角度天頂俯衝攻擊航艦甲板，常規裝甲難以防禦！',
     badge: 'Kh-22 暴風雨',
     era: 'era5',
@@ -1217,8 +1171,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   agm65_maverick: {
     id: 'agm65_maverick',
     role: 'attacker',
-    name: 'AGM-65 Maverick Precision Guided Missile',
-    nameZh: 'AGM-65 小牛電視/紅外精確導引空地飛彈',
+    name: 'AGM-65 小牛電視/紅外精確導引空地飛彈',
     desc: 'A-10A 疣豬與 F/A-18A 裝甲殺手！光學電視/紅外成像導引，射程遠精確直擊敵軍主力戰車、防空陣地與加固機堡！',
     badge: '小牛精確飛彈',
     era: 'era5',
@@ -1234,8 +1187,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   agm88_harm: {
     id: 'agm88_harm',
     role: 'attacker',
-    name: 'AGM-88 HARM High-Speed Anti-Radiation Missile',
-    nameZh: 'AGM-88 高速反輻射飛彈 (野鼬防空獵殺)',
+    name: 'AGM-88 高速反輻射飛彈 (野鼬防空獵殺)',
     desc: 'EA-6B 與 F/A-18A 防空壓制利刃！極速 3.5 馬赫撲向敵方雷達信號發射源，在敵方防空飛彈尚未起飛前即摧毀其雷達天線！',
     badge: 'AGM-88 HARM',
     era: 'era5',
@@ -1251,8 +1203,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   tow_missiles: {
     id: 'tow_missiles',
     role: 'attacker',
-    name: 'BGM-71 TOW Wire-Guided Heavy Anti-Tank Missiles',
-    nameZh: 'BGM-71 拖式重型線導反裝甲飛彈',
+    name: 'BGM-71 拖式重型線導反裝甲飛彈',
     desc: 'AH-1W 超級眼鏡蛇武裝直升機專屬反裝甲主力！操作員十字瞄準線追蹤，精準破壞敵主力戰車與岸防工事！',
     badge: '拖式反裝甲飛彈',
     era: 'era5',
@@ -1268,8 +1219,7 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   hellfire_missiles: {
     id: 'hellfire_missiles',
     role: 'attacker',
-    name: 'AGM-114 Hellfire Semi-Active Laser Missiles',
-    nameZh: 'AGM-114 地獄火雷射導引反戰車飛彈',
+    name: 'AGM-114 地獄火雷射導引反戰車飛彈',
     desc: 'AH-64A 阿帕契主力毀滅武器！雷射半主動尋標，具備高拋弧線攻頂能力，穿透任何現代主力戰車車頂薄弱裝甲！',
     badge: '地獄火攻頂飛彈',
     era: 'era5',
@@ -1380,7 +1330,6 @@ export type AircraftModel =
   | 'su7'        // Su-7 Fitter (蘇聯空軍超音速強擊機 · 30mm機砲 / 500kg炸彈 / 57mm火箭)
   | 'il28'       // IL-28 Beagle (雙噴射輕轟炸機 · 魚雷/反艦火箭)
   | 'tu16'       // Tu-16 Badger (蘇聯海軍航空兵長程飛彈轟炸機 · KSR-5 / AS-5 重型超音速反艦飛彈)
-  | 'komar_ptg' // Komar 級飛彈快艇 (P-15 冥河反艦飛彈)
   // Era 5 BLUFOR Carrier Air Wing (現代神盾與超視距航母大洋艦隊 1973-1991)
   | 'f14a'   // F-14A Tomcat (雄貓可變後掠翼重截擊機 · AWG-9 雷達 · AIM-54 鳳凰長程飛彈/反飛彈)
   | 'fa18a'  // F/A-18A Hornet (大黃蜂多用途戰鬥攻擊機 · 9M 響尾蛇 / 麻雀 / 魚叉)
@@ -1431,7 +1380,7 @@ export type AircraftModel =
   | 'mirage3'     // Dassault Mirage IIIE (幻象三型無尾三角翼截擊機 · R.530 飛彈)
   | 'hunter_fga9' // Hawker Hunter FGA.9 (獵鷹式經典攻擊機 · 4x 30mm 亞丁重砲)
   // Era 5 Allied AI Aircraft (晚期冷戰北約多國空軍 · 嚴格止步於 SARH 半主動雷達導引)
-  | 'f4f'         // F-4F Phantom II (西德空軍幽靈二式 · AN/APQ-120雷達 · 4x AIM-7F 麻雀 SARH)
+  | 'f4f_phantom' // F-4F Phantom II (西德空軍幽靈二式 · AN/APQ-120雷達 · 4x AIM-7F 麻雀 SARH)
   | 'tornado_gr1' // Panavia Tornado GR.1 (狂風電戰突防打擊機 · 2x ALARM 反輻射 + 海鷹反艦)
   | 'tornado_ids' // Panavia Tornado IDS (狂風反跑道/反裝甲打擊機 · 2x JP233 穿甲集束子母彈)
   | 'tornado_adv' // Panavia Tornado ADV F.3 (狂風長程防空截擊機 · 4x Skyflash SARH)
@@ -1625,8 +1574,6 @@ export type InstallationType =
   | 'glcm_site'          // BGM-109G 陸基戰斧巡弋飛彈陣地 (遠程外科手術打擊敵要塞基地)
   | 'scud_site';         // 華約 9K72 飛毛腿-B 戰術彈道飛彈發射營 (Scud-B SSM 重型戰術地對地彈道打擊)
 
-export type ActiveDockFacility = 'carrier' | 'airbase' | 'engineer_construction' | 'battalion_cp';
-
 export interface Installation {
   id: string;
   type: InstallationType;
@@ -1710,12 +1657,6 @@ export interface Island {
   roads?: { points: Vector2D[]; type: 'road' | 'trail' }[];
   hills?: { x: number; y: number; radius: number }[];
   rivers?: { points: Vector2D[]; width: number }[];
-}
-
-export interface FriendlyAirbasePool {
-  ready: Record<string, number>;
-  replenishTimer: number;
-  replenishMax: number;
 }
 
 export type ProjectileType =
@@ -1956,7 +1897,6 @@ export interface RequisitionItem {
   id: string;
   category: RequisitionCategory;
   name: string;
-  nameZh: string;
   cost: number;
   era: 'era1' | 'era2' | 'era3' | 'era4' | 'era5' | 'both' | 'all';
   badge: string;
