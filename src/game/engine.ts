@@ -38,8 +38,10 @@ import { getAlliedSagFleet } from './alliedSagFleets';
 import { getNavalGunPerformance, getNavalLauncherRange } from './navalGuns';
 import { getCatalogRole } from './airWingCatalog';
 import { AIR_WEAPON_RANGE, getInstallationRange } from './rangeScale';
+import { getShipAshmFit, getShipSamSystem } from './navalMissileSalvos';
 import { getAircraftSpeed, isSupersonicMissile, MISSILE_SPEED, shipMapSpeed, SPECIAL_ATTACK_SPEED } from './speedScale';
 import { getAircraftBaseHealth, getAircraftBaseSpeed, getAircraftGunRounds } from './aircraftStats';
+import { carriesStores, getPayloadRounds, resolvePayload } from './aircraftLoadouts';
 
 /** Piston and early-jet fighters that count as fighters even when flagged with another role. */
 const GUN_FIGHTER_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>(['f4f', 'f6f', 'f4u', 'f8f', 'f9f', 'f2h', 'p51', 'p47', 'p38', 'p40', 'f86']);
@@ -739,9 +741,16 @@ export class GameEngine {
     if (!flagship || !flagship.carrierPlanes) return;
 
     if (loadout.fighterPayload) this.activePayloads.fighter = loadout.fighterPayload;
-    if (loadout.diveBomberPayload) this.activePayloads.dive_bomber = loadout.diveBomberPayload;
+    if (loadout.diveBomberPayload) {
+      // The dive-bomber deck slot is filled by attack aircraft from the Korean War on
+      this.activePayloads.dive_bomber = loadout.diveBomberPayload;
+      this.activePayloads.attacker = loadout.diveBomberPayload;
+    }
     if (loadout.torpedoBomberPayload) this.activePayloads.torpedo_bomber = loadout.torpedoBomberPayload;
-    if (loadout.scoutPayload) this.activePayloads.scout = loadout.scoutPayload;
+    if (loadout.scoutPayload) {
+      this.activePayloads.scout = loadout.scoutPayload;
+      this.activePayloads.aew = loadout.scoutPayload;
+    }
 
     if (this.era === 'era1') {
       flagship.carrierPlanes.ready.f4f = loadout.fighters;
@@ -1634,7 +1643,7 @@ export class GameEngine {
     const role: AircraftRole = getCatalogRole(model, 'carrier', this.era);
 
     // Allow overriding payload on sortie, and persist as current active payload for role
-    const payloadType = specificPayload || this.activePayloads[role];
+    const payloadType = resolvePayload(model, specificPayload || this.activePayloads[role], this.era);
     if (specificPayload) {
       this.activePayloads[role] = specificPayload;
     }
@@ -1672,47 +1681,7 @@ export class GameEngine {
     // Resilient, battle-hardened health pools for carrier and land-based air groups
     const baseHealth = getAircraftBaseHealth(model);
 
-    const hasPayload =
-      payloadType === 'hvar_rockets' ||
-      payloadType === 'tiny_tim_rocket' ||
-      payloadType === 'napalm_canister' ||
-      payloadType === 'asw_torpedo' ||
-      payloadType === 'asw_acoustic_torpedo' ||
-      payloadType === 'bomb_2000' ||
-      payloadType === 'bomb_500' ||
-      payloadType === 'bomb_1000' ||
-      payloadType === 'bomb_1600' ||
-      payloadType === 'bombs_dual_500' ||
-      payloadType === 'aerial_torpedo' ||
-      payloadType === 'depth_bombs' ||
-      payloadType === 'scout_depth_charge' ||
-      payloadType === 'aim9_sidewinder' ||
-      payloadType === 'aim7_sparrow' ||
-      payloadType === 'agm12_bullpup' ||
-      payloadType === 'agm45_shrike' ||
-      payloadType === 'agm62_walleye' ||
-      payloadType === 'bombs_snakeye_retarded' ||
-      payloadType === 'b52_megaton_carpet' ||
-      payloadType === 'b52_megaton_nuke' ||
-      payloadType === 'tactical_b61_nuke' ||
-      payloadType === 'opfor_tactical_nuke' ||
-      payloadType === 'ffar_rockets_pod' ||
-      payloadType === 'helo_assault_troops' ||
-      payloadType === 'c1_paratroopers' ||
-      payloadType === 'aim7_aim9_combo' ||
-      payloadType === 'gbu10_laser_paveway' ||
-      payloadType === 'cbu_cluster_bombs' ||
-      payloadType === 'blu27_napalm' ||
-      payloadType === 'agm78_standard_arm' ||
-      payloadType === 'mer_iron_bombs' ||
-      payloadType === 'rgm84_harpoon' ||
-      payloadType === 'aim54_phoenix' ||
-      payloadType === 'p700_granit' ||
-      payloadType === 'kh22_burya' ||
-      payloadType === 'agm65_maverick' ||
-      payloadType === 'agm88_harm' ||
-      payloadType === 'tow_missiles' ||
-      payloadType === 'hellfire_missiles';
+    const hasPayload = carriesStores(payloadType);
 
     const payloadName = catalogItem ? catalogItem.badge : 'Clean Guns';
 
@@ -1730,31 +1699,7 @@ export class GameEngine {
     // 戰鬥機機槍彈殘彈數量
     const gunRounds = getAircraftGunRounds(model);
 
-    let initialAmmo = 0;
-    if (payloadType === 'clean_guns') initialAmmo = gunRounds;
-    else if (payloadType === 'rgm84_harpoon') initialAmmo = model === 'b52' ? 8 : (model === 's3a' || model === 'a6e' || model === 'fa18a') ? 4 : 2;
-    else if (payloadType === 'agm88_harm') initialAmmo = model === 'fa18a' ? 4 : 2;
-    else if (payloadType === 'aim54_phoenix') initialAmmo = 6;
-    else if (payloadType === 'kh22_burya' || payloadType === 'p700_granit') initialAmmo = 2;
-    else if (payloadType === 'hellfire_missiles' || payloadType === 'tow_missiles') initialAmmo = 8;
-    else if (payloadType === 'aim9_sidewinder' || payloadType === 'aim7_sparrow' || payloadType === 'aim7_aim9_combo') initialAmmo = 4;
-    else if (payloadType === 'agm12_bullpup' || payloadType === 'agm45_shrike' || payloadType === 'agm62_walleye' || payloadType === 'gbu10_laser_paveway' || payloadType === 'agm78_standard_arm') initialAmmo = 2;
-    else if (payloadType === 'cbu_cluster_bombs' || payloadType === 'blu27_napalm' || payloadType === 'bombs_snakeye_retarded') initialAmmo = 4;
-    else if (payloadType === 'mer_iron_bombs') initialAmmo = 1;
-    else if (payloadType === 'b52_megaton_carpet') initialAmmo = 36;
-    else if (payloadType === 'ffar_rockets_pod') initialAmmo = 16;
-    else if (payloadType === 'helo_assault_troops') initialAmmo = 1;
-    else if (payloadType === 'c1_paratroopers') initialAmmo = 1;
-    else if (payloadType === 'hvar_rockets') initialAmmo = 8;
-    else if (payloadType === 'tiny_tim_rocket') initialAmmo = 2;
-    else if (payloadType === 'napalm_canister') initialAmmo = 2;
-    else if (payloadType === 'asw_torpedo' || payloadType === 'asw_acoustic_torpedo') initialAmmo = 2;
-    else if (payloadType === 'bomb_2000') initialAmmo = 1;
-    else if (payloadType === 'bombs_dual_500') initialAmmo = 2;
-    else if (payloadType === 'bomb_500' || payloadType === 'bomb_1000' || payloadType === 'bomb_1600' || payloadType === 'aerial_torpedo') initialAmmo = 1;
-    else if (payloadType === 'depth_bombs') initialAmmo = 4;
-    else if (payloadType === 'scout_depth_charge') initialAmmo = 2;
-    else initialAmmo = 1;
+    const initialAmmo = getPayloadRounds(model, payloadType, this.era, gunRounds);
 
     const launchedIds: string[] = [];
 
@@ -1777,8 +1722,8 @@ export class GameEngine {
         flightNumber: planeNumber,
         gunAmmo: gunRounds,
         maxGunAmmo: gunRounds,
-        ammoRemaining: payloadType === 'clean_guns' ? gunRounds : initialAmmo,
-        maxAmmo: payloadType === 'clean_guns' ? gunRounds : initialAmmo,
+        ammoRemaining: initialAmmo,
+        maxAmmo: initialAmmo,
         side: 'player',
         pos: { x: flagship.pos.x, y: flagship.pos.y },
         vel: { x: Math.cos(flagship.heading) * baseSpeed, y: Math.sin(flagship.heading) * baseSpeed },
@@ -3681,7 +3626,9 @@ export class GameEngine {
       // ════ AIM-7 麻雀 + AIM-9 響尾蛇 雙重空優混編 (遠程半主動雷達 + 近距紅外格鬥) ════
       const targetHostile = targetEntity || { pos: targetPos, id: plane.order.targetId || '' };
       const targetPlane = 'role' in targetHostile ? targetHostile : null;
-      if (d >= 1200 && d <= AIR_WEAPON_RANGE.aim7 && (plane.ammoRemaining || 4) > 2) {
+      // Half the rails carry Sparrows (e.g. F-4: 4 AIM-7 + 4 AIM-9), fired first at beyond-visual range
+      const sparrowsLeft = (plane.ammoRemaining || 0) - Math.floor((plane.maxAmmo || 4) / 2);
+      if (d >= 1200 && d <= AIR_WEAPON_RANGE.aim7 && sparrowsLeft > 0) {
         this.fireAAMissile(plane, targetPlane || targetHostile, 'aim7');
         plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
       } else if (d < AIR_WEAPON_RANGE.aim9) {
@@ -4377,6 +4324,16 @@ export class GameEngine {
       : attacker.model === 'f8f' || attacker.model === 'sb2c'
       ? 24
       : 16;
+
+    // Muzzle flashes: nose cannon on jets, a flash at each wing battery on piston fighters
+    const noseGun = isA10 || isModernVulcan || isMig15;
+    const flashSize = isA10 ? 9 : noseGun ? 6 : 4;
+    const stations = noseGun ? [0] : [7, -7];
+    for (const offset of stations) {
+      const fx = attacker.pos.x + Math.cos(attacker.heading) * (noseGun ? 9 : 3) + Math.sin(attacker.heading) * offset;
+      const fy = attacker.pos.y + Math.sin(attacker.heading) * (noseGun ? 9 : 3) - Math.cos(attacker.heading) * offset;
+      this.spawnMuzzleFlash(fx, fy, attacker.heading, flashSize, false);
+    }
 
     for (let b = 0; b < burstCount; b++) {
       const spread = (Math.random() - 0.5) * (isA10 ? 0.012 : isModernVulcan ? 0.016 : isF86 ? 0.015 : isMig15 ? 0.05 : 0.045);
@@ -5310,6 +5267,8 @@ export class GameEngine {
     const flakX = plane.pos.x + (Math.random() - 0.5) * 48;
     const flakY = plane.pos.y + (Math.random() - 0.5) * 48;
 
+    // US 5"/38 and 90 mm bursts are black; Japanese and Soviet-pattern charges leave a brown-grey cloud
+    const burstColor = sourceSide === 'player' || sourceSide === 'allied' ? '#14181D' : '#3B3530';
     for (let p = 0; p < puffCount; p++) {
       const offsetX = (Math.random() - 0.5) * 75;
       const offsetY = (Math.random() - 0.5) * 75;
@@ -5322,7 +5281,7 @@ export class GameEngine {
         life: 1.6 + Math.random() * 0.8, // Lingering smoke puffs hanging in air
         maxLife: 2.4,
         radius: 20 + Math.random() * 14,
-        color: '#161A1E',
+        color: burstColor,
         type: 'flak_puff',
         rot: Math.random() * Math.PI * 2,
         rotSpeed: (Math.random() - 0.5) * 0.4,
@@ -5335,6 +5294,7 @@ export class GameEngine {
     const dy = plane.pos.y - origin.y;
     const totalDist = Math.hypot(dx, dy);
     const baseAngle = Math.atan2(dy, dx);
+    this.spawnMuzzleFlash(origin.x + Math.cos(baseAngle) * 10, origin.y + Math.sin(baseAngle) * 10, baseAngle, 7, false);
     const aaSpeed = 580;
 
     for (let t = 0; t < tracerCount; t++) {
@@ -5720,14 +5680,63 @@ export class GameEngine {
     }
   }
 
+  private muzzleFlashSeq = 0;
+
+  /**
+   * Purely visual muzzle blast: a short flame along the bore and, for guns of 5 inches and up, a
+   * drifting cordite smoke cloud. Deterministic (no RNG), so it never changes the simulation.
+   */
+  private spawnMuzzleFlash(x: number, y: number, angle: number, size: number, withSmoke: boolean) {
+    const seq = this.muzzleFlashSeq++;
+    const life = 0.09 + size * 0.006;
+    this.particles.push({
+      id: `muzzle-${seq}`,
+      x,
+      y,
+      vx: 0,
+      vy: 0,
+      life,
+      maxLife: life,
+      radius: size,
+      color: '#FFD54F',
+      type: 'muzzle_flash',
+      rot: angle,
+    });
+    if (withSmoke) {
+      const drift = 6 + size * 0.4;
+      this.particles.push({
+        id: `gunsmoke-${seq}`,
+        x: x + Math.cos(angle) * size * 0.8,
+        y: y + Math.sin(angle) * size * 0.8,
+        vx: Math.cos(angle) * drift,
+        vy: Math.sin(angle) * drift,
+        life: 1.4 + size * 0.03,
+        maxLife: 1.4 + size * 0.03,
+        radius: size * 1.1,
+        color: 'rgba(120, 110, 96, 1)',
+        type: 'gun_smoke',
+        rot: angle + seq,
+      });
+    }
+  }
+
   private fireTurretSalvo(ship: Ship, turret: Turret, targetPos: Vector2D) {
     const isHeavy = turret.damage > 100;
     soundEngine.playGunSalvo(isHeavy);
 
+    // Shells leave from the turret's own muzzles, not the ship's centre
+    const cosS = Math.cos(ship.heading);
+    const sinS = Math.sin(ship.heading);
+    const mountX = ship.pos.x + turret.relX * cosS - turret.relY * sinS;
+    const mountY = ship.pos.y + turret.relX * sinS + turret.relY * cosS;
     const cosH = Math.cos(turret.angle);
     const sinH = Math.sin(turret.angle);
-    const muzzleX = ship.pos.x + cosH * 24;
-    const muzzleY = ship.pos.y + sinH * 24;
+    const barrel = 4 + Math.sqrt(turret.damage) * 0.55;
+    const muzzleX = mountX + cosH * barrel;
+    const muzzleY = mountY + sinH * barrel;
+    // Flash scales with the bore: a 16-inch broadside dwarfs a 40 mm mount
+    const flashSize = 5 + Math.sqrt(turret.damage) * 0.9;
+    this.spawnMuzzleFlash(muzzleX, muzzleY, turret.angle, flashSize, turret.damage >= 60);
 
     const d = dist(ship.pos, targetPos);
     // 時代二 (Mk 37 雷達射控) 與時代三 (Mk 25 微波射控) 散佈大幅收斂，砲彈初速更高
@@ -8717,109 +8726,7 @@ export class GameEngine {
 
     const baseHealth = getAircraftBaseHealth(model);
 
-    const pType: AircraftPayloadType =
-      payload ||
-      (model === 'f14a'
-        ? 'aim54_phoenix'
-        : model === 'f15a'
-        ? 'aim7_sparrow'
-        : model === 'f16a'
-        ? 'aim9_sidewinder'
-        : model === 'fa18a'
-        ? 'rgm84_harpoon'
-        : model === 'a10a'
-        ? 'agm65_maverick'
-        : model === 'a6e'
-        ? 'rgm84_harpoon'
-        : model === 'ea6b'
-        ? 'agm88_harm'
-        : model === 'av8b'
-        ? 'agm65_maverick'
-        : model === 'ah64a'
-        ? 'hellfire_missiles'
-        : model === 'ah1w'
-        ? 'tow_missiles'
-        : model === 's3a'
-        ? 'rgm84_harpoon'
-        : model === 'f111'
-        ? 'gbu10_laser_paveway'
-        : model === 'sh3f'
-        ? 'asw_acoustic_torpedo'
-        : model === 'ch53'
-        ? 'helo_assault_troops'
-        : model === 'c2a' || model === 'c130' || model === 'c47'
-        ? 'c1_paratroopers'
-        : model === 'b52'
-        ? (this.era === 'era5' ? 'rgm84_harpoon' : 'b52_megaton_carpet')
-        : model === 'f4e' || model === 'f4j' || model === 'f4f_phantom'
-        ? 'aim7_sparrow'
-        : model === 'tornado_adv'
-        ? 'aim7_sparrow'
-        : model === 'mirage2000'
-        ? 'aim7_sparrow'
-        : model === 'tornado_gr1' || model === 'viggen_ja37'
-        ? 'rgm84_harpoon'
-        : model === 'tornado_ids' || model === 'jaguar_gr1' || model === 'hunter_fga9' || model === 'a1h' || model === 'a37b'
-        ? 'bombs_snakeye_retarded'
-        : model === 'f5a' || model === 'f104g' || model === 'mirage3'
-        ? 'aim9_sidewinder'
-        : model === 'f105'
-        ? 'agm45_shrike'
-        : model === 'a7'
-        ? 'agm62_walleye'
-        : model === 'a6a'
-        ? 'bombs_snakeye_retarded'
-        : model === 'a6b_weasel'
-        ? 'agm45_shrike'
-        : model === 'a4'
-        ? 'bombs_snakeye_retarded'
-        : model === 'f8'
-        ? 'aim9_sidewinder'
-        : model === 'ov10'
-        ? 'ffar_rockets_pod'
-        : model === 'uh1'
-        ? 'helo_assault_troops'
-        : model === 'ah1'
-        ? 'ffar_rockets_pod'
-        : model === 'c1'
-        ? 'c1_paratroopers'
-        : model === 'sh2' || model === 'p3'
-        ? 'asw_acoustic_torpedo'
-        : model === 'b17' || model === 'b17_late' || model === 'lancaster'
-        ? 'bombs_carpet_250'
-        : model === 'b24'
-        ? 'bombs_quad_500'
-        : model === 'b25'
-        ? 'bombs_dual_500'
-        : model === 'b29'
-        ? 'bombs_carpet_250'
-        : model === 'p51' || model === 'p36a' || model === 'f82' || model === 'hurricane' || model === 'spitfire_v' || model === 'spitfire_xiv' || model === 'rokaf_p51' || model === 'meteor'
-        ? 'clean_guns'
-        : model === 'p47'
-        ? 'mixed_bombs_rockets'
-        : model === 'p39d' || model === 'tempest' || model === 'sea_fury' || model === 'firefly_as5'
-        ? 'hvar_rockets'
-        : model === 'f86'
-        ? 'clean_guns'
-        : model === 'a20' || model === 'mosquito'
-        ? 'bombs_dual_500'
-        : model === 'beaufighter' || model === 'swordfish'
-        ? 'aerial_torpedo'
-        : model === 'a26'
-        ? (this.era === 'era3' ? 'napalm_canister' : 'bombs_dual_500')
-        : model === 'p40'
-        ? 'clean_guns'
-        : model === 'p38'
-        ? 'hvar_rockets'
-        : role === 'level_bomber'
-        ? 'bombs_carpet_250'
-        : role === 'attacker'
-        ? 'mixed_bombs_rockets'
-        : role === 'fighter'
-        ? 'clean_guns'
-        : role === 'dive_bomber'
-        ? 'bomb_1000'
-        : 'aerial_torpedo');
+    const pType = resolvePayload(model, payload, this.era);
 
     // ══════════════════════════════════════════════════════════
     // 時代三與時代四戰術/戰略核武器政治後果與授權檢定 (Nuclear Weapons CP Costs)
@@ -8917,21 +8824,8 @@ export class GameEngine {
 
     const gunRounds = getAircraftGunRounds(model);
 
-    const afbHasPayload = pType !== 'clean_guns' && pType !== 'scout_fuel';
-    const afbInitialAmmo =
-      pType === 'clean_guns'
-        ? gunRounds
-        : pType === 'rgm84_harpoon'
-        ? (model === 'b52' ? 8 : model === 's3a' || model === 'a6e' || model === 'fa18a' ? 4 : 2)
-        : pType === 'c1_paratroopers' || pType === 'helo_assault_troops'
-        ? 1
-        : pType === 'b52_megaton_carpet'
-        ? 36
-        : pType === 'aim54_phoenix'
-        ? 6
-        : pType === 'aim7_sparrow' || pType === 'aim9_sidewinder' || pType === 'aim7_aim9_combo' || pType === 'cbu_cluster_bombs' || pType === 'blu27_napalm' || pType === 'bombs_snakeye_retarded'
-        ? 4
-        : 2;
+    const afbHasPayload = carriesStores(pType);
+    const afbInitialAmmo = getPayloadRounds(model, pType, this.era, gunRounds);
 
     for (let i = 0; i < count; i++) {
       const planeId = `afb-plane-${Date.now()}-${i}`;
@@ -10010,20 +9904,19 @@ export class GameEngine {
         ship.samCooldown = Math.max(0, ship.samCooldown - dt);
       }
 
-      if ((ship.samCooldown || 0) <= 0) {
+      if ((ship.samCooldown || 0) <= 0 && (ship.readySAMs ?? 1) > 0) {
         const samRange = ship.samRange || 1800;
 
         // A. 艦載長程防空飛彈史實限制：早期連續波照明與海面雜波反射，難以追蹤掠海反艦飛彈，專職攔截中高空敵機
-        const hostileAircraft = this.aircraft.find(
+        const hostileAircraft = this.aircraft.filter(
           (a) =>
             a.side === 'enemy' &&
             a.state !== 'shot_down' &&
             dist(ship.pos, a.pos) <= samRange
         );
 
-        if (hostileAircraft) {
-          this.fireSAM(ship, hostileAircraft, 'aircraft');
-          ship.samCooldown = ship.type === 'cg' ? 4.0 : 5.0;
+        if (hostileAircraft.length > 0) {
+          this.launchShipSamSalvo(ship, hostileAircraft, (a) => this.fireSAM(ship, a, 'aircraft'), (a) => a.state !== 'shot_down');
         }
       }
 
@@ -10122,8 +10015,17 @@ export class GameEngine {
           styxCandidates.sort((a, b) => dist(eShip.pos, a.pos) - dist(eShip.pos, b.pos))[0] ||
           this.getFlagship();
 
-        if (targetShip && dist(eShip.pos, targetShip.pos) <= 2600) {
-          this.fireKomarStyx(eShip, targetShip);
+        const fit = getShipAshmFit(eShip.type);
+        const styxLeft = eShip.ashmReady ?? fit?.magazine ?? 2;
+        if (targetShip && styxLeft > 0 && dist(eShip.pos, targetShip.pos) <= 2600) {
+          // Two Termits per target (the 1967 Eilat attack: two boats, two missiles each)
+          const salvo = Math.min(fit?.salvo ?? 2, styxLeft);
+          for (let i = 0; i < salvo; i++) {
+            this.scheduleAction(i * 1.5, () => {
+              if (!eShip.isSunk && !targetShip.isSunk) this.fireKomarStyx(eShip, targetShip);
+            });
+          }
+          eShip.ashmReady = styxLeft - salvo;
           eShip.torpedoCooldown = eShip.type === 'osa' ? 18.0 : 24.0;
         }
       }
@@ -10677,12 +10579,8 @@ export class GameEngine {
         coordStrikers.forEach((eShip, idx) => {
           const inRangeTargets = prioritizedFriendlies.filter((f) => dist(eShip.pos, f.pos) <= 6400);
           const primaryTarget = inRangeTargets[0] || prioritizedFriendlies[0];
-          const salvoCount =
-            eShip.type === 'ssgn_oscar' || eShip.type === 'cgn_kirov'
-              ? 16
-              : eShip.type === 'cvhg_kiev'
-              ? 12
-              : 8;
+          const salvoCount = Math.min(getShipAshmFit(eShip.type)?.salvo ?? 8, eShip.ashmReady ?? Infinity);
+          if (salvoCount <= 0) return;
           fleetSalvoTotal += salvoCount;
 
           if (eShip.type === 'ssgn_oscar') {
@@ -10745,7 +10643,7 @@ export class GameEngine {
           const samName = isKirov ? 'S-300F 堡壘 (SA-N-6 Fort VLS)' : isSovremenny ? 'SA-N-7 施基利 (Shtil)' : isUdaloy ? 'SA-N-9 匕首 (Kinzhal VLS)' : 'SA-N-3 戈布勒 (Goblet)';
 
           // 優先攔截來襲之敵方反艦飛彈、巡弋飛彈與戰術/潛射彈道飛彈 (ATACMS / Trident II D5)
-          const incomingBluforMissile = this.projectiles.find(
+          const incomingBluforMissiles = this.projectiles.filter(
             (p) =>
               !p.isDead &&
               this.isHostile(eShip.side, p.side) &&
@@ -10753,17 +10651,15 @@ export class GameEngine {
               dist(eShip.pos, p.pos) <= samRange
           );
 
-          if (incomingBluforMissile) {
-            this.fireSovietShipSAM(eShip, incomingBluforMissile, samName);
-            eShip.samCooldown = isKirov ? 2.5 : 4.0;
+          if (incomingBluforMissiles.length > 0) {
+            this.launchShipSamSalvo(eShip, incomingBluforMissiles, (m) => this.fireSovietShipSAM(eShip, m, samName), (m) => !m.isDead);
           } else {
             // 攔截進入防空圈之敵方在空戰機
-            const targetPlayerPlane = this.aircraft.find(
+            const targetPlayerPlanes = this.aircraft.filter(
               (a) => this.isHostile(eShip.side, a.side) && a.state !== 'shot_down' && dist(eShip.pos, a.pos) <= samRange
             );
-            if (targetPlayerPlane) {
-              this.fireSovietShipSAM(eShip, targetPlayerPlane, samName);
-              eShip.samCooldown = isKirov ? 3.0 : 4.5;
+            if (targetPlayerPlanes.length > 0) {
+              this.launchShipSamSalvo(eShip, targetPlayerPlanes, (a) => this.fireSovietShipSAM(eShip, a, samName), (a) => a.state !== 'shot_down');
             }
           }
         }
@@ -10836,11 +10732,6 @@ export class GameEngine {
 
         const samRange = ship.samRange || (ship.type === 'cg_tico' ? 4200 : ship.type === 'cg_virginia' || ship.type === 'ddg_kidd' ? 3600 : ship.type === 'ffg_ohp' ? 3000 : 2400);
 
-        // 神盾系統大容量垂發彈艙持續作戰補給 (Aegis sustained magazine replenishment)
-        if (ship.hasAegis && (ship.readySAMs ?? 0) < 30 && (ship.maxSAMs ?? 122) > 40) {
-          ship.readySAMs = Math.min(ship.maxSAMs ?? 122, (ship.readySAMs ?? 0) + 12);
-        }
-
         if ((ship.samCooldown || 0) <= 0 && (ship.readySAMs ?? 48) > 0) {
           // A. 優先攔截進入射程的敵方反艦飛彈、巡弋飛彈與彈道飛彈 (P-700 / Moskit / Scud / RK-55 / R-39 SLBM)
           const incomingMissiles = this.projectiles.filter(
@@ -10852,19 +10743,8 @@ export class GameEngine {
           );
 
           if (incomingMissiles.length > 0) {
-            // 神盾巡洋艦 (Ticonderoga) 具備 8 個通道，以 100ms 模擬時間間隔急速齊射攔截來襲彈群
-            const maxChannels = ship.hasAegis ? (ship.aegisChannels || 8) : 1;
-            const targetsToEngage = incomingMissiles.slice(0, Math.min(maxChannels, (ship.readySAMs ?? 48)));
-            for (let m = 0; m < targetsToEngage.length; m++) {
-              const targetM = targetsToEngage[m];
-              this.scheduleAction(m * 0.1, () => {
-                if (!ship.isSunk && !targetM.isDead) {
-                  this.fireSAM(ship, targetM, 'projectile');
-                }
-              });
-            }
-            ship.samCooldown = ship.hasAegis ? 0.9 : 4.0;
-            ship.readySAMs = Math.max(0, (ship.readySAMs ?? 48) - targetsToEngage.length);
+            // 神盾巡洋艦 (Ticonderoga) 以四具 SPG-62 照明雷達分時導引，每目標雙發齊射 (shoot-shoot)
+            this.launchShipSamSalvo(ship, incomingMissiles, (m) => this.fireSAM(ship, m, 'projectile'), (m) => !m.isDead);
           } else {
             // B. 攔截進入防空圈之敵方高空戰鬥機與戰略轟炸機 (Tu-22M3 / Tu-95 / Su-27 / MiG-29A)
             // 神盾艦可同時照射引導多達 4 架敵機！
@@ -10876,18 +10756,7 @@ export class GameEngine {
                 dist(ship.pos, a.pos) <= samRange
             );
             if (targetPlanes.length > 0) {
-              const maxAirChannels = ship.hasAegis ? Math.min(4, Math.floor((ship.aegisChannels || 8) / 2)) : 1;
-              const planesToEngage = targetPlanes.slice(0, Math.min(maxAirChannels, (ship.readySAMs ?? 48)));
-              for (let pIdx = 0; pIdx < planesToEngage.length; pIdx++) {
-                const targetPlane = planesToEngage[pIdx];
-                this.scheduleAction(pIdx * 0.12, () => {
-                  if (!ship.isSunk && targetPlane.state !== 'shot_down') {
-                    this.fireSAM(ship, targetPlane, 'aircraft');
-                  }
-                });
-              }
-              ship.samCooldown = ship.hasAegis ? 1.2 : 5.0;
-              ship.readySAMs = Math.max(0, (ship.readySAMs ?? 48) - planesToEngage.length);
+              this.launchShipSamSalvo(ship, targetPlanes, (a) => this.fireSAM(ship, a, 'aircraft'), (a) => a.state !== 'shot_down');
             }
           }
         }
@@ -11726,7 +11595,10 @@ export class GameEngine {
       this.revealSubmarine(sub, 14.0, 'firing', sub.name);
     }
 
-    const salvoCount = salvoOverride ?? (this.era === 'era5' ? 16 : 4);
+    const requested = salvoOverride ?? (this.era === 'era5' ? getShipAshmFit(sub.type)?.salvo ?? 16 : 4);
+    const salvoCount = sub.ashmReady !== undefined ? Math.min(requested, sub.ashmReady) : requested;
+    if (salvoCount <= 0) return;
+    if (sub.ashmReady !== undefined) sub.ashmReady -= salvoCount;
     const speed = MISSILE_SPEED.granit;
     const dmg = 3100;
     const targetPool = extraTargets && extraTargets.length > 0 ? extraTargets : [targetShip];
@@ -12941,6 +12813,28 @@ export class GameEngine {
     }
   }
 
+  /**
+   * One SAM engagement from a ship's historical launcher (see navalMissileSalvos.ts): up to
+   * `channels` targets, `perTarget` rounds rippled at each, limited by the magazine where the
+   * ship tracks one. The launcher then waits its reload / cadence cycle.
+   */
+  private launchShipSamSalvo<T>(ship: Ship, targets: T[], fire: (target: T) => void, isAlive: (target: T) => boolean): void {
+    const system = getShipSamSystem(ship);
+    const magazine = ship.readySAMs;
+    let fired = 0;
+    targets.slice(0, system.channels).forEach((target, ti) => {
+      for (let r = 0; r < system.perTarget; r++) {
+        if (magazine !== undefined && fired >= magazine) return;
+        fired++;
+        this.scheduleAction(ti * 0.12 + r * 0.6, () => {
+          if (!ship.isSunk && isAlive(target)) fire(target);
+        });
+      }
+    });
+    if (magazine !== undefined) ship.readySAMs = Math.max(0, magazine - fired);
+    ship.samCooldown = system.cycle;
+  }
+
   private fireSAM(ship: Ship, target: Aircraft | Projectile, targetType: 'aircraft' | 'projectile') {
     soundEngine.playRocketWhoosh();
     const samModel =
@@ -13048,7 +12942,8 @@ export class GameEngine {
       return;
     }
 
-    const salvoCount = Math.min(8, ship.readyHarpoons ?? 8);
+    // US doctrine: half the canisters at one surface group, the rest held for the next
+    const salvoCount = Math.min(getShipAshmFit(ship.type)?.salvo ?? 4, ship.readyHarpoons ?? 8);
     if (salvoCount <= 0) return;
 
     soundEngine.playRocketWhoosh();
@@ -13071,7 +12966,7 @@ export class GameEngine {
 
     const primaryTarget = targets[0];
     this.addBannerAlert(
-      `🚀【Mk 141 發射箱 ${salvoCount} 枚魚叉齊射！】「${ship.name}」兩組四聯裝發射筒連續點火！掠海撲向「${primaryTarget.name}」！`,
+      `🚀【Mk 141 發射箱 ${salvoCount} 枚魚叉齊射！】「${ship.name}」四聯裝發射筒連續點火！掠海撲向「${primaryTarget.name}」！（剩餘 ${ship.readyHarpoons ?? 0} 枚）`,
       'player',
       'alert',
       5.5
@@ -13245,13 +13140,12 @@ export class GameEngine {
       ? 'P-270 白蛉 (Moskit / SS-N-22 日炎)'
       : 'P-15M/4K51 邊界重型反艦飛彈';
 
-    const defaultEra5Count =
-      'isSunk' in eShip && (eShip.type === 'ssgn_oscar' || eShip.type === 'cgn_kirov')
-        ? 16
-        : 'isSunk' in eShip && eShip.type === 'cvhg_kiev'
-        ? 12
-        : 8;
-    const salvoCount = salvoOverride ?? (this.era === 'era5' ? defaultEra5Count : isGranit ? 4 : 2);
+    const fit = 'isSunk' in eShip ? getShipAshmFit(eShip.type) : undefined;
+    const requested = salvoOverride ?? (this.era === 'era5' ? fit?.salvo ?? 8 : isGranit ? 4 : 2);
+    // Ships cannot fire more than is left in their launchers (Kiev: 8 on the rails + 16 reloads)
+    const salvoCount = 'isSunk' in eShip && eShip.ashmReady !== undefined ? Math.min(requested, eShip.ashmReady) : requested;
+    if (salvoCount <= 0) return;
+    if ('isSunk' in eShip && eShip.ashmReady !== undefined) eShip.ashmReady -= salvoCount;
     const speed = isGranit ? MISSILE_SPEED.granit : isBazalt ? MISSILE_SPEED.bazalt : isMoskit ? MISSILE_SPEED.moskit : MISSILE_SPEED.styx;
     const dmg = isGranit ? 3100 : isBazalt ? 2800 : isMoskit ? 2700 : 2100;
     const ashmProfile: AshmFlightProfile = isGranit || isBazalt
@@ -15083,20 +14977,18 @@ export class GameEngine {
       if ((ship.samCooldown || 0) <= 0) {
         const samRange = ship.samRange || 2800;
         // 優先攔截來襲敵方反艦飛彈、巡弋飛彈與戰術彈道飛彈 (Scud-B 等)
-        const incomingThreat = this.projectiles.find(
+        const incomingThreats = this.projectiles.filter(
           (p) => !p.isDead && this.isHostile(ship.side, p.side) && (p.type === 'missile_ashm' || p.type === 'missile_cruise' || p.type === 'missile_ssm') && dist(ship.pos, p.pos) <= samRange
         );
-        if (incomingThreat) {
-          this.fireSAM(ship, incomingThreat, 'projectile');
-          ship.samCooldown = 4.0;
+        if (incomingThreats.length > 0) {
+          this.launchShipSamSalvo(ship, incomingThreats, (m) => this.fireSAM(ship, m, 'projectile'), (m) => !m.isDead);
         } else {
           // 攔截防空射程內之敵方戰鬥機或轟炸機
-          const hostilePlane = this.aircraft.find(
+          const hostilePlanes = this.aircraft.filter(
             (a) => this.isHostile(ship.side, a.side) && a.state !== 'shot_down' && dist(ship.pos, a.pos) <= samRange
           );
-          if (hostilePlane) {
-            this.fireSAM(ship, hostilePlane, 'aircraft');
-            ship.samCooldown = 5.0;
+          if (hostilePlanes.length > 0) {
+            this.launchShipSamSalvo(ship, hostilePlanes, (a) => this.fireSAM(ship, a, 'aircraft'), (a) => a.state !== 'shot_down');
           }
         }
       }

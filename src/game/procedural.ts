@@ -15,6 +15,7 @@ import {
 } from '../types/game';
 import { getNavalGunPerformance, getNavalLauncherRange } from './navalGuns';
 import { getGroundUnitRange } from './rangeScale';
+import { getShipAshmFit } from './navalMissileSalvos';
 import {
   ARTILLERY_UNIT_TYPES,
   BATTERY_ECHELON_TYPES,
@@ -9627,7 +9628,15 @@ export function createShip(
     hullCrewHealth: partial.hullCrewHealth ?? partial.health,
     maxHullCrewHealth: partial.maxHullCrewHealth ?? partial.maxHealth,
     ...partial,
+    ...ashmLoad(partial.type, partial.hasHarpoon),
   };
+}
+
+/** Anti-ship missiles in the launchers at sea, from the ship's historical fit (navalMissileSalvos.ts). */
+function ashmLoad(type: Ship['type'], hasHarpoon: boolean | undefined): Partial<Ship> {
+  const fit = getShipAshmFit(type);
+  if (!fit) return {};
+  return hasHarpoon ? { readyHarpoons: fit.magazine, maxHarpoons: fit.magazine } : { ashmReady: fit.magazine };
 }
 
 export function createTurret(

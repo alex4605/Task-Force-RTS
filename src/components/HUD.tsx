@@ -23,15 +23,11 @@ import { getRequisitionCatalog } from '../game/requisition';
 import { BattleAlertBanner } from '../game/engine';
 import {
   DEFAULT_AFB_FORMATION_COUNTS,
-  DEFAULT_AFB_PAYLOADS,
   DEFAULT_CARRIER_FORMATION_COUNTS,
-  getAfbCompatiblePayloads,
   getAfbModelsForEra,
   getCarrierModelsForEra,
-  getCompatiblePayloads,
-  getDefaultAfbPayloadForUnit,
-  getDefaultCarrierPayloads,
 } from '../game/airWingCatalog';
+import { getModelPayloads, resolvePayload } from '../game/aircraftLoadouts';
 import { MiniRadar } from './hud/MiniRadar';
 import { ActiveArmamentTrayState, ArmamentTrayModal } from './hud/ArmamentTrayModal';
 import { SelectedUnitsPanel } from './hud/SelectedUnitsPanel';
@@ -300,9 +296,9 @@ export const HUD: React.FC<HUDProps> = ({
     () => ({ ...DEFAULT_CARRIER_FORMATION_COUNTS })
   );
 
-  // Per-model chosen payload: defaults to role's active payload
+  // Per-model chosen payload; unset models fly the role's active payload if the airframe carried it
   const [modelPayloads, setModelPayloads] = React.useState<Partial<Record<AircraftModel, AircraftPayloadType>>>(
-    () => getDefaultCarrierPayloads(activePayloads)
+    () => ({})
   );
 
   const [rightPanelTab, setRightPanelTab] = React.useState<'flights' | 'cps'>('flights');
@@ -406,9 +402,7 @@ export const HUD: React.FC<HUDProps> = ({
   const [afbFormationCounts, setAfbFormationCounts] = useState<Partial<Record<string, number>>>(
     () => ({ ...DEFAULT_AFB_FORMATION_COUNTS })
   );
-  const [afbPayloads, setAfbPayloads] = useState<Partial<Record<string, AircraftPayloadType>>>(
-    () => ({ ...DEFAULT_AFB_PAYLOADS })
-  );
+  const [afbPayloads, setAfbPayloads] = useState<Partial<Record<AircraftModel, AircraftPayloadType>>>({});
 
   // Bottom Deck Filters & Tactical Armament Selector Tray State
   const [carrierFilter, setCarrierFilter] = useState<'all' | 'fighter' | 'dive_bomber' | 'torpedo_bomber' | 'attacker' | 'special'>('all');
@@ -481,15 +475,6 @@ export const HUD: React.FC<HUDProps> = ({
     }
     return Array.from(map.values());
   }, [aircraft]);
-
-  // Keep model payloads updated if activePayloads change externally
-  React.useEffect(() => {
-    const defaults = getDefaultCarrierPayloads(activePayloads);
-    setModelPayloads((prev) => ({
-      ...defaults,
-      ...prev,
-    }));
-  }, [activePayloads]);
 
   const afbModels = useMemo(() => getAfbModelsForEra(era), [era]);
 
@@ -1573,9 +1558,9 @@ export const HUD: React.FC<HUDProps> = ({
                     const hasReady = readyCount > 0;
                     const selectedCount = formationCounts[model] || (role === 'scout' ? 1 : 2);
                     const effectiveCount = Math.min(selectedCount, readyCount || 1);
-                    const currentPayload = modelPayloads[model] || activePayloads[role];
+                    const currentPayload = resolvePayload(model, modelPayloads[model] || activePayloads[role], era);
                     const payloadData = PAYLOAD_CATALOG[currentPayload] || PAYLOAD_CATALOG.clean_guns;
-                    const compatiblePayloads = getCompatiblePayloads(role, era);
+                    const compatiblePayloads = getModelPayloads(model, era);
 
                     const roleBadge =
                       role === 'fighter'
@@ -1802,10 +1787,10 @@ export const HUD: React.FC<HUDProps> = ({
                     const hasReady = mCount > 0;
                     const selectedCount = afbFormationCounts[id] || 2;
                     const effectiveCount = Math.min(selectedCount, mCount || 1);
-                    const currentPayload = afbPayloads[id] || getDefaultAfbPayloadForUnit(id, role, era);
+                    const currentPayload = resolvePayload(id, afbPayloads[id], era);
                     const payloadData = PAYLOAD_CATALOG[currentPayload] || PAYLOAD_CATALOG.clean_guns;
                     const isCarrierCapable = isNavy;
-                    const afbCompatiblePayloads = getAfbCompatiblePayloads(id, role, era);
+                    const afbCompatiblePayloads = getModelPayloads(id, era);
                     const isNukeEquipped =
                       currentPayload === 'tactical_nuke' ||
                       currentPayload === 'b52_megaton_nuke' ||

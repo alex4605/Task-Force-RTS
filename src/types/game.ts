@@ -335,6 +335,7 @@ export interface Ship {
   harpoonRange?: number;
   readyHarpoons?: number;
   maxHarpoons?: number;
+  ashmReady?: number; // 敵艦反艦飛彈發射架剩餘彈數 (P-15 / P-270 / P-500 / P-700)
   ashmType?: 'harpoon' | 'exocet_mm40' | 'exocet_mm38';
   hasGranit?: boolean;
   granitCooldown?: number;
@@ -1799,7 +1800,9 @@ export interface Particle {
     | 'fire'
     | 'flare'
     | 'chaff'
-    | 'chaff_cloud';
+    | 'chaff_cloud'
+    | 'muzzle_flash'
+    | 'gun_smoke';
   shape?: 'circle' | 'line' | 'ring';
   length?: number;
   scale?: number;
