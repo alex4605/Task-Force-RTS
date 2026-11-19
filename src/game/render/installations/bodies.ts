@@ -1,6 +1,7 @@
 // Per-type installation artwork. Each drawer runs with the canvas translated to the installation's position.
 import { Installation, InstallationType, Island } from '../../../types/game';
 import { RenderContext } from '../context';
+import { drawGroundSilhouette } from '../../unitPreviewRenderer';
 import { InstallationStyle } from './style';
 
 /** Draws the type-specific body of one installation in its local frame. */
@@ -170,36 +171,44 @@ function drawRadarStation(rc: RenderContext, _inst: Installation, style: Install
 
 function drawAmmoDepot(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
   const ctx = rc.ctx;
-  const { isPlayer, labelColor } = style;
+  const { isPlayer, color, labelColor } = style;
 
-  // Hexagonal sandbagged revetment bunker + fuel/ordnance canisters + hazard diamond
+  // Ammunition storage area: earth-covered igloo magazines in staggered rows (spaced against
+  // sympathetic detonation), a perimeter fence, access road and above-ground fuel tanks.
+  ctx.strokeStyle = 'rgba(176, 190, 197, 0.55)';
+  ctx.lineWidth = 0.8;
+  ctx.setLineDash([2, 1.5]);
+  ctx.strokeRect(-20, -14, 40, 30);
+  ctx.setLineDash([]);
+  // Access road
+  ctx.strokeStyle = 'rgba(176, 164, 140, 0.6)';
   ctx.lineWidth = 2;
-  ctx.fillStyle = isPlayer ? 'rgba(21, 101, 192, 0.55)' : 'rgba(62, 39, 35, 0.78)';
   ctx.beginPath();
-  for (let i = 0; i < 6; i++) {
-    const a = (i * Math.PI) / 3;
-    const x = Math.cos(a) * 16;
-    const y = Math.sin(a) * 16;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  ctx.closePath();
-  ctx.fill();
+  ctx.moveTo(-20, 1);
+  ctx.lineTo(20, 1);
   ctx.stroke();
-
-  // Inner reinforced roof & 3 fuel/ammo drums
-  ctx.fillStyle = '#33691E';
-  ctx.strokeStyle = '#AED581';
-  ctx.lineWidth = 1;
-  ctx.fillRect(-8, -6, 7, 5);
-  ctx.strokeRect(-8, -6, 7, 5);
-  ctx.fillRect(1, -6, 7, 5);
-  ctx.strokeRect(1, -6, 7, 5);
-  ctx.fillStyle = '#FFA726';
-  ctx.beginPath();
-  ctx.arc(-4, 4, 2.8, 0, Math.PI * 2);
-  ctx.arc(4, 4, 2.8, 0, Math.PI * 2);
-  ctx.fill();
+  // Igloos: earth mound with a concrete headwall facing the road
+  for (const [x, y, face] of [[-13, -7, 1], [0, -7, 1], [13, -7, 1], [-7, 9, -1], [7, 9, -1]] as const) {
+    ctx.fillStyle = 'rgba(85, 107, 47, 0.95)';
+    ctx.strokeStyle = 'rgba(30, 40, 20, 0.9)';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.ellipse(x, y, 4.5, 4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#B0BEC5';
+    ctx.fillRect(x - 2.5, y + face * 3.2 - 0.6, 5, 1.2);
+  }
+  // Fuel storage tanks
+  ctx.fillStyle = isPlayer ? '#546E7A' : '#5D4037';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 0.9;
+  for (const x of [-16, 16]) {
+    ctx.beginPath();
+    ctx.arc(x, 10, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
 
   ctx.fillStyle = labelColor;
   ctx.font = 'bold 8.5px monospace';
@@ -235,28 +244,8 @@ function drawInfantrySquad(rc: RenderContext, _inst: Installation, style: Instal
   ctx.arc(0, -29, 2, 0, Math.PI * 2);
   ctx.fill();
 
-  // 2. 地面物理工事: 沙袋半月掩體與機槍
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = '#BCAAA4';
-  ctx.fillStyle = 'rgba(78, 52, 46, 0.75)';
-  ctx.beginPath();
-  ctx.arc(0, 5, 11, -Math.PI * 0.75, Math.PI * 0.75);
-  ctx.stroke();
-  ctx.fill();
-
-  // 機槍槍身與三腳架
-  ctx.strokeStyle = '#FFE082';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(-2, 5);
-  ctx.lineTo(14, 5);
-  ctx.moveTo(4, 2);
-  ctx.lineTo(4, 8);
-  ctx.moveTo(-2, 5);
-  ctx.lineTo(-6, 1);
-  ctx.moveTo(-2, 5);
-  ctx.lineTo(-6, 9);
-  ctx.stroke();
+  // 2. 地面物理工事: historical emplacement layout with era-appropriate silhouettes
+  drawEmplacements(ctx, 'infantry_squad', isPlayer);
 
   // 標籤
   ctx.fillStyle = labelColor;
@@ -295,32 +284,8 @@ function drawInfantryPlatoon(rc: RenderContext, _inst: Installation, style: Inst
   ctx.arc(5, -31, 1.8, 0, Math.PI * 2);
   ctx.fill();
 
-  // 2. 地面物理工事: 防禦暗堡與機砲
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = '#CFD8DC';
-  ctx.fillStyle = isPlayer ? 'rgba(21, 101, 192, 0.45)' : 'rgba(38, 50, 56, 0.85)';
-  ctx.strokeRect(-12, -2, 24, 20);
-  ctx.fillRect(-12, -2, 24, 20);
-
-  // 壕溝連接網絡
-  ctx.strokeStyle = '#8D6E63';
-  ctx.lineWidth = 1.8;
-  ctx.beginPath();
-  ctx.moveTo(-16, 8);
-  ctx.lineTo(-12, 8);
-  ctx.moveTo(12, 8);
-  ctx.lineTo(20, 12);
-  ctx.stroke();
-
-  // 機砲砲身
-  ctx.strokeStyle = isPlayer ? '#80DEEA' : '#FF8A80';
-  ctx.lineWidth = 2.2;
-  ctx.beginPath();
-  ctx.moveTo(0, 5.5);
-  ctx.lineTo(17, 5.5);
-  ctx.moveTo(0, 10.5);
-  ctx.lineTo(17, 10.5);
-  ctx.stroke();
+  // 2. 地面物理工事: historical emplacement layout with era-appropriate silhouettes
+  drawEmplacements(ctx, 'infantry_platoon', isPlayer);
 
   // 標籤
   ctx.fillStyle = labelColor;
@@ -356,30 +321,8 @@ function drawTankPlatoon(rc: RenderContext, _inst: Installation, style: Installa
   ctx.arc(5, -31, 1.8, 0, Math.PI * 2);
   ctx.fill();
 
-  // 2. 地面物理工事: 戰車車體與戰車砲
-  ctx.fillStyle = '#263238';
-  ctx.fillRect(-13, 0, 26, 4);
-  ctx.fillRect(-13, 14, 26, 4);
-
-  ctx.fillStyle = isPlayer ? '#1B5E20' : '#33691E';
-  ctx.strokeStyle = isPlayer ? '#81C784' : '#C5E1A5';
-  ctx.lineWidth = 1.5;
-  ctx.fillRect(-10, 3, 20, 12);
-  ctx.strokeRect(-10, 3, 20, 12);
-
-  // 砲塔與砲身
-  ctx.fillStyle = isPlayer ? '#2E7D32' : '#1B5E20';
-  ctx.beginPath();
-  ctx.arc(2, 9, 5.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.strokeStyle = '#FFD54F';
-  ctx.lineWidth = 2.4;
-  ctx.beginPath();
-  ctx.moveTo(2, 9);
-  ctx.lineTo(20, 9);
-  ctx.stroke();
+  // 2. 地面物理工事: historical emplacement layout with era-appropriate silhouettes
+  drawEmplacements(ctx, 'tank_platoon', isPlayer);
 
   // 標籤
   ctx.fillStyle = labelColor;
@@ -418,29 +361,8 @@ function drawTankBattalion(rc: RenderContext, _inst: Installation, style: Instal
   ctx.lineTo(3, -31);
   ctx.stroke();
 
-  // 2. 地面物理工事: 裝甲指揮掩體 + 戰車集群
-  ctx.fillStyle = isPlayer ? '#1B5E20' : '#263238';
-  ctx.strokeStyle = isPlayer ? '#81C784' : '#90A4AE';
-  ctx.lineWidth = 1.6;
-  ctx.fillRect(-14, 2, 28, 16);
-  ctx.strokeRect(-14, 2, 28, 16);
-
-  // 無線電通訊天線
-  ctx.strokeStyle = '#90CAF9';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(-8, 2);
-  ctx.lineTo(-8, -10);
-  ctx.lineTo(-5, -14);
-  ctx.stroke();
-
-  // 戰車砲身
-  ctx.strokeStyle = '#FFD54F';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(2, 10);
-  ctx.lineTo(22, 10);
-  ctx.stroke();
+  // 2. 地面物理工事: historical emplacement layout with era-appropriate silhouettes
+  drawEmplacements(ctx, 'tank_battalion', isPlayer);
 
   // 標籤
   ctx.fillStyle = labelColor;
@@ -482,36 +404,8 @@ function drawTowedArtillery(rc: RenderContext, _inst: Installation, style: Insta
   ctx.arc(3, -31, 1.8, 0, Math.PI * 2);
   ctx.fill();
 
-  // 2. 地面物理工事: 野戰重砲 (雙腳開腳大架、防盾與砲管)
-  // 防盾
-  ctx.strokeStyle = isPlayer ? '#90CAF9' : '#B0BEC5';
-  ctx.lineWidth = 2.4;
-  ctx.beginPath();
-  ctx.moveTo(2, 2);
-  ctx.lineTo(2, 18);
-  ctx.stroke();
-
-  // 長身管砲身與制退器
-  ctx.strokeStyle = isPlayer ? '#80DEEA' : '#FFCA28';
-  ctx.lineWidth = 2.6;
-  ctx.beginPath();
-  ctx.moveTo(0, 10);
-  ctx.lineTo(22, 10);
-  ctx.stroke();
-
-  // 雙腳開腳駐鋤 (Trail Legs)
-  ctx.strokeStyle = '#78909C';
-  ctx.lineWidth = 1.8;
-  ctx.beginPath();
-  ctx.moveTo(0, 10);
-  ctx.lineTo(-12, 3);
-  ctx.moveTo(0, 10);
-  ctx.lineTo(-12, 17);
-  ctx.stroke();
-
-  // 彈藥箱與砲彈堆
-  ctx.fillStyle = '#8D6E63';
-  ctx.fillRect(-14, 8, 4, 4);
+  // 2. 地面物理工事: historical emplacement layout with era-appropriate silhouettes
+  drawEmplacements(ctx, 'towed_artillery', isPlayer);
 
   // 標籤
   ctx.fillStyle = labelColor;
@@ -550,29 +444,8 @@ function drawFlakBattery(rc: RenderContext, _inst: Installation, style: Installa
   ctx.arc(3, -31, 1.8, 0, Math.PI * 2);
   ctx.fill();
 
-  // 2. 地面物理工事: 友軍 90mm M2 / 敵軍 八八式 75mm 重型高射砲
-  ctx.strokeStyle = isPlayer ? '#64B5F6' : '#78909C';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(-8, 10);
-  ctx.lineTo(8, 10);
-  ctx.moveTo(0, 2);
-  ctx.lineTo(0, 18);
-  ctx.stroke();
-
-  // 旋轉圓盤
-  ctx.fillStyle = isPlayer ? '#1E3A5F' : '#37474F';
-  ctx.beginPath();
-  ctx.arc(0, 10, 4.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  // 高仰角防空砲管
-  ctx.strokeStyle = isPlayer ? '#80DEEA' : '#FF8A80';
-  ctx.lineWidth = 2.4;
-  ctx.beginPath();
-  ctx.moveTo(0, 10);
-  ctx.lineTo(16, 2);
-  ctx.stroke();
+  // 2. 地面物理工事: historical emplacement layout with era-appropriate silhouettes
+  drawEmplacements(ctx, 'flak_battery', isPlayer);
 
   // 標籤
   ctx.fillStyle = isPlayer ? '#80DEEA' : '#FF8A80';
@@ -1605,6 +1478,124 @@ function drawWatchtower(rc: RenderContext, inst: Installation, style: Installati
   ctx.font = 'bold 8.5px monospace';
   ctx.textAlign = 'center';
   ctx.fillText(`🗼 [${inst.name}]`, 0, -28);
+}
+
+type EmplacementKind = 'infantry_squad' | 'infantry_platoon' | 'tank_platoon' | 'tank_battalion' | 'towed_artillery' | 'flak_battery';
+
+/** U-shaped earth revetment open toward the rear, for a vehicle facing north (-y). */
+function drawRevetment(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  ctx.strokeStyle = 'rgba(141, 110, 99, 0.9)';
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  ctx.moveTo(x - w / 2, y + h / 2);
+  ctx.lineTo(x - w / 2, y - h / 2 + 2);
+  ctx.quadraticCurveTo(x - w / 2, y - h / 2, x - w / 2 + 2, y - h / 2);
+  ctx.lineTo(x + w / 2 - 2, y - h / 2);
+  ctx.quadraticCurveTo(x + w / 2, y - h / 2, x + w / 2, y - h / 2 + 2);
+  ctx.lineTo(x + w / 2, y + h / 2);
+  ctx.stroke();
+}
+
+/** Circular sandbagged gun pit. */
+function drawGunPit(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+  ctx.fillStyle = 'rgba(62, 39, 35, 0.55)';
+  ctx.strokeStyle = 'rgba(188, 170, 164, 0.85)';
+  ctx.lineWidth = 1.6;
+  ctx.setLineDash([1.8, 0.9]);
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+/** Draws a unit silhouette at (x, y), facing north, at the given scale. */
+function placeUnit(ctx: CanvasRenderingContext2D, unitType: string, isPlayer: boolean, x: number, y: number, scale: number) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(-Math.PI / 2);
+  drawGroundSilhouette(ctx, unitType, isPlayer, scale);
+  ctx.restore();
+}
+
+// WWII garrison layouts: USMC / US Army for the player, Imperial Japanese Army for the enemy,
+// matching the calibres on each installation's label.
+function drawEmplacements(ctx: CanvasRenderingContext2D, kind: EmplacementKind, isPlayer: boolean) {
+  const rifle = isPlayer ? 'usmc_rifle_42' : 'opfor_infantry_42';
+  const tank = isPlayer ? 'usmc_armor_m4' : 'opfor_type97_tank';
+  const gun = isPlayer ? 'usmc_artillery_105' : 'opfor_field_artillery';
+  switch (kind) {
+    case 'infantry_squad': {
+      ctx.strokeStyle = 'rgba(188, 170, 164, 0.85)';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.arc(0, 14, 12, Math.PI * 1.1, Math.PI * 1.9);
+      ctx.stroke();
+      placeUnit(ctx, rifle, isPlayer, 0, 10, 0.9);
+      break;
+    }
+    case 'infantry_platoon': {
+      // Zig-zag fire trench with three fireteams along it
+      ctx.strokeStyle = 'rgba(62, 39, 35, 0.95)';
+      ctx.lineWidth = 3.2;
+      ctx.lineJoin = 'miter';
+      ctx.beginPath();
+      ctx.moveTo(-20, 8);
+      for (let i = 0; i < 8; i++) ctx.lineTo(-20 + (i + 1) * 5, i % 2 === 0 ? 3 : 8);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(188, 170, 164, 0.6)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      for (const x of [-12, 0, 12]) placeUnit(ctx, rifle, isPlayer, x, 12, 0.62);
+      break;
+    }
+    case 'tank_platoon': {
+      for (const x of [-12, 0, 12]) {
+        drawRevetment(ctx, x, 9, 10, 16);
+        placeUnit(ctx, tank, isPlayer, x, 9, 0.55);
+      }
+      break;
+    }
+    case 'tank_battalion': {
+      // Two companies abreast plus a sandbagged command bunker
+      for (const [x, y] of [[-15, 4], [-5, 4], [5, 4], [15, 4], [-10, 19], [10, 19]]) {
+        drawRevetment(ctx, x, y, 8.5, 13);
+        placeUnit(ctx, tank, isPlayer, x, y, 0.45);
+      }
+      ctx.fillStyle = '#3E4A3D';
+      ctx.strokeStyle = 'rgba(188, 170, 164, 0.85)';
+      ctx.lineWidth = 1.2;
+      ctx.fillRect(-3.5, 15, 7, 7);
+      ctx.strokeRect(-3.5, 15, 7, 7);
+      break;
+    }
+    case 'towed_artillery': {
+      for (const x of [-15, -5, 5, 15]) {
+        drawGunPit(ctx, x, 10, 5);
+        placeUnit(ctx, gun, isPlayer, x, 12, 0.42);
+      }
+      break;
+    }
+    case 'flak_battery': {
+      // Four heavy AA guns (90mm M2 / Type 88 75mm) on cruciform platforms around the fire director
+      for (const [x, y] of [[-11, 3], [11, 3], [-11, 19], [11, 19]]) {
+        drawGunPit(ctx, x, y, 6);
+        placeUnit(ctx, 'opfor_ks19_heavy', isPlayer, x, y, 0.4);
+      }
+      ctx.fillStyle = '#263238';
+      ctx.strokeStyle = '#B0BEC5';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(0, 11, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-4, 11);
+      ctx.lineTo(4, 11);
+      ctx.stroke();
+      break;
+    }
+  }
 }
 
 // ════ S-75 Dvina (SA-2 Guideline) battery: the "Star of David" layout of six revetted SM-63

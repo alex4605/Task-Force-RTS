@@ -3,6 +3,10 @@ import { drawGroundSilhouette } from '../unitPreviewRenderer';
 import { RenderContext, Camera } from './context';
 import { drawUnitSelectionRing } from './ships';
 
+/** Vehicle / fireteam silhouette scale; the NATO frame and status bars are offset to clear it. */
+const SILHOUETTE_SCALE = 1.6;
+const FRAME_LIFT = 8;
+
 // Draw Ground Units (USMC Infantry, LVT Amphibious, Armor, and OPFOR Ambush squads)
 export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], camera: Camera, selectedUnitIds: string[]) {
   const ctx = rc.ctx;
@@ -44,14 +48,14 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
     // Soft ground contact shadow for crisp silhouette pop over island terrain
     ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
     ctx.beginPath();
-    ctx.ellipse(-1, 1.5, 13.5, 8.5, 0, 0, Math.PI * 2);
+    ctx.ellipse(-1, 1.5, 13.5 * SILHOUETTE_SCALE / 1.08, 8.5 * SILHOUETTE_SCALE / 1.08, 0, 0, Math.PI * 2);
     ctx.fill();
-    drawGroundSilhouette(ctx, unit.type, isPlayer, 1.08);
+    drawGroundSilhouette(ctx, unit.type, isPlayer, SILHOUETTE_SCALE);
     ctx.restore();
 
     // 1. NATO APP-6 Tactical Frame (藍色長方形 友軍 vs 紅色菱形 敵軍)
     const isHostile = !isPlayer;
-    const midY = -20;
+    const midY = -20 - FRAME_LIFT;
     const boxW = 25;
     const boxH = 14;
     const frameColor = isPlayer ? '#42A5F5' : '#FF5252';
@@ -279,24 +283,24 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
 
     // Background plate
     ctx.fillStyle = 'rgba(4, 12, 22, 0.88)';
-    ctx.fillRect(-barW / 2 - 1, 16, barW + 2, 7.5);
+    ctx.fillRect(-barW / 2 - 1, 23, barW + 2, 7.5);
     ctx.strokeStyle = '#1E3A5F';
     ctx.lineWidth = 0.8;
-    ctx.strokeRect(-barW / 2 - 1, 16, barW + 2, 7.5);
+    ctx.strokeRect(-barW / 2 - 1, 23, barW + 2, 7.5);
 
     // Bar 1: 組織度 ORG (綠色 / 混亂時黃色 / 崩潰時紅色)
     ctx.fillStyle = orgPct > 0.45 ? '#00E676' : orgPct > 0.2 ? '#FFD54F' : '#FF1744';
-    ctx.fillRect(-barW / 2, 17, barW * orgPct, 2.5);
+    ctx.fillRect(-barW / 2, 24, barW * orgPct, 2.5);
 
     // Bar 2: 建制度 STR (鋼藍色 / 受損時橙色)
     ctx.fillStyle = strPct > 0.5 ? '#00E5FF' : '#FF9100';
-    ctx.fillRect(-barW / 2, 20.2, barW * strPct, 2.5);
+    ctx.fillRect(-barW / 2, 27.2, barW * strPct, 2.5);
 
     // Bar 3: 火力壓制條 SUPPRESSION (受擊壓制時顯示紅/琥珀色進度條)
     if (unit.suppression && unit.suppression > 5) {
       const suppPct = Math.min(1, unit.suppression / 100);
       ctx.fillStyle = unit.suppression >= 50 ? '#FF1744' : '#FF9100';
-      ctx.fillRect(-barW / 2, 23.4, barW * suppPct, 2.2);
+      ctx.fillRect(-barW / 2, 30.4, barW * suppPct, 2.2);
     }
 
     // 6. Tactical Status Badges & Unit Name (保留純粹洗鍊 NATO 圖標，僅在選中或極端狀態下顯示戰術標籤)
@@ -304,7 +308,7 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
       ctx.font = 'bold 7.5px monospace';
       ctx.textAlign = 'center';
       ctx.fillStyle = '#00E5FF';
-      ctx.fillText('🛡️ [URBAN 掩體 -70%航彈 -50%直射]', 0, isSelected ? -46 : -36);
+      ctx.fillText('🛡️ [URBAN 掩體 -70%航彈 -50%直射]', 0, isSelected ? -54 : -44);
     }
 
     // 火力壓制警示標籤 (Progressive Suppression Badges)
@@ -314,10 +318,10 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
       const spdPenalty = Math.round((0.30 + (unit.suppression / 100) * 0.50) * 100);
       if (unit.suppression >= 50 || unit.isPinned) {
         ctx.fillStyle = '#FF1744';
-        ctx.fillText(`🛑【重度壓制 PINNED -${spdPenalty}% SPD】`, 0, isSelected ? -55 : -43);
+        ctx.fillText(`🛑【重度壓制 PINNED -${spdPenalty}% SPD】`, 0, isSelected ? -63 : -51);
       } else {
         ctx.fillStyle = '#FF9100';
-        ctx.fillText(`⚠️【火力壓制 SUPPRESSED -${spdPenalty}% SPD】`, 0, isSelected ? -55 : -43);
+        ctx.fillText(`⚠️【火力壓制 SUPPRESSED -${spdPenalty}% SPD】`, 0, isSelected ? -63 : -51);
       }
     }
 
@@ -326,7 +330,7 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
       ctx.font = 'bold 8.5px monospace';
       ctx.textAlign = 'center';
       ctx.fillStyle = '#FF1744';
-      ctx.fillText('📡🎯【反砲擊火控雷達鎖定 COUNTER-BATTERY】', 0, isSelected ? -65 : -53);
+      ctx.fillText('📡🎯【反砲擊火控雷達鎖定 COUNTER-BATTERY】', 0, isSelected ? -73 : -61);
       const pingR = (Math.sin(rc.time * 10) + 1) * 6 + 14;
       ctx.strokeStyle = 'rgba(255, 23, 68, 0.75)';
       ctx.lineWidth = 1.4;
@@ -341,23 +345,23 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
 
       if (unit.isSurrendered) {
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillText('🏳️【已降 SURRENDER】', 0, -35);
+        ctx.fillText('🏳️【已降 SURRENDER】', 0, -43);
       } else if (unit.isBanzaiCharging) {
         ctx.fillStyle = '#FF1744';
-        ctx.fillText('🔥【萬歲衝鋒 BANZAI】', 0, -35);
+        ctx.fillText('🔥【萬歲衝鋒 BANZAI】', 0, -43);
       } else if (unit.disorganized) {
         ctx.fillStyle = '#FFD54F';
-        ctx.fillText('⚠️【混亂壓制 DISORGANIZED】', 0, -35);
+        ctx.fillText('⚠️【混亂壓制 DISORGANIZED】', 0, -43);
       } else {
         ctx.fillStyle = isPlayer ? '#90CAF9' : '#FFAB91';
-        ctx.fillText(unit.name, 0, -35);
+        ctx.fillText(unit.name, 0, -43);
       }
 
       // 僅在選中時顯示詳細補給與數值，平時維持最高戰術地圖專業可讀性
       if (isSelected) {
         ctx.font = 'bold 7px monospace';
         ctx.fillStyle = unit.isSupplied ? '#00E676' : '#FF5252';
-        ctx.fillText(`ORG ${Math.round(orgPct * 100)}% · STR ${Math.round(strPct * 100)}% ${unit.isSupplied ? '[補給通]' : '[斷補]'}`, 0, 32);
+        ctx.fillText(`ORG ${Math.round(orgPct * 100)}% · STR ${Math.round(strPct * 100)}% ${unit.isSupplied ? '[補給通]' : '[斷補]'}`, 0, 39);
       }
     }
 
@@ -365,7 +369,7 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
 
     // Selection ring & Weapon range
     if (isSelected) {
-      drawUnitSelectionRing(rc, unit.pos, 22);
+      drawUnitSelectionRing(rc, unit.pos, 28);
 
       if (unit.range > 0) {
         ctx.strokeStyle = 'rgba(255, 213, 79, 0.28)';
