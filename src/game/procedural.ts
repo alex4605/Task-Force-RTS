@@ -2614,9 +2614,9 @@ export function createCVNNimitz(id: string, name: string, pos: Vector2D): Ship {
     flakCooldown: 0,
     flakRange: 1100,
     carrierPlanes: {
-      ready: { f14a: 10, fa18a: 8, a6e: 6, s3a: 4, e2c: 2, ea6b: 2, sh3f: 4 },
-      hangar: { f14a: 14, fa18a: 14, a6e: 10, s3a: 8, e2c: 4, ea6b: 6, sh3f: 6, c2a: 4, av8b: 6 },
-      maxPerType: { f14a: 14, fa18a: 14, a6e: 10, s3a: 8, e2c: 4, ea6b: 6, sh3f: 6, c2a: 4, av8b: 6 },
+      ready: { f14a: 10, fa18a: 8, a6e: 6, s3a: 4, e2c: 2, ea6b: 2, sh3f: 4, sh60b: 2 },
+      hangar: { f14a: 14, fa18a: 14, a6e: 10, s3a: 8, e2c: 4, ea6b: 6, sh3f: 6, sh60b: 4, c2a: 4, av8b: 6 },
+      maxPerType: { f14a: 14, fa18a: 14, a6e: 10, s3a: 8, e2c: 4, ea6b: 6, sh3f: 6, sh60b: 4, c2a: 4, av8b: 6 },
     },
   });
 }
@@ -4325,6 +4325,100 @@ export function createConvoyEscortShip(
 }
 
 // 友軍戰艦支援徵召 (Requisition BB)
+/**
+ * Casablanca-class escort carrier, the "jeep carrier" of Taffy 3 at Samar (USS Gambier Bay,
+ * CVE-73, sunk 25 October 1944): one 5"/38 on the fantail, twin 40 mm Bofors, 19 knots.
+ */
+export function createCasablancaCVE(id: string, name: string, pos: Vector2D): Ship {
+  const heading = -Math.PI / 4;
+  return createShip({
+    id,
+    name,
+    codeName: 'Jeep Carrier',
+    type: 'cve',
+    side: 'player',
+    era: 'era2',
+    pos: { ...pos },
+    heading,
+    speed: 12,
+    maxSpeed: 19,
+    length: 86,
+    width: 18,
+    health: 2100,
+    maxHealth: 2100,
+    armor: 0.12,
+    detectionRange: 3000,
+    turrets: [
+      createTurret(-40, 0, '5-inch/38 Mk 12 Single (艦艉單裝)', 1050, 2.4, 1, heading, 65),
+      createTurret(30, 7, '40mm Bofors Twin Mk 1 (艦艏左)', 700, 0.5, 2, heading, 30),
+      createTurret(30, -7, '40mm Bofors Twin Mk 1 (艦艏右)', 700, 0.5, 2, heading, 30),
+      createTurret(-30, 7, '40mm Bofors Twin Mk 1 (艦艉左)', 700, 0.5, 2, heading, 30),
+      createTurret(-30, -7, '40mm Bofors Twin Mk 1 (艦艉右)', 700, 0.5, 2, heading, 30),
+    ],
+    detailedArmaments: [
+      { name: '5吋38倍徑單裝高平兩用砲', count: '1門 (艦艉)', type: 'secondary', desc: '卡薩布蘭卡級唯一的大口徑火砲' },
+      { name: '40mm 博福斯雙聯裝機砲', count: '16門 (8座雙聯裝)', type: 'aa', desc: '護航航艦近程防空' },
+      { name: '20mm 厄利孔防空快砲', count: '20門', type: 'aa', desc: '近迫自衛火網' },
+      { name: '混合航空中隊 (Composite Squadron)', count: '28架', type: 'main', desc: 'FM-2 野貓 / TBM 復仇者 · 薩馬島外海以炸彈與機槍迎擊栗田艦隊' },
+    ],
+    flakCooldown: 0,
+    flakRange: 720,
+  });
+}
+
+/**
+ * USS New Jersey (BB-62) on her 1968-69 Vietnam gunline deployment: the only battleship in
+ * commission, 16-inch guns for shore bombardment, 20 x 5"/38, all light AA removed.
+ */
+export function createNewJersey1968(id: string, pos: Vector2D): Ship {
+  const ship = createPlayerBattleship(id, 'USS New Jersey (BB-62)', pos, 'era3');
+  ship.era = 'era4';
+  ship.codeName = 'Big J';
+  ship.turrets = ship.turrets.filter((tr) => !/3-inch|40mm|20mm/.test(tr.caliber));
+  ship.detailedArmaments = [
+    { name: '16吋50倍徑三聯裝 Mark 7 巨型艦砲', count: '9門 (3座三聯裝)', type: 'main', desc: '1968-69 越南岸轟：單次部署發射近 6,000 發 16 吋砲彈' },
+    { name: '5吋38倍徑雙聯裝高平兩用砲', count: '20門 (10座雙聯裝)', type: 'secondary', desc: '岸轟與防空' },
+    { name: '電子作戰系統 (ULQ-6)', count: '1套', type: 'secondary', desc: '1968 年重新服役時拆除全部 40mm / 20mm 輕防空砲' },
+  ];
+  return ship;
+}
+
+/**
+ * Project 123K (P-4) torpedo boat, the North Vietnamese boats of the Gulf of Tonkin incident
+ * (2 August 1964): aluminium planing hull, two 450 mm torpedoes, twin 14.5 mm KPV, 50 knots.
+ */
+export function createP4TorpedoBoat(id: string, name: string, pos: Vector2D): Ship {
+  const heading = (Math.PI * 3) / 4;
+  return createShip({
+    id,
+    name,
+    codeName: 'Swatow Striker',
+    type: 'patrol_boat',
+    side: 'enemy',
+    era: 'era4',
+    pos: { ...pos },
+    heading,
+    speed: 24,
+    maxSpeed: 50,
+    length: 34,
+    width: 7,
+    health: 480,
+    maxHealth: 480,
+    armor: 0.08,
+    detectionRange: 2000,
+    hasTorpedoes: true,
+    torpedoCooldown: 0,
+    torpedoReloadTime: 12,
+    turrets: [createTurret(6, 0, '14.5mm Twin KPV (2M-5 機槍塔)', 650, 0.3, 2, heading, 30)],
+    detailedArmaments: [
+      { name: '450mm 魚雷發射槽', count: '2條', type: 'torpedo', desc: '1964 年東京灣事件對美艦馬多克斯號發動魚雷攻擊' },
+      { name: '14.5mm KPV 雙聯裝重機槍', count: '2挺', type: 'aa', desc: '近程自衛' },
+    ],
+    flakCooldown: 0,
+    flakRange: 450,
+  });
+}
+
 export function createPlayerBattleship(
   id: string,
   name: string,
@@ -7800,7 +7894,8 @@ function addPlayerTaskForce(era: Era, cvPos: Vector2D, initialHeading: number, p
       createAdamsDDG('player-ddg1', 'USS Charles F. Adams (DDG-2)', { x: cvPos.x + 360, y: cvPos.y + 120 }),
       createForrestShermanDD('player-dd1', 'USS Forrest Sherman (DD-931)', { x: cvPos.x + 220, y: cvPos.y - 160 }),
       createKnoxFFG('player-ffg1', 'USS Knox (FFG-1052)', { x: cvPos.x - 180, y: cvPos.y + 260 }),
-      createLPHIwoJima('player-lph1', 'USS Iwo Jima (LPH-2)', { x: cvPos.x - 300, y: cvPos.y - 140 })
+      createLPHIwoJima('player-lph1', 'USS Iwo Jima (LPH-2)', { x: cvPos.x - 300, y: cvPos.y - 140 }),
+      createNewJersey1968('player-bb1', { x: cvPos.x + 120, y: cvPos.y + 300 })
     );
   } else {
     // ═══════════════════════════════════════════════════════════════════════
@@ -7841,6 +7936,8 @@ function addPlayerFleetEra1(cvPos: Vector2D, initialHeading: number, playerShips
   // 驅逐艦幕: USS Fletcher (DD-445), USS Radford (DD-446), USS O'Bannon (DD-450)
   // 艦載機編制: F4F Wildcat, SBD Dauntless, TBD Devastator, OS2U Kingfisher
   // ═══════════════════════════════════════════════════════════════════════
+  // USS Washington (BB-56): North Carolina class, sank Kirishima at the Naval Battle of Guadalcanal (15 Nov 1942)
+  playerShips.push(createPlayerBattleship('player-bb1', 'USS Washington (BB-56)', { x: cvPos.x + 260, y: cvPos.y + 190 }, 'era1'));
   playerShips.push(
     // 1. USS Enterprise (CV-6) - 企業號艦隊航母 (大E)
     createShip({
@@ -7880,9 +7977,9 @@ function addPlayerFleetEra1(cvPos: Vector2D, initialHeading: number, playerShips
       flakCooldown: 0,
       flakRange: 750,
       carrierPlanes: {
-        ready: { f4f: 8, sbd: 8, tbd: 6, os2u: 2 },
-        hangar: { f4f: 12, sbd: 12, tbd: 8, os2u: 2 },
-        maxPerType: { f4f: 14, sbd: 14, tbd: 8, os2u: 2 },
+        ready: { f4f: 8, sbd: 8, tbd: 2, tbf: 4, os2u: 2 },
+        hangar: { f4f: 12, sbd: 12, tbd: 4, tbf: 6, os2u: 2 },
+        maxPerType: { f4f: 14, sbd: 14, tbd: 6, tbf: 8, os2u: 2 },
       },
     }),
 
@@ -8143,6 +8240,8 @@ function addPlayerFleetEra2(cvPos: Vector2D, initialHeading: number, playerShips
   // 護航驅逐艦傳奇: USS Samuel B. Roberts (DE-413)
   // 艦載機編制: F6F Hellcat, F4U Corsair, F8F Bearcat, SB2C Helldiver, TBF Avenger
   // ═══════════════════════════════════════════════════════════════════════
+  // Taffy 3 escort carrier, Battle off Samar (25 Oct 1944)
+  playerShips.push(createCasablancaCVE('player-cve1', 'USS Gambier Bay (CVE-73)', { x: cvPos.x - 300, y: cvPos.y + 220 }));
   playerShips.push(
     // 1. USS Essex (CV-9) - 艾塞克斯號航空母艦
     createShip({
@@ -8681,7 +8780,9 @@ function addEnemyTaskForce(era: Era, enemyShips: Ship[], enemyCenter: Vector2D, 
       createOsaPTG('enemy-osa-1', 'Project 205 Osa (PTG-351)', { x: enemyCenter.x + 360, y: enemyCenter.y - 180 }),
       createOsaPTG('enemy-osa-2', 'Project 205 Osa (PTG-352)', { x: enemyCenter.x + 500, y: enemyCenter.y + 140 }),
       createKomarMissileBoat('enemy-komar-1', 'Project 183R Komar (PTG-181)', { x: enemyCenter.x - 220, y: enemyCenter.y - 280 }),
-      createFoxtrotSS('enemy-foxtrot-1', 'Project 641 Foxtrot (B-427)', { x: 3200, y: 3800 })
+      createFoxtrotSS('enemy-foxtrot-1', 'Project 641 Foxtrot (B-427)', { x: 3200, y: 3800 }),
+      createP4TorpedoBoat('enemy-p4-1', 'Project 123K P-4 (T-333)', { x: enemyCenter.x - 520, y: enemyCenter.y + 420 }),
+      createP4TorpedoBoat('enemy-p4-2', 'Project 123K P-4 (T-336)', { x: enemyCenter.x - 600, y: enemyCenter.y + 360 })
     );
   } else if (era === 'era5') {
     // ═══════════════════════════════════════════════════════════════════════

@@ -64,6 +64,7 @@ export type GroundUnitType =
   | 'us_army_chaparral_sam'    // 時代四 MIM-72 榭樹 (Chaparral) 履帶防空飛彈車
   | 'usmc_armor_m48'      // 時代四 M48A3 Patton 90mm 主力戰車排
   | 'usmc_ontos_m50'      // 時代四 M50 Ontos 6聯裝106mm無後座力砲反裝甲自走車
+  | 'us_m551_sheridan'    // 時代四 M551 謝里登空降突擊偵察車 (152mm 砲射飛彈兩用砲 / 鋁合金車體 / 可空投涉水)
   | 'usmc_lvtp5a1'        // 時代四 LVTP-5A1 兩棲重裝步戰車 (強烈火力支援與灘頭重載突擊)
   | 'usmc_armor_m3'      // 時代一 USMC M3 Stuart 裝甲排
   | 'usmc_armor_m4'      // 時代二 USMC M4A2 Sherman 裝甲排
@@ -1410,6 +1411,10 @@ export type AircraftModel =
   | 'a50'    // A-50 Mainstay (主桅長程空中早期預警機 · 伊留申-76 改裝)
   | 'su25'   // Su-25 Frogfoot (蛙足重裝甲近接支援強擊機 · 雙管30mm · S-24大火箭)
   | 'mi24'   // Mi-24 Hind (雌鹿空中飛行戰車 · 12.7mm四聯旋轉機槍 · 9M114 螺旋反裝甲)
+  | 'pby'    // PBY-5A Catalina (卡特琳娜水陸兩用巡邏機 · 黑貓夜間反艦 / 反潛 / 搜救)
+  | 'f84'    // F-84E/G Thunderjet (雷霆噴射戰鬥轟炸機 · 韓戰聯合國軍主力對地攻擊機)
+  | 'sh60b'  // SH-60B Seahawk (海鷹 LAMPS III 艦載反潛直升機 · Mk 46 魚雷 / 企鵝反艦飛彈)
+  | 'mig23'  // MiG-23ML Flogger-G (鞭撻者可變後掠翼戰鬥機 · R-23/R-24 · 華約數量最多的第三代戰機)
   | 'be12'   // Beriev Be-12 Chaika (別里耶夫 Be-12 海鷗式雙發反潛水上飛機 · 磁異探測尾針 · APR-1 航空魚雷)
   | 'il38';  // Ilyushin Il-38 May (伊留申 Il-38 五月遠洋四發反潛巡邏機 · 聲吶浮標網 · AT-1/APR-2 魚雷)
 

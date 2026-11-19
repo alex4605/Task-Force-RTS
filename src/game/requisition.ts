@@ -919,6 +919,17 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
         typeTag: 'armor_m48',
       },
       {
+        id: 'req-ground-m551',
+        category: 'ground',
+        name: 'US Army M551 謝里登裝甲騎兵排',
+        cost: 280,
+        era: 'era4',
+        badge: '152mm砲射飛彈兩用砲',
+        desc: '1969 年起投入越南裝甲騎兵團的空降突擊偵察車：鋁合金車體可空投、可浮渡，152mm 主砲發射 M625 霰彈對付叢林步兵。',
+        statsDesc: 'HP: 1500 | 152mm 兩用砲 | 高機動輕裝甲 | 兩棲浮渡',
+        typeTag: 'm551_sheridan',
+      },
+      {
         id: 'req-ground-ontos',
         category: 'ground',
         name: 'USMC M50 昂圖斯六聯無後座力砲戰車排',

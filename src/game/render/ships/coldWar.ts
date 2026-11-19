@@ -1197,6 +1197,10 @@ export function drawPetyaFFG(rc: RenderContext, ship: Ship, hullColor: string, d
 // twin 25mm 2M-3 mounts fore and aft, small wheelhouse with radar mast.
 export function drawP6TorpedoBoat(rc: RenderContext, ship: Ship, hullColor: string, detailColor: string) {
   const ctx = rc.ctx;
+  if (/P-4/.test(ship.name)) {
+    drawP4TorpedoBoat(ctx, ship, hullColor, detailColor);
+    return;
+  }
   const l = ship.length;
   const w = ship.width;
 
@@ -1276,4 +1280,64 @@ export function drawP6TorpedoBoat(rc: RenderContext, ship: Ship, hullColor: stri
     ctx.lineTo(mx + dir * 6, 1.1);
     ctx.stroke();
   }
+}
+
+/**
+ * Project 123K (P-4) hydroplane torpedo boat: a short duralumin stepped hull, broad aft and very
+ * fine forward, two torpedo troughs on the after deck that drop their 450 mm torpedoes over the
+ * stern, and a small enclosed wheelhouse topped by the twin 14.5 mm KPV turret.
+ */
+function drawP4TorpedoBoat(ctx: CanvasRenderingContext2D, ship: Ship, hullColor: string, detailColor: string) {
+  const l = ship.length;
+  const w = ship.width;
+  ctx.fillStyle = '#2B3236';
+  ctx.strokeStyle = hullColor;
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(l * 0.5, 0);
+  ctx.quadraticCurveTo(l * 0.2, -w * 0.5, -l * 0.1, -w * 0.5);
+  ctx.lineTo(-l * 0.5, -w * 0.46);
+  ctx.lineTo(-l * 0.5, w * 0.46);
+  ctx.lineTo(-l * 0.1, w * 0.5);
+  ctx.quadraticCurveTo(l * 0.2, w * 0.5, l * 0.5, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  // Hydroplane step across the hull
+  ctx.strokeStyle = 'rgba(176, 190, 197, 0.45)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(-l * 0.05, -w * 0.48);
+  ctx.lineTo(-l * 0.05, w * 0.48);
+  ctx.stroke();
+
+  // Two stern-launching torpedo troughs with the torpedoes in them
+  for (const side of [-1, 1]) {
+    ctx.fillStyle = '#1A1F22';
+    ctx.fillRect(-l * 0.5, side * w * 0.26 - w * 0.1, l * 0.42, w * 0.2);
+    ctx.fillStyle = '#B0BEC5';
+    ctx.fillRect(-l * 0.48, side * w * 0.26 - w * 0.06, l * 0.36, w * 0.12);
+    ctx.fillStyle = '#FF5252';
+    ctx.fillRect(-l * 0.14, side * w * 0.26 - w * 0.06, l * 0.03, w * 0.12);
+  }
+
+  // Wheelhouse with the twin KPV turret on its roof
+  ctx.fillStyle = '#37474F';
+  ctx.strokeStyle = detailColor;
+  ctx.lineWidth = 1.1;
+  ctx.fillRect(l * 0.02, -w * 0.28, l * 0.2, w * 0.56);
+  ctx.strokeRect(l * 0.02, -w * 0.28, l * 0.2, w * 0.56);
+  ctx.fillStyle = '#263238';
+  ctx.strokeStyle = '#FF5252';
+  ctx.beginPath();
+  ctx.arc(l * 0.12, 0, w * 0.18, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(l * 0.12, -0.9);
+  ctx.lineTo(l * 0.12 + 6, -0.9);
+  ctx.moveTo(l * 0.12, 0.9);
+  ctx.lineTo(l * 0.12 + 6, 0.9);
+  ctx.stroke();
 }

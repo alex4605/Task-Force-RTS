@@ -135,6 +135,10 @@ const AIRCRAFT_BASE_STATS: Partial<Record<AircraftModel, AircraftBaseStats>> = {
   su27: { health: 880, gunRounds: 1440 },
   a50: { health: 1500, gunRounds: 1440 },
   su25: { health: 1350, gunRounds: 1440 },
+  pby: { health: 900, gunRounds: 1500 }, // bow turret, waist blisters, tunnel gun
+  f84: { health: 560, gunRounds: 1800 }, // six .50 cal
+  sh60b: { health: 700, gunRounds: 0 },
+  mig23: { health: 620, gunRounds: 200 }, // GSh-23L
   mi24: { health: 880, gunRounds: 1440 },
 };
 

@@ -581,11 +581,11 @@ export class GameEngine {
     // Initialize friendly airbase planes & replenishment timers (包含水平轟炸機、陸基戰鬥機、陸基攻擊機)
     this.airbasePlanes =
       this.era === 'era1'
-        ? { b17: 6, b25: 6, p40: 8, p36a: 8, p39d: 6, a20: 6, f4f: 8, sbd: 8, tbd: 6, os2u: 2, c47: 4 }
+        ? { b17: 6, b25: 6, p40: 8, p36a: 8, p39d: 6, a20: 6, f4f: 8, sbd: 8, tbd: 6, os2u: 2, c47: 4, pby: 3 }
         : this.era === 'era2'
-        ? { b24: 6, b17_late: 6, p51: 8, p47: 6, p38: 4, f6f: 10, f4u: 8, sb2c: 8, tbf: 8, sc1: 2, c47: 4 }
+        ? { b24: 6, b17_late: 6, p51: 8, p47: 6, p38: 4, f6f: 10, f4u: 8, sb2c: 8, tbf: 8, sc1: 2, c47: 4, pby: 3 }
         : this.era === 'era3'
-        ? { b29: 6, f86: 8, f82: 6, a26: 6, f9f: 8, f2h: 6, ad1: 8, f4u4: 6, af_guardian: 4, ad3w: 2, ho3s1: 2, c47: 4 }
+        ? { b29: 6, f86: 8, f84: 8, f82: 6, a26: 6, f9f: 8, f2h: 6, ad1: 8, f4u4: 6, af_guardian: 4, ad3w: 2, ho3s1: 2, c47: 4 }
         : this.era === 'era4'
         ? { b52: 4, f4e: 8, f105: 8, a7: 8, a1h: 6, a37b: 6, f5a: 6, f104g: 6, ov10: 6, uh1: 6, ah1: 6, f4j: 6, a6a: 6, e1: 2, c1: 4 }
         : { b52: 4, f111: 4, a10a: 8, ah64a: 6, ah1w: 6, f15a: 8, f16a: 8, e3a: 2, c130: 4, f14a: 10, fa18a: 8, a6e: 6, s3a: 4, e2c: 2, ea6b: 4, av8b: 6, ch53: 4, sh3f: 4, c2a: 4 };
@@ -3384,8 +3384,8 @@ export class GameEngine {
         plane.shootCooldown -= dt;
         const targetPlane = targetEntity && 'role' in targetEntity ? (targetEntity as Aircraft) : null;
         if (targetPlane && targetPlane.state !== 'shot_down') {
-          if (plane.side === 'enemy' && (plane.model === 'su27' || plane.model === 'mig29a' || plane.model === 'mig21' || plane.model === 'mig17')) {
-            if (plane.model === 'su27' || plane.model === 'mig29a') {
+          if (plane.side === 'enemy' && (plane.model === 'su27' || plane.model === 'mig29a' || plane.model === 'mig23' || plane.model === 'mig21' || plane.model === 'mig17')) {
+            if (plane.model === 'su27' || plane.model === 'mig29a' || plane.model === 'mig23') {
               // Era 5 Soviet 4th Gen Fighters: R-27 BVR & R-73 High-Off-Boresight Dogfight
               if (d >= 1000 && d <= AIR_WEAPON_RANGE.r27er && plane.shootCooldown <= 0) {
                 this.fireAAMissile(plane, targetPlane, 'aim7'); // R-27ER Alamo BVR
@@ -3914,8 +3914,8 @@ export class GameEngine {
       plane.shootCooldown -= dt;
 
       if (isModernFighter) {
-        if (plane.side === 'enemy' && (plane.model === 'su27' || plane.model === 'mig29a' || plane.model === 'mig21' || plane.model === 'mig17')) {
-          if (plane.model === 'su27' || plane.model === 'mig29a') {
+        if (plane.side === 'enemy' && (plane.model === 'su27' || plane.model === 'mig29a' || plane.model === 'mig23' || plane.model === 'mig21' || plane.model === 'mig17')) {
+          if (plane.model === 'su27' || plane.model === 'mig29a' || plane.model === 'mig23') {
             if (hDist >= 1000 && hDist <= 3600 && plane.shootCooldown <= 0) {
               this.fireAAMissile(plane, hostile, 'aim7'); // R-27ER Alamo
               plane.shootCooldown = 5.0;
@@ -6644,7 +6644,7 @@ export class GameEngine {
     const scrambleTarget = flagship ? { ...flagship.pos } : { x: 5000, y: 5000 };
     const heading = Math.atan2(scrambleTarget.y - spawnPos.y, scrambleTarget.x - spawnPos.x);
 
-    const scModel: AircraftModel = isEra5 ? (Math.random() < 0.5 ? 'su27' : 'mig29a') : isEra4 ? (Math.random() < 0.5 ? 'mig21' : 'mig19') : isEra3 ? 'mig15' : fModel;
+    const scModel: AircraftModel = isEra5 ? (() => { const r = Math.random(); return r < 0.34 ? 'su27' : r < 0.67 ? 'mig29a' : 'mig23'; })() : isEra4 ? (Math.random() < 0.5 ? 'mig21' : 'mig19') : isEra3 ? 'mig15' : fModel;
     const scSpeed = getAircraftSpeed(scModel);
     const scHealth = isEra5 ? 720 : scModel === 'mig21' ? 580 : scModel === 'mig19' ? 560 : isEra3 ? 540 : 150;
     const scrambleCount = Math.min(8, this.calculateDynamicWaveSize(4));
@@ -6656,7 +6656,7 @@ export class GameEngine {
         model: scModel,
         role: 'fighter',
         name: isEra5
-          ? (scModel === 'su27' ? `Su-27 側衛緊急迎擊噴射機 (#${i + 1})` : `MiG-29A 支點超音速迎擊機 (#${i + 1})`)
+          ? (scModel === 'su27' ? `Su-27 側衛緊急迎擊噴射機 (#${i + 1})` : scModel === 'mig23' ? `MiG-23ML 鞭撻者緊急迎擊機 (#${i + 1})` : `MiG-29A 支點超音速迎擊機 (#${i + 1})`)
           : isEra4
           ? (scModel === 'mig21' ? `MiG-21 緊急迎擊噴射機 (#${i + 1})` : `MiG-19 超音速迎擊機 (#${i + 1})`)
           : isEra3
@@ -6674,11 +6674,11 @@ export class GameEngine {
         health: scHealth,
         maxHealth: scHealth,
         order: { type: 'attack', targetPos: scrambleTarget },
-        hasPayload: (isEra5 || isEra4) && (scModel === 'su27' || scModel === 'mig29a' || scModel === 'mig21'),
+        hasPayload: (isEra5 || isEra4) && (scModel === 'su27' || scModel === 'mig29a' || scModel === 'mig23' || scModel === 'mig21'),
         payloadType: (isEra5 || isEra4) ? 'aim9_sidewinder' : undefined,
         shootCooldown: 0,
-        gunAmmo: scModel === 'su27' ? 250 : scModel === 'mig29a' ? 250 : scModel === 'mig21' ? 200 : scModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
-        maxGunAmmo: scModel === 'su27' ? 250 : scModel === 'mig29a' ? 250 : scModel === 'mig21' ? 200 : scModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
+        gunAmmo: scModel === 'su27' ? 250 : scModel === 'mig29a' ? 250 : scModel === 'mig23' ? 200 : scModel === 'mig21' ? 200 : scModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
+        maxGunAmmo: scModel === 'su27' ? 250 : scModel === 'mig29a' ? 250 : scModel === 'mig23' ? 200 : scModel === 'mig21' ? 200 : scModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
         wingmanOffset: { x: i * 22, y: 15 },
         missionType: 'scramble',
         chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
@@ -6813,20 +6813,20 @@ export class GameEngine {
     const targetPos = targetPlane ? targetPlane.pos : (flagship ? flagship.pos : { x: 5000, y: 5000 });
     const heading = Math.atan2(targetPos.y - spawnPos.y, targetPos.x - spawnPos.x);
 
-    const dcaModel: AircraftModel = isEra5 ? (Math.random() < 0.5 ? 'su27' : 'mig29a') : isEra4 ? (Math.random() < 0.6 ? 'mig21' : 'mig19') : isEra3 ? 'mig15' : fModel;
+    const dcaModel: AircraftModel = isEra5 ? (() => { const r = Math.random(); return r < 0.34 ? 'su27' : r < 0.67 ? 'mig29a' : 'mig23'; })() : isEra4 ? (Math.random() < 0.6 ? 'mig21' : 'mig19') : isEra3 ? 'mig15' : fModel;
     const dcaSpeed = getAircraftSpeed(dcaModel);
     const dcaHealth = isEra5 ? 750 : dcaModel === 'mig21' ? 580 : dcaModel === 'mig19' ? 560 : isEra3 ? 540 : 160;
     const dcaCount = this.calculateDynamicWaveSize(5);
 
     for (let i = 0; i < dcaCount; i++) {
-      const thisModel: AircraftModel = isEra5 ? (i % 2 === 0 ? 'su27' : 'mig29a') : isEra4 ? (i % 2 === 0 ? 'mig21' : 'mig19') : dcaModel;
+      const thisModel: AircraftModel = isEra5 ? (['su27', 'mig29a', 'mig23'] as const)[i % 3] : isEra4 ? (i % 2 === 0 ? 'mig21' : 'mig19') : dcaModel;
       this.aircraft.push({
         id: `enemy-dca-${Date.now()}-${i}`,
         squadronId: sqId,
         model: thisModel,
         role: 'fighter',
         name: isEra5
-          ? (thisModel === 'su27' ? `Su-27 側衛超音速防空截擊機 (#${i + 1})` : `MiG-29A 支點全天候截擊機 (#${i + 1})`)
+          ? (thisModel === 'su27' ? `Su-27 側衛超音速防空截擊機 (#${i + 1})` : thisModel === 'mig23' ? `MiG-23ML 鞭撻者可變翼截擊機 (#${i + 1})` : `MiG-29A 支點全天候截擊機 (#${i + 1})`)
           : isEra4
           ? (thisModel === 'mig21' ? `MiG-21 魚窩超音速防空截擊機 (#${i + 1})` : `MiG-19 農夫超音速防空截擊機 (#${i + 1})`)
           : isEra3
@@ -6844,11 +6844,11 @@ export class GameEngine {
         health: dcaHealth,
         maxHealth: dcaHealth,
         order: targetPlane ? { type: 'attack', targetPos, targetId: targetPlane.id } : { type: 'patrol', patrolOrigin: spawnPos },
-        hasPayload: (isEra5 || isEra4) && (thisModel === 'su27' || thisModel === 'mig29a' || thisModel === 'mig21'),
+        hasPayload: (isEra5 || isEra4) && (thisModel === 'su27' || thisModel === 'mig29a' || thisModel === 'mig23' || thisModel === 'mig21'),
         payloadType: (isEra5 || isEra4) ? 'aim9_sidewinder' : undefined,
         shootCooldown: 0,
-        gunAmmo: thisModel === 'su27' ? 250 : thisModel === 'mig29a' ? 250 : thisModel === 'mig21' ? 200 : thisModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
-        maxGunAmmo: thisModel === 'su27' ? 250 : thisModel === 'mig29a' ? 250 : thisModel === 'mig21' ? 200 : thisModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
+        gunAmmo: thisModel === 'su27' ? 250 : thisModel === 'mig29a' ? 250 : thisModel === 'mig23' ? 200 : thisModel === 'mig21' ? 200 : thisModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
+        maxGunAmmo: thisModel === 'su27' ? 250 : thisModel === 'mig29a' ? 250 : thisModel === 'mig23' ? 200 : thisModel === 'mig21' ? 200 : thisModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
         wingmanOffset: { x: i * 25, y: (i - (dcaCount - 1) / 2) * 20 },
         missionType: 'dca',
         chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
@@ -7811,7 +7811,7 @@ export class GameEngine {
       const isMlrs = unit.type === 'us_m270_mlrs';
       const isAtgm = unit.type === 'us_dragon_atgm' || unit.type === 'us_m2_bradley';
       const isArty = unit.isArtillery || unit.isSPG || unit.type.includes('artillery') || unit.type.includes('howitzer') || unit.type === 'us_m198_155';
-      const isTank = unit.type.includes('armor') || unit.type.includes('tank') || unit.type === 'us_m1ip_abrams' || unit.type === 'us_m60a1_rise';
+      const isTank = unit.type.includes('armor') || unit.type.includes('tank') || unit.type === 'us_m1ip_abrams' || unit.type === 'us_m60a1_rise' || unit.type === 'us_m551_sheridan';
       const isShell = isTank || isArty || unit.type === 'usmc_lvt_45' || unit.type === 'usmc_lvtp5a1' || unit.type === 'usmc_aav7a1' || unit.type === 'usmc_lav25';
 
       if (isNuclearAtacms) {
@@ -9565,6 +9565,8 @@ export class GameEngine {
       gUnit = createGroundUnit(gId, 'usmc_air_assault_65', 'USMC 空中突擊/直升機機降突擊排 (1965)', 'player', this.era, spawnPos);
     } else if (item.typeTag === 'armor_m48') {
       gUnit = createGroundUnit(gId, 'usmc_armor_m48', 'USMC M48A3 巴頓主力戰車排', 'player', this.era, spawnPos);
+    } else if (item.typeTag === 'm551_sheridan') {
+      gUnit = createGroundUnit(gId, 'us_m551_sheridan', 'US Army M551 謝里登裝甲騎兵排', 'player', this.era, spawnPos);
     } else if (item.typeTag === 'ontos_m50') {
       gUnit = createGroundUnit(gId, 'usmc_ontos_m50', 'USMC M50 昂圖斯六聯無後座力砲戰車', 'player', this.era, spawnPos);
     } else if (item.typeTag === 'artillery') {
@@ -17781,7 +17783,7 @@ export class GameEngine {
       'opfor_zsu57_2', 'opfor_sa6_kub', 'opfor_sa9_strela1', 'opfor_sa8_osa', 'opfor_sa11_buk', 'opfor_sa15_tor', 'opfor_btr_zd',
       'opfor_tunguska', 'opfor_strela10', 'opfor_t72b', 'opfor_t80b', 'opfor_bmp2',
       'usmc_armor_m3', 'usmc_armor_m4', 'usmc_patton_m46', 'us_army_armor_korea',
-      'usmc_duster_m42', 'usmc_armor_m48', 'usmc_ontos_m50', 'us_army_m113_mech', 'us_army_chaparral_sam'
+      'usmc_duster_m42', 'usmc_armor_m48', 'usmc_ontos_m50', 'us_m551_sheridan', 'us_army_m113_mech', 'us_army_chaparral_sam'
     ];
     const armorUnits = validGround.filter((u) => armorTypes.includes(u.type));
     if (armorUnits.length > 0) {

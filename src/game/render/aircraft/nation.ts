@@ -29,12 +29,12 @@ export const AIRCRAFT_NATION: Record<AircraftModel, AircraftNation> = {
   sc1: 'usn', f9f: 'usn', f2h: 'usn', ad1: 'usn', f4u4: 'usn', af_guardian: 'usn', ad3w: 'usn', ho3s1: 'usn',
   f8: 'usn', f4b: 'usn', f4j: 'usn', a4: 'usn', a6a: 'usn', a6b_weasel: 'usn', e1: 'usn', s2: 'usn', uh2: 'usn',
   sh2: 'usn', c1: 'usn', a7: 'usn', p3: 'usn', a1h: 'usn', f14a: 'usn', fa18a: 'usn', s3a: 'usn', a6e: 'usn',
-  e2c: 'usn', ea6b: 'usn', c2a: 'usn', sh3f: 'usn', av8b: 'usn', ch53: 'usn', ah1w: 'usn',
+  e2c: 'usn', ea6b: 'usn', c2a: 'usn', sh3f: 'usn', av8b: 'usn', ch53: 'usn', ah1w: 'usn', pby: 'usn', sh60b: 'usn',
   // US Army Air Forces / US Air Force / US Army
   b17: 'usaf', b24: 'usaf', p40: 'usaf', p38: 'usaf', a20: 'usaf', a26: 'usaf', p51: 'usaf', p47: 'usaf',
   b29: 'usaf', f86: 'usaf', f4e: 'usaf', f105: 'usaf', b52: 'usaf', ov10: 'usaf', uh1: 'usaf', ah1: 'usaf',
   c47: 'usaf', f15a: 'usaf', f16a: 'usaf', a10a: 'usaf', f111: 'usaf', e3a: 'usaf', ah64a: 'usaf', c130: 'usaf',
-  p36a: 'usaf', b25: 'usaf', p39d: 'usaf', b17_late: 'usaf', f82: 'usaf', a37b: 'usaf', f5a: 'usaf',
+  p36a: 'usaf', b25: 'usaf', p39d: 'usaf', b17_late: 'usaf', f82: 'usaf', a37b: 'usaf', f5a: 'usaf', f84: 'usaf',
   // Imperial Japan
   zero: 'japan', zero_a6m2: 'japan', zero_a6m5: 'japan', kamikaze_zero: 'japan', ki61: 'japan', george: 'japan',
   val: 'japan', judy: 'japan', kate: 'japan', jill: 'japan', g4m: 'japan', ohka: 'japan', kamikaze_judy: 'japan',
@@ -50,7 +50,7 @@ export const AIRCRAFT_NATION: Record<AircraftModel, AircraftNation> = {
   // Soviet Union / Warsaw Pact
   mig15: 'ussr', tu14: 'ussr', yak9: 'ussr', il10: 'ussr', mig17: 'ussr', mig19: 'ussr', mig21: 'ussr',
   su7: 'ussr', il28: 'ussr', tu16: 'ussr', tu95: 'ussr', tu22m3: 'ussr', yak38: 'ussr', ka27: 'ussr',
-  mig29a: 'ussr', su27: 'ussr', a50: 'ussr', su25: 'ussr', mi24: 'ussr', be12: 'ussr', il38: 'ussr',
+  mig29a: 'ussr', su27: 'ussr', a50: 'ussr', su25: 'ussr', mi24: 'ussr', be12: 'ussr', il38: 'ussr', mig23: 'ussr',
 };
 
 /**

@@ -50,6 +50,8 @@ const TANK_SPECS: TankSpec[] = [
   { match: /armor_m4/, hullL: 20, hullW: 10.5, glacis: 2.5, turret: 'round', turretX: 0.5, turretY: 0, turretRx: 4.8, turretRy: 4.2, gunLen: 10, gunW: 1.6 },
   // Korea: M4A3E8 / M46 mix -> M46 Patton proportions with 90mm and bore evacuator
   { match: /patton_m46|armor_korea/, hullL: 22, hullW: 11.5, glacis: 2, turret: 'round', turretX: 0, turretY: 0, turretRx: 5.6, turretRy: 4.8, gunLen: 13, gunW: 1.8, evacuatorAt: 0.75, muzzleBrake: true },
+  // M551 Sheridan: low aluminium hull, flat welded turret, short fat 152mm gun-launcher
+  { match: /sheridan/, hullL: 19, hullW: 10.5, glacis: 3, turret: 'boxy', turretX: -0.5, turretY: 0, turretRx: 4.6, turretRy: 4, gunLen: 7.5, gunW: 2.6 },
   // M48 Patton: big egg-shaped cast turret
   { match: /m48/, hullL: 23, hullW: 12, glacis: 2.5, turret: 'round', turretX: -0.5, turretY: 0, turretRx: 6.2, turretRy: 5.2, gunLen: 13.5, gunW: 1.9, evacuatorAt: 0.72, muzzleBrake: true },
   // M60A1: needle-nose turret, 105mm M68 with bore evacuator
@@ -838,6 +840,7 @@ export function groundSilhouetteClass(unitType: string): GroundSilhouetteClass {
     t.includes('armor_m4') ||
     t.includes('armor_m3') ||
     t.includes('ontos') ||
+    t.includes('sheridan') ||
     t.includes('su100') ||
     t.includes('su_100');
 

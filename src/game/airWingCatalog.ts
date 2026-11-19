@@ -42,6 +42,7 @@ export function getCarrierModelsForEra(era: Era): CarrierModelDef[] {
       { model: 'f4f', label: 'F4F Wildcat', role: 'fighter', desc: '4x .50 cal · CAP Escort' },
       { model: 'sbd', label: 'SBD Dauntless', role: 'dive_bomber', desc: 'AP Bomb / Dual 500lb' },
       { model: 'tbd', label: 'TBD Devastator', role: 'torpedo_bomber', desc: 'Mk 13 Torpedo / ASW' },
+      { model: 'tbf', label: 'TBF-1 Avenger', role: 'torpedo_bomber', desc: '1942 年 6 月起取代 TBD · 東所羅門 / 聖克魯斯海戰' },
       { model: 'os2u', label: 'OS2U Kingfisher', role: 'scout', desc: 'Air Recon & Spotting' },
     ];
   }
@@ -157,6 +158,12 @@ export function getCarrierModelsForEra(era: Era): CarrierModelDef[] {
       desc: '全天候艦載多用途打擊戰鬥機 · AIM-7/9/魚叉',
     },
     {
+      model: 'sh60b',
+      label: 'SH-60B Seahawk',
+      role: 'torpedo_bomber',
+      desc: 'LAMPS III 艦載反潛直升機 · 聲納浮標 / Mk 46 魚雷 / 磁異探測',
+    },
+    {
       model: 'a6e',
       label: 'A-6E TRAM',
       role: 'attacker',
@@ -259,6 +266,7 @@ export function getAfbModelsForEra(era: Era): AfbModelDef[] {
       { id: 'p39d', label: 'P-39D 空中眼鏡蛇', role: 'attacker', desc: '中置引擎 · 槳轂37mm機砲重穿甲', isNavy: false },
       { id: 'a20', label: 'A-20 浩劫', role: 'attacker', desc: '雙發對艦/對地重攻擊機', isNavy: false },
       { id: 'c47', label: 'C-47 空中列車', role: 'transport', desc: '戰術傘兵運輸機 · 空投陸戰/空降傘兵奪島 (按U卸載)', isNavy: false },
+      { id: 'pby', label: 'PBY-5A 卡特琳娜 (黑貓)', role: 'scout', desc: '水陸兩用巡邏機 · 夜間雷達搜索 / 深水炸彈 / 魚雷 · 搜救', isNavy: true },
       { id: 'f4f', label: 'F4F 野貓 (海軍陸基)', role: 'fighter', desc: '可轉場回企業號航艦', isNavy: true },
       { id: 'sbd', label: 'SBD 無畏 (海軍陸基)', role: 'dive_bomber', desc: '可轉場回企業號航艦', isNavy: true },
       { id: 'tbd', label: 'TBD 毀滅者 (海軍陸基)', role: 'torpedo_bomber', desc: '可轉場回企業號航艦', isNavy: true },
@@ -266,6 +274,7 @@ export function getAfbModelsForEra(era: Era): AfbModelDef[] {
   }
   if (era === 'era2') {
     return [
+      { id: 'pby', label: 'PBY-5A 卡特琳娜 (黑貓)', role: 'scout', desc: '黑貓中隊夜間反艦 · 雷達搜索 / 深水炸彈 / 魚雷 · 搜救', isNavy: true },
       { id: 'b24', label: 'B-24 解放者', role: 'level_bomber', desc: '超重型遠程水平轟炸機 · 16枚地毯連環航彈', isNavy: false },
       { id: 'b17_late', label: 'B-17G 飛行堡壘 (後期)', role: 'level_bomber', desc: '下顎雙聯.50機砲砲塔 · 密集防禦火網 · 16枚地毯轟炸', isNavy: false },
       { id: 'p51', label: 'P-51 野馬', role: 'fighter', desc: '長程高速空優戰鬥機 · 6x .50 機槍 / 火箭 / 航彈', isNavy: false },
@@ -281,6 +290,7 @@ export function getAfbModelsForEra(era: Era): AfbModelDef[] {
   if (era === 'era3') {
     return [
       { id: 'b29', label: 'B-29 超級堡壘', role: 'level_bomber', desc: '萬米平流層戰略重轟 · 24枚連環地毯航彈 / Mk 4 戰術核彈', isNavy: false },
+      { id: 'f84', label: 'F-84G 雷霆噴射', role: 'attacker', desc: '韓戰聯合國軍主力噴射戰轟機 · 6挺.50機槍 / 航彈 / HVAR / 凝固汽油彈', isNavy: false },
       { id: 'f86', label: 'F-86 軍刀', role: 'fighter', desc: '後掠翼噴射空優王者 · 6x .50 M3 柯爾特高射速機砲', isNavy: false },
       { id: 'f82', label: 'F-82 雙野馬長程截擊機', role: 'fighter', desc: '雙機身超長程護航戰機 · 6x .50高射速機砲', isNavy: false },
       { id: 'a26', label: 'A-26 入侵者', role: 'attacker', desc: '雙發高速重攻擊機 · 凝固汽油燃燒彈 / 小蒂姆火箭 / 巨彈', isNavy: false },

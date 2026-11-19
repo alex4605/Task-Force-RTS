@@ -968,7 +968,7 @@ const AIRCRAFT_PROPULSION: Record<AircraftModel, Propulsion> = {
   p3: 'multi_prop', ov10: 'multi_prop', g4m: 'multi_prop', e2c: 'multi_prop', c2a: 'multi_prop',
   c130: 'multi_prop', b25: 'multi_prop', beaufighter: 'multi_prop', b17_late: 'multi_prop',
   mosquito: 'multi_prop', lancaster: 'multi_prop', f82: 'multi_prop', tu95: 'multi_prop', be12: 'multi_prop',
-  il38: 'multi_prop',
+  il38: 'multi_prop', pby: 'multi_prop',
   // jet
   f86: 'jet', f9f: 'jet', f2h: 'jet', f8: 'jet', f4b: 'jet', f4f_phantom: 'jet', f4j: 'jet', a4: 'jet', a6a: 'jet',
   a6b_weasel: 'jet', f4e: 'jet', f105: 'jet', a7: 'jet', ohka: 'jet', mig15: 'jet', mig17: 'jet',
@@ -976,14 +976,14 @@ const AIRCRAFT_PROPULSION: Record<AircraftModel, Propulsion> = {
   av8b: 'jet', a10a: 'jet', f15a: 'jet', f16a: 'jet', f111: 'jet', meteor: 'jet', a37b: 'jet', f5a: 'jet',
   f104g: 'jet', mirage3: 'jet', hunter_fga9: 'jet', tornado_gr1: 'jet', tornado_ids: 'jet',
   tornado_adv: 'jet', mirage2000: 'jet', jaguar_gr1: 'jet', viggen_ja37: 'jet', tu22m3: 'jet', yak38: 'jet',
-  mig29a: 'jet', su27: 'jet', su25: 'jet',
+  mig29a: 'jet', su27: 'jet', su25: 'jet', f84: 'jet', mig23: 'jet',
   // podded_jet
   b52: 'podded_jet', tu14: 'podded_jet', il28: 'podded_jet', s3a: 'podded_jet', e3a: 'podded_jet',
   a50: 'podded_jet',
   // helicopter
   ho3s1: 'helicopter', uh2: 'helicopter', sh2: 'helicopter', uh1: 'helicopter', ah1: 'helicopter',
   sh3f: 'helicopter', ch53: 'helicopter', ah64a: 'helicopter', ah1w: 'helicopter', ka27: 'helicopter',
-  mi24: 'helicopter',
+  mi24: 'helicopter', sh60b: 'helicopter',
 };
 
 interface RotorSpec {
@@ -1009,6 +1009,7 @@ const ROTOR_SPECS: Partial<Record<AircraftModel, RotorSpec>> = {
   ah64a: { radius: 15, blades: 4, hubX: 1 },
   ka27: { radius: 14, blades: 3, hubX: 0, coaxial: true },
   mi24: { radius: 18, blades: 5, hubX: 1 },
+  sh60b: { radius: 15, blades: 4, hubX: 1 },
 };
 const DEFAULT_ROTOR: RotorSpec = { radius: 14, blades: 3, hubX: 1 };
 

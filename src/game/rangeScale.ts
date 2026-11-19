@@ -67,6 +67,7 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   usmc_air_assault_65: 0.5,
   usmc_armor_m48: 2.0, // M41 90mm
   usmc_ontos_m50: 1.1, // M40 106mm recoilless rifle
+  us_m551_sheridan: 2.0, // M81 152mm gun-launcher (HEAT / canister in Vietnam)
   usmc_lvtp5a1: 1.5,
   opfor_vietnam_sapper: 0.2,
   opfor_pt76_amphib: 1.5, // D-56T 76mm
