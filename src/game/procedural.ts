@@ -13,7 +13,8 @@ import {
   MountainRidge,
   LagoonWater,
 } from '../types/game';
-import { getNavalGunPerformance } from './navalGuns';
+import { getNavalGunPerformance, getNavalLauncherRange } from './navalGuns';
+import { getGroundUnitRange } from './rangeScale';
 
 export function dist(a: Vector2D, b: Vector2D): number {
   const dx = a.x - b.x;
@@ -2617,6 +2618,9 @@ export function createGroundUnit(
   const isNuclearTEL =
     type === 'us_atacms_nuclear' ||
     type === 'opfor_scud_nuclear';
+
+  // Historical engagement range on the shared cross-arm scale (see rangeScale.ts)
+  range = getGroundUnitRange(type);
 
   return {
     id,
@@ -10953,6 +10957,8 @@ export function createTurret(
     range = gun.range;
     reloadTime = gun.reloadTime;
     if (gun.damage !== undefined) damage = gun.damage;
+  } else {
+    range = getNavalLauncherRange(caliber) ?? range;
   }
   return {
     relX,

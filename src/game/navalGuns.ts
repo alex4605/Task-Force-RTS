@@ -1,3 +1,5 @@
+import { gameRangeFromKm } from './rangeScale';
+
 /**
  * Historical naval gun performance, mapped onto game units.
  *
@@ -6,7 +8,7 @@
  * ship's guns are consistent with each other; the scale is anchored on the US 16"/50 Mk 7
  * (range 1950, reload ~7.5 s, damage 340), which keeps the game's existing pacing:
  *
- *   range  = 600 + 35 * km
+ *   range  = gameRangeFromKm(km)              (shared land / sea / air scale, rangeScale.ts)
  *   reload = 1.15 * (60 / rpm) ^ 0.55          (compresses slow battleship salvos vs quick-firers)
  *   damage = 19.8 * shellKg ^ 0.4              (diminishing returns on shell weight)
  *
@@ -102,7 +104,7 @@ export function getNavalGunPerformance(caliber: string): GunPerformance | null {
     const spec = GUN_SPECS.find((g) => g.match.test(caliber));
     if (spec) {
       perf = {
-        range: Math.round(600 + 35 * spec.km),
+        range: gameRangeFromKm(spec.km),
         reloadTime: Math.round(Math.min(12, Math.max(0.3, 1.15 * Math.pow(60 / spec.rpm, 0.55))) * 100) / 100,
         damage: spec.lightAA ? undefined : Math.round(19.8 * Math.pow(spec.shellKg, 0.4)),
       };
@@ -110,4 +112,45 @@ export function getNavalGunPerformance(caliber: string): GunPerformance | null {
   }
   cache.set(caliber, perf);
   return perf;
+}
+
+/**
+ * Missiles, CIWS and ASW rockets: historical maximum range (km) only. Damage and reload stay as
+ * authored (they are balanced as salvo weapons); range moves onto the shared cross-arm scale.
+ */
+const LAUNCHER_RANGE_KM: { match: RegExp; km: number }[] = [
+  { match: /P-700|Granit/, km: 625 },
+  { match: /P-500|Bazalt/, km: 550 },
+  { match: /SM-70|P-35/, km: 300 },
+  { match: /S-300|SA-N-6/, km: 90 },
+  { match: /Mk 10 Mod 7/, km: 74 }, // SM-1ER / SM-2ER (Belknap)
+  { match: /Mk 26|Mk 41|Sea Dart/, km: 74 }, // SM-2MR / Sea Dart
+  { match: /SA-N-3|Shtorm/, km: 55 },
+  { match: /Mk 13/, km: 46 }, // SM-1MR (Perry)
+  { match: /Exocet/, km: 42 }, // MM38
+  { match: /Terrier/, km: 37 }, // RIM-2 Terrier (Kitty Hawk)
+  { match: /Shtil|SA-N-7/, km: 25 },
+  { match: /SA-N-1|Volna/, km: 22 },
+  { match: /Mk 29|RIM-7|NSSMS|海麻雀/, km: 19 }, // RIM-7M Sea Sparrow
+  { match: /Mk 11/, km: 16 }, // RIM-24 Tartar (Adams)
+  { match: /BPDMS/, km: 15 },
+  { match: /Crotale|海響尾蛇/, km: 13 },
+  { match: /Kinzhal|SA-N-9/, km: 12 },
+  { match: /ASROC/, km: 9.2 },
+  { match: /Sea Wolf|海狼/, km: 6 },
+  { match: /RBU-6000/, km: 5.8 },
+  { match: /AK-630/, km: 4 },
+  { match: /RBU-2500/, km: 2.5 },
+  { match: /Phalanx|Mk 19/, km: 1.5 },
+];
+
+const launcherCache = new Map<string, number | null>();
+
+/** Range on the shared scale for a missile / CIWS / rocket mount, or null if unknown. */
+export function getNavalLauncherRange(caliber: string): number | null {
+  if (launcherCache.has(caliber)) return launcherCache.get(caliber)!;
+  const spec = LAUNCHER_RANGE_KM.find((l) => l.match.test(caliber));
+  const r = spec ? gameRangeFromKm(spec.km) : null;
+  launcherCache.set(caliber, r);
+  return r;
 }

@@ -35,8 +35,9 @@ import {
   FleetUpgrades,
 } from '../types/game';
 import { getAlliedSagFleet } from './alliedSagFleets';
-import { getNavalGunPerformance } from './navalGuns';
+import { getNavalGunPerformance, getNavalLauncherRange } from './navalGuns';
 import { getCatalogRole } from './airWingCatalog';
+import { AIR_WEAPON_RANGE, getInstallationRange } from './rangeScale';
 import { getAircraftBaseHealth, getAircraftBaseSpeed, getAircraftGunRounds } from './aircraftStats';
 
 /** Piston and early-jet fighters that count as fighters even when flagged with another role. */
@@ -525,6 +526,7 @@ export class GameEngine {
     const generated = generateSector(sectorNum, era);
     this.worldSize = generated.worldSize;
     this.islands = generated.islands;
+    this.applyHistoricalInstallationRanges();
     this.friendlyBase = generated.friendlyBase;
     this.playerShips = generated.playerShips;
     this.alliedShips = [];
@@ -3327,7 +3329,7 @@ export class GameEngine {
           if (plane.side === 'enemy' && (plane.model === 'su27' || plane.model === 'mig29a' || plane.model === 'mig21' || plane.model === 'mig17')) {
             if (plane.model === 'su27' || plane.model === 'mig29a') {
               // Era 5 Soviet 4th Gen Fighters: R-27 BVR & R-73 High-Off-Boresight Dogfight
-              if (d >= 1000 && d <= 3600 && plane.shootCooldown <= 0) {
+              if (d >= 1000 && d <= AIR_WEAPON_RANGE.r27er && plane.shootCooldown <= 0) {
                 this.fireAAMissile(plane, targetPlane, 'aim7'); // R-27ER Alamo BVR
                 plane.shootCooldown = 5.0;
               } else if (d < 1000 && d > 200 && plane.shootCooldown <= 0) {
@@ -3338,7 +3340,7 @@ export class GameEngine {
                 plane.shootCooldown = 0.15;
               }
             } else if (plane.model === 'mig21') {
-              if (d >= 320 && d <= 1800 && plane.shootCooldown <= 0) {
+              if (d >= 320 && d <= AIR_WEAPON_RANGE.k13 && plane.shootCooldown <= 0) {
                 this.fireAAMissile(plane, targetPlane, 'k13');
                 plane.shootCooldown = 4.2;
                 this.triggerSovietHitAndRun(plane, targetPlane.pos);
@@ -3356,10 +3358,10 @@ export class GameEngine {
               }
             }
           } else if ((plane.side === 'player' || plane.side === 'allied') && (FRIENDLY_MISSILE_FIGHTER_MODELS.has(plane.model))) {
-            if (plane.model === 'f14a' && d >= 1600 && d <= 4800 && plane.shootCooldown <= 0) {
+            if (plane.model === 'f14a' && d >= 1600 && d <= AIR_WEAPON_RANGE.aim54 && plane.shootCooldown <= 0) {
               this.firePhoenixMissile(plane, targetPlane.pos, targetPlane);
               plane.shootCooldown = 7.0;
-            } else if (d >= 800 && d <= 3200 && (plane.sarhHoldTimer || 0) <= 0 && plane.shootCooldown <= 0) {
+            } else if (d >= 800 && d <= AIR_WEAPON_RANGE.aim7 && (plane.sarhHoldTimer || 0) <= 0 && plane.shootCooldown <= 0) {
               this.fireAAMissile(plane, targetPlane, 'aim7');
               plane.shootCooldown = 5.5;
             } else if (d < 800 && d > 200 && plane.shootCooldown <= 0) {
@@ -3391,7 +3393,7 @@ export class GameEngine {
   private releasePayloadOnTarget(dt: number, plane: Aircraft, targetEntity: Aircraft | GroundUnit | Installation | Ship | undefined, targetPos: Vector2D, d: number): void {
     if (plane.payloadType === 'rgm84_harpoon') {
       // ════ 魚叉超視距反艦飛彈 (AGM-84 Harpoon AShM): 4000m 掠海主動雷達導引 ════
-      if (d < 4000) {
+      if (d < AIR_WEAPON_RANGE.harpoon) {
         this.fireAirLaunchedHarpoon(plane, targetPos, targetEntity);
         plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
         if ((plane.ammoRemaining || 0) <= 0) {
@@ -3402,7 +3404,7 @@ export class GameEngine {
       }
     } else if (plane.payloadType === 'kh22_burya') {
       // ════ Kh-22 暴風超音速高空俯衝重型反艦飛彈 (Mach 4.0): 4600m ════
-      if (d < 4600) {
+      if (d < AIR_WEAPON_RANGE.kh22) {
         this.fireKh22Missile(plane, targetPos, targetEntity);
         plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
         if ((plane.ammoRemaining || 0) <= 0) {
@@ -3413,7 +3415,7 @@ export class GameEngine {
       }
     } else if (plane.payloadType === 'p700_granit') {
       // ════ P-700 花崗岩超音速飽和掠海反艦群: 4600m ════
-      if (d < 4600) {
+      if (d < AIR_WEAPON_RANGE.p700) {
         this.fireGranitMissile(plane, targetPos, targetEntity);
         plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
         if ((plane.ammoRemaining || 0) <= 0) {
@@ -3424,7 +3426,7 @@ export class GameEngine {
       }
     } else if (plane.payloadType === 'agm88_harm') {
       // ════ AGM-88 HARM 高速反輻射飛彈 (SEAD 獵殺雷達與防空陣地): 4200m ════
-      if (d < 4200) {
+      if (d < AIR_WEAPON_RANGE.harm) {
         this.fireHARMMissile(plane, targetPos, targetEntity);
         plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
         if ((plane.ammoRemaining || 0) <= 0) {
@@ -3512,7 +3514,7 @@ export class GameEngine {
       }
     } else if (plane.payloadType === 'aim54_phoenix') {
       // ════ AIM-54 鳳凰超遠程空空/反飛彈攔截 (AWG-9 Mach 4.3): 4800m BVR ════
-      if (d < 4800) {
+      if (d < AIR_WEAPON_RANGE.aim54) {
         this.firePhoenixMissile(plane, targetPos, targetEntity);
         plane.ammoRemaining = (plane.ammoRemaining || 6) - 1;
         if ((plane.ammoRemaining || 0) <= 0) {
@@ -3523,7 +3525,7 @@ export class GameEngine {
       }
     } else if (plane.payloadType === 'agm65_maverick') {
       // ════ AGM-65 小牛精確電視/紅外導引反裝甲飛彈: 2400m ════
-      if (d < 2400) {
+      if (d < AIR_WEAPON_RANGE.maverick) {
         this.fireMaverickMissile(plane, targetPos, targetEntity);
         plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
         if ((plane.ammoRemaining || 0) <= 0) {
@@ -3534,7 +3536,7 @@ export class GameEngine {
       }
     } else if (plane.payloadType === 'hellfire_missiles' || plane.payloadType === 'tow_missiles') {
       // ════ AGM-114 地獄火 / BGM-71 拖式 反戰車導引飛彈: 2000m ════
-      if (d < 2000) {
+      if (d < AIR_WEAPON_RANGE.hellfire) {
         this.fireHellfireMissile(plane, targetPos, targetEntity);
         plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
         if ((plane.ammoRemaining || 0) <= 0) {
@@ -3544,7 +3546,7 @@ export class GameEngine {
         }
       }
     } else if (plane.payloadType === 'aim9_sidewinder') {
-      if (d < 1600) {
+      if (d < AIR_WEAPON_RANGE.aim9) {
         const targetHostile = targetEntity || { pos: targetPos, id: plane.order.targetId || '' };
         this.fireAAMissile(plane, targetHostile as Aircraft, 'aim9');
         plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
@@ -3555,7 +3557,7 @@ export class GameEngine {
         }
       }
     } else if (plane.payloadType === 'aim7_sparrow') {
-      if (d < 2400) {
+      if (d < AIR_WEAPON_RANGE.aim7) {
         const targetHostile = targetEntity || { pos: targetPos, id: plane.order.targetId || '' };
         this.fireAAMissile(plane, targetHostile as Aircraft, 'aim7');
         plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
@@ -3566,7 +3568,7 @@ export class GameEngine {
         }
       }
     } else if (plane.payloadType === 'agm45_shrike') {
-      if (d < 2600) {
+      if (d < AIR_WEAPON_RANGE.shrike) {
         let radarTarget = targetEntity && 'type' in targetEntity ? targetEntity as Installation : null;
         if (!radarTarget) {
           for (const isl of this.islands) {
@@ -3592,7 +3594,7 @@ export class GameEngine {
         }
       }
     } else if (plane.payloadType === 'agm12_bullpup') {
-      if (d < 2000) {
+      if (d < AIR_WEAPON_RANGE.bullpup) {
         this.fireBullpupMissile(plane, targetPos);
         plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
         if ((plane.ammoRemaining || 0) <= 0) {
@@ -3602,7 +3604,7 @@ export class GameEngine {
         }
       }
     } else if (plane.payloadType === 'agm62_walleye') {
-      if (d < 1600) {
+      if (d < AIR_WEAPON_RANGE.walleye) {
         this.dropWalleyeGlideBomb(plane, targetPos);
         plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
         if ((plane.ammoRemaining || 0) <= 0) {
@@ -3662,7 +3664,7 @@ export class GameEngine {
       }
     } else if (plane.model === 'tu16') {
       // ════ 蘇聯海航 Tu-16 獾式長程飛彈轟炸機: 2800m 發射 KSR-5 超音速反艦飛彈 ════
-      if (d < 2800) {
+      if (d < AIR_WEAPON_RANGE.ksr5) {
         this.fireTu16KSR5Missile(plane, targetPos);
         plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
         if ((plane.ammoRemaining || 0) <= 0) {
@@ -3675,10 +3677,10 @@ export class GameEngine {
       // ════ AIM-7 麻雀 + AIM-9 響尾蛇 雙重空優混編 (遠程半主動雷達 + 近距紅外格鬥) ════
       const targetHostile = targetEntity || { pos: targetPos, id: plane.order.targetId || '' };
       const targetPlane = 'role' in targetHostile ? targetHostile : null;
-      if (d >= 1200 && d <= 2500 && (plane.ammoRemaining || 4) > 2) {
+      if (d >= 1200 && d <= AIR_WEAPON_RANGE.aim7 && (plane.ammoRemaining || 4) > 2) {
         this.fireAAMissile(plane, targetPlane || targetHostile, 'aim7');
         plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
-      } else if (d < 1600) {
+      } else if (d < AIR_WEAPON_RANGE.aim9) {
         this.fireAAMissile(plane, targetPlane || targetHostile, 'aim9');
         plane.ammoRemaining = (plane.ammoRemaining || 4) - 1;
         if ((plane.ammoRemaining || 0) <= 0) {
@@ -3689,7 +3691,7 @@ export class GameEngine {
       }
     } else if (plane.payloadType === 'gbu10_laser_paveway') {
       // ════ GBU-10 鋪路雷射導引穿甲炸彈 (外科手術式精確破障) ════
-      if (d < 1800) {
+      if (d < AIR_WEAPON_RANGE.laserBomb) {
         this.dropLaserGuidedBomb(plane, targetPos);
         plane.ammoRemaining = (plane.ammoRemaining || 2) - 1;
         if ((plane.ammoRemaining || 0) <= 0) {
@@ -3724,7 +3726,7 @@ export class GameEngine {
       }
     } else if (plane.payloadType === 'agm78_standard_arm') {
       // ════ AGM-78 標準長程反輻射飛彈 (3600m SEAD 野鼬超遠程獵殺) ════
-      if (d < 3600) {
+      if (d < AIR_WEAPON_RANGE.standardArm) {
         let radarTarget = targetEntity && 'type' in targetEntity ? targetEntity as Installation : null;
         if (!radarTarget) {
           for (const isl of this.islands) {
@@ -9043,6 +9045,7 @@ export class GameEngine {
       isASuWOnly: false,
     };
     onIsland.installations.push(newFlak);
+    this.applyHistoricalInstallationRanges();
 
     // Stock newly built airfield with fresh planes in airbase pool!
     if (this.era === 'era1') {
@@ -9080,6 +9083,16 @@ export class GameEngine {
   // ══════════════════════════════════════════════════════════
   // 戰區後勤採購系統 (Command Logistics & Requisition System)
   // ══════════════════════════════════════════════════════════
+
+  /** Moves every armed installation onto the shared historical range scale (rangeScale.ts). */
+  private applyHistoricalInstallationRanges() {
+    for (const isl of this.islands) {
+      for (const inst of isl.installations) {
+        const r = getInstallationRange(inst.type, inst.name, this.era);
+        if (r !== null) inst.range = r;
+      }
+    }
+  }
 
   public purchaseRequisition(
     item: RequisitionItem,
@@ -9119,9 +9132,15 @@ export class GameEngine {
     } else if (item.category === 'aircraft') {
       return this.purchaseAircraftRequisition(item, freeSandbox, flagship);
     } else if (item.category === 'ground') {
-      return this.purchaseGroundRequisition(item, targetIslandId, customPos, fleetPos);
+      // Garrisons placed by the player join the shared historical range scale
+      const ok = this.purchaseGroundRequisition(item, targetIslandId, customPos, fleetPos);
+      this.applyHistoricalInstallationRanges();
+      return ok;
     } else if (item.category === 'installations') {
-      return this.purchaseInstallationRequisition(item, targetIslandId, customPos, freeSandbox);
+      // Garrisons placed by the player join the shared historical range scale
+      const ok = this.purchaseInstallationRequisition(item, targetIslandId, customPos, freeSandbox);
+      this.applyHistoricalInstallationRanges();
+      return ok;
     }
 
     return false;
@@ -14924,7 +14943,7 @@ export class GameEngine {
           relY: t.relY ?? t.pos?.y ?? 0,
           pos: t.pos,
           caliber: t.caliber,
-          range: gun?.range ?? t.range,
+          range: gun?.range ?? getNavalLauncherRange(t.caliber) ?? t.range,
           cooldown: t.cooldown,
           reloadTime: reload,
           maxCooldown: gun ? reload : t.maxCooldown ?? t.reloadTime ?? 4.0,
