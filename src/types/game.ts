@@ -1800,7 +1800,9 @@ export interface Particle {
     | 'fire'
     | 'flare'
     | 'chaff'
-    | 'chaff_cloud';
+    | 'chaff_cloud'
+    | 'muzzle_flash'
+    | 'gun_smoke';
   shape?: 'circle' | 'line' | 'ring';
   length?: number;
   scale?: number;

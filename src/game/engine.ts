@@ -4325,6 +4325,16 @@ export class GameEngine {
       ? 24
       : 16;
 
+    // Muzzle flashes: nose cannon on jets, a flash at each wing battery on piston fighters
+    const noseGun = isA10 || isModernVulcan || isMig15;
+    const flashSize = isA10 ? 9 : noseGun ? 6 : 4;
+    const stations = noseGun ? [0] : [7, -7];
+    for (const offset of stations) {
+      const fx = attacker.pos.x + Math.cos(attacker.heading) * (noseGun ? 9 : 3) + Math.sin(attacker.heading) * offset;
+      const fy = attacker.pos.y + Math.sin(attacker.heading) * (noseGun ? 9 : 3) - Math.cos(attacker.heading) * offset;
+      this.spawnMuzzleFlash(fx, fy, attacker.heading, flashSize, false);
+    }
+
     for (let b = 0; b < burstCount; b++) {
       const spread = (Math.random() - 0.5) * (isA10 ? 0.012 : isModernVulcan ? 0.016 : isF86 ? 0.015 : isMig15 ? 0.05 : 0.045);
       const bAngle = attacker.heading + spread;
@@ -5257,6 +5267,8 @@ export class GameEngine {
     const flakX = plane.pos.x + (Math.random() - 0.5) * 48;
     const flakY = plane.pos.y + (Math.random() - 0.5) * 48;
 
+    // US 5"/38 and 90 mm bursts are black; Japanese and Soviet-pattern charges leave a brown-grey cloud
+    const burstColor = sourceSide === 'player' || sourceSide === 'allied' ? '#14181D' : '#3B3530';
     for (let p = 0; p < puffCount; p++) {
       const offsetX = (Math.random() - 0.5) * 75;
       const offsetY = (Math.random() - 0.5) * 75;
@@ -5269,7 +5281,7 @@ export class GameEngine {
         life: 1.6 + Math.random() * 0.8, // Lingering smoke puffs hanging in air
         maxLife: 2.4,
         radius: 20 + Math.random() * 14,
-        color: '#161A1E',
+        color: burstColor,
         type: 'flak_puff',
         rot: Math.random() * Math.PI * 2,
         rotSpeed: (Math.random() - 0.5) * 0.4,
@@ -5282,6 +5294,7 @@ export class GameEngine {
     const dy = plane.pos.y - origin.y;
     const totalDist = Math.hypot(dx, dy);
     const baseAngle = Math.atan2(dy, dx);
+    this.spawnMuzzleFlash(origin.x + Math.cos(baseAngle) * 10, origin.y + Math.sin(baseAngle) * 10, baseAngle, 7, false);
     const aaSpeed = 580;
 
     for (let t = 0; t < tracerCount; t++) {
@@ -5667,14 +5680,63 @@ export class GameEngine {
     }
   }
 
+  private muzzleFlashSeq = 0;
+
+  /**
+   * Purely visual muzzle blast: a short flame along the bore and, for guns of 5 inches and up, a
+   * drifting cordite smoke cloud. Deterministic (no RNG), so it never changes the simulation.
+   */
+  private spawnMuzzleFlash(x: number, y: number, angle: number, size: number, withSmoke: boolean) {
+    const seq = this.muzzleFlashSeq++;
+    const life = 0.09 + size * 0.006;
+    this.particles.push({
+      id: `muzzle-${seq}`,
+      x,
+      y,
+      vx: 0,
+      vy: 0,
+      life,
+      maxLife: life,
+      radius: size,
+      color: '#FFD54F',
+      type: 'muzzle_flash',
+      rot: angle,
+    });
+    if (withSmoke) {
+      const drift = 6 + size * 0.4;
+      this.particles.push({
+        id: `gunsmoke-${seq}`,
+        x: x + Math.cos(angle) * size * 0.8,
+        y: y + Math.sin(angle) * size * 0.8,
+        vx: Math.cos(angle) * drift,
+        vy: Math.sin(angle) * drift,
+        life: 1.4 + size * 0.03,
+        maxLife: 1.4 + size * 0.03,
+        radius: size * 1.1,
+        color: 'rgba(120, 110, 96, 1)',
+        type: 'gun_smoke',
+        rot: angle + seq,
+      });
+    }
+  }
+
   private fireTurretSalvo(ship: Ship, turret: Turret, targetPos: Vector2D) {
     const isHeavy = turret.damage > 100;
     soundEngine.playGunSalvo(isHeavy);
 
+    // Shells leave from the turret's own muzzles, not the ship's centre
+    const cosS = Math.cos(ship.heading);
+    const sinS = Math.sin(ship.heading);
+    const mountX = ship.pos.x + turret.relX * cosS - turret.relY * sinS;
+    const mountY = ship.pos.y + turret.relX * sinS + turret.relY * cosS;
     const cosH = Math.cos(turret.angle);
     const sinH = Math.sin(turret.angle);
-    const muzzleX = ship.pos.x + cosH * 24;
-    const muzzleY = ship.pos.y + sinH * 24;
+    const barrel = 4 + Math.sqrt(turret.damage) * 0.55;
+    const muzzleX = mountX + cosH * barrel;
+    const muzzleY = mountY + sinH * barrel;
+    // Flash scales with the bore: a 16-inch broadside dwarfs a 40 mm mount
+    const flashSize = 5 + Math.sqrt(turret.damage) * 0.9;
+    this.spawnMuzzleFlash(muzzleX, muzzleY, turret.angle, flashSize, turret.damage >= 60);
 
     const d = dist(ship.pos, targetPos);
     // 時代二 (Mk 37 雷達射控) 與時代三 (Mk 25 微波射控) 散佈大幅收斂，砲彈初速更高
