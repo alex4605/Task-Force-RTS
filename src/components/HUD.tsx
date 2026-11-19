@@ -28,6 +28,7 @@ import {
   getCarrierModelsForEra,
 } from '../game/airWingCatalog';
 import { getModelPayloads, resolvePayload } from '../game/aircraftLoadouts';
+import { getCatalogRole } from '../game/airWingCatalog';
 import { MiniRadar } from './hud/MiniRadar';
 import { ActiveArmamentTrayState, ArmamentTrayModal } from './hud/ArmamentTrayModal';
 import { SelectedUnitsPanel } from './hud/SelectedUnitsPanel';
@@ -68,7 +69,7 @@ interface HUDProps {
   era: Era;
   onSetEra: (era: Era) => void;
   selectedUnits: (Ship | Aircraft | GroundUnit)[];
-  onLaunchModel: (model: AircraftModel, count?: number, payload?: AircraftPayloadType) => void;
+  onLaunchModel: (model: AircraftModel, count?: number, payload?: AircraftPayloadType, carrierId?: string) => void;
   onOrderSelected: (type: 'move' | 'attack' | 'patrol' | 'rtb' | 'idle') => void;
   onStopUnits: () => void;
   onSetSpeed: (speed: number) => void;
@@ -98,8 +99,10 @@ interface HUDProps {
   airbaseReplenishTimer?: number;
   convoyReinforceTimer?: number;
   nextConvoyEscort?: 'ss' | 'dd' | 'cl' | 'ca';
-  onFerryPlanes?: (model: string, count: number) => void;
-  onLaunchAirbaseSortie?: (model: AircraftModel, count: number, payload?: AircraftPayloadType) => void;
+  /** Friendly airfields with their own aircraft stock, HQ island first. */
+  airfields?: { id: string; name: string; isHQ: boolean; planes: Record<string, number> }[];
+  onTransferPlanes?: (model: AircraftModel, count: number, fromId: string, toId: string) => void;
+  onLaunchAirbaseSortie?: (model: AircraftModel, count: number, payload?: AircraftPayloadType, airfieldId?: string) => void;
   onToggleTransportEmbark?: (transportId: string) => void;
   onTriggerLSMRocket?: (lsmrId: string) => void;
   onBuildAirfield?: (engineerId: string) => void;
@@ -256,7 +259,8 @@ export const HUD: React.FC<HUDProps> = ({
   airbaseReplenishTimer = 45,
   convoyReinforceTimer: _convoyReinforceTimer = 100,
   nextConvoyEscort: _nextConvoyEscort = 'dd',
-  onFerryPlanes,
+  airfields = [],
+  onTransferPlanes,
   onLaunchAirbaseSortie,
   onToggleTransportEmbark,
   onTriggerLSMRocket,
@@ -286,10 +290,35 @@ export const HUD: React.FC<HUDProps> = ({
   onCancelSonobuoy,
   onSelectUnitIds,
 }) => {
-  const planes = flagship?.carrierPlanes?.ready || {};
+  // Every friendly deck with an air group: the flagship carrier, escort carriers and amphibious ships
+  const carriers = useMemo(() => playerShips.filter((s) => !s.isSunk && s.carrierPlanes), [playerShips]);
+  const [selectedCarrierId, setSelectedCarrierId] = useState<string | undefined>(undefined);
+  const activeCarrier = carriers.find((c) => c.id === selectedCarrierId) ?? flagship;
+  const planes = activeCarrier?.carrierPlanes?.ready || {};
+  const [selectedAirfieldId, setSelectedAirfieldId] = useState<string | undefined>(undefined);
+  const activeAirfield = airfields.find((a) => a.id === selectedAirfieldId) ?? airfields[0];
+  const airbaseStock = activeAirfield?.planes ?? airbasePlanes;
+  const [carrierFerryTo, setCarrierFerryTo] = useState('');
+  const [afbFerryTo, setAfbFerryTo] = useState('');
+  const ferryBases = useMemo(
+    () => [
+      ...airfields.map((a) => ({ id: a.id, name: `${a.isHQ ? '🏛️ ' : '🛬 '}${a.name}`, isCarrier: false })),
+      ...carriers.map((c) => ({ id: c.id, name: `⚓ ${c.name}`, isCarrier: true })),
+    ],
+    [airfields, carriers]
+  );
   const currentCatalog = useMemo(() => getRequisitionCatalog(era), [era]);
 
-  const flightModels = useMemo(() => getCarrierModelsForEra(era), [era]);
+  // The era's carrier air wing plus any detachment embarked on the selected deck (helicopters, Harriers...)
+  const flightModels = useMemo(() => {
+    const base = getCarrierModelsForEra(era);
+    const stock = activeCarrier?.carrierPlanes?.maxPerType ?? {};
+    const extra = Object.keys(stock)
+      .filter((m) => !base.some((b) => b.model === m))
+      .map((m) => ({ model: m as AircraftModel, label: m.toUpperCase(), role: getCatalogRole(m as AircraftModel, 'carrier', era), desc: '艦載分遣隊' }));
+    const all = [...base, ...extra];
+    return activeCarrier && activeCarrier !== flagship ? all.filter((fm) => (stock[fm.model] ?? 0) > 0) : all;
+  }, [era, activeCarrier, flagship]);
 
   // Per-model formation count state: e.g. 1, 2, 4, or max available
   const [formationCounts, setFormationCounts] = React.useState<Partial<Record<AircraftModel, number>>>(
@@ -348,7 +377,10 @@ export const HUD: React.FC<HUDProps> = ({
     }
   }, [selectedAirfacility]);
 
-  // 若在畫面上點選了工兵部隊或航空母艦，自動切換至對應選單並展開出擊列
+  // 若在畫面上點選了工兵部隊或航空母艦，自動切換至對應選單並展開出擊列。
+  // Keyed on the selected ids, not the array: the parent hands over a fresh array every frame,
+  // which used to snap the deck back to the carrier tab whenever a carrier stayed selected.
+  const selectedUnitsKey = selectedUnits.map((u) => u.id).join(',');
   useEffect(() => {
     const hasEngineer = selectedUnits.some(
       (u) => ('type' in u) && u.type === 'usmc_engineer'
@@ -363,7 +395,8 @@ export const HUD: React.FC<HUDProps> = ({
       setBottomDeckTab('carrier');
       setIsBottomDeckExpanded(true);
     }
-  }, [selectedUnits, selectedAirfacility]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedUnitsKey, selectedAirfacility]);
 
   // C / G / Esc 快捷鍵: CAP 空巡與被動聲納浮標投擲模式
   useEffect(() => {
@@ -1541,6 +1574,32 @@ export const HUD: React.FC<HUDProps> = ({
                 </div>
               </div>
 
+              {/* Deck selector and ferry destination */}
+              <div className="flex flex-wrap items-center gap-1.5 mb-1.5 text-[10px]">
+                {carriers.length > 1 &&
+                  carriers.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setSelectedCarrierId(c.id)}
+                      className={`px-2 py-0.5 rounded font-bold border ${activeCarrier?.id === c.id ? 'bg-[#1976D2] text-white border-[#42A5F5]' : 'bg-[#0B1E34] text-slate-300 border-[#1E3A5F] hover:text-white'}`}
+                    >
+                      ⚓ {c.name}
+                    </button>
+                  ))}
+                <span className="text-slate-400 ml-auto">轉場至</span>
+                <select
+                  value={carrierFerryTo}
+                  onChange={(e) => setCarrierFerryTo(e.target.value)}
+                  className="bg-[#0B1E34] border border-[#1E3A5F] rounded px-1.5 py-0.5 text-[10px] text-[#80DEEA]"
+                >
+                  <option value="">— 選擇目的地 —</option>
+                  {ferryBases.filter((b) => b.id !== activeCarrier?.id).map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+
               {/* Carrier Aircraft Cards with Draggable and Wheel Scroll */}
               <DraggableScrollContainer className="gap-2 pb-1">
                 {flightModels
@@ -1690,7 +1749,7 @@ export const HUD: React.FC<HUDProps> = ({
                           type="button"
                           disabled={!hasReady}
                           onClick={() => {
-                            onLaunchModel(model, effectiveCount, currentPayload);
+                            onLaunchModel(model, effectiveCount, currentPayload, activeCarrier?.id);
                             setBottomDeckTab('carrier');
                             setIsBottomDeckExpanded(true);
                           }}
@@ -1702,6 +1761,15 @@ export const HUD: React.FC<HUDProps> = ({
                         >
                           <Plane className="w-3 h-3 shrink-0" />
                           <span className="truncate">{hasReady ? (`出擊 ${effectiveCount}機`) : ('整備中')}</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={!hasReady || !carrierFerryTo || !activeCarrier}
+                          onClick={() => activeCarrier && onTransferPlanes?.(model, effectiveCount, activeCarrier.id, carrierFerryTo)}
+                          className={`mt-1 py-0.5 px-1.5 rounded font-bold text-center text-[9px] border ${hasReady && carrierFerryTo ? 'bg-[#0B1E34] hover:bg-[#153252] text-[#80DEEA] border-[#1E3A5F]' : 'bg-[#050D18] text-slate-600 border-slate-800 cursor-not-allowed'}`}
+                          title="以轉場航線飛往選定的機場或航艦"
+                        >
+                          🛫 轉場 {effectiveCount}機
                         </button>
                       </div>
                     );
@@ -1771,6 +1839,35 @@ export const HUD: React.FC<HUDProps> = ({
                 </div>
               </div>
 
+              {/* Airfield selector (each has its own stock) and ferry destination */}
+              <div className="flex flex-wrap items-center gap-1.5 mb-1.5 text-[10px]">
+                {airfields.map((a) => {
+                  const total = Object.values(a.planes).reduce((s, n) => s + (n || 0), 0);
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => setSelectedAirfieldId(a.id)}
+                      className={`px-2 py-0.5 rounded font-bold border ${activeAirfield?.id === a.id ? 'bg-[#00897B] text-white border-[#80CBC4]' : 'bg-[#051A18] text-slate-300 border-[#1E3A5F] hover:text-white'}`}
+                      title={a.isHQ ? 'HQ 島機場：所有增援與補充飛機先抵達此處' : '前進機場：獨立庫存，以轉場補充'}
+                    >
+                      {a.isHQ ? '🏛️ HQ ' : '🛬 '}{a.name} · {total}機
+                    </button>
+                  );
+                })}
+                <span className="text-slate-400 ml-auto">轉場至</span>
+                <select
+                  value={afbFerryTo}
+                  onChange={(e) => setAfbFerryTo(e.target.value)}
+                  className="bg-[#051A18] border border-[#1E3A5F] rounded px-1.5 py-0.5 text-[10px] text-[#80CBC4]"
+                >
+                  <option value="">— 選擇目的地 —</option>
+                  {ferryBases.filter((b) => b.id !== activeAirfield?.id).map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+
               {/* AFB Aircraft Cards with Draggable and Wheel Scroll */}
               <DraggableScrollContainer className="gap-2 pb-1">
                 {afbModels
@@ -1783,7 +1880,7 @@ export const HUD: React.FC<HUDProps> = ({
                     return true;
                   })
                   .map(({ id, label, role, desc, isNavy }) => {
-                    const mCount = airbasePlanes[id] || 0;
+                    const mCount = airbaseStock[id] || 0;
                     const hasReady = mCount > 0;
                     const selectedCount = afbFormationCounts[id] || 2;
                     const effectiveCount = Math.min(selectedCount, mCount || 1);
@@ -1955,31 +2052,32 @@ export const HUD: React.FC<HUDProps> = ({
 
                         {/* Action Buttons: Sortie & Ferry */}
                         <div className="grid grid-cols-2 gap-1.5 mt-2">
-                          {isCarrierCapable ? (
-                            <button
-                              type="button"
-                              disabled={!hasReady}
-                              onClick={() => onFerryPlanes?.(id, effectiveCount)}
-                              className={`py-1.5 px-1 rounded font-bold text-center text-[10px] flex items-center justify-center gap-1 transition-transform active:scale-95 ${
-                                hasReady
-                                  ? 'bg-[#0B1E34] hover:bg-[#153252] text-[#80DEEA] border border-[#1E3A5F]'
-                                  : 'bg-[#031017] text-slate-600 border border-slate-800 cursor-not-allowed'
-                              }`}
-                              title="轉場至旗艦航空母艦機庫"
-                            >
-                              <span>🛫 轉場CV</span>
-                            </button>
-                          ) : (
-                            <div className="text-[9px] text-slate-400 flex items-center justify-center bg-[#031017] rounded border border-slate-800/60 text-center font-bold">
-                              陸航專用
-                            </div>
-                          )}
+                          {(() => {
+                            const dest = ferryBases.find((b) => b.id === afbFerryTo);
+                            const deckOnly = dest?.isCarrier && !isCarrierCapable;
+                            const canFerry = hasReady && !!dest && !deckOnly && !!activeAirfield;
+                            return (
+                              <button
+                                type="button"
+                                disabled={!canFerry}
+                                onClick={() => activeAirfield && onTransferPlanes?.(id as AircraftModel, effectiveCount, activeAirfield.id, afbFerryTo)}
+                                className={`py-1.5 px-1 rounded font-bold text-center text-[10px] flex items-center justify-center gap-1 transition-transform active:scale-95 ${
+                                  canFerry
+                                    ? 'bg-[#0B1E34] hover:bg-[#153252] text-[#80DEEA] border border-[#1E3A5F]'
+                                    : 'bg-[#031017] text-slate-600 border border-slate-800 cursor-not-allowed'
+                                }`}
+                                title={deckOnly ? '陸基機型無法降落航艦甲板' : '以轉場航線飛往選定的機場或航艦'}
+                              >
+                                <span>{deckOnly ? '陸航專用' : '🛫 轉場'}</span>
+                              </button>
+                            );
+                          })()}
 
                           <button
                             type="button"
                             disabled={!hasReady}
                             onClick={() => {
-                              onLaunchAirbaseSortie?.(id as AircraftModel, effectiveCount, currentPayload);
+                              onLaunchAirbaseSortie?.(id as AircraftModel, effectiveCount, currentPayload, activeAirfield?.id);
                             }}
                             className={`py-1.5 px-1 rounded font-bold text-center text-[10px] flex items-center justify-center gap-1 transition-transform active:scale-95 ${
                               hasReady

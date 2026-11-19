@@ -241,8 +241,8 @@ export default function App() {
     syncEngineSnapshot();
   };
 
-  const handleLaunchModel = (model: AircraftModel, count: number = 2, payload?: AircraftPayloadType) => {
-    engine.launchAircraft(model, count, payload);
+  const handleLaunchModel = (model: AircraftModel, count: number = 2, payload?: AircraftPayloadType, carrierId?: string) => {
+    engine.launchAircraft(model, count, payload, carrierId);
     setAircraft([...engine.aircraft]);
     setPlayerShips([...engine.playerShips]);
     setActivePayloads({ ...engine.activePayloads });
@@ -519,12 +519,19 @@ export default function App() {
           setIslands([...engine.islands]);
           return success;
         }}
-        onFerryPlanes={(model, count) => {
-          engine.ferryAirbasePlanesToCarrier(model, count);
+        airfields={engine.getFriendlyAirfields().map((a) => ({
+          id: a.id,
+          name: a.name,
+          isHQ: a.id === engine.hqAirfieldId,
+          planes: engine.getAirfieldPool(a.id),
+        }))}
+        onTransferPlanes={(model, count, fromId, toId) => {
+          engine.transferAircraft(model, count, fromId, toId);
+          setAircraft([...engine.aircraft]);
           setPlayerShips([...engine.playerShips]);
         }}
-        onLaunchAirbaseSortie={(model, count, payload) => {
-          engine.launchAirbaseSortie(model, count, payload);
+        onLaunchAirbaseSortie={(model, count, payload, airfieldId) => {
+          engine.launchAirbaseSortie(model, count, payload, undefined, airfieldId);
           setAircraft([...engine.aircraft]);
         }}
         onToggleTransportEmbark={(transportId) => {

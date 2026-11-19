@@ -2331,9 +2331,9 @@ export function createLPHIwoJima(id: string, name: string, pos: Vector2D): Ship 
     flakCooldown: 0,
     flakRange: 850,
     carrierPlanes: {
-      ready: { uh1: 6, ah1: 4, sh2: 4 },
-      hangar: { uh1: 8, ah1: 6, sh2: 6 },
-      maxPerType: { uh1: 8, ah1: 6, sh2: 6 },
+      ready: { uh1: 6, ah1: 4, sh2: 4, ch46: 4 },
+      hangar: { uh1: 8, ah1: 6, sh2: 6, ch46: 4 },
+      maxPerType: { uh1: 8, ah1: 6, sh2: 6, ch46: 8 },
     },
   });
 }
@@ -3340,6 +3340,12 @@ export function createTarawaLHA(id: string, name: string, pos: Vector2D): Ship {
     ],
     flakCooldown: 0,
     flakRange: 900,
+    // Marine aviation combat element
+    carrierPlanes: {
+      ready: { av8b: 4, ch53: 2, ah1w: 2 },
+      hangar: { av8b: 2, ch53: 2 },
+      maxPerType: { av8b: 8, ch53: 8, ah1w: 4, sh60b: 2 },
+    },
   });
 }
 
@@ -4520,6 +4526,12 @@ export function createCasablancaCVE(id: string, name: string, pos: Vector2D): Sh
     ],
     flakCooldown: 0,
     flakRange: 720,
+    // VC-10 composite squadron: FM-2 Wildcats (drawn as F4F) and TBM Avengers
+    carrierPlanes: {
+      ready: { f4f: 6, tbf: 4 },
+      hangar: { f4f: 4, tbf: 4 },
+      maxPerType: { f4f: 12, tbf: 10 },
+    },
   });
 }
 
