@@ -164,10 +164,18 @@ export function updateDieselBattery(sub: Ship, dt: number, era: Era, nearestShip
     const safe = nearestShip > 2500 && nearestAircraft > 1500;
     if (safe) {
       sub.isSnorkeling = true; // on the surface
+      sub.diveTimer = undefined;
       sub.battery = Math.min(1, battery + 0.02 * dt);
       return { surfaceKt: SURFACE_SPEED[sub.subVariant ?? ''] ?? 17 };
     }
-    sub.isSnorkeling = false; // crash dive
+    if (sub.isSnorkeling) {
+      // Crash dive: a U-boat needed ~25 s, a big I-boat nearer a minute, to get under; until then
+      // it is still on the surface and can be shelled, bombed or strafed
+      sub.diveTimer = (sub.diveTimer ?? (sub.subVariant === 'ijn_sub' ? 9 : 6)) - dt;
+      if (sub.diveTimer > 0) return { capKt: 8 };
+      sub.isSnorkeling = false;
+      sub.diveTimer = undefined;
+    }
     drain();
     return (sub.battery ?? 0) <= 0.02 ? { capKt: 3 } : {};
   }
@@ -217,4 +225,17 @@ export function enemyAswWeapon(ship: Ship, era: Era): EnemyAswWeapon | undefined
   }
   if (t === 'dd_sovremenny') return { kind: 'rbu', label: 'RBU-1000 反潛火箭', range: gameRangeFromKm(1), rounds: 6, cooldown: 20 };
   return undefined;
+}
+
+/** A WWII boat that is on the surface (transiting, charging or still diving) and can be hit by guns and bombs. */
+export function isSurfacedBoat(sub: Ship, era: Era): boolean {
+  return Boolean(sub.isSnorkeling) && (era === 'era1' || era === 'era2');
+}
+
+/** Passive / active sonobuoy sensitivity against a given boat (multiplies the buoy radius). */
+export function sonobuoySensitivity(sub: Ship, era: Era): number {
+  const noise = submarineNoise(sub);
+  // Era 4 Julie explosive echo-ranging and Jezebel LOFAR; era 5 DIFAR; earlier: simple hydrophones
+  const factor = era === 'era4' ? 0.75 + 0.25 * noise : noise * 1.1;
+  return Math.max(0.3, Math.min(1.25, factor));
 }

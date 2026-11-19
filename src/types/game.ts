@@ -286,7 +286,12 @@ export interface Ship {
   repathCooldown?: number;
   battery?: number; // 柴電潛艦電池電量 (0-1)：水下高速航行急速耗電，呼吸管航行充電
   rbuCooldown?: number; // 敵艦反潛火箭 / 深水炸彈再裝填
-  isSnorkeling?: boolean; // 呼吸管航行 / 上浮充電中：噪音大增且可被雷達發現
+  isSnorkeling?: boolean;
+  diveTimer?: number; // 緊急下潛剩餘秒數：仍浮在水面、可被砲火與航彈攻擊
+  evadeTimer?: number; // 潛艦規避機動剩餘秒數
+  evadeHeading?: number;
+  datumPos?: Vector2D; // 最後已知位置 (Datum)：失去接觸後的搜索中心
+  datumAge?: number; // 呼吸管航行 / 上浮充電中：噪音大增且可被雷達發現
   navAvoidSide?: number; // 繞行陸地時記住的轉向側 (+1 右 / -1 左)，避免左右抖動
   navCheckPos?: Vector2D; // 進度檢查點：一段時間未前進即判定受困並重新規劃航線
   navCheckTimer?: number;
@@ -1549,6 +1554,7 @@ export interface Aircraft {
   nation?: AircraftNation; // 機徽覆寫：同一機型由不同國家操作時 (如日本航空自衛隊 F-15J)
   homeBaseId?: string; // 母基地：返航降落的機場 (Installation id) 或航艦 (Ship id)
   ferryTo?: string; // 轉場目的地 (機場或航艦 id)：抵達後降落並計入該基地庫存
+  sonobuoyDropTimer?: number; // 反潛巡邏自動布放聲納浮標計時
   airMission?: AirMission; // 戰術任務：CAP / BARCAP / 戰鬥掃蕩 / 護航 / 打擊編隊
   packageId?: string; // 所屬打擊編隊 (護航機與打擊機共用)
   missionTimer?: number; // 掃蕩滯空剩餘時間

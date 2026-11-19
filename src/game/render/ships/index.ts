@@ -23,6 +23,7 @@ export function drawShips(rc: RenderContext, ships: Ship[], camera: Camera, sele
   for (const ship of ships) {
     const isSub = isSubmarineShip(ship);
     if (ship.side === 'enemy' && isSub && !ship.isSunk && !ship.isSpotted) {
+      if (ship.datumPos) drawDatum(rc, ship);
       continue; // Undetected enemy submarine stays hidden under Fog of War
     }
 
@@ -969,4 +970,36 @@ function drawShipStatus(rc: RenderContext, ship: Ship, zoom: number = 0.65, isSe
   ctx.strokeStyle = 'rgba(0, 229, 255, 0.6)';
   ctx.lineWidth = 0.7;
   ctx.strokeRect(startX, yHcs, barWidth, barHeight);
+}
+
+/**
+ * Datum of a lost submarine contact: the last known position and a dashed circle that grows
+ * with the time since contact at the boat's best submerged speed (where it could be by now).
+ */
+function drawDatum(rc: RenderContext, ship: Ship): void {
+  const ctx = rc.ctx;
+  const p = ship.datumPos!;
+  const age = ship.datumAge ?? 0;
+  const fade = Math.max(0, 1 - age / 90);
+  const radius = 40 + age * Math.max(6, ship.maxSpeed * 0.9);
+  ctx.save();
+  ctx.globalAlpha = 0.85 * fade;
+  ctx.strokeStyle = '#FFB74D';
+  ctx.lineWidth = 1.4;
+  ctx.setLineDash([7, 6]);
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(p.x - 8, p.y);
+  ctx.lineTo(p.x + 8, p.y);
+  ctx.moveTo(p.x, p.y - 8);
+  ctx.lineTo(p.x, p.y + 8);
+  ctx.stroke();
+  ctx.fillStyle = '#FFB74D';
+  ctx.font = 'bold 10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(`DATUM +${Math.round(age)}s`, p.x, p.y - radius - 4);
+  ctx.restore();
 }

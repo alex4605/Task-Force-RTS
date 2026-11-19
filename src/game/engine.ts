@@ -40,7 +40,7 @@ import { getNavalGunPerformance, getNavalLauncherRange } from './navalGuns';
 import { getAfbModelsForEra, getCarrierModelsForEra, getCatalogRole } from './airWingCatalog';
 import { AIR_WEAPON_RANGE, gameRangeFromKm, getInstallationRange } from './rangeScale';
 import { getShipAshmFit, getShipSamSystem } from './navalMissileSalvos';
-import { aircraftDetectionRange, depthChargePattern, enemyAswWeapon, shipSonar, sonarDeadZone, sonarDetectionRange, updateDieselBattery } from './asw';
+import { aircraftDetectionRange, depthChargePattern, enemyAswWeapon, isDieselBoat, isSurfacedBoat, shipSonar, sonarDeadZone, sonarDetectionRange, sonobuoySensitivity, updateDieselBattery } from './asw';
 import { barrierStation, isStriker, selectAirTarget } from './airMissions';
 import { getAircraftSpeed, isSupersonicMissile, MISSILE_SPEED, shipMapSpeed, SPECIAL_ATTACK_SPEED } from './speedScale';
 import { getAircraftBaseHealth, getAircraftBaseSpeed, getAircraftGunRounds } from './aircraftStats';
@@ -1397,7 +1397,7 @@ export class GameEngine {
         buoy.pingTimer = buoy.pingInterval;
 
         // 被動水聽器間歇掃描半徑內是否有敵軍潛艦通過
-        const detectedSubs = enemySubs.filter((sub) => dist(buoy.pos, sub.pos) <= buoy.detectionRadius);
+        const detectedSubs = enemySubs.filter((sub) => dist(buoy.pos, sub.pos) <= buoy.detectionRadius * sonobuoySensitivity(sub, this.era));
         if (detectedSubs.length > 0) {
           soundEngine.playSonarPing();
           buoy.hasActiveContact = true;
@@ -2456,6 +2456,13 @@ export class GameEngine {
       (s) => !s.isSunk && (!this.isSubmarine(s) || Boolean(s.isSpottedByEnemy))
     );
 
+    if (this.isSubmarine(ship) && (ship.evadeTimer || 0) > 0) {
+      ship.evadeTimer = (ship.evadeTimer || 0) - _dt;
+      ship.targetHeading = ship.evadeHeading ?? ship.heading;
+      ship.targetSpeed = isDieselBoat(ship) ? 3 : ship.maxSpeed;
+      return;
+    }
+
     if (this.isSubmarine(ship)) {
       let target: Ship | undefined = hostiles.sort((a, b) => dist(ship.pos, a.pos) - dist(ship.pos, b.pos))[0];
       if (!target) target = flagship;
@@ -2628,14 +2635,14 @@ export class GameEngine {
       let target: Ship | Installation | null = null;
       if (ship.order.type === 'attack' && ship.order.targetId) {
         target =
-          targetShips.find((s) => s.id === ship.order.targetId && !s.isSunk && !this.isSubmarine(s)) ||
+          targetShips.find((s) => s.id === ship.order.targetId && !s.isSunk && this.isGunTarget(s, ship.side)) ||
           this.findTargetInstallation(ship.order.targetId);
       }
 
       if (!target || dist(ship.pos, target.pos) > effectiveRange) {
         target =
           targetShips
-            .filter((s) => !s.isSunk && !this.isSubmarine(s) && dist(ship.pos, s.pos) <= effectiveRange)
+            .filter((s) => !s.isSunk && this.isGunTarget(s, ship.side) && dist(ship.pos, s.pos) <= effectiveRange)
             .sort((a, b) => dist(ship.pos, a.pos) - dist(ship.pos, b.pos))[0] || null;
       }
 
@@ -4042,6 +4049,15 @@ export class GameEngine {
     } else {
       // 反潛機主動巡邏：定時投放聲吶浮標 / 吊放聲吶脈衝，並自動獵殺已被定位之敵方潛艦
       const aswRange = this.getAircraftAswSonarRange(plane);
+      // Player ASW aircraft on patrol lay their own buoy pattern: one buoy every ~18 s wherever
+      // no friendly buoy is already listening
+      if (aswRange > 0 && plane.side === 'player' && (plane.sonobuoyAmmo ?? 0) > 0) {
+        plane.sonobuoyDropTimer = (plane.sonobuoyDropTimer ?? 6) - dt;
+        if (plane.sonobuoyDropTimer <= 0) {
+          plane.sonobuoyDropTimer = 18;
+          if (!this.sonobuoys.some((b) => dist(b.pos, plane.pos) < 900)) this.deploySonobuoyFromAircraft(plane, { ...plane.pos });
+        }
+      }
       if (aswRange > 0) {
         plane.sonarPingCooldown = (plane.sonarPingCooldown ?? 2.5) - dt;
         if (plane.sonarPingCooldown <= 0) {
@@ -15290,6 +15306,9 @@ export class GameEngine {
         readySAMs: def.hasSAM ? 32 : 0,
         maxSAMs: def.hasSAM ? 32 : 0,
         torpedoCooldown: def.torpedoCooldown,
+        // Commonwealth / allied escorts all carried depth-charge rails and throwers
+        hasDepthCharges: def.type === 'destroyer' || def.type === 'ffg' || def.type === 'ddg',
+        depthChargeCooldown: 0,
         sonarRange:
           def.hasASROC || def.type === 'destroyer'
             ? this.era === 'era5'
@@ -15393,6 +15412,14 @@ export class GameEngine {
       ship.targetSpeed = ship.maxSpeed * 0.9;
     } else {
       ship.targetHeading = tacticalInterceptHeading;
+    }
+
+    // 1b. 反潛獵殺：持有或剛失去潛艦接觸的護航艦以搜索航速逼近目標或最後已知位置
+    const hunt = this.findAswHunt(ship);
+    if (hunt) {
+      const steer = this.getEnemySteerPoint(ship, hunt.pos);
+      ship.targetHeading = Math.atan2(steer.y - ship.pos.y, steer.x - ship.pos.x);
+      ship.targetSpeed = hunt.speedKt;
     }
 
     // 2. 自主特殊武裝反擊 (Harpoon / Exocet / Torpedo / ASROC - 反潛武器僅針對已定位潛艦)
@@ -15862,8 +15889,12 @@ export class GameEngine {
     const logKey = `${sub.id}-${reason}`;
     const canLog = (this.sonarLogCooldowns[logKey] || 0) <= 0;
 
+    sub.datumPos = { ...sub.pos };
+    sub.datumAge = 0;
     if (sub.side === 'enemy') {
       const wasHidden = !sub.isSpotted;
+      // First contact by sonar or a buoy field: the boat hears the ping and half the time evades
+      if (wasHidden && reason !== 'firing' && Math.random() < 0.5) this.startSubmarineEvasion(sub, this.getFlagship()?.pos ?? sub.pos);
       sub.isSpotted = true;
       sub.spottedTimer = Math.max(sub.spottedTimer || 0, duration);
 
@@ -15924,6 +15955,43 @@ export class GameEngine {
     }
   }
 
+  /** Ships guns can engage: surface ships, and WWII boats caught on the surface that this side can see. */
+  private isGunTarget(s: Ship, shooterSide: Ship['side']): boolean {
+    if (!this.isSubmarine(s)) return true;
+    if (!isSurfacedBoat(s, this.era)) return false;
+    return shooterSide === 'enemy' ? Boolean(s.isSpottedByEnemy) : Boolean(s.isSpotted);
+  }
+
+  /**
+   * A submarine under attack evades: it turns away from the attack and either creeps away
+   * slowly and quietly (diesel boats, "silent running") or sprints deep (nuclear boats).
+   */
+  private startSubmarineEvasion(sub: Ship, threatPos: Vector2D): void {
+    if ((sub.evadeTimer || 0) > 0 || sub.isSunk) return;
+    const away = Math.atan2(sub.pos.y - threatPos.y, sub.pos.x - threatPos.x);
+    sub.evadeHeading = away + (Math.random() < 0.5 ? -1 : 1) * (Math.PI / 3);
+    sub.evadeTimer = isDieselBoat(sub) ? 30 : 18;
+    sub.isSnorkeling = false;
+  }
+
+  /**
+   * Target for an escort's anti-submarine hunt: a submarine its side currently holds, or the
+   * datum (last known position) of one recently lost. Closed at hunting speed so the sonar keeps
+   * working.
+   */
+  private findAswHunt(ship: Ship): { pos: Vector2D; speedKt: number } | undefined {
+    const sonar = shipSonar(ship, this.era, false);
+    if (!sonar) return undefined;
+    const speedKt = Math.min(ship.maxSpeed, Math.max(6, sonar.huntSpeedKt - 2));
+    const subs = this.enemyShips.filter((s) => !s.isSunk && this.isSubmarine(s));
+    const held = subs.filter((s) => s.isSpotted && dist(ship.pos, s.pos) < 3500).sort((a, b) => dist(ship.pos, a.pos) - dist(ship.pos, b.pos))[0];
+    if (held) return { pos: held.pos, speedKt };
+    const datum = subs
+      .filter((s) => s.datumPos && (s.datumAge ?? 999) < 75 && dist(ship.pos, s.datumPos) < 3000)
+      .sort((a, b) => dist(ship.pos, a.datumPos!) - dist(ship.pos, b.datumPos!))[0];
+    return datum?.datumPos ? { pos: datum.datumPos, speedKt } : undefined;
+  }
+
   /**
    * One detection pass on a submarine (see asw.ts): hull sonars by era and class, degraded by the
    * hunter's own speed and blind directly overhead; surface-search radar on a snorkelling or
@@ -15964,6 +16032,10 @@ export class GameEngine {
     const friendlySubs = [...this.playerShips, ...this.alliedShips].filter((s) => !s.isSunk && this.isSubmarine(s));
 
     for (const eSub of enemySubs) {
+      if (eSub.datumPos) {
+        eSub.datumAge = (eSub.datumAge ?? 0) + dt;
+        if (eSub.datumAge > 90) eSub.datumPos = undefined;
+      }
       if ((eSub.spottedTimer || 0) > 0) {
         eSub.spottedTimer = Math.max(0, (eSub.spottedTimer || 0) - dt);
         if (eSub.spottedTimer <= 0) {
@@ -16924,12 +16996,13 @@ export class GameEngine {
 
       // 潛水艇處於深潛狀態：完全免疫艦砲砲彈、機槍掃射、反艦飛彈、巡弋飛彈、火箭與常規航彈！
       // 依歷史與現代反潛作戰常理：潛水艇僅能被深水炸彈 (Depth Charges)、刺蝟砲 (Hedgehog)、ASROC 反潛火箭與魚雷 (Torpedoes) 命中傷害！
-      if (this.isSubmarine(ship) && !(
-        proj.type === 'depth_charge' ||
-        proj.type === 'hedgehog' ||
-        proj.type === 'torpedo' ||
-        proj.isASROC
-      )) {
+      const aswWeapon = proj.type === 'depth_charge' || proj.type === 'hedgehog' || proj.type === 'torpedo' || Boolean(proj.isASROC);
+      if (this.isSubmarine(ship) && aswWeapon && ship.side === 'enemy' && dist(proj.pos, ship.pos) < 500) {
+        this.startSubmarineEvasion(ship, proj.pos);
+      }
+      // A submerged boat is immune to shells, rockets, bombs and missiles; a WWII boat caught on
+      // the surface (transiting or still diving) is not
+      if (this.isSubmarine(ship) && !aswWeapon && !isSurfacedBoat(ship, this.era)) {
         continue;
       }
 
