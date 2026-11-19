@@ -103,6 +103,7 @@ import {
   createIjnIBoatSS,
   createSovietWhiskeySS,
   createSovietVictor3SSN,
+  makeInstallation,
 } from './procedural';
 import { NavalNavigationGrid, computeShipSeparationSteering } from './navigation';
 import { soundEngine } from './audio';
@@ -9012,7 +9013,7 @@ export class GameEngine {
     // Successfully construct new forward airfield!
     soundEngine.playPlaneSortie();
     const newAirfieldId = `airfield-${onIsland.id}-${Date.now()}`;
-    const newAirfield: Installation = {
+    const newAirfield: Installation = makeInstallation({
       id: newAirfieldId,
       type: 'airfield',
       name: `前進野戰航空基地 (${onIsland.name})`,
@@ -9020,33 +9021,27 @@ export class GameEngine {
       pos: { ...eng.pos },
       angle: -Math.PI / 4,
       health: 3000,
-      maxHealth: 3000,
       range: 4000,
-      cooldown: 0,
       reloadTime: 15,
-      isDestroyed: false,
       side: 'player',
-    };
+    });
     onIsland.installations.push(newAirfield);
 
     // Build companion AA Flak battery to protect airfield
-    const newFlak: Installation = {
+    const newFlak: Installation = makeInstallation({
       id: `flak-${onIsland.id}-${Date.now()}`,
       type: 'flak_battery',
       name: '野戰防空砲兵連 (90mm M2 / 40mm Bofors)',
       weaponDesc: '工兵防空陣地 · 保護前進野戰跑道不受空襲',
       pos: { x: eng.pos.x + 85, y: eng.pos.y + 40 },
-      angle: 0,
       health: 1200,
-      maxHealth: 1200,
       armor: 0.35,
       range: 1100,
       cooldown: 0.5,
       reloadTime: 1.6,
-      isDestroyed: false,
       side: 'player',
       isASuWOnly: false,
-    };
+    });
     onIsland.installations.push(newFlak);
     this.applyHistoricalInstallationRanges();
 
@@ -9221,7 +9216,7 @@ export class GameEngine {
         this.era === 'era5' ? 3800 : this.era === 'era4' ? 3600 : this.era === 'era3' ? 3400 : this.era === 'era2' ? 3200 : 2800;
       const heavyDamage =
         this.era === 'era5' ? 1050 : this.era === 'era4' ? 920 : this.era === 'era3' ? 850 : this.era === 'era2' ? 780 : 640;
-      targetIsland.installations.push({
+      targetIsland.installations.push(makeInstallation({
         id: `${instId}-240`,
         type: 'coastal_gun',
         name:
@@ -9235,16 +9230,13 @@ export class GameEngine {
         side: 'player',
         pos: instPos,
         health: 2600,
-        maxHealth: 2600,
         armor: 0.55,
         damage: heavyDamage,
         blastRadius: 52,
         angle: instAngle,
         range: heavyRange,
         reloadTime: 6.2,
-        cooldown: 0,
-        isDestroyed: false,
-      });
+      }));
     } else if (item.typeTag === 'coastal_gun') {
       const coastalRange = this.era === 'era3' ? 2200 : this.era === 'era2' ? 1900 : 1650;
       const coastalDmg = this.era === 'era3' ? 520 : this.era === 'era2' ? 420 : 340;
@@ -9297,7 +9289,7 @@ export class GameEngine {
       });
     } else if (item.typeTag === 'pontoon_pier') {
       // 浮式人工棧橋港 (急造港口)
-      targetIsland.installations.push({
+      targetIsland.installations.push(makeInstallation({
         id: instId,
         type: 'pontoon_pier',
         name: `浮式人工棧橋港碼頭 (${targetIsland.name})`,
@@ -9305,18 +9297,15 @@ export class GameEngine {
         side: 'player',
         pos: instPos,
         health: 2200,
-        maxHealth: 2200,
         armor: 0.35,
         angle: instAngle,
         range: 550,
         reloadTime: 1.0,
-        cooldown: 0,
-        isDestroyed: false,
         upgradeTimer: 0,
-      });
+      }));
     } else if (item.typeTag === 'major_naval_port') {
       // 正規深水軍港
-      targetIsland.installations.push({
+      targetIsland.installations.push(makeInstallation({
         id: instId,
         type: 'major_naval_port',
         name: `正規深水軍港突堤 (${targetIsland.name})`,
@@ -9324,17 +9313,14 @@ export class GameEngine {
         side: 'player',
         pos: instPos,
         health: 4200,
-        maxHealth: 4200,
         armor: 0.5,
         angle: instAngle,
         range: 850,
         reloadTime: 1.0,
-        cooldown: 0,
-        isDestroyed: false,
-      });
+      }));
     } else if (item.typeTag === 'supply_depot') {
       // 戰地輜重補給樞紐
-      targetIsland.installations.push({
+      targetIsland.installations.push(makeInstallation({
         id: instId,
         type: 'supply_depot',
         name: '戰地輜重補給樞紐',
@@ -9342,17 +9328,12 @@ export class GameEngine {
         side: 'player',
         pos: instPos,
         health: 2000,
-        maxHealth: 2000,
         armor: 0.4,
         angle: instAngle,
-        range: 0,
-        reloadTime: 0,
-        cooldown: 0,
-        isDestroyed: false,
-      });
+      }));
     } else if (item.typeTag === 'field_hospital') {
       // 戰地野戰醫院
-      targetIsland.installations.push({
+      targetIsland.installations.push(makeInstallation({
         id: instId,
         type: 'field_hospital',
         name: '戰地野戰醫院',
@@ -9360,17 +9341,12 @@ export class GameEngine {
         side: 'player',
         pos: instPos,
         health: 1600,
-        maxHealth: 1600,
         armor: 0.3,
         angle: instAngle,
-        range: 0,
-        reloadTime: 0,
-        cooldown: 0,
-        isDestroyed: false,
-      });
+      }));
     } else if (item.typeTag === 'airfield') {
       // 前進野戰機場
-      targetIsland.installations.push({
+      targetIsland.installations.push(makeInstallation({
         id: instId,
         type: 'airfield',
         name: `前進野戰機場跑道 (${targetIsland.name})`,
@@ -9378,18 +9354,13 @@ export class GameEngine {
         side: 'player',
         pos: instPos,
         health: 3500,
-        maxHealth: 3500,
         armor: 0.4,
         angle: instAngle,
-        range: 0,
-        reloadTime: 0,
-        cooldown: 0,
-        isDestroyed: false,
-      });
+      }));
       targetIsland.isFriendlyBase = true;
     } else if (item.typeTag === 'command_post') {
       // 堅固防衛坑道指揮所
-      targetIsland.installations.push({
+      targetIsland.installations.push(makeInstallation({
         id: instId,
         type: 'command_post',
         name: `地下坑道指揮所 (${targetIsland.name})`,
@@ -9397,17 +9368,14 @@ export class GameEngine {
         side: 'player',
         pos: instPos,
         health: 3600,
-        maxHealth: 3600,
         armor: 0.55,
         angle: instAngle,
         range: 1000,
         reloadTime: 2.0,
-        cooldown: 0,
-        isDestroyed: false,
-      });
+      }));
     } else if (item.typeTag === 'ammo_depot') {
       // 重型戰備油彈庫
-      targetIsland.installations.push({
+      targetIsland.installations.push(makeInstallation({
         id: instId,
         type: 'ammo_depot',
         name: `重型戰備油彈庫 (${targetIsland.name})`,
@@ -9415,17 +9383,12 @@ export class GameEngine {
         side: 'player',
         pos: instPos,
         health: 2600,
-        maxHealth: 2600,
         armor: 0.45,
         angle: instAngle,
-        range: 0,
-        reloadTime: 0,
-        cooldown: 0,
-        isDestroyed: false,
-      });
+      }));
     } else if (item.typeTag === 'battalion_cp') {
       // 營級前進作戰指揮所 (Battalion CP)
-      targetIsland.installations.push({
+      targetIsland.installations.push(makeInstallation({
         id: instId,
         type: 'battalion_cp',
         name: `營前進作戰指揮所 (${targetIsland.name})`,
@@ -9433,17 +9396,14 @@ export class GameEngine {
         side: 'player',
         pos: instPos,
         health: 3800,
-        maxHealth: 3800,
         armor: 0.50,
         angle: instAngle,
         range: 1200,
         reloadTime: 1.0,
-        cooldown: 0,
-        isDestroyed: false,
-      });
+      }));
     } else if (item.typeTag === 'sam_patriot') {
       // MIM-104 愛國者長程防空/反飛彈營
-      targetIsland.installations.push({
+      targetIsland.installations.push(makeInstallation({
         id: instId,
         type: 'flak_battery',
         name: `MIM-104 愛國者長程防空飛彈營 (${targetIsland.name})`,
@@ -9451,17 +9411,14 @@ export class GameEngine {
         side: 'player',
         pos: instPos,
         health: 2600,
-        maxHealth: 2600,
         armor: 0.55,
         angle: instAngle,
         range: 2600,
         reloadTime: 1.8,
-        cooldown: 0,
-        isDestroyed: false,
-      });
+      }));
     } else if (item.typeTag === 'sam_hawk') {
       // MIM-23 霍克防空飛彈陣地
-      targetIsland.installations.push({
+      targetIsland.installations.push(makeInstallation({
         id: instId,
         type: 'flak_battery',
         name: `MIM-23 霍克防空飛彈連 (${targetIsland.name})`,
@@ -9469,17 +9426,14 @@ export class GameEngine {
         side: 'player',
         pos: instPos,
         health: 1800,
-        maxHealth: 1800,
         armor: 0.45,
         angle: instAngle,
         range: 1800,
         reloadTime: 2.2,
-        cooldown: 0,
-        isDestroyed: false,
-      });
+      }));
     } else if (item.typeTag === 'fob') {
       // 前進作戰基地 (FOB)
-      targetIsland.installations.push({
+      targetIsland.installations.push(makeInstallation({
         id: instId,
         type: 'command_post',
         name: `前進作戰基地 FOB (${targetIsland.name})`,
@@ -9487,14 +9441,11 @@ export class GameEngine {
         side: 'player',
         pos: instPos,
         health: 4500,
-        maxHealth: 4500,
         armor: 0.60,
         angle: instAngle,
         range: 1600,
         reloadTime: 1.0,
-        cooldown: 0,
-        isDestroyed: false,
-      });
+      }));
     }
 
     this.islandsVersion++;
