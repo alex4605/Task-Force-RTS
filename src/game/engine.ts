@@ -37,7 +37,7 @@ import {
 } from '../types/game';
 import { getAlliedSagFleet } from './alliedSagFleets';
 import { getNavalGunPerformance, getNavalLauncherRange } from './navalGuns';
-import { getCatalogRole } from './airWingCatalog';
+import { getAfbModelsForEra, getCarrierModelsForEra, getCatalogRole } from './airWingCatalog';
 import { AIR_WEAPON_RANGE, getInstallationRange } from './rangeScale';
 import { getShipAshmFit, getShipSamSystem } from './navalMissileSalvos';
 import { barrierStation, isStriker, selectAirTarget } from './airMissions';
@@ -121,6 +121,11 @@ export interface BattleAlertBanner {
   duration: number;
 }
 
+/** Helicopters and STOVL jets can land on any flight deck, including amphibious ships. */
+const DECK_CAPABLE_ROTARY_AND_STOVL: ReadonlySet<AircraftModel> = new Set<AircraftModel>([
+  'ho3s1', 'uh2', 'sh2', 'uh1', 'ah1', 'sh3f', 'ch53', 'ch46', 'ah64a', 'ah1w', 'sh60b', 'av8b',
+]);
+
 /** Weighted pick from a small list of aircraft models, consuming one random draw. */
 function pickModel(models: readonly AircraftModel[], weights: readonly number[]): AircraftModel {
   let r = Math.random();
@@ -199,7 +204,11 @@ export class GameEngine {
   private sessionToken: number = 0;
 
   // Friendly Airbase (AFB) plane reserve pool & replenishment
+  /** HQ island airfield's stock; every reinforcement, replenishment and purchase lands here first. */
   public airbasePlanes: Record<string, number> = {};
+  /** Independent aircraft stock of every friendly airfield, keyed by its installation id (HQ shares airbasePlanes). */
+  public airfieldPlanes: Record<string, Record<string, number>> = {};
+  public hqAirfieldId = 'friendly-base-afb';
   public airbaseReplenishTimer: number = 45;
   public airbaseReplenishMax: number = 45;
 
@@ -601,6 +610,9 @@ export class GameEngine {
         : this.era === 'era4'
         ? { b52: 4, f4e: 8, f105: 8, f100: 6, ac47: 2, ch46: 4, a7: 8, a1h: 6, a37b: 6, f5a: 6, f104g: 6, ov10: 6, uh1: 6, ah1: 6, f4j: 6, a6a: 6, e1: 2, c1: 4 }
         : { b52: 4, f111: 4, a10a: 8, ah64a: 6, ah1w: 6, f15a: 8, f16a: 8, e3a: 2, c130: 4, f14a: 10, fa18a: 8, a6e: 6, s3a: 4, e2c: 2, ea6b: 4, av8b: 6, ch53: 4, sh3f: 4, c2a: 4 };
+    this.hqAirfieldId =
+      this.friendlyBase?.installations.find((inst) => inst.type === 'airfield' && inst.side === 'player')?.id ?? 'friendly-base-afb';
+    this.airfieldPlanes = { [this.hqAirfieldId]: this.airbasePlanes };
     this.airbaseReplenishTimer = this.airbaseReplenishMax;
     this.convoyReinforceTimer = this.convoyReinforceMax;
     this.tokyoExpressTimer = 120;
@@ -1642,8 +1654,9 @@ export class GameEngine {
   // CARRIER FLIGHT DECK OPERATIONS
   // ══════════════════════════════════════════════════════════
 
-  public launchAircraft(model: AircraftModel, count: number = 2, specificPayload?: AircraftPayloadType): boolean {
-    const flagship = this.getFlagship();
+  public launchAircraft(model: AircraftModel, count: number = 2, specificPayload?: AircraftPayloadType, carrierId?: string): boolean {
+    // Launching carrier: the one asked for, otherwise the flagship
+    const flagship = (carrierId ? this.playerShips.find((s) => s.id === carrierId && !s.isSunk && s.carrierPlanes) : undefined) ?? this.getFlagship();
     if (!flagship || !flagship.carrierPlanes) return false;
 
     const readyCount = flagship.carrierPlanes.ready[model] || 0;
@@ -1779,6 +1792,8 @@ export class GameEngine {
       actionType: 'recon_spotted',
       text: `🛫【機隊起飛出擊】「${flightName}」從飛行甲板彈射出擊！掛載: ${catalogItem?.name || payloadName} (儲存彈藥: ${initialAmmo})`,
     });
+
+    for (const a of this.aircraft) if (a.squadronId === sqId) a.homeBaseId = flagship.id;
 
     // 不取消航母選取：保持航母/旗艦選中狀態，讓下方飛行甲板出擊選單保持開啟，方便連續派遣多批次機隊
     if (!this.selectedUnitIds.includes(flagship.id)) {
@@ -2741,6 +2756,11 @@ export class GameEngine {
       const plane = this.aircraft[i];
 
       if (this.updateShotDownAircraft(dt, i, plane)) continue;
+
+      if (plane.ferryTo) {
+        if (this.updateFerryFlight(dt, i, plane)) continue;
+        // still en route: fall through to steering and movement (no combat orders)
+      }
 
       if (this.updateOhkaRocket(dt, plane)) continue;
 
@@ -4120,6 +4140,213 @@ export class GameEngine {
     return false;
   }
 
+  // ══════════════════════════════════════════════════════════
+  // 機場獨立庫存與轉場 (Per-airfield stocks and ferry flights)
+  // ══════════════════════════════════════════════════════════
+
+  /** Intact friendly airfield by id. */
+  public findFriendlyAirfield(id: string): Installation | undefined {
+    for (const isl of this.islands) {
+      const inst = isl.installations.find((x) => x.id === id && x.type === 'airfield' && x.side === 'player' && !x.isDestroyed);
+      if (inst) return inst;
+    }
+    return undefined;
+  }
+
+  /** Every intact friendly airfield, the HQ island's first. */
+  public getFriendlyAirfields(): Installation[] {
+    const all = this.islands.flatMap((isl) => isl.installations.filter((x) => x.type === 'airfield' && x.side === 'player' && !x.isDestroyed));
+    return all.sort((a, b) => (a.id === this.hqAirfieldId ? -1 : b.id === this.hqAirfieldId ? 1 : 0));
+  }
+
+  /** Aircraft stock of an airfield (created empty on first use, e.g. for a captured field). */
+  public getAirfieldPool(id: string): Record<string, number> {
+    if (id === this.hqAirfieldId) return this.airbasePlanes;
+    return (this.airfieldPlanes[id] ??= {});
+  }
+
+  /** Friendly ship that can take aircraft aboard. */
+  private findFriendlyCarrier(id: string): Ship | undefined {
+    return this.playerShips.find((s) => s.id === id && !s.isSunk && s.carrierPlanes);
+  }
+
+  /** Position of an airfield or carrier, or undefined if it no longer exists. */
+  private getAirBasePos(id: string): Vector2D | undefined {
+    return this.findFriendlyAirfield(id)?.pos ?? this.findFriendlyCarrier(id)?.pos;
+  }
+
+  /** Whether this airframe can operate from a ship's deck (it appears in a carrier air wing or as a navy type). */
+  public isCarrierCapable(model: AircraftModel): boolean {
+    if (DECK_CAPABLE_ROTARY_AND_STOVL.has(model)) return true;
+    const eras: Era[] = ['era1', 'era2', 'era3', 'era4', 'era5'];
+    return eras.some(
+      (e) => getCarrierModelsForEra(e).some((d) => d.model === model) || getAfbModelsForEra(e).some((d) => d.id === model && d.isNavy)
+    );
+  }
+
+  /**
+   * Home base to return to: the base it launched from or was ferried to if it still exists,
+   * otherwise the nearest friendly airfield (carrier aircraft fall back to the flagship).
+   */
+  private resolveHomeBase(plane: Aircraft): string | undefined {
+    if (plane.homeBaseId && this.getAirBasePos(plane.homeBaseId)) return plane.homeBaseId;
+    if (!plane.homeBaseId) return undefined;
+    const flagship = this.getFlagship();
+    if (flagship?.carrierPlanes && this.isCarrierCapable(plane.model) && this.findFriendlyCarrier(plane.homeBaseId) === undefined && plane.homeBaseId.startsWith('player-')) {
+      plane.homeBaseId = flagship.id;
+      return flagship.id;
+    }
+    const nearest = this.getFriendlyAirfields().sort((a, b) => dist(plane.pos, a.pos) - dist(plane.pos, b.pos))[0];
+    plane.homeBaseId = nearest?.id;
+    return plane.homeBaseId;
+  }
+
+  /** Puts a landed aircraft into an airfield's stock or a carrier's ready deck. */
+  private stowAircraftAtBase(baseId: string, model: AircraftModel, count: number): void {
+    const carrier = this.findFriendlyCarrier(baseId);
+    if (carrier?.carrierPlanes) {
+      const cp = carrier.carrierPlanes;
+      const ready = cp.ready[model] || 0;
+      const room = Math.max(0, (cp.maxPerType[model] || 14) - ready);
+      cp.ready[model] = ready + Math.min(count, room);
+      if (count > room) cp.hangar[model] = (cp.hangar[model] || 0) + (count - room);
+      return;
+    }
+    const pool = this.getAirfieldPool(baseId);
+    pool[model] = (pool[model] || 0) + count;
+  }
+
+  /** Flies a returning aircraft home; true once it has landed and left the map. */
+  private returnToHomeBase(dt: number, i: number, plane: Aircraft): boolean {
+    const baseId = plane.homeBaseId;
+    const pos = baseId ? this.getAirBasePos(baseId) : undefined;
+    if (!baseId || !pos) return false;
+    plane.targetHeading = Math.atan2(pos.y - plane.pos.y, pos.x - plane.pos.x);
+    plane.altitude = Math.min(0.85, plane.altitude + dt * 0.2);
+    if (dist(plane.pos, pos) < 60) {
+      this.stowAircraftAtBase(baseId, plane.model, 1);
+      this.aircraft.splice(i, 1);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Ferries aircraft between friendly airfields and carriers. The aircraft actually fly the leg,
+   * unarmed, and only join the destination's stock on landing; carrier decks accept only
+   * carrier-capable types.
+   */
+  public transferAircraft(model: AircraftModel, count: number, fromId: string, toId: string): boolean {
+    const fail = (text: string) => {
+      this.addCombatLog({ category: 'air', sourceSide: 'player', sourceName: '航空作戰中心', targetName: '轉場', actionType: 'recon_spotted', text });
+      return false;
+    };
+    if (fromId === toId) return fail('⚠️ 轉場出發地與目的地相同。');
+    const fromPos = this.getAirBasePos(fromId);
+    const toPos = this.getAirBasePos(toId);
+    if (!fromPos || !toPos) return fail('⚠️ 轉場基地不存在或已被摧毀。');
+    const toCarrier = this.findFriendlyCarrier(toId);
+    if (toCarrier && !this.isCarrierCapable(model)) return fail(`⚠️ ${model.toUpperCase()} 並非艦載機型，無法降落「${toCarrier.name}」。`);
+
+    const fromCarrier = this.findFriendlyCarrier(fromId);
+    let available: number;
+    if (fromCarrier?.carrierPlanes) {
+      const cp = fromCarrier.carrierPlanes;
+      available = (cp.ready[model] || 0) + (cp.hangar[model] || 0);
+      if (available < count) return fail(`⚠️ 「${fromCarrier.name}」${model.toUpperCase()} 不足 (${available}/${count})。`);
+      const fromReady = Math.min(count, cp.ready[model] || 0);
+      cp.ready[model] = (cp.ready[model] || 0) - fromReady;
+      cp.hangar[model] = (cp.hangar[model] || 0) - (count - fromReady);
+    } else {
+      const pool = this.getAirfieldPool(fromId);
+      available = pool[model] || 0;
+      if (available < count) return fail(`⚠️ 機場 ${model.toUpperCase()} 庫存不足 (${available}/${count})。`);
+      pool[model] = available - count;
+    }
+
+    const speed = getAircraftBaseSpeed(model);
+    const health = getAircraftBaseHealth(model);
+    const heading = Math.atan2(toPos.y - fromPos.y, toPos.x - fromPos.x);
+    const sqId = `sq-ferry-${model}-${Date.now()}`;
+    const fromName = fromCarrier?.name ?? this.findFriendlyAirfield(fromId)?.name ?? fromId;
+    const toName = toCarrier?.name ?? this.findFriendlyAirfield(toId)?.name ?? toId;
+    for (let k = 0; k < count; k++) {
+      this.aircraft.push({
+        id: `ferry-${model}-${Date.now()}-${k}-${Math.floor(Math.random() * 1e6)}`,
+        squadronId: sqId,
+        model,
+        role: getCatalogRole(model, toCarrier ? 'carrier' : 'airbase', this.era),
+        name: `轉場 ${model.toUpperCase()} #${k + 1} (→ ${toName})`,
+        flightName: `轉場編隊 ${fromName} → ${toName}`,
+        side: 'player',
+        pos: { x: fromPos.x + (k - (count - 1) / 2) * 26, y: fromPos.y + k * 18 },
+        vel: { x: Math.cos(heading) * speed, y: Math.sin(heading) * speed },
+        heading,
+        targetHeading: heading,
+        speed,
+        maxSpeed: speed,
+        altitude: 0.8,
+        state: 'cruising',
+        health,
+        maxHealth: health,
+        order: { type: 'move', targetPos: { ...toPos } },
+        hasPayload: false,
+        payloadType: 'clean_guns',
+        shootCooldown: 0,
+        gunAmmo: getAircraftGunRounds(model),
+        maxGunAmmo: getAircraftGunRounds(model),
+        wingmanOffset: { x: (k - (count - 1) / 2) * 26, y: k * 18 },
+        homeBaseId: toId,
+        ferryTo: toId,
+      });
+    }
+    soundEngine.playPlaneSortie();
+    this.addCombatLog({
+      category: 'air',
+      sourceSide: 'player',
+      sourceName: fromName,
+      targetName: toName,
+      actionType: 'recon_spotted',
+      text: `🛫【轉場起飛】${count} 架 ${model.toUpperCase()} 自「${fromName}」起飛轉場前往「${toName}」，抵達降落後即計入該基地庫存。`,
+    });
+    return true;
+  }
+
+  /**
+   * Ferry leg: steer for the destination (which may be a moving carrier) and land into its stock.
+   * If the destination is lost en route the flight diverts to the HQ airfield.
+   */
+  private updateFerryFlight(dt: number, i: number, plane: Aircraft): boolean {
+    if (!plane.ferryTo) return false;
+    let pos = this.getAirBasePos(plane.ferryTo);
+    if (!pos) {
+      plane.ferryTo = this.findFriendlyAirfield(this.hqAirfieldId) ? this.hqAirfieldId : this.getFriendlyAirfields()[0]?.id;
+      plane.homeBaseId = plane.ferryTo;
+      pos = plane.ferryTo ? this.getAirBasePos(plane.ferryTo) : undefined;
+      if (!pos) return false;
+    }
+    plane.order = { type: 'move', targetPos: { ...pos } };
+    plane.targetHeading = Math.atan2(pos.y - plane.pos.y, pos.x - plane.pos.x);
+    plane.altitude = Math.min(0.85, plane.altitude + dt * 0.2);
+    if (dist(plane.pos, pos) < 60) {
+      const base = plane.ferryTo;
+      this.stowAircraftAtBase(base, plane.model, 1);
+      this.aircraft.splice(i, 1);
+      if (!this.aircraft.some((a) => a.squadronId === plane.squadronId)) {
+        this.addCombatLog({
+          category: 'air',
+          sourceSide: 'player',
+          sourceName: plane.flightName || '轉場編隊',
+          targetName: base,
+          actionType: 'recon_spotted',
+          text: `🛬【轉場完成】${plane.flightName} 全數降落，已計入目的地基地庫存。`,
+        });
+      }
+      return true;
+    }
+    return false;
+  }
+
   /** Return to carrier / airbase, landing and rearming. */
   private updateReturnToBase(dt: number, flagship: Ship | undefined, i: number, plane: Aircraft): boolean {
     if (plane.side === 'allied') {
@@ -4142,6 +4369,9 @@ export class GameEngine {
         this.aircraft.splice(i, 1);
         return true;
       }
+    } else if (plane.side === 'player' && this.resolveHomeBase(plane)) {
+      // Flies back to its own airfield or carrier and lands into that base's stock
+      if (this.returnToHomeBase(dt, i, plane)) return true;
     } else if (plane.side === 'player') {
       const isLandBased =
         plane.squadronId.startsWith('sq-afb-') ||
@@ -8796,70 +9026,21 @@ export class GameEngine {
     });
   }
 
-  // ══════════════════════════════════════════════════════════
-  // 前進航空基地 (AFB) 轉場與出擊調度 (Airbase Operations)
-  // ══════════════════════════════════════════════════════════
-
-  public ferryAirbasePlanesToCarrier(model: string, count: number = 2) {
-    const flagship = this.getFlagship();
-    if (!flagship || !flagship.carrierPlanes) {
-      this.addCombatLog({
-        category: 'air',
-        sourceSide: 'player',
-        sourceName: '前進航空基地',
-        targetName: '特遣艦隊',
-        actionType: 'recon_spotted',
-        text: `⚠️ 目前特遣艦隊中無航空母艦可供轉場降落。`,
-      });
-      return;
-    }
-
-    const available = this.airbasePlanes[model] || 0;
-    if (available < count) {
-      this.addCombatLog({
-        category: 'air',
-        sourceSide: 'player',
-        sourceName: '前進航空基地',
-        targetName: '特遣艦隊',
-        actionType: 'recon_spotted',
-        text: `⚠️ 基地該機型庫存不足 (${available}/${count})。`,
-      });
-      return;
-    }
-
-    this.airbasePlanes[model] -= count;
-    const currentReady = flagship.carrierPlanes.ready[model] || 0;
-    const maxReady = flagship.carrierPlanes.maxPerType[model] || 14;
-    const addReady = Math.min(count, maxReady - currentReady);
-    const addHangar = count - addReady;
-
-    flagship.carrierPlanes.ready[model] = currentReady + addReady;
-    if (addHangar > 0) {
-      flagship.carrierPlanes.hangar[model] = (flagship.carrierPlanes.hangar[model] || 0) + addHangar;
-    }
-
-    soundEngine.playPlaneSortie();
-    this.addCombatLog({
-      category: 'air',
-      sourceSide: 'player',
-      sourceName: '前進航空基地 (AFB)',
-      targetName: flagship.name,
-      actionType: 'recon_spotted',
-      text: `🛫【轉場渡航成功】前進空軍基地調派 ${count} 架 ${model.toUpperCase()} 飛往「${flagship.name}」，已順利降落補入艦隊機庫！`,
-    });
-  }
-
   public launchAirbaseSortie(
     model: AircraftModel,
     count: number = 2,
     payload?: AircraftPayloadType,
-    targetPos?: Vector2D
+    targetPos?: Vector2D,
+    airfieldId: string = this.hqAirfieldId
   ) {
-    const available = this.airbasePlanes[model] || 0;
+    const airfield = this.findFriendlyAirfield(airfieldId);
+    if (!airfield) return;
+    const pool = this.getAirfieldPool(airfieldId);
+    const available = pool[model] || 0;
     if (available < count) return;
-    this.airbasePlanes[model] -= count;
+    pool[model] -= count;
 
-    const baseCenter = this.friendlyBase?.center || { x: 2000, y: 12400 };
+    const baseCenter = airfield.pos;
     const heading = -Math.PI / 4;
     soundEngine.playPlaneSortie();
 
@@ -8877,7 +9058,7 @@ export class GameEngine {
     if (pType === 'b52_megaton_nuke') {
       const nukeCost = 900;
       if (this.resourcePoints < nukeCost) {
-        this.airbasePlanes[model] += count;
+        pool[model] += count;
         this.addBannerAlert(`❌【戰略授權不足】動用 B28/B41 百萬噸級戰略熱核武器需耗費 ${nukeCost} CP！目前 CP 不足！`, 'player', 'sunk', 5.5);
         this.addCombatLog({
           category: 'air',
@@ -8896,7 +9077,7 @@ export class GameEngine {
       this.checkOpforNuclearRetaliation();
     } else if (pType === 'tactical_b61_nuke') {
       if (this.resourcePoints < 4000) {
-        this.airbasePlanes[model] += count;
+        pool[model] += count;
         this.addBannerAlert('❌【政治授權不足】動用 B61 戰術核武器需耗費 4,000 CP！目前 CP 不足！', 'player', 'sunk', 5.5);
         this.addCombatLog({
           category: 'air',
@@ -8915,7 +9096,7 @@ export class GameEngine {
     } else if (pType === 'tactical_nuke') {
       if (this.resourcePoints < 4500) {
         // Return available planes since sortie cannot proceed
-        this.airbasePlanes[model] += count;
+        pool[model] += count;
         this.addBannerAlert('❌【政治授權不足】動用戰術核武器需耗費 4,500 CP 戰略指揮點數！目前 CP 不足！', 'player', 'sunk', 5.5);
         this.addCombatLog({
           category: 'air',
@@ -8999,6 +9180,7 @@ export class GameEngine {
         gunAmmo: gunRounds,
         maxGunAmmo: gunRounds,
         wingmanOffset: { x: (i - (count - 1) / 2) * 28, y: i * 20 },
+        homeBaseId: airfieldId,
         ...((): { sonobuoyAmmo?: number; maxSonobuoyAmmo?: number; sonobuoyModel?: string } => {
           const spec = this.getSonobuoySpec(model);
           return spec
@@ -9014,7 +9196,7 @@ export class GameEngine {
       sourceName: '前進航空基地 (AFB)',
       targetName: '戰區空域',
       actionType: 'recon_spotted',
-      text: `✈️【基地機隊緊急出擊！】前進航空基地出動 ${count} 架 ${model.toUpperCase()} (${roleZh}) 直飛戰區！掛載: ${PAYLOAD_CATALOG[pType]?.name || pType}`,
+      text: `✈️【基地機隊緊急出擊！】${airfield.name} 出動 ${count} 架 ${model.toUpperCase()} (${roleZh}) 直飛戰區！掛載: ${PAYLOAD_CATALOG[pType]?.name || pType}`,
     });
   }
 
@@ -9082,20 +9264,14 @@ export class GameEngine {
     onIsland.installations.push(newFlak);
     this.applyHistoricalInstallationRanges();
 
-    // Stock newly built airfield with fresh planes in airbase pool!
-    if (this.era === 'era1') {
-      this.airbasePlanes.b17 = (this.airbasePlanes.b17 || 0) + 3;
-      this.airbasePlanes.p40 = (this.airbasePlanes.p40 || 0) + 4;
-      this.airbasePlanes.a20 = (this.airbasePlanes.a20 || 0) + 3;
-    } else if (this.era === 'era2') {
-      this.airbasePlanes.b24 = (this.airbasePlanes.b24 || 0) + 3;
-      this.airbasePlanes.p51 = (this.airbasePlanes.p51 || 0) + 4;
-      this.airbasePlanes.p47 = (this.airbasePlanes.p47 || 0) + 3;
-    } else {
-      this.airbasePlanes.b29 = (this.airbasePlanes.b29 || 0) + 3;
-      this.airbasePlanes.f86 = (this.airbasePlanes.f86 || 0) + 4;
-      this.airbasePlanes.a26 = (this.airbasePlanes.a26 || 0) + 3;
-    }
+    // The new airfield keeps its own stock, starting with a forward detachment; further
+    // aircraft reach it by ferry flights from the HQ airfield or a carrier
+    this.airfieldPlanes[newAirfieldId] =
+      this.era === 'era1'
+        ? { b17: 3, p40: 4, a20: 3 }
+        : this.era === 'era2'
+        ? { b24: 3, p51: 4, p47: 3 }
+        : { b29: 3, f86: 4, a26: 3 };
 
     this.score.totalScore += 800;
     this.score.stars += 3;
@@ -9382,7 +9558,8 @@ export class GameEngine {
         angle: instAngle,
       }));
     } else if (item.typeTag === 'airfield') {
-      // 前進野戰機場
+      // 前進野戰機場 (own, initially empty aircraft stock; fill it by ferry flights)
+      this.airfieldPlanes[instId] = {};
       targetIsland.installations.push(makeInstallation({
         id: instId,
         type: 'airfield',
