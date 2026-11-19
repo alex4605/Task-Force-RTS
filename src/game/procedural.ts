@@ -3546,7 +3546,7 @@ export function createMonsunUBoatSS(id: string, name: string, pos: Vector2D, era
     pos: { ...pos },
     heading,
     speed: 7.5,
-    maxSpeed: era === 'era1' ? 14 : 16,
+    maxSpeed: 7, // Type IXD2 Monsun: 6.9 kt submerged on electric motors
     length: era === 'era1' ? 66 : 78,
     width: 9,
     health: era === 'era1' ? 760 : 980,
@@ -3582,7 +3582,7 @@ export function createIjnIBoatSS(id: string, name: string, pos: Vector2D, era: E
     pos: { ...pos },
     heading,
     speed: 8,
-    maxSpeed: 16,
+    maxSpeed: 8, // B1 type: 8 kt submerged
     length: 84,
     width: 10,
     health: era === 'era1' ? 880 : 1120,
@@ -3624,7 +3624,7 @@ export function createSovietWhiskeySS(
     pos: { ...pos },
     heading,
     speed: isZulu ? 9 : 8,
-    maxSpeed: isZulu ? 18 : 16,
+    maxSpeed: isZulu ? 15 : 13, // submerged: Zulu 15 kt, Whiskey 13 kt
     length: isZulu ? 86 : 76,
     width: 10,
     health: isZulu ? 1350 : 1120,
@@ -9229,7 +9229,7 @@ function addEnemyFleetEra1(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
       pos: { x: 7200, y: 7400 },
       heading: -Math.PI / 2,
       speed: 6,
-      maxSpeed: 14,
+      maxSpeed: 8, // B1 type: 8 kt submerged
       length: 56,
       width: 9,
       health: 750,
@@ -9593,7 +9593,7 @@ function addEnemyFleetEra2(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
       pos: { x: 7400, y: 7200 },
       heading: -Math.PI / 3,
       speed: 6,
-      maxSpeed: 16,
+      maxSpeed: 6.5, // Sen-Toku: 6.5 kt submerged
       length: 70,
       width: 12,
       health: 980,

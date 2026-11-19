@@ -38,8 +38,9 @@ import {
 import { getAlliedSagFleet } from './alliedSagFleets';
 import { getNavalGunPerformance, getNavalLauncherRange } from './navalGuns';
 import { getAfbModelsForEra, getCarrierModelsForEra, getCatalogRole } from './airWingCatalog';
-import { AIR_WEAPON_RANGE, getInstallationRange } from './rangeScale';
+import { AIR_WEAPON_RANGE, gameRangeFromKm, getInstallationRange } from './rangeScale';
 import { getShipAshmFit, getShipSamSystem } from './navalMissileSalvos';
+import { aircraftDetectionRange, depthChargePattern, enemyAswWeapon, shipSonar, sonarDeadZone, sonarDetectionRange, updateDieselBattery } from './asw';
 import { barrierStation, isStriker, selectAirTarget } from './airMissions';
 import { getAircraftSpeed, isSupersonicMissile, MISSILE_SPEED, shipMapSpeed, SPECIAL_ATTACK_SPEED } from './speedScale';
 import { getAircraftBaseHealth, getAircraftBaseSpeed, getAircraftGunRounds } from './aircraftStats';
@@ -2140,6 +2141,19 @@ export class GameEngine {
         ship.heading += Math.sign(angleDiff) * turnStep;
       }
 
+      // Diesel boats: battery drain, snorkelling (surfacing before the snorkel) and a crawl when flat
+      if (this.isSubmarine(ship)) {
+        const hostileSurface = ship.side === 'enemy' ? [...this.playerShips, ...this.alliedShips] : this.enemyShips;
+        const nearestShip = hostileSurface.reduce((m, h) => (h.isSunk || this.isSubmarine(h) ? m : Math.min(m, dist(h.pos, ship.pos))), Infinity);
+        const nearestAircraft = this.aircraft.reduce(
+          (m, a) => (a.state === 'shot_down' || !this.isHostile(ship.side, a.side) ? m : Math.min(m, dist(a.pos, ship.pos))),
+          Infinity
+        );
+        const diesel = updateDieselBattery(ship, dt, this.era, nearestShip, nearestAircraft);
+        if (diesel.surfaceKt !== undefined && ship.targetSpeed > 0) ship.targetSpeed = diesel.surfaceKt;
+        if (diesel.capKt !== undefined) ship.targetSpeed = Math.min(ship.targetSpeed, diesel.capKt);
+      }
+
       // Acceleration and Full Stop Braking
       if (ship.targetSpeed === 0) {
         const brake = 16 * dt;
@@ -2217,6 +2231,22 @@ export class GameEngine {
         if (nearSub) {
           this.dropDepthCharge(ship);
           ship.depthChargeCooldown = 6;
+        }
+      }
+
+      // Enemy escorts attack submarines their sensors hold: RBU rocket launchers or depth charges
+      if (ship.side === 'enemy' && !this.isSubmarine(ship)) {
+        const weapon = enemyAswWeapon(ship, this.era);
+        ship.rbuCooldown = Math.max(0, (ship.rbuCooldown || 0) - dt);
+        if (weapon && ship.rbuCooldown <= 0) {
+          const prey = [...this.playerShips, ...this.alliedShips].find(
+            (s) => this.isSubmarine(s) && !s.isSunk && s.isSpottedByEnemy && dist(ship.pos, s.pos) <= weapon.range
+          );
+          if (prey) {
+            if (weapon.kind === 'rbu') this.fireRbuSalvo(ship, prey.pos, weapon.rounds, weapon.label);
+            else this.dropDepthCharge(ship);
+            ship.rbuCooldown = weapon.cooldown;
+          }
         }
       }
 
@@ -5501,33 +5531,85 @@ export class GameEngine {
     }
   }
 
+  /**
+   * A depth-charge pattern, as escorts actually laid them: charges rolled from the stern racks in
+   * a line astern and thrown abeam by the K-guns either side, forming a diamond around the boat's
+   * estimated position, with hydrostatic pistols set for different depths (staggered fuses).
+   */
   private dropDepthCharge(ship: Ship) {
     soundEngine.playTorpedoLaunch();
-    const sternX = ship.pos.x - Math.cos(ship.heading) * (ship.length * 0.45);
-    const sternY = ship.pos.y - Math.sin(ship.heading) * (ship.length * 0.45);
-
-    this.projectiles.push({
-      id: `dc-${Date.now()}`,
-      type: 'depth_charge',
-      side: ship.side,
-      pos: { x: sternX, y: sternY },
-      vel: { x: 0, y: 0 },
-      originPos: { x: sternX, y: sternY },
-      targetPos: { x: sternX, y: sternY },
-      flightProgress: 0,
-      maxDistance: 0,
-      distanceTraveled: 0,
-      damage:
-        ship.side === 'player' || ship.side === 'allied'
-          ? Math.round(500 * (1 + 0.2 * (this.fleetUpgrades.depthChargeSonarLevel - 1)))
-          : 500,
-      blastRadius: 70,
-      speed: 0,
-      heading: 0,
-      isDead: false,
-      trail: [],
-      fuseTimer: 1.5,
+    const cos = Math.cos(ship.heading);
+    const sin = Math.sin(ship.heading);
+    const sternX = ship.pos.x - cos * (ship.length * 0.45);
+    const sternY = ship.pos.y - sin * (ship.length * 0.45);
+    const count = depthChargePattern(this.era);
+    const friendly = ship.side === 'player' || ship.side === 'allied';
+    const perCharge = friendly ? Math.round(240 * (1 + 0.2 * (this.fleetUpgrades.depthChargeSonarLevel - 1))) : 240;
+    // [along-track offset astern, lateral offset]: racks lay a line, K-guns throw to each beam
+    const offsets: Array<[number, number]> = [[0, 0], [-35, 0], [-70, 0], [-20, 60], [-20, -60], [-55, 45], [-55, -45]].slice(0, count) as Array<[number, number]>;
+    offsets.forEach(([along, lateral], k) => {
+      const x = sternX + cos * along - sin * lateral;
+      const y = sternY + sin * along + cos * lateral;
+      this.projectiles.push({
+        id: `dc-${Date.now()}-${k}`,
+        type: 'depth_charge',
+        side: ship.side,
+        pos: { x, y },
+        vel: { x: 0, y: 0 },
+        originPos: { x, y },
+        targetPos: { x, y },
+        flightProgress: 0,
+        maxDistance: 0,
+        distanceTraveled: 0,
+        damage: perCharge,
+        blastRadius: 60,
+        speed: 0,
+        heading: 0,
+        isDead: false,
+        trail: [],
+        fuseTimer: 1.4 + k * 0.35,
+      });
     });
+  }
+
+  /**
+   * Soviet ahead-throwing ASW rocket launchers (RBU-2500 / RBU-6000 / RBU-1000) and, in earlier
+   * eras, depth charges, fired by enemy ships at a submarine their sonar holds.
+   */
+  private fireRbuSalvo(ship: Ship, targetPos: Vector2D, rounds: number, label: string) {
+    soundEngine.playRocketWhoosh();
+    const bowX = ship.pos.x + Math.cos(ship.heading) * (ship.length * 0.3);
+    const bowY = ship.pos.y + Math.sin(ship.heading) * (ship.length * 0.3);
+    const angle = Math.atan2(targetPos.y - bowY, targetPos.x - bowX);
+    for (let k = 0; k < rounds; k++) {
+      // Ring pattern around the aim point, as the launcher's tubes are laid
+      const ringA = (k / rounds) * Math.PI * 2;
+      const tx = targetPos.x + Math.cos(ringA) * 45;
+      const ty = targetPos.y + Math.sin(ringA) * 45;
+      const d = dist({ x: bowX, y: bowY }, { x: tx, y: ty });
+      const speed = 220;
+      this.projectiles.push({
+        id: `rbu-${Date.now()}-${k}-${Math.floor(Math.random() * 1e6)}`,
+        type: 'hedgehog',
+        side: ship.side,
+        pos: { x: bowX, y: bowY },
+        vel: { x: ((tx - bowX) / d) * speed, y: ((ty - bowY) / d) * speed },
+        originPos: { x: bowX, y: bowY },
+        targetPos: { x: tx, y: ty },
+        flightProgress: 0,
+        maxDistance: d,
+        distanceTraveled: 0,
+        damage: 560,
+        blastRadius: 40,
+        speed,
+        heading: angle,
+        isDead: false,
+        trail: [],
+        isHedgehog: true,
+        arcAltitude: 0,
+        attackerName: `${ship.name} ${label}`,
+      });
+    }
   }
 
   private fireHedgehogSalvo(ship: Ship, targetPos: Vector2D) {
@@ -6025,6 +6107,8 @@ export class GameEngine {
         speed,
         heading: spreadAngle,
         isDead: false,
+        // 1960s+ torpedoes home: Soviet 53-65K wake homers, US Mk 37 / Mk 48
+        isAcousticHoming: this.era === 'era4' || this.era === 'era5',
         trail: [],
         attackerName: shipName,
       });
@@ -15752,29 +15836,6 @@ export class GameEngine {
     });
   }
 
-  // ══════════════════════════════════════════════════════════
-  // 跨時代潛艦戰爭迷霧與反潛聲吶偵測系統 (Submarine Fog of War)
-  // ══════════════════════════════════════════════════════════
-  private getShipAswSonarRange(ship: Ship): number {
-    if (ship.sonarRange !== undefined) return ship.sonarRange;
-    if (this.isSubmarine(ship)) return this.era === 'era5' ? 1950 : this.era === 'era4' ? 1450 : 950;
-    if (ship.hasASROC || ship.hasSVTT) return this.era === 'era5' ? 2100 : 1700;
-    if (ship.hasDepthCharges || ship.hasHedgehog) return 1050;
-    if (
-      ship.side === 'enemy' &&
-      (ship.type === 'destroyer' ||
-        ship.type === 'petya' ||
-        ship.type === 'riga' ||
-        ship.type === 'kashin' ||
-        ship.type === 'dd_udaloy' ||
-        ship.type === 'cgn_kirov' ||
-        ship.type === 'dd_sovremenny')
-    ) {
-      return this.era === 'era5' ? 1900 : this.era === 'era4' ? 1550 : 1000;
-    }
-    return 0;
-  }
-
   private getAircraftAswSonarRange(plane: Aircraft): number {
     if (plane.model === 'be12') return 1650;
     if (plane.model === 'il38') return 1900;
@@ -15863,6 +15924,35 @@ export class GameEngine {
     }
   }
 
+  /**
+   * One detection pass on a submarine (see asw.ts): hull sonars by era and class, degraded by the
+   * hunter's own speed and blind directly overhead; surface-search radar on a snorkelling or
+   * surfaced boat; aircraft by sighting, radar, MAD and dipping sonar.
+   */
+  private detectSubmarine(sub: Ship, ships: Ship[], planes: Aircraft[], revealSec: number): void {
+    for (const hunter of ships) {
+      const d = dist(hunter.pos, sub.pos);
+      if (d > 2600) continue;
+      const hunterIsSub = this.isSubmarine(hunter);
+      const sonar = shipSonar(hunter, this.era, hunterIsSub);
+      if (sonar && d <= sonarDetectionRange(sonar, hunter.speed, sub) && d >= sonarDeadZone(sonar, this.era)) {
+        this.revealSubmarine(sub, revealSec, 'sonar', `${hunter.name} · ${sonar.label}`);
+        return;
+      }
+      // Surface-search radar (SG / SPS-10 ...) on a snorkel mast or a boat recharging on the surface
+      if (sub.isSnorkeling && !hunterIsSub && d <= gameRangeFromKm(this.era === 'era1' ? 5 : 8)) {
+        this.revealSubmarine(sub, revealSec + 2, 'sonar', `${hunter.name} · 對海搜索雷達 (呼吸管)`);
+        return;
+      }
+    }
+    for (const plane of planes) {
+      if (dist(plane.pos, sub.pos) <= aircraftDetectionRange(plane, sub, this.era)) {
+        this.revealSubmarine(sub, revealSec + 0.5, 'sonar', plane.name);
+        return;
+      }
+    }
+  }
+
   private updateSubmarineFogOfWar(dt: number) {
     // 1. 衰減日誌節流冷卻與潛艦暴露倒數計時器
     for (const k in this.sonarLogCooldowns) {
@@ -15896,50 +15986,20 @@ export class GameEngine {
     }
 
     // 2. 友軍反潛艦艇與反潛機隊主動偵測敵潛艦
-    const friendlyAswShips = [...this.playerShips, ...this.alliedShips].filter((s) => !s.isSunk && this.getShipAswSonarRange(s) > 0);
+    const friendlyAswShips = [...this.playerShips, ...this.alliedShips].filter((s) => !s.isSunk);
     const friendlyAswPlanes = this.aircraft.filter(
-      (a) => (a.side === 'player' || a.side === 'allied') && a.state !== 'shot_down' && this.getAircraftAswSonarRange(a) > 0
+      (a) => (a.side === 'player' || a.side === 'allied') && a.state !== 'shot_down' && (this.getAircraftAswSonarRange(a) > 0 || a.role === 'scout' || a.role === 'aew')
     );
 
-    for (const eSub of enemySubs) {
-      for (const fShip of friendlyAswShips) {
-        const range = this.getShipAswSonarRange(fShip);
-        if (dist(fShip.pos, eSub.pos) <= range) {
-          this.revealSubmarine(eSub, 4.0, 'sonar', fShip.name);
-          break;
-        }
-      }
-      for (const fPlane of friendlyAswPlanes) {
-        const range = this.getAircraftAswSonarRange(fPlane);
-        if (dist(fPlane.pos, eSub.pos) <= range) {
-          this.revealSubmarine(eSub, 4.5, 'sonar', fPlane.name);
-          break;
-        }
-      }
-    }
+    for (const eSub of enemySubs) this.detectSubmarine(eSub, friendlyAswShips, friendlyAswPlanes, 4.0);
 
     // 3. 敵軍反潛艦艇與 Be-12 / Il-38 / Ka-27 反潛機隊主動偵測我方潛艦
-    const enemyAswShips = this.enemyShips.filter((s) => !s.isSunk && this.getShipAswSonarRange(s) > 0);
+    const enemyAswShips = this.enemyShips.filter((s) => !s.isSunk);
     const enemyAswPlanes = this.aircraft.filter(
-      (a) => a.side === 'enemy' && a.state !== 'shot_down' && this.getAircraftAswSonarRange(a) > 0
+      (a) => a.side === 'enemy' && a.state !== 'shot_down' && (this.getAircraftAswSonarRange(a) > 0 || a.role === 'scout' || a.role === 'aew')
     );
 
-    for (const fSub of friendlySubs) {
-      for (const eShip of enemyAswShips) {
-        const range = this.getShipAswSonarRange(eShip);
-        if (dist(eShip.pos, fSub.pos) <= range) {
-          this.revealSubmarine(fSub, 5.0, 'sonar', eShip.name);
-          break;
-        }
-      }
-      for (const ePlane of enemyAswPlanes) {
-        const range = this.getAircraftAswSonarRange(ePlane);
-        if (dist(ePlane.pos, fSub.pos) <= range) {
-          this.revealSubmarine(fSub, 5.0, 'sonar', ePlane.name);
-          break;
-        }
-      }
-    }
+    for (const fSub of friendlySubs) this.detectSubmarine(fSub, enemyAswShips, enemyAswPlanes, 5.0);
   }
 
   private updateProjectiles(dt: number) {
@@ -16702,8 +16762,8 @@ export class GameEngine {
 
     // Check contact hit during terminal phase (progress > 0.85) or when landing
     if (proj.flightProgress >= 0.85) {
-      const directHitSub = this.enemyShips.find(
-        (e) => this.isSubmarine(e) && !e.isSunk && dist(proj.pos, e.pos) < 32
+      const directHitSub = [...this.playerShips, ...this.alliedShips, ...this.enemyShips].find(
+        (e) => this.isSubmarine(e) && !e.isSunk && this.isHostile(proj.side, e.side) && dist(proj.pos, e.pos) < 32
       );
       if (directHitSub) {
         this.detonateProjectile(proj, directHitSub);
@@ -16733,7 +16793,9 @@ export class GameEngine {
 
   private updateTorpedoProjectile(dt: number, proj: Projectile): void {
     // Mk 24 / Mk 34 / Mk 46 / APR-2 聲自導反潛魚雷主動導引鎖定 (Acoustic Homing Tracking: turnRate 3.5)
-    const isHoming = proj.isAcousticHoming || this.era === 'era3' || this.era === 'era4' || this.era === 'era5';
+    // Only homing torpedoes home (Mk 24 FIDO from 1943, Mk 44/46, 53-65K wake homers); WWII and
+    // Korean-war ship and submarine torpedoes ran straight
+    const isHoming = Boolean(proj.isAcousticHoming);
     const allShips = [...this.playerShips, ...this.alliedShips, ...this.enemyShips];
     const targetShips = allShips.filter((s) => !s.isSunk && this.isHostile(proj.side, s.side));
     if (isHoming) {

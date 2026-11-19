@@ -284,6 +284,9 @@ export interface Ship {
   enemySpottedTimer?: number;
   subVariant?: 'uboat' | 'ijn_sub' | 'whiskey' | 'zulu' | 'foxtrot' | 'victor3' | 'akula' | 'oscar2' | 'ssn_la' | 'kilo';
   repathCooldown?: number;
+  battery?: number; // 柴電潛艦電池電量 (0-1)：水下高速航行急速耗電，呼吸管航行充電
+  rbuCooldown?: number; // 敵艦反潛火箭 / 深水炸彈再裝填
+  isSnorkeling?: boolean; // 呼吸管航行 / 上浮充電中：噪音大增且可被雷達發現
   navAvoidSide?: number; // 繞行陸地時記住的轉向側 (+1 右 / -1 左)，避免左右抖動
   navCheckPos?: Vector2D; // 進度檢查點：一段時間未前進即判定受困並重新規劃航線
   navCheckTimer?: number;
