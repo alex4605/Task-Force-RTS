@@ -1240,6 +1240,14 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
 };
 
 // 8 大日軍戰術空中任務編組 (Enemy Air Tactical Mission Doctrines)
+/**
+ * Fighter and strike missions. cap: orbit over the defended asset; barcap: a barrier station on the
+ * threat axis; sweep: hunt fighters over the target area ahead of a strike; escort: stay with a
+ * strike package and engage only fighters threatening it; strike: fly with the package at its
+ * slowest member's speed to the target.
+ */
+export type AirMission = 'cap' | 'barcap' | 'sweep' | 'escort' | 'strike';
+
 export type EnemyAirMissionType =
   | 'dca'               // 1. DCA (防空攔截): 戰鬥機防空攔截，敵基地/艦隊受威脅時緊急升空阻截
   | 'air_sweep'         // 2. Air Sweep/Superiority (制空掃蕩): 零戰/紫電改主力主動尋殲友機搶奪制空權
@@ -1493,6 +1501,10 @@ export interface Aircraft {
   bombingDropCooldown?: number;
   bombingPassedTargetDist?: number;
   missionType?: EnemyAirMissionType;
+  airMission?: AirMission; // 戰術任務：CAP / BARCAP / 戰鬥掃蕩 / 護航 / 打擊編隊
+  packageId?: string; // 所屬打擊編隊 (護航機與打擊機共用)
+  missionTimer?: number; // 掃蕩滯空剩餘時間
+  interceptTargetId?: string; // 目前鎖定的攔截目標 (避免每格切換)
   isWinchester?: boolean;
   // 半主動雷達導引機頭照射狀態 (SARH Nose Radar Illumination)
   sarhIlluminatingTargetId?: string;

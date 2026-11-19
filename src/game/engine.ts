@@ -39,6 +39,7 @@ import { getNavalGunPerformance, getNavalLauncherRange } from './navalGuns';
 import { getCatalogRole } from './airWingCatalog';
 import { AIR_WEAPON_RANGE, getInstallationRange } from './rangeScale';
 import { getShipAshmFit, getShipSamSystem } from './navalMissileSalvos';
+import { barrierStation, isStriker, selectAirTarget } from './airMissions';
 import { getAircraftSpeed, isSupersonicMissile, MISSILE_SPEED, shipMapSpeed, SPECIAL_ATTACK_SPEED } from './speedScale';
 import { getAircraftBaseHealth, getAircraftBaseSpeed, getAircraftGunRounds } from './aircraftStats';
 import { carriesStores, getPayloadRounds, resolvePayload } from './aircraftLoadouts';
@@ -2627,9 +2628,102 @@ export class GameEngine {
     }
   }
 
+  /** Lead striker of a friendly strike package of this side that has no escort yet. */
+  private findUnescortedPackage(side: Aircraft['side']): Aircraft | undefined {
+    const escorted = new Set(this.aircraft.filter((a) => a.airMission === 'escort' && a.state !== 'shot_down').map((a) => a.packageId));
+    return this.aircraft.find(
+      (a) => a.side === side && a.airMission === 'strike' && a.state !== 'shot_down' && a.hasPayload && !escorted.has(a.packageId)
+    );
+  }
+
+  /** Where enemy air raids come from: an intact enemy airfield, else an enemy carrier. */
+  private getEnemyAirThreatAxis(): Vector2D | undefined {
+    const airfield = this.islands
+      .flatMap((i) => i.installations)
+      .find((inst) => inst.type === 'airfield' && inst.side === 'enemy' && !inst.isDestroyed);
+    if (airfield) return airfield.pos;
+    return this.enemyShips.find((s) => !s.isSunk && (s.type === 'carrier' || s.type === 'cvhg_kiev'))?.pos;
+  }
+
+  /**
+   * Turns a freshly launched squadron into a strike package: aircraft carrying air-to-ground
+   * stores become strikers that fly together, air-to-air fighters become their escort.
+   */
+  private organizeStrikePackage(packageId: string): void {
+    const members = this.aircraft.filter((a) => a.squadronId === packageId && a.state !== 'shot_down');
+    const strikers = members.filter(isStriker);
+    if (strikers.length === 0) return;
+    for (const s of strikers) {
+      s.airMission = 'strike';
+      s.packageId = packageId;
+    }
+    members
+      .filter((a) => !isStriker(a))
+      .forEach((f, i) => {
+        f.airMission = 'escort';
+        f.packageId = packageId;
+        f.state = 'patrolling';
+        f.order = { type: 'patrol', patrolOrigin: { ...strikers[0].pos } };
+        // Escort elements weave either side of the package, the high cover a little ahead
+        f.wingmanOffset = { x: (i % 2 === 0 ? 1 : -1) * (110 + Math.floor(i / 2) * 70), y: (i % 2 === 0 ? -1 : 1) * 60 };
+      });
+  }
+
+  /**
+   * Per-tick mission upkeep: escorts take station on their package's lead, strike packages cruise
+   * at their slowest member's speed until they split for the attack, and sweeps go home once
+   * their time over the target area is spent.
+   */
+  private updateAirMissions(dt: number): void {
+    const packages = new Map<string, Aircraft[]>();
+    for (const a of this.aircraft) {
+      if (a.airMission === 'strike' && a.packageId && a.state !== 'shot_down' && a.hasPayload && a.order.type === 'attack') {
+        const list = packages.get(a.packageId);
+        if (list) list.push(a);
+        else packages.set(a.packageId, [a]);
+      }
+    }
+
+    for (const plane of this.aircraft) {
+      if (plane.state === 'shot_down') continue;
+      if (plane.airMission === 'escort') {
+        const strikers = plane.packageId ? packages.get(plane.packageId) : undefined;
+        if (!strikers || strikers.length === 0) {
+          // Package has attacked or been destroyed: the escort goes home with it
+          plane.airMission = undefined;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+          continue;
+        }
+        const lead = strikers[0];
+        const cos = Math.cos(lead.heading);
+        const sin = Math.sin(lead.heading);
+        plane.order.patrolOrigin = {
+          x: lead.pos.x + cos * 140 - sin * plane.wingmanOffset.x,
+          y: lead.pos.y + sin * 140 + cos * plane.wingmanOffset.x,
+        };
+      } else if (plane.airMission === 'strike' && plane.packageId && plane.state === 'cruising') {
+        const strikers = packages.get(plane.packageId);
+        const target = plane.order.targetPos;
+        if (strikers && strikers.length > 1 && target && dist(plane.pos, target) > 1500) {
+          const packageSpeed = Math.min(...strikers.map((s) => s.maxSpeed));
+          plane.speed = Math.min(plane.maxSpeed, packageSpeed);
+        }
+      } else if (plane.airMission === 'sweep' && plane.order.patrolOrigin) {
+        if (dist(plane.pos, plane.order.patrolOrigin) < 900) plane.missionTimer = (plane.missionTimer ?? 45) - dt;
+        if ((plane.missionTimer ?? 1) <= 0) {
+          plane.airMission = undefined;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+        }
+      }
+    }
+  }
+
   // 2. Update Aircraft with Air Warfare RTS Logic
   private updateAircraft(dt: number) {
     const flagship = this.getFlagship();
+    this.updateAirMissions(dt);
 
     for (let i = this.aircraft.length - 1; i >= 0; i--) {
       const plane = this.aircraft[i];
@@ -3804,8 +3898,14 @@ export class GameEngine {
     const radarPerimeter = plane.model === 'f14a' ? 4800 : (this.era === 'era5' ? 3800 : isModernFighter ? 2400 : 420);
 
     // Find hostile aircraft within patrol radar
-    const hostile = this.aircraft.find(
-      (a) => this.isHostile(plane.side, a.side) && a.state !== 'shot_down' && dist(plane.pos, a.pos) < radarPerimeter
+    // Mission-aware intercept: CAP/BARCAP go for bombers and stay leashed to their station, a
+    // sweep hunts fighters, an escort fights only what threatens its package
+    const hostile = selectAirTarget(
+      plane,
+      this.aircraft.filter((a) => this.isHostile(plane.side, a.side)),
+      center,
+      radarPerimeter,
+      plane.airMission ?? 'cap'
     );
 
     if (hostile && plane.role === 'fighter') {
@@ -3933,6 +4033,11 @@ export class GameEngine {
           });
           return true;
         }
+      }
+
+      if (plane.airMission === 'escort') {
+        plane.targetHeading = Math.atan2(center.y - plane.pos.y, center.x - plane.pos.x);
+        return false;
       }
 
       // Circular orbit (ASW planes sweep wider corridors)
@@ -6029,7 +6134,8 @@ export class GameEngine {
         state: 'patrolling',
         health: cHealth,
         maxHealth: cHealth,
-        order: { type: 'patrol', patrolOrigin: { ...capCenter } },
+        order: { type: 'patrol', patrolOrigin: barrierStation(capCenter, this.getFlagship()?.pos, 1600) },
+        airMission: 'barcap',
         hasPayload: (isEra5 || isEra4) && (capModel === 'su27' || capModel === 'mig29a' || capModel === 'mig21'),
         payloadType: (isEra5 || isEra4) ? 'aim9_sidewinder' : undefined,
         shootCooldown: 0,
@@ -6143,6 +6249,8 @@ export class GameEngine {
         ? `🛩️【灘頭密接支援 (CAS)】冷戰聯軍 ${casCount}架 IL-10 鐵獸強擊機實施超低空突防！俯衝壓制我方兩棲登陸艇與陸戰隊排！`
         : `🛩️【灘頭密接支援 (CAS)】敵 ${casCount}架 艦爆實施超低空突防！俯衝壓制我方兩棲登陸艇與陸戰隊排！海灘防空機槍全力還擊！`,
     });
+
+    this.organizeStrikePackage(sqId);
   }
 
   private launchEnemyAirbaseStrike(spawnPos: Vector2D, sqId: string, isEra3: boolean, isEra4: boolean, isEra5: boolean): void {
@@ -6222,6 +6330,8 @@ export class GameEngine {
         ? `💣【陸基前進基地遭襲！】冷戰聯軍 ${heavyCount}架 Tu-14 雙噴射轟炸機以高空編隊越境！意圖對前進空軍基地跑道與機庫實施毀滅性面狀轟炸！`
         : `💣【陸基前進基地遭襲！】敵 ${heavyCount}架 一式陸攻以高空編隊越境！意圖對 Henderson Field 機場跑道與機庫實施毀滅性面狀轟炸！`,
     });
+
+    this.organizeStrikePackage(sqId);
   }
 
   private launchEnemyFleetStrike(flagship: Ship | undefined, spawnPos: Vector2D, sqId: string, isEra3: boolean, isEra4: boolean, isEra5: boolean, dbModel: AircraftModel, tbModel: AircraftModel): void {
@@ -6350,6 +6460,8 @@ export class GameEngine {
         ? `⚠️【反艦動態編隊來襲】冷戰遠東聯軍 ${totalFleetCount}架 打擊機隊掠海飛來，Tu-14 噴射魚雷機與 IL-10 強擊機目標鎖定護航艦艇「${targetShip?.name || '巡洋艦'}」！`
         : `⚠️【反艦動態編隊來襲】敵 ${totalFleetCount}架 打擊機隊掠海飛來，目標鎖定護航艦艇「${targetShip?.name || '巡洋艦'}」！護航艦砲火全力攔截！`,
     });
+
+    this.organizeStrikePackage(sqId);
   }
 
   private launchEnemyFlagshipStrike(flagship: Ship | undefined, spawnPos: Vector2D, sqId: string, isEra3: boolean, isEra4: boolean, isEra5: boolean, fModel: AircraftModel, dbModel: AircraftModel, tbModel: AircraftModel): void {
@@ -6522,6 +6634,8 @@ export class GameEngine {
         ? `🚨【旗艦打擊編隊！】長程對空雷達警報大作！偵測到敵 ${totalStrikeCount}機 動態反艦打擊群 (Tu-14 噴射魚雷機 + IL-10 鐵獸強擊機 + MiG-15 噴射直衛) 全速直撲「${flagship?.name || '航空母艦'}」！`
         : `🚨【旗艦打擊編隊！】長程對空雷達警報大作！偵測到敵 ${totalStrikeCount}機 動態反艦打擊群 (魚雷機+俯衝艦爆+直衛零戰) 全速直撲「${flagship?.name || '航空母艦'}」！`,
     });
+
+    this.organizeStrikePackage(sqId);
   }
 
   private launchEnemyScramble(flagship: Ship | undefined, spawnPos: Vector2D, sqId: string, isEra3: boolean, isEra4: boolean, isEra5: boolean, fModel: AircraftModel): void {
@@ -6642,10 +6756,12 @@ export class GameEngine {
         speed: sSpeed,
         maxSpeed: sSpeed,
         altitude: 0.92,
-        state: 'cruising',
+        state: 'patrolling',
         health: sHealth,
         maxHealth: sHealth,
-        order: { type: 'attack', targetPos: sweepTarget },
+        order: { type: 'patrol', patrolOrigin: sweepTarget },
+        airMission: 'sweep',
+        missionTimer: 45,
         hasPayload: (isEra5 || isEra4) && (sweepModel === 'su27' || sweepModel === 'mig29a' || sweepModel === 'mig21'),
         payloadType: (isEra5 || isEra4) ? 'aim9_sidewinder' : undefined,
         shootCooldown: 0,
@@ -14522,6 +14638,7 @@ export class GameEngine {
           health: baseHealth,
           maxHealth: baseHealth,
           order: { type: 'patrol', patrolOrigin: { ...patrolCenter } },
+          airMission: 'barcap',
           hasPayload: true,
           payloadType: pType,
           payloadName: pName,
@@ -14683,10 +14800,19 @@ export class GameEngine {
     const hostileShips = this.enemyShips.filter((s) => !s.isSunk);
     const hostileGround = this.groundUnits.filter((u) => this.isHostile('allied', u.side) && !u.isDestroyed);
 
+    // Allied fighters escort an allied strike already airborne without cover, otherwise hold a
+    // barrier CAP between the fleet and the threat axis (enemy airfield / carrier / nearest raid)
+    const unescorted = choice.role === 'fighter' ? this.findUnescortedPackage('allied') : undefined;
+    const fleetPos = this.getFlagship()?.pos ?? baseCenter;
+    let fighterMission: 'escort' | 'barcap' | undefined;
     let order: UnitOrder;
-    if (choice.role === 'fighter' && hostilePlanes.length > 0) {
-      const nearestP = hostilePlanes[0];
-      order = { type: 'patrol', patrolOrigin: { ...nearestP.pos } };
+    if (unescorted) {
+      fighterMission = 'escort';
+      order = { type: 'patrol', patrolOrigin: { ...unescorted.pos } };
+    } else if (choice.role === 'fighter') {
+      fighterMission = 'barcap';
+      const threat = this.getEnemyAirThreatAxis() ?? hostilePlanes[0]?.pos;
+      order = { type: 'patrol', patrolOrigin: barrierStation(fleetPos, threat, 1800) };
     } else if ((choice.role === 'attacker' || choice.role === 'torpedo_bomber') && hostileShips.length > 0) {
       order = { type: 'attack', targetPos: { ...hostileShips[0].pos } };
     } else if (hostileGround.length > 0) {
@@ -14713,7 +14839,6 @@ export class GameEngine {
         speed: choice.speed,
         maxSpeed: choice.speed,
         altitude: choice.role === 'level_bomber' ? 0.95 : 0.82,
-        state: 'cruising',
         health: choice.baseHealth,
         maxHealth: choice.baseHealth,
         order,
@@ -14725,8 +14850,12 @@ export class GameEngine {
         maxGunAmmo: choice.ammo,
         wingmanOffset: { x: (i - (count - 1) / 2) * 32, y: i * 22 },
         flightName: `${choice.affiliation} · 盟軍特遣航空隊 (${choice.model.toUpperCase()})`,
+        airMission: fighterMission,
+        packageId: unescorted?.packageId,
+        state: fighterMission ? 'patrolling' : 'cruising',
       });
     }
+    if (!fighterMission) this.organizeStrikePackage(sqId);
 
     soundEngine.playPlaneSortie();
     this.addBannerAlert(
