@@ -38,6 +38,7 @@ import { getAlliedSagFleet } from './alliedSagFleets';
 import { getNavalGunPerformance, getNavalLauncherRange } from './navalGuns';
 import { getCatalogRole } from './airWingCatalog';
 import { AIR_WEAPON_RANGE, getInstallationRange } from './rangeScale';
+import { getAircraftSpeed, isSupersonicMissile, MISSILE_SPEED, shipMapSpeed, SPECIAL_ATTACK_SPEED } from './speedScale';
 import { getAircraftBaseHealth, getAircraftBaseSpeed, getAircraftGunRounds } from './aircraftStats';
 
 /** Piston and early-jet fighters that count as fighters even when flagged with another role. */
@@ -220,7 +221,7 @@ export class GameEngine {
   private navGrid: NavalNavigationGrid | null = null;
   private sonarLogCooldowns: Record<string, number> = {};
 
-  private getAshmStructuralHealth(variant?: AshmVariant, speed: number = 500): number {
+  private getAshmStructuralHealth(variant?: AshmVariant, speed?: number): number {
     switch (variant) {
       case 'p700_granit':
         return 225;
@@ -242,7 +243,7 @@ export class GameEngine {
       case 'harpoon_agm84':
         return 130;
       default:
-        return speed > 600 ? 185 : 130;
+        return isSupersonicMissile(speed) ? 185 : 130;
     }
   }
 
@@ -256,7 +257,7 @@ export class GameEngine {
     if (v === 'exocet_mm40' || v === 'exocet_mm38') return 0.52;
     if (v === 'harpoon_rgm84' || v === 'harpoon_ugm84' || v === 'harpoon_agm84') return 0.60;
     if (v === 'p15_styx' || v === 'ksr5_kelt') return 0.78;
-    return (proj.speed || 500) > 580 ? 0.45 : 0.72;
+    return isSupersonicMissile(proj.speed) ? 0.45 : 0.72;
   }
 
   private handleAshmLeaderDestroyed(leader: Projectile) {
@@ -2179,10 +2180,12 @@ export class GameEngine {
 
       // Realistic Deliberate Naval Warship Movement (Noticeably slower than high-speed aircraft)
       if (ship.speed !== 0) {
-        ship.vel.x = Math.cos(ship.heading) * ship.speed;
-        ship.vel.y = Math.sin(ship.heading) * ship.speed;
-        ship.pos.x += ship.vel.x * dt * 1.6;
-        ship.pos.y += ship.vel.y * dt * 1.6;
+        // speed is in knots; vel is the true map velocity on the shared speed scale
+        const mapSpeed = shipMapSpeed(ship.speed);
+        ship.vel.x = Math.cos(ship.heading) * mapSpeed;
+        ship.vel.y = Math.sin(ship.heading) * mapSpeed;
+        ship.pos.x += ship.vel.x * dt;
+        ship.pos.y += ship.vel.y * dt;
       } else {
         ship.vel.x = 0;
         ship.vel.y = 0;
@@ -2916,7 +2919,7 @@ export class GameEngine {
   // 1. MXY-7 櫻花特攻火箭反艦飛彈 (Rocket-Propelled Anti-Ship Suicide Missile)
   private updateOhkaRocket(dt: number, plane: Aircraft): boolean {
     if (plane.model === 'ohka') {
-      plane.speed = 380;
+      plane.speed = SPECIAL_ATTACK_SPEED.ohka;
       // 噴射火尾與推進煙幕粒子 (Flaring rocket trail)
       if (Math.random() < 0.65) {
         this.particles.push({
@@ -3031,8 +3034,8 @@ export class GameEngine {
             vel: { x: Math.cos(ohkaHeading) * 380, y: Math.sin(ohkaHeading) * 380 },
             heading: ohkaHeading,
             targetHeading: ohkaHeading,
-            speed: 380,
-            maxSpeed: 380,
+            speed: SPECIAL_ATTACK_SPEED.ohka,
+            maxSpeed: SPECIAL_ATTACK_SPEED.ohka,
             altitude: 0.75,
             state: 'kamikaze_dive',
             health: 180,
@@ -3073,7 +3076,7 @@ export class GameEngine {
         // 距離小於 950米 時進入特攻俯衝
         if (d < 950 && plane.state !== 'kamikaze_dive') {
           plane.state = 'kamikaze_dive';
-          plane.speed = 220;
+          plane.speed = SPECIAL_ATTACK_SPEED.kamikazeDive;
           soundEngine.playDiveBomberWhistle();
           this.addCombatLog({
             category: 'air',
@@ -5903,7 +5906,7 @@ export class GameEngine {
 
     for (let i = 0; i < aswCount; i++) {
       const aswModel: AircraftModel = isEra4 ? 'be12' : i === 0 ? 'il38' : 'ka27';
-      const aswSpeed = aswModel === 'il38' ? 128 : aswModel === 'be12' ? 112 : 102;
+      const aswSpeed = getAircraftSpeed(aswModel);
       const aswHealth = aswModel === 'il38' ? 1150 : aswModel === 'be12' ? 920 : 800;
 
       this.aircraft.push({
@@ -5975,7 +5978,7 @@ export class GameEngine {
         : isEra3
         ? (i % 2 === 0 ? 'mig15' : 'yak9')
         : fModel;
-      const cSpeed = capModel === 'su27' ? 195 : capModel === 'mig29a' ? 190 : capModel === 'mig21' ? 185 : capModel === 'mig17' ? 152 : capModel === 'mig15' ? 160 : capModel === 'yak9' ? 132 : 130;
+      const cSpeed = getAircraftSpeed(capModel);
       const cHealth = capModel === 'su27' ? 750 : capModel === 'mig29a' ? 680 : capModel === 'mig21' ? 580 : capModel === 'mig17' ? 480 : capModel === 'mig15' ? 540 : capModel === 'yak9' ? 440 : 150;
 
       this.aircraft.push({
@@ -6047,7 +6050,7 @@ export class GameEngine {
 
     const heading = Math.atan2(targetPos.y - spawnPos.y, targetPos.x - spawnPos.x);
     const casModel: AircraftModel = isEra5 ? (Math.random() < 0.6 ? 'su25' : 'mi24') : isEra4 ? (Math.random() < 0.6 ? 'su7' : 'mig17') : isEra3 ? 'il10' : dbModel;
-    const casSpeed = isEra5 ? (casModel === 'su25' ? 165 : 120) : isEra4 ? 155 : isEra3 ? 116 : 122;
+    const casSpeed = getAircraftSpeed(casModel);
     const casHealth = isEra5 ? (casModel === 'su25' ? 850 : 750) : isEra4 ? 680 : isEra3 ? 620 : 145;
     const casCount = Math.min(6, this.calculateDynamicWaveSize(4));
 
@@ -6124,7 +6127,7 @@ export class GameEngine {
     const heading = Math.atan2(basePos.y - spawnPos.y, basePos.x - spawnPos.x);
 
     const heavyModel: AircraftModel = isEra5 ? (Math.random() < 0.6 ? 'tu22m3' : 'tu95') : isEra4 ? 'il28' : isEra3 ? 'tu14' : 'g4m';
-    const hSpeed = isEra5 ? 170 : isEra4 ? 138 : isEra3 ? 130 : 120;
+    const hSpeed = getAircraftSpeed(heavyModel);
     const hHealth = isEra5 ? 2500 : isEra4 ? 850 : isEra3 ? 680 : 480;
 
     const heavyCount = this.calculateDynamicWaveSize(6);
@@ -6208,8 +6211,8 @@ export class GameEngine {
 
     const fleetDbModel: AircraftModel = isEra5 ? 'su25' : isEra4 ? 'su7' : isEra3 ? 'il10' : dbModel;
     const fleetTbModel: AircraftModel = isEra5 ? 'tu22m3' : isEra4 ? 'il28' : isEra3 ? 'tu14' : tbModel;
-    const fDbSpeed = isEra5 ? 165 : isEra4 ? 158 : isEra3 ? 116 : 115;
-    const fTbSpeed = isEra5 ? 175 : isEra4 ? 138 : isEra3 ? 130 : 110;
+    const fDbSpeed = getAircraftSpeed(fleetDbModel);
+    const fTbSpeed = getAircraftSpeed(fleetTbModel);
     const fDbHealth = isEra5 ? 850 : isEra4 ? 700 : isEra3 ? 620 : 155;
     const fTbHealth = isEra5 ? 2200 : isEra4 ? 950 : isEra3 ? 680 : 150;
 
@@ -6338,7 +6341,7 @@ export class GameEngine {
 
     // 護航戰鬥機 (Su-27 / MiG-21 / MiG-15 / Zero Escorts)
     const escModel: AircraftModel = isEra5 ? (Math.random() < 0.5 ? 'su27' : 'mig29a') : isEra4 ? 'mig21' : isEra3 ? 'mig15' : fModel;
-    const escSpeed = isEra5 ? 190 : isEra4 ? 180 : isEra3 ? 150 : 135;
+    const escSpeed = getAircraftSpeed(escModel);
     const escHealth = isEra5 ? 750 : isEra4 ? 580 : isEra3 ? 540 : 160;
 
     for (let i = 0; i < escCount; i++) {
@@ -6382,7 +6385,7 @@ export class GameEngine {
 
     // 俯衝轟炸機 / 強擊機 (Su-25 / Su-7 / IL-10 / Val / Judy)
     const strikeDbModel: AircraftModel = isEra5 ? 'su25' : isEra4 ? 'su7' : isEra3 ? 'il10' : dbModel;
-    const strikeDbSpeed = isEra5 ? 165 : isEra4 ? 158 : isEra3 ? 116 : 115;
+    const strikeDbSpeed = getAircraftSpeed(strikeDbModel);
     const strikeDbHealth = isEra5 ? 850 : isEra4 ? 700 : isEra3 ? 620 : 155;
 
     for (let i = 0; i < dbCount; i++) {
@@ -6425,7 +6428,7 @@ export class GameEngine {
 
     // 魚雷攻擊機 / 長程反艦飛彈轟炸機 (Tu-22M3 逆火 / Tu-16 獾式 / Tu-14 / Kate / Jill)
     const strikeTbModel: AircraftModel = isEra5 ? 'tu22m3' : isEra4 ? 'tu16' : isEra3 ? 'tu14' : tbModel;
-    const strikeTbSpeed = isEra5 ? 175 : isEra4 ? 142 : isEra3 ? 130 : 110;
+    const strikeTbSpeed = getAircraftSpeed(strikeTbModel);
     const strikeTbHealth = isEra5 ? 2200 : isEra4 ? 1350 : isEra3 ? 680 : 150;
 
     for (let i = 0; i < tbCount; i++) {
@@ -6503,7 +6506,7 @@ export class GameEngine {
     const heading = Math.atan2(scrambleTarget.y - spawnPos.y, scrambleTarget.x - spawnPos.x);
 
     const scModel: AircraftModel = isEra5 ? (Math.random() < 0.5 ? 'su27' : 'mig29a') : isEra4 ? (Math.random() < 0.5 ? 'mig21' : 'mig19') : isEra3 ? 'mig15' : fModel;
-    const scSpeed = isEra5 ? 195 : scModel === 'mig21' ? 185 : scModel === 'mig19' ? 172 : isEra3 ? 160 : 142;
+    const scSpeed = getAircraftSpeed(scModel);
     const scHealth = isEra5 ? 720 : scModel === 'mig21' ? 580 : scModel === 'mig19' ? 560 : isEra3 ? 540 : 150;
     const scrambleCount = Math.min(8, this.calculateDynamicWaveSize(4));
 
@@ -6591,7 +6594,7 @@ export class GameEngine {
         : i % 2 === 0
         ? fModel
         : (this.era === 'era1' ? 'zero_a6m5' : 'ki61');
-      const sSpeed = sweepModel === 'su27' ? 195 : sweepModel === 'mig29a' ? 190 : sweepModel === 'yak38' ? 150 : sweepModel === 'mig21' ? 185 : sweepModel === 'mig19' ? 172 : sweepModel === 'mig17' ? 152 : sweepModel === 'mig15' ? 160 : sweepModel === 'yak9' ? 132 : 152;
+      const sSpeed = getAircraftSpeed(sweepModel);
       const sHealth = sweepModel === 'su27' ? 750 : sweepModel === 'mig29a' ? 680 : sweepModel === 'yak38' ? 520 : sweepModel === 'mig21' ? 580 : sweepModel === 'mig19' ? 560 : sweepModel === 'mig17' ? 480 : sweepModel === 'mig15' ? 540 : sweepModel === 'yak9' ? 440 : 175;
 
       this.aircraft.push({
@@ -6670,7 +6673,7 @@ export class GameEngine {
     const heading = Math.atan2(targetPos.y - spawnPos.y, targetPos.x - spawnPos.x);
 
     const dcaModel: AircraftModel = isEra5 ? (Math.random() < 0.5 ? 'su27' : 'mig29a') : isEra4 ? (Math.random() < 0.6 ? 'mig21' : 'mig19') : isEra3 ? 'mig15' : fModel;
-    const dcaSpeed = isEra5 ? 195 : dcaModel === 'mig21' ? 185 : dcaModel === 'mig19' ? 172 : isEra3 ? 160 : 148;
+    const dcaSpeed = getAircraftSpeed(dcaModel);
     const dcaHealth = isEra5 ? 750 : dcaModel === 'mig21' ? 580 : dcaModel === 'mig19' ? 560 : isEra3 ? 540 : 160;
     const dcaCount = this.calculateDynamicWaveSize(5);
 
@@ -8259,7 +8262,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const attackerName = `${plane.name} (戰機 #${plane.id.slice(-4)})`;
     const heading = plane.heading;
-    const speed = 520; // 0.85 Mach sea-skimming
+    const speed = MISSILE_SPEED.harpoon; // Mach 0.71 sea-skimming
     const range = 4200;
 
     let targetShipId: string | undefined = undefined;
@@ -8342,7 +8345,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const attackerName = `${plane.name} (戰機 #${plane.id.slice(-4)})`;
     const heading = plane.heading;
-    const speed = 820; // Mach 4.3 hypersonic BVR interceptor
+    const speed = MISSILE_SPEED.aim54; // Mach 5
     const range = 5200;
 
     let targetId: string | undefined = undefined;
@@ -8407,7 +8410,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const attackerName = `${plane.name} (戰機 #${plane.id.slice(-4)})`;
     const heading = plane.heading;
-    const speed = 760; // Mach 3.0+ high-speed anti-radiation
+    const speed = MISSILE_SPEED.harm; // Mach 2.9
     const range = 4600;
 
     let radarInstId: string | undefined = undefined;
@@ -8459,7 +8462,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const attackerName = `${plane.name} (戰機 #${plane.id.slice(-4)})`;
     const heading = plane.heading;
-    const speed = 640;
+    const speed = MISSILE_SPEED.maverick;
     const range = 2600;
 
     this.projectiles.push({
@@ -8496,7 +8499,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const attackerName = `${plane.name} (轟炸機 #${plane.id.slice(-4)})`;
     const heading = plane.heading;
-    const speed = 780; // Mach 4.0 supersonic dive
+    const speed = MISSILE_SPEED.kh22; // Mach 4.6 dive
     const range = 4600;
 
     const playerShipsAlive = [...this.playerShips, ...this.alliedShips]
@@ -8561,7 +8564,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const attackerName = `${plane.name} (戰機 #${plane.id.slice(-4)})`;
     const heading = plane.heading;
-    const speed = 640; // Mach 2.5 Granit
+    const speed = MISSILE_SPEED.granit; // Mach 2.5
     const range = 4200;
 
     let targetShipId: string | undefined = targetEntity?.id;
@@ -8607,7 +8610,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const attackerName = `${plane.name} (武裝直升機 #${plane.id.slice(-4)})`;
     const heading = plane.heading;
-    const speed = 580;
+    const speed = MISSILE_SPEED.hellfire;
     const range = 2200;
 
     this.projectiles.push({
@@ -11033,7 +11036,7 @@ export class GameEngine {
               const decoyChance =
                 incomingThreat.type === 'missile_ashm'
                   ? this.getAshmChaffDecoyChance(incomingThreat)
-                  : incomingThreat.speed > 580 || incomingThreat.type === 'missile_ssm'
+                  : isSupersonicMissile(incomingThreat.speed) || incomingThreat.type === 'missile_ssm'
                   ? 0.45
                   : 0.76;
               if (Math.random() < decoyChance) {
@@ -11291,7 +11294,7 @@ export class GameEngine {
     const spawnPos: Vector2D = { x: 1200, y: 11000 }; // Submerged Ohio off-map
     const d = dist(spawnPos, targetPos);
     const angle = Math.atan2(targetPos.y - spawnPos.y, targetPos.x - spawnPos.x);
-    const speed = 820; // Mach 5+ ballistic plunge
+    const speed = MISSILE_SPEED.trident; // re-entry vehicle terminal plunge
     this.projectiles.push({
       id: `trident-${Date.now()}`,
       type: 'slbm_trident',
@@ -11336,7 +11339,7 @@ export class GameEngine {
     this.registerArtillerySignature(launcher.pos, launcher.side, launcher.name, launcher.type);
     const d = dist(launcher.pos, targetPos);
     const angle = Math.atan2(targetPos.y - launcher.pos.y, targetPos.x - launcher.pos.x);
-    const speed = 720;
+    const speed = MISSILE_SPEED.lance;
     const isAtacms = launcher.type === 'us_atacms_nuclear' || launcher.side !== 'enemy';
 
     this.projectiles.push({
@@ -11404,7 +11407,7 @@ export class GameEngine {
     this.registerArtillerySignature(launcher.pos, launcher.side, launcher.name, launcher.type);
     const d = dist(launcher.pos, targetPos);
     const angle = Math.atan2(targetPos.y - launcher.pos.y, targetPos.x - launcher.pos.x);
-    const speed = 700; // Mach 3.5 terminal speed
+    const speed = MISSILE_SPEED.atacms; // Mach 3 terminal
 
     this.projectiles.push({
       id: `atacms-${Date.now()}-${Math.random()}`,
@@ -11566,7 +11569,7 @@ export class GameEngine {
     this.registerArtillerySignature(launcher.pos, 'enemy', launcher.name, 'scud');
     const d = dist(launcher.pos, targetPos);
     const angle = Math.atan2(targetPos.y - launcher.pos.y, targetPos.x - launcher.pos.x);
-    const speed = 720; // Mach 4.5 terminal ballistic speed
+    const speed = MISSILE_SPEED.scud; // Mach 4.5 terminal
 
     this.projectiles.push({
       id: `scud-${Date.now()}-${Math.random()}`,
@@ -11611,7 +11614,7 @@ export class GameEngine {
     }
     const d = dist(sub.pos, targetShip.pos);
     const angle = Math.atan2(targetShip.pos.y - sub.pos.y, targetShip.pos.x - sub.pos.x);
-    const speed = 500;
+    const speed = MISSILE_SPEED.harpoon;
 
     soundEngine.playWaterSplash();
     for (let i = 0; i < 8; i++) {
@@ -11721,7 +11724,7 @@ export class GameEngine {
     const attackerName = `${origin.name} (BGM-109 / UGM-109 戰斧巡弋飛彈)`;
     const d = dist(origin.pos, targetPos);
     const angle = Math.atan2(targetPos.y - origin.pos.y, targetPos.x - origin.pos.x);
-    const speed = 510;
+    const speed = MISSILE_SPEED.tomahawk;
 
     this.projectiles.push({
       id: `tlam-${Date.now()}-${Math.random()}`,
@@ -11773,7 +11776,7 @@ export class GameEngine {
     }
 
     const salvoCount = salvoOverride ?? (this.era === 'era5' ? 16 : 4);
-    const speed = 640;
+    const speed = MISSILE_SPEED.granit;
     const dmg = 3100;
     const targetPool = extraTargets && extraTargets.length > 0 ? extraTargets : [targetShip];
 
@@ -11844,7 +11847,7 @@ export class GameEngine {
     const isAntiMissile = !('model' in target);
     const d = dist(inst.pos, target.pos);
     const angle = Math.atan2(target.pos.y - inst.pos.y, target.pos.x - inst.pos.x);
-    const speed = 850;
+    const speed = MISSILE_SPEED.patriot;
 
     this.projectiles.push({
       id: `patriot-${Date.now()}-${Math.random()}`,
@@ -11884,7 +11887,7 @@ export class GameEngine {
     const isAntiMissile = !('model' in target);
     const d = dist(inst.pos, target.pos);
     const angle = Math.atan2(target.pos.y - inst.pos.y, target.pos.x - inst.pos.x);
-    const speed = 880;
+    const speed = MISSILE_SPEED.s300;
 
     this.projectiles.push({
       id: `s300-${Date.now()}-${Math.random()}`,
@@ -11928,7 +11931,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const d = dist(unit.pos, target.pos);
     const angle = Math.atan2(target.pos.y - unit.pos.y, target.pos.x - unit.pos.x);
-    const speed = 680;
+    const speed = MISSILE_SPEED.tunguska;
 
     this.projectiles.push({
       id: `tunguska-${Date.now()}-${Math.random()}`,
@@ -12004,7 +12007,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const d = dist(inst.pos, targetPlane.pos);
     const angle = Math.atan2(targetPlane.pos.y - inst.pos.y, targetPlane.pos.x - inst.pos.x);
-    const speed = 670;
+    const speed = MISSILE_SPEED.sa3;
 
     this.projectiles.push({
       id: `sa3-${Date.now()}-${Math.random()}`,
@@ -12038,7 +12041,7 @@ export class GameEngine {
     const isAntiMissile = !('model' in target);
     const d = dist(ship.pos, target.pos);
     const angle = Math.atan2(target.pos.y - ship.pos.y, target.pos.x - ship.pos.x);
-    const speed = 720;
+    const speed = MISSILE_SPEED.sovietNavalSam;
 
     this.projectiles.push({
       id: `sov-sam-${Date.now()}-${Math.random()}`,
@@ -12170,8 +12173,8 @@ export class GameEngine {
         vel: { x: Math.cos(heading) * 210, y: Math.sin(heading) * 210 },
         heading,
         targetHeading: heading,
-        speed: 210,
-        maxSpeed: 210,
+        speed: getAircraftSpeed('tu22m3'),
+        maxSpeed: getAircraftSpeed('tu22m3'),
         altitude: 0.96,
         state: 'cruising',
         health: 1600,
@@ -12205,8 +12208,8 @@ export class GameEngine {
           vel: { x: Math.cos(heading) * 195, y: Math.sin(heading) * 195 },
           heading,
           targetHeading: heading,
-          speed: 195,
-          maxSpeed: 195,
+          speed: getAircraftSpeed('su27'),
+          maxSpeed: getAircraftSpeed('su27'),
           altitude: 0.94,
           state: 'cruising',
           health: 720,
@@ -12279,8 +12282,8 @@ export class GameEngine {
         vel: { x: Math.cos(heading) * 140, y: Math.sin(heading) * 140 },
         heading,
         targetHeading: heading,
-        speed: 140,
-        maxSpeed: 140,
+        speed: getAircraftSpeed('il28'),
+        maxSpeed: getAircraftSpeed('il28'),
         altitude: 0.92,
         state: 'cruising',
         health: 1200,
@@ -12314,8 +12317,8 @@ export class GameEngine {
           vel: { x: Math.cos(heading) * 165, y: Math.sin(heading) * 165 },
           heading,
           targetHeading: heading,
-          speed: 165,
-          maxSpeed: 165,
+          speed: getAircraftSpeed('mig21'),
+          maxSpeed: getAircraftSpeed('mig21'),
           altitude: 0.90,
           state: 'cruising',
           health: 550,
@@ -12341,7 +12344,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const d = dist(ship.pos, targetPos);
     const angle = Math.atan2(targetPos.y - ship.pos.y, targetPos.x - ship.pos.x);
-    const speed = 480;
+    const speed = MISSILE_SPEED.asroc;
 
     this.projectiles.push({
       id: `asroc-${Date.now()}-${Math.random()}`,
@@ -12422,7 +12425,7 @@ export class GameEngine {
     soundEngine.playRocketWhoosh();
     const d = dist(unit.pos, targetPlane.pos);
     const angle = Math.atan2(targetPlane.pos.y - unit.pos.y, targetPlane.pos.x - unit.pos.x);
-    const speed = 580;
+    const speed = MISSILE_SPEED.chaparral;
     this.projectiles.push({
       id: `chaparral-${Date.now()}-${Math.random()}`,
       type: 'missile_sam',
@@ -12565,10 +12568,10 @@ export class GameEngine {
           missile.missileHealth = 280; // 重型裝甲彈道飛彈 (Scud-B)
           missile.maxMissileHealth = 280;
         } else if (missile.type === 'missile_ashm') {
-          const hp = this.getAshmStructuralHealth(missile.ashmVariant, missile.speed || 500);
+          const hp = this.getAshmStructuralHealth(missile.ashmVariant, missile.speed);
           missile.missileHealth = hp;
           missile.maxMissileHealth = hp;
-        } else if ((missile.speed || 500) > 600) {
+        } else if (isSupersonicMissile(missile.speed)) {
           missile.missileHealth = 180;
           missile.maxMissileHealth = 180;
         } else {
@@ -12946,7 +12949,7 @@ export class GameEngine {
             interceptChance = 0.14;
           } else if (targetMissile.ashmVariant === 'p15_styx' || targetMissile.ashmVariant === 'ksr5_kelt') {
             interceptChance = 0.24;
-          } else if ((targetMissile.speed || 500) > 600 || targetMissile.type === 'missile_ssm') {
+          } else if (isSupersonicMissile(targetMissile.speed) || targetMissile.type === 'missile_ssm') {
             interceptChance = 0.10;
           }
           const roll = Math.random();
@@ -13007,7 +13010,7 @@ export class GameEngine {
 
     const d = dist(ship.pos, target.pos);
     const launchAngle = Math.atan2(target.pos.y - ship.pos.y, target.pos.x - ship.pos.x);
-    const speed = 640;
+    const speed = MISSILE_SPEED.standard;
 
     this.particles.push({
       id: `sam-flash-${Date.now()}`,
@@ -13101,7 +13104,7 @@ export class GameEngine {
     this.scheduleStaggeredMissileLaunch(ship, targets, salvoCount, {
       missileType: 'missile_ashm',
       missileName: 'RGM-84 魚叉掠海反艦飛彈',
-      speed: 500,
+      speed: MISSILE_SPEED.harpoon,
       damage: 2050,
       blastRadius: 55,
       isSeaSkimming: true,
@@ -13146,7 +13149,7 @@ export class GameEngine {
       this.scheduleStaggeredMissileLaunch(ship, targets, salvoCount, {
         missileType: 'missile_ashm',
         missileName: label,
-        speed: isMM40 ? 555 : 535,
+        speed: isMM40 ? MISSILE_SPEED.exocetMm40 : MISSILE_SPEED.exocetMm38,
         damage: isMM40 ? 1850 : 1650,
         blastRadius: 48,
         isSeaSkimming: true,
@@ -13175,7 +13178,7 @@ export class GameEngine {
       this.scheduleStaggeredMissileLaunch(ship, targets, salvoCount, {
         missileType: 'missile_ashm',
         missileName: 'RGM-84 魚叉掠海反艦飛彈 (北約/盟軍標準型)',
-        speed: 500,
+        speed: MISSILE_SPEED.harpoon,
         damage: 2050,
         blastRadius: 55,
         isSeaSkimming: true,
@@ -13201,7 +13204,7 @@ export class GameEngine {
     soundEngine.playRocketWhoosh();
     const d = dist(ship.pos, targetShip.pos);
     const angle = Math.atan2(targetShip.pos.y - ship.pos.y, targetShip.pos.x - ship.pos.x);
-    const speed = 500;
+    const speed = MISSILE_SPEED.harpoon;
     const isSingleArmOHP = 'type' in ship && ship.type === 'ffg_ohp' && ship.side === 'player';
 
     this.projectiles.push({
@@ -13298,7 +13301,7 @@ export class GameEngine {
         ? 12
         : 8;
     const salvoCount = salvoOverride ?? (this.era === 'era5' ? defaultEra5Count : isGranit ? 4 : 2);
-    const speed = isGranit ? 640 : isBazalt ? 660 : isMoskit ? 710 : 420;
+    const speed = isGranit ? MISSILE_SPEED.granit : isBazalt ? MISSILE_SPEED.bazalt : isMoskit ? MISSILE_SPEED.moskit : MISSILE_SPEED.styx;
     const dmg = isGranit ? 3100 : isBazalt ? 2800 : isMoskit ? 2700 : 2100;
     const ashmProfile: AshmFlightProfile = isGranit || isBazalt
       ? 'datalink_follower'
@@ -13344,7 +13347,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const d = dist(inst.pos, targetPlane.pos);
     const angle = Math.atan2(targetPlane.pos.y - inst.pos.y, targetPlane.pos.x - inst.pos.x);
-    const speed = 590;
+    const speed = MISSILE_SPEED.sa2;
 
     this.projectiles.push({
       id: `sa2-${Date.now()}-${Math.random()}`,
@@ -13399,7 +13402,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const d = dist(inst.pos, targetPlane.pos);
     const angle = Math.atan2(targetPlane.pos.y - inst.pos.y, targetPlane.pos.x - inst.pos.x);
-    const speed = 620;
+    const speed = MISSILE_SPEED.hawk;
 
     this.projectiles.push({
       id: `hawk-${Date.now()}-${Math.random()}`,
@@ -13440,7 +13443,7 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     const d = dist(ship.pos, targetShip.pos);
     const angle = Math.atan2(targetShip.pos.y - ship.pos.y, targetShip.pos.x - ship.pos.x);
-    const speed = 360;
+    const speed = MISSILE_SPEED.styx;
 
     this.projectiles.push({
       id: `styx-${Date.now()}-${Math.random()}`,
@@ -13548,7 +13551,7 @@ export class GameEngine {
 
     soundEngine.playRocketWhoosh();
     const angle = Math.atan2(target.pos.y - plane.pos.y, target.pos.x - plane.pos.x);
-    const speed = aamType === 'aim7' ? 620 : 560;
+    const speed = aamType === 'aim7' ? MISSILE_SPEED.aim7 : MISSILE_SPEED.aim9;
     const aamName =
       this.era === 'era5'
         ? (aamType === 'aim7'
@@ -13605,7 +13608,7 @@ export class GameEngine {
     soundEngine.playRocketWhoosh();
     const d = dist(plane.pos, targetInst.pos);
     const angle = Math.atan2(targetInst.pos.y - plane.pos.y, targetInst.pos.x - plane.pos.x);
-    const speed = 640;
+    const speed = MISSILE_SPEED.shrike;
     const targetName = ('codeName' in targetInst && targetInst.codeName) || targetInst.name;
     const targetEntityType: Projectile['targetEntityType'] =
       'isSunk' in targetInst ? 'ship' : 'reloadTime' in targetInst ? 'installation' : 'ground';
@@ -13719,7 +13722,7 @@ export class GameEngine {
     soundEngine.playRocketWhoosh();
     const d = dist(plane.pos, targetPos);
     const angle = Math.atan2(targetPos.y - plane.pos.y, targetPos.x - plane.pos.x);
-    const speed = 460;
+    const speed = MISSILE_SPEED.bullpup;
 
     this.projectiles.push({
       id: `bullpup-${Date.now()}-${Math.random()}`,
@@ -13925,7 +13928,7 @@ export class GameEngine {
     soundEngine.playRocketWhoosh();
     const d = dist(plane.pos, targetInst.pos);
     const angle = Math.atan2(targetInst.pos.y - plane.pos.y, targetInst.pos.x - plane.pos.x);
-    const speed = 760;
+    const speed = MISSILE_SPEED.standardArm;
     const targetName = ('codeName' in targetInst && targetInst.codeName) || targetInst.name;
     const targetEntityType: Projectile['targetEntityType'] =
       'isSunk' in targetInst ? 'ship' : 'reloadTime' in targetInst ? 'installation' : 'ground';
@@ -14014,7 +14017,7 @@ export class GameEngine {
     soundEngine.playKlaxon();
     const d = dist(plane.pos, targetPos);
     const angle = Math.atan2(targetPos.y - plane.pos.y, targetPos.x - plane.pos.x);
-    const speed = 520;
+    const speed = MISSILE_SPEED.ksr5;
 
     this.projectiles.push({
       id: `ksr5-${Date.now()}-${Math.random()}`,
@@ -14632,7 +14635,7 @@ export class GameEngine {
     if (isCap) {
       const patrolCenter: Vector2D = { x: 8600, y: 5200 };
       const model = isEra5 ? (Math.random() < 0.5 ? 'f15a' : 'f16a') : isEra4 ? 'f4e' : 'f86';
-      const speed = isEra5 ? 175 : isEra4 ? 160 : 145;
+      const speed = getAircraftSpeed(model);
       const baseHealth = isEra5 ? 750 : isEra4 ? 680 : 520;
       const modelName = isEra5 ? (model === 'f15a' ? 'F-15A 鷹式超音速空優戰機' : 'F-16A 戰隼全天候戰機') : isEra4 ? 'F-4E 幽靈二式空優戰鬥機' : 'F-86 軍刀空優機';
       const pType = isEra5 ? 'aim9_sidewinder' : isEra4 ? 'aim9_sidewinder' : 'clean_guns';
@@ -14690,7 +14693,7 @@ export class GameEngine {
       const targetUnit = this.groundUnits.find((u) => u.side === 'enemy' && !u.isDestroyed);
       const targetPos: Vector2D = targetUnit ? { ...targetUnit.pos } : { x: 9200, y: 4800 };
       const model = isEra5 ? 'a10a' : isEra4 ? 'a7' : 'ad1';
-      const speed = isEra5 ? 130 : isEra4 ? 135 : 120;
+      const speed = getAircraftSpeed(model);
       const baseHealth = isEra5 ? 1100 : isEra4 ? 750 : 700;
       const modelName = isEra5 ? 'A-10A 雷霆二式裝甲獵殺機' : isEra4 ? 'A-7 海盜二式輕型攻擊機' : 'AD-1 天襲者密接打擊機';
       const pType = isEra5 ? 'agm65_maverick' : isEra4 ? 'bombs_snakeye_retarded' : (count % 2 === 0 ? 'hvar_rockets' : 'napalm_canister');
@@ -14772,44 +14775,44 @@ export class GameEngine {
 
     if (this.era === 'era1') {
       pool = [
-        { model: 'hurricane', role: 'fighter', modelName: '颶風式 Mk.II 戰鬥機', speed: 102, baseHealth: 420, payloadType: 'clean_guns', payloadName: '8x .303 白朗寧機槍', ammo: 2400, affiliation: '英國皇家空軍 (RAF)' },
-        { model: 'spitfire_v', role: 'fighter', modelName: '噴火式 Mk.V 戰鬥機', speed: 112, baseHealth: 420, payloadType: 'clean_guns', payloadName: '2x 20mm 機砲 + 4x .303', ammo: 1800, affiliation: '英國皇家空軍 (RAF)' },
-        { model: 'beaufighter', role: 'attacker', modelName: '雙頭怪 (Beaufighter) 打擊機', speed: 106, baseHealth: 620, payloadType: 'aerial_torpedo', payloadName: 'Mk 13 航空魚雷 / 4x 20mm', ammo: 1200, affiliation: '皇家空軍岸防司令部' },
-        { model: 'swordfish', role: 'torpedo_bomber', modelName: '劍魚魚雷轟炸機', speed: 74, baseHealth: 340, payloadType: 'aerial_torpedo', payloadName: '18吋航空重型魚雷', ammo: 600, affiliation: '皇家海軍航空隊 (FAA)' },
+        { model: 'hurricane', role: 'fighter', modelName: '颶風式 Mk.II 戰鬥機', speed: getAircraftSpeed('hurricane'), baseHealth: 420, payloadType: 'clean_guns', payloadName: '8x .303 白朗寧機槍', ammo: 2400, affiliation: '英國皇家空軍 (RAF)' },
+        { model: 'spitfire_v', role: 'fighter', modelName: '噴火式 Mk.V 戰鬥機', speed: getAircraftSpeed('spitfire_v'), baseHealth: 420, payloadType: 'clean_guns', payloadName: '2x 20mm 機砲 + 4x .303', ammo: 1800, affiliation: '英國皇家空軍 (RAF)' },
+        { model: 'beaufighter', role: 'attacker', modelName: '雙頭怪 (Beaufighter) 打擊機', speed: getAircraftSpeed('beaufighter'), baseHealth: 620, payloadType: 'aerial_torpedo', payloadName: 'Mk 13 航空魚雷 / 4x 20mm', ammo: 1200, affiliation: '皇家空軍岸防司令部' },
+        { model: 'swordfish', role: 'torpedo_bomber', modelName: '劍魚魚雷轟炸機', speed: getAircraftSpeed('swordfish'), baseHealth: 340, payloadType: 'aerial_torpedo', payloadName: '18吋航空重型魚雷', ammo: 600, affiliation: '皇家海軍航空隊 (FAA)' },
       ];
     } else if (this.era === 'era2') {
       pool = [
-        { model: 'spitfire_xiv', role: 'fighter', modelName: '噴火式 Mk.XIV (格里芬)', speed: 126, baseHealth: 460, payloadType: 'clean_guns', payloadName: '2x 20mm + 2x .50 機槍', ammo: 1600, affiliation: '英國皇家空軍 (RAF)' },
-        { model: 'tempest', role: 'fighter', modelName: '暴風式 Mk.V 戰鬥機', speed: 128, baseHealth: 520, payloadType: 'hvar_rockets', payloadName: '8x 航空火箭 / 4x 20mm', ammo: 1600, affiliation: '英國皇家空軍 (RAF)' },
-        { model: 'mosquito', role: 'attacker', modelName: '蚊式 (Mosquito FB.VI) 轟炸機', speed: 125, baseHealth: 580, payloadType: 'bombs_dual_500', payloadName: '雙聯 500lb 航彈 + 4x 20mm', ammo: 1400, affiliation: '英國皇家空軍 (RAF)' },
-        { model: 'lancaster', role: 'level_bomber', modelName: '蘭開斯特重型轟炸機', speed: 96, baseHealth: 980, payloadType: 'bombs_carpet_250', payloadName: '16枚連環地毯航彈', ammo: 1800, affiliation: '皇家空軍轟炸司令部' },
+        { model: 'spitfire_xiv', role: 'fighter', modelName: '噴火式 Mk.XIV (格里芬)', speed: getAircraftSpeed('spitfire_xiv'), baseHealth: 460, payloadType: 'clean_guns', payloadName: '2x 20mm + 2x .50 機槍', ammo: 1600, affiliation: '英國皇家空軍 (RAF)' },
+        { model: 'tempest', role: 'fighter', modelName: '暴風式 Mk.V 戰鬥機', speed: getAircraftSpeed('tempest'), baseHealth: 520, payloadType: 'hvar_rockets', payloadName: '8x 航空火箭 / 4x 20mm', ammo: 1600, affiliation: '英國皇家空軍 (RAF)' },
+        { model: 'mosquito', role: 'attacker', modelName: '蚊式 (Mosquito FB.VI) 轟炸機', speed: getAircraftSpeed('mosquito'), baseHealth: 580, payloadType: 'bombs_dual_500', payloadName: '雙聯 500lb 航彈 + 4x 20mm', ammo: 1400, affiliation: '英國皇家空軍 (RAF)' },
+        { model: 'lancaster', role: 'level_bomber', modelName: '蘭開斯特重型轟炸機', speed: getAircraftSpeed('lancaster'), baseHealth: 980, payloadType: 'bombs_carpet_250', payloadName: '16枚連環地毯航彈', ammo: 1800, affiliation: '皇家空軍轟炸司令部' },
       ];
     } else if (this.era === 'era3') {
       pool = [
-        { model: 'meteor', role: 'fighter', modelName: '流星 (Meteor F.8) 噴射戰鬥機', speed: 138, baseHealth: 520, payloadType: 'clean_guns', payloadName: '4x 20mm 西斯帕諾機砲', ammo: 1600, affiliation: '聯合國軍 / 皇家空軍' },
-        { model: 'rokaf_p51', role: 'fighter', modelName: 'F-51D 野馬式戰鬥機', speed: 122, baseHealth: 460, payloadType: 'clean_guns', payloadName: '6x .50 M2 機槍', ammo: 1800, affiliation: '大韓民國空軍 (ROKAF)' },
-        { model: 'sea_fury', role: 'attacker', modelName: '海怒 (Sea Fury FB.11) 艦載機', speed: 120, baseHealth: 500, payloadType: 'hvar_rockets', payloadName: '8x 60lb 火箭 + 4x 20mm', ammo: 1600, affiliation: '英聯邦特遣艦隊航空隊' },
-        { model: 'firefly_as5', role: 'attacker', modelName: '螢火蟲 (Firefly AS.5) 攻擊機', speed: 104, baseHealth: 490, payloadType: 'hvar_rockets', payloadName: 'ASH雷達 + 8x 火箭', ammo: 1200, affiliation: '英聯邦海軍特遣隊' },
+        { model: 'meteor', role: 'fighter', modelName: '流星 (Meteor F.8) 噴射戰鬥機', speed: getAircraftSpeed('meteor'), baseHealth: 520, payloadType: 'clean_guns', payloadName: '4x 20mm 西斯帕諾機砲', ammo: 1600, affiliation: '聯合國軍 / 皇家空軍' },
+        { model: 'rokaf_p51', role: 'fighter', modelName: 'F-51D 野馬式戰鬥機', speed: getAircraftSpeed('rokaf_p51'), baseHealth: 460, payloadType: 'clean_guns', payloadName: '6x .50 M2 機槍', ammo: 1800, affiliation: '大韓民國空軍 (ROKAF)' },
+        { model: 'sea_fury', role: 'attacker', modelName: '海怒 (Sea Fury FB.11) 艦載機', speed: getAircraftSpeed('sea_fury'), baseHealth: 500, payloadType: 'hvar_rockets', payloadName: '8x 60lb 火箭 + 4x 20mm', ammo: 1600, affiliation: '英聯邦特遣艦隊航空隊' },
+        { model: 'firefly_as5', role: 'attacker', modelName: '螢火蟲 (Firefly AS.5) 攻擊機', speed: getAircraftSpeed('firefly_as5'), baseHealth: 490, payloadType: 'hvar_rockets', payloadName: 'ASH雷達 + 8x 火箭', ammo: 1200, affiliation: '英聯邦海軍特遣隊' },
       ];
     } else if (this.era === 'era4') {
       pool = [
-        { model: 'f5a', role: 'fighter', modelName: 'F-5A 自由鬥士輕型戰機', speed: 160, baseHealth: 560, payloadType: 'aim9_sidewinder', payloadName: '2x AIM-9 響尾蛇 + 20mm機砲', ammo: 800, affiliation: '北約盟國戰術空軍' },
-        { model: 'mirage3', role: 'fighter', modelName: '幻象 IIIE 三角翼戰鬥機', speed: 168, baseHealth: 580, payloadType: 'aim9_sidewinder', payloadName: '魔術/響尾蛇 + 雙門德發機砲', ammo: 700, affiliation: '法國空軍 / 北約聯隊' },
-        { model: 'f104g', role: 'fighter', modelName: 'F-104G 星式超音速戰機', speed: 185, baseHealth: 550, payloadType: 'aim9_sidewinder', payloadName: '20mm 火神砲 + 響尾蛇飛彈', ammo: 750, affiliation: '西德聯邦海航 (MFG 2)' },
-        { model: 'a1h', role: 'attacker', modelName: 'A-1H 天襲者密接打擊機', speed: 115, baseHealth: 680, payloadType: 'bombs_snakeye_retarded', payloadName: '重裝航彈 + 4x 20mm 機砲', ammo: 1200, affiliation: '盟軍戰術空軍聯隊' },
-        { model: 'a37b', role: 'attacker', modelName: 'A-37B 蜻蜓式輕型攻擊機', speed: 130, baseHealth: 500, payloadType: 'bombs_snakeye_retarded', payloadName: 'GAU-2B 米尼岡機槍 + 航彈', ammo: 1500, affiliation: '南越空軍 (VNAF)' },
-        { model: 'hunter_fga9', role: 'attacker', modelName: '獵手 (Hunter FGA.9) 攻擊機', speed: 140, baseHealth: 580, payloadType: 'bombs_snakeye_retarded', payloadName: '4x 30mm 亞丁機砲 + 航彈', ammo: 1000, affiliation: '英國皇家空軍 (RAF)' },
+        { model: 'f5a', role: 'fighter', modelName: 'F-5A 自由鬥士輕型戰機', speed: getAircraftSpeed('f5a'), baseHealth: 560, payloadType: 'aim9_sidewinder', payloadName: '2x AIM-9 響尾蛇 + 20mm機砲', ammo: 800, affiliation: '北約盟國戰術空軍' },
+        { model: 'mirage3', role: 'fighter', modelName: '幻象 IIIE 三角翼戰鬥機', speed: getAircraftSpeed('mirage3'), baseHealth: 580, payloadType: 'aim9_sidewinder', payloadName: '魔術/響尾蛇 + 雙門德發機砲', ammo: 700, affiliation: '法國空軍 / 北約聯隊' },
+        { model: 'f104g', role: 'fighter', modelName: 'F-104G 星式超音速戰機', speed: getAircraftSpeed('f104g'), baseHealth: 550, payloadType: 'aim9_sidewinder', payloadName: '20mm 火神砲 + 響尾蛇飛彈', ammo: 750, affiliation: '西德聯邦海航 (MFG 2)' },
+        { model: 'a1h', role: 'attacker', modelName: 'A-1H 天襲者密接打擊機', speed: getAircraftSpeed('a1h'), baseHealth: 680, payloadType: 'bombs_snakeye_retarded', payloadName: '重裝航彈 + 4x 20mm 機砲', ammo: 1200, affiliation: '盟軍戰術空軍聯隊' },
+        { model: 'a37b', role: 'attacker', modelName: 'A-37B 蜻蜓式輕型攻擊機', speed: getAircraftSpeed('a37b'), baseHealth: 500, payloadType: 'bombs_snakeye_retarded', payloadName: 'GAU-2B 米尼岡機槍 + 航彈', ammo: 1500, affiliation: '南越空軍 (VNAF)' },
+        { model: 'hunter_fga9', role: 'attacker', modelName: '獵手 (Hunter FGA.9) 攻擊機', speed: getAircraftSpeed('hunter_fga9'), baseHealth: 580, payloadType: 'bombs_snakeye_retarded', payloadName: '4x 30mm 亞丁機砲 + 航彈', ammo: 1000, affiliation: '英國皇家空軍 (RAF)' },
       ];
     } else {
       // Era 5 Cold War NATO Coalition (Ceiling is SARH, AMRAAM not yet deployed)
       pool = [
-        { model: 'tornado_adv', role: 'fighter', modelName: '龍捲風 ADV F.3 全天候截擊機', speed: 195, baseHealth: 750, payloadType: 'aim7_sparrow', payloadName: '4x 天閃 (Skyflash) SARH + 響尾蛇', ammo: 600, affiliation: '英國皇家空軍 (RAF)' },
-        { model: 'f4f_phantom', role: 'fighter', modelName: 'F-4F 幽靈II式戰鬥機', speed: 165, baseHealth: 680, payloadType: 'aim7_sparrow', payloadName: '4x AIM-7 麻雀 (SARH) + 響尾蛇', ammo: 640, affiliation: '西德聯邦空軍 (Luftwaffe)' },
-        { model: 'mirage2000', role: 'fighter', modelName: '幻象 2000C 電傳飛控戰鬥機', speed: 205, baseHealth: 720, payloadType: 'aim7_sparrow', payloadName: '超級530D (SARH) + 魔術二型', ammo: 600, affiliation: '法國空軍 (Armée de l\'Air)' },
-        { model: 'tornado_gr1', role: 'attacker', modelName: '龍捲風 GR.1 遠程打擊機', speed: 175, baseHealth: 760, payloadType: 'rgm84_harpoon', payloadName: '海鷹/鸕鶿反艦飛彈 + 雙門27mm砲', ammo: 800, affiliation: '西德聯邦海航 (MFG 1)' },
-        { model: 'tornado_ids', role: 'attacker', modelName: '龍捲風 IDS 跑道壓制戰轟機', speed: 175, baseHealth: 760, payloadType: 'bombs_snakeye_retarded', payloadName: 'JP233 跑道集束子母彈藥撒佈器', ammo: 800, affiliation: '英國皇家空軍 (RAF)' },
-        { model: 'jaguar_gr1', role: 'attacker', modelName: '美洲豹 GR.1 戰術攻擊機', speed: 155, baseHealth: 650, payloadType: 'bombs_snakeye_retarded', payloadName: '翼上響尾蛇 + 蛇眼減速炸彈', ammo: 900, affiliation: '英法聯合特遣隊' },
-        { model: 'viggen_ja37', role: 'attacker', modelName: 'JA 37 雷式戰鬥攻擊機', speed: 190, baseHealth: 780, payloadType: 'rgm84_harpoon', payloadName: 'RBS-15F 重型反艦飛彈 + 30mm砲', ammo: 700, affiliation: '瑞典空軍 (Flygvapnet)' },
+        { model: 'tornado_adv', role: 'fighter', modelName: '龍捲風 ADV F.3 全天候截擊機', speed: getAircraftSpeed('tornado_adv'), baseHealth: 750, payloadType: 'aim7_sparrow', payloadName: '4x 天閃 (Skyflash) SARH + 響尾蛇', ammo: 600, affiliation: '英國皇家空軍 (RAF)' },
+        { model: 'f4f_phantom', role: 'fighter', modelName: 'F-4F 幽靈II式戰鬥機', speed: getAircraftSpeed('f4f_phantom'), baseHealth: 680, payloadType: 'aim7_sparrow', payloadName: '4x AIM-7 麻雀 (SARH) + 響尾蛇', ammo: 640, affiliation: '西德聯邦空軍 (Luftwaffe)' },
+        { model: 'mirage2000', role: 'fighter', modelName: '幻象 2000C 電傳飛控戰鬥機', speed: getAircraftSpeed('mirage2000'), baseHealth: 720, payloadType: 'aim7_sparrow', payloadName: '超級530D (SARH) + 魔術二型', ammo: 600, affiliation: '法國空軍 (Armée de l\'Air)' },
+        { model: 'tornado_gr1', role: 'attacker', modelName: '龍捲風 GR.1 遠程打擊機', speed: getAircraftSpeed('tornado_gr1'), baseHealth: 760, payloadType: 'rgm84_harpoon', payloadName: '海鷹/鸕鶿反艦飛彈 + 雙門27mm砲', ammo: 800, affiliation: '西德聯邦海航 (MFG 1)' },
+        { model: 'tornado_ids', role: 'attacker', modelName: '龍捲風 IDS 跑道壓制戰轟機', speed: getAircraftSpeed('tornado_ids'), baseHealth: 760, payloadType: 'bombs_snakeye_retarded', payloadName: 'JP233 跑道集束子母彈藥撒佈器', ammo: 800, affiliation: '英國皇家空軍 (RAF)' },
+        { model: 'jaguar_gr1', role: 'attacker', modelName: '美洲豹 GR.1 戰術攻擊機', speed: getAircraftSpeed('jaguar_gr1'), baseHealth: 650, payloadType: 'bombs_snakeye_retarded', payloadName: '翼上響尾蛇 + 蛇眼減速炸彈', ammo: 900, affiliation: '英法聯合特遣隊' },
+        { model: 'viggen_ja37', role: 'attacker', modelName: 'JA 37 雷式戰鬥攻擊機', speed: getAircraftSpeed('viggen_ja37'), baseHealth: 780, payloadType: 'rgm84_harpoon', payloadName: 'RBS-15F 重型反艦飛彈 + 30mm砲', ammo: 700, affiliation: '瑞典空軍 (Flygvapnet)' },
       ];
     }
 
