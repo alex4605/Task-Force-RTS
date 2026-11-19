@@ -266,7 +266,8 @@ export interface Ship {
   hasTorpedoes?: boolean;
   hasDepthCharges?: boolean;
   depthChargeCooldown?: number;
-  hasHedgehog?: boolean;
+  hasHedgehog?: boolean; // 前拋式反潛武器 (刺蝟砲 / Squid / Limbo / Bofors 375mm)
+  aheadThrower?: 'hedgehog' | 'squid' | 'limbo' | 'bofors375' | 'rbu';
   hedgehogCooldown?: number;
   isFlagship?: boolean;
   isSunk: boolean;
@@ -288,6 +289,9 @@ export interface Ship {
   rbuCooldown?: number; // 敵艦反潛火箭 / 深水炸彈再裝填
   isSnorkeling?: boolean;
   diveTimer?: number; // 緊急下潛剩餘秒數：仍浮在水面、可被砲火與航彈攻擊
+  belowLayer?: boolean; // 潛艦潛入溫躍層下方：水面艦艦殼聲納大幅失效
+  layerTimer?: number;
+  aswHunting?: boolean; // 護航艦自動減速反潛搜索中
   evadeTimer?: number; // 潛艦規避機動剩餘秒數
   evadeHeading?: number;
   datumPos?: Vector2D; // 最後已知位置 (Datum)：失去接觸後的搜索中心
@@ -334,6 +338,8 @@ export interface Ship {
   maxASROC?: number;
   readyASROC?: number;
   hasSVTT?: boolean;
+  hasVLASROC?: boolean; // Mk 41 垂直發射 ASROC (1993 起服役)
+  standoffAswWeapon?: 'ASROC' | 'Ikara' | 'Malafon' | 'VL-ASROC';
   svttCooldown?: number;
   hasChaffLauncher?: boolean; // 艦載 RBOC 金屬箔條干擾迫擊砲發射器
   chaffCooldown?: number;
@@ -1798,6 +1804,8 @@ export interface Projectile {
   isTinyTim?: boolean;
   isAcousticHoming?: boolean;
   isHedgehog?: boolean;
+  /** Squid / Limbo / Bofors / RBU rounds sink to a set depth instead of needing a contact hit. */
+  isDepthFused?: boolean;
   arcAltitude?: number;
   tumbleAngle?: number;
   isBeamTracer?: boolean; // 仿 M61 火神砲 / GSh-23 連續高亮光束彈幕

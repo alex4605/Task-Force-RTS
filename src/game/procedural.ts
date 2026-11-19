@@ -1,3 +1,4 @@
+import { applyHistoricalAswFit } from './asw';
 import {
   Island,
   IslandStronghold,
@@ -9920,7 +9921,7 @@ export function createShip(
       : 980
   );
 
-  return {
+  const ship: Ship = {
     heading: 0,
     targetHeading: partial.heading || 0,
     speed: 0,
@@ -9950,6 +9951,8 @@ export function createShip(
     ...partial,
     ...ashmLoad(partial.type, partial.hasHarpoon),
   };
+  applyHistoricalAswFit(ship);
+  return ship;
 }
 
 /** Anti-ship missiles in the launchers at sea, from the ship's historical fit (navalMissileSalvos.ts). */

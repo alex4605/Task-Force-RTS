@@ -239,3 +239,161 @@ export function sonobuoySensitivity(sub: Ship, era: Era): number {
   const factor = era === 'era4' ? 0.75 + 0.25 * noise : noise * 1.1;
   return Math.max(0.3, Math.min(1.25, factor));
 }
+
+/** Ahead-throwing ASW weapon: Hedgehog fires contact-fused bombs; the others are depth-fused. */
+export type AheadThrower = 'hedgehog' | 'squid' | 'limbo' | 'bofors375' | 'rbu';
+
+export interface AswFit {
+  depthCharges?: boolean;
+  aheadThrower?: AheadThrower;
+  /** Mk 32 / STWS / L5 324-550 mm lightweight torpedo tubes. */
+  svtt?: boolean;
+  /** Rocket-delivered homing torpedo: ASROC, the Australian Ikara or the French Malafon. */
+  standoff?: 'ASROC' | 'Ikara' | 'Malafon';
+  /** Vertical-launch ASROC from Mk 41 cells (in service from 1993). */
+  vlAsroc?: boolean;
+}
+
+/**
+ * Historical anti-submarine fit of each named ship, matched by name. Surface combatants that are
+ * not listed keep no ASW weapons (battleships, carriers, cruisers, amphibious ships), with the
+ * exceptions noted.
+ */
+const ASW_FITS: Array<[RegExp, AswFit]> = [
+  // ── Era 1-2 USN: depth-charge racks and K-guns; Hedgehog on destroyer escorts. Fletchers at
+  //    Samar (Johnston, Hoel) still had no Hedgehog.
+  [/Fletcher|Radford|O'Bannon|Johnston|Hoel/, { depthCharges: true }],
+  [/Samuel B\. Roberts|DE-\d/, { depthCharges: true, aheadThrower: 'hedgehog' }],
+  [/Atlanta \(CL-51\)/, { depthCharges: true }], // early Atlantas carried two stern racks
+  // ── Era 1-2 IJN destroyers: Type 95 / Type 2 depth charges
+  [/IJN (Kagero|Yukikaze|Akizuki|Shimakaze)/, { depthCharges: true }],
+  // ── Era 1-2 Royal Navy / Commonwealth destroyers
+  [/Jervis|Arunta|Warramunga|Quilliam|Armada/, { depthCharges: true }],
+  // ── Era 3 Korean War
+  [/Gearing|Frank Knox/, { depthCharges: true, aheadThrower: 'hedgehog' }],
+  [/Skory/, { depthCharges: true }],
+  [/Bataan|Cayuga|Cossack/, { depthCharges: true }],
+  [/Defender/, { aheadThrower: 'squid', depthCharges: true }], // RN Daring class: one triple Squid
+  [/Vampire/, { aheadThrower: 'limbo' }], // the RAN Darings were completed with Limbo in place of Squid
+  [/Rotoiti/, { aheadThrower: 'squid' }], // Loch class: two triple Squid
+  [/Baekdusan|PC-701/, { depthCharges: true }],
+  // ── Era 4 Vietnam: ASROC only on ASW-modernised and new-build ships
+  [/Belknap/, { standoff: 'ASROC', svtt: true }], // fired from the Mk 10 Terrier launcher
+  [/Charles F\. Adams|DDG-2\b/, { standoff: 'ASROC', svtt: true }],
+  [/Forrest Sherman \(DD-931\)/, { aheadThrower: 'hedgehog', depthCharges: true, svtt: true }], // not ASW-modernised
+  [/Knox \(FF?G-1052\)/, { standoff: 'ASROC', svtt: true }],
+  [/Sheffield \(Type 42|Gloucester|Type 42/, { svtt: true }], // STWS Mk 2
+  [/Andromeda/, { aheadThrower: 'limbo' }], // Leander as built: Limbo Mk 10
+  [/Iroquois/, { aheadThrower: 'limbo', svtt: true }],
+  [/Haruna|Shirane/, { standoff: 'ASROC', svtt: true }],
+  [/Takatsuki/, { standoff: 'ASROC', svtt: true, aheadThrower: 'bofors375' }],
+  [/Amatsukaze/, { standoff: 'ASROC', svtt: true, aheadThrower: 'hedgehog' }],
+  [/D39|D38|HMAS Hobart 荷巴特號|HMAS Perth/, { standoff: 'Ikara', svtt: true }], // RAN Perth class
+  // ── Era 5
+  [/Ticonderoga \(CG-47\)/, { standoff: 'ASROC', svtt: true }], // CG-47..51 fire ASROC from Mk 26
+  [/Virginia|Spruance|Kidd \(DDG-993\)/, { standoff: 'ASROC', svtt: true }],
+  [/Oliver Hazard Perry|FFG-7/, { svtt: true }],
+  [/Broadsword|Brilliant/, { svtt: true }], // STWS
+  [/Tromp|Bremen/, { svtt: true }],
+  [/Lütjens|Asagiri|Hatsuyuki/, { standoff: 'ASROC', svtt: true }],
+  [/Tourville/, { standoff: 'Malafon', svtt: true }],
+  [/Glamorgan/, {}], // County class: ASW by its Wessex helicopter only
+];
+
+/** Applies the ship's historical ASW fit; returns false if the ship is not in the table. */
+export function applyHistoricalAswFit(ship: Ship): boolean {
+  const rule = ASW_FITS.find(([re]) => re.test(ship.name));
+  if (!rule) return false;
+  const fit = rule[1];
+  ship.hasDepthCharges = Boolean(fit.depthCharges);
+  ship.hasHedgehog = Boolean(fit.aheadThrower);
+  ship.aheadThrower = fit.aheadThrower;
+  ship.hasSVTT = Boolean(fit.svtt);
+  ship.hasASROC = Boolean(fit.standoff) || Boolean(fit.vlAsroc);
+  ship.standoffAswWeapon = fit.vlAsroc ? 'VL-ASROC' : fit.standoff;
+  ship.hasVLASROC = Boolean(fit.vlAsroc);
+  if (ship.hasDepthCharges && ship.depthChargeCooldown === undefined) ship.depthChargeCooldown = 0;
+  if (ship.hasHedgehog && ship.hedgehogCooldown === undefined) ship.hedgehogCooldown = 0;
+  return true;
+}
+
+/** Ahead-throwing salvo pattern: rounds, contact or depth fuze, per-round damage and blast. */
+export const AHEAD_THROWERS: Record<AheadThrower, { label: string; rounds: number; depthFused: boolean; damage: number; blast: number; reload: number; maxRange: number }> = {
+  hedgehog: { label: 'Mk 10 / Mk 15 刺蝟砲 (24發觸發引信)', rounds: 24, depthFused: false, damage: 780, blast: 28, reload: 12, maxRange: 290 },
+  squid: { label: 'Squid 三管深彈迫擊砲 (深度引信)', rounds: 6, depthFused: true, damage: 900, blast: 55, reload: 14, maxRange: 300 },
+  limbo: { label: 'Limbo Mk 10 三管深彈迫擊砲 (深度引信)', rounds: 3, depthFused: true, damage: 1200, blast: 60, reload: 10, maxRange: 420 },
+  bofors375: { label: 'Bofors 375mm 四管反潛火箭', rounds: 4, depthFused: true, damage: 1000, blast: 55, reload: 12, maxRange: 560 },
+  rbu: { label: 'RBU 反潛火箭', rounds: 12, depthFused: true, damage: 560, blast: 40, reload: 25, maxRange: 1340 },
+};
+
+/** Stand-off ASW rockets: each delivers a lightweight homing torpedo by rocket or drone. */
+export const STANDOFF_ASW: Record<NonNullable<Ship['standoffAswWeapon']>, { label: string; launcher: string; rangeFactor: number }> = {
+  ASROC: { label: 'RUR-5 ASROC 反潛火箭', launcher: 'Mk 16 / Mk 112 八聯裝發射架', rangeFactor: 1 },
+  Ikara: { label: 'Ikara 反潛導引飛行器', launcher: 'Ikara 旋轉發射架', rangeFactor: 1.25 },
+  Malafon: { label: 'Malafon 反潛滑翔飛彈', launcher: 'Malafon 斜軌發射架', rangeFactor: 1.1 },
+  'VL-ASROC': { label: 'RUM-139 VL-ASROC 垂直發射反潛火箭', launcher: 'Mk 41 垂直發射系統', rangeFactor: 1.3 },
+};
+
+/** Name of the ship's lightweight torpedo tubes by navy. */
+export function svttLabel(ship: Ship): string {
+  const n = ship.name;
+  if (/^HMS |^HMNZS /.test(n)) return 'STWS Mk 2 艦側魚雷 (Mk 46 / Stingray)';
+  if (/Tourville/.test(n)) return 'L5 艦側魚雷';
+  if (/^JDS |^JS |Haruna|Shirane|Takatsuki|Amatsukaze|Asagiri|Hatsuyuki/.test(n)) return '68式三聯裝短魚雷發射管';
+  return 'Mk 32 SVTT 艦側魚雷';
+}
+
+// ── Thermocline ────────────────────────────────────────────────────────────────────────────
+// A sharp temperature layer bends sound away: a hull sonar above it hears little of a boat
+// below it. Submarine captains went deep under the layer to shake a hunter (well understood by
+// 1943, the "afternoon effect" of the Atlantic); the counters were variable-depth and towed
+// sonars streamed below the layer, dipping sonars lowered through it, deep-set sonobuoys, and
+// later long-range bottom-bounce / convergence-zone paths.
+
+/** How long a boat stays below the layer after the last threat it sensed (s). */
+export const LAYER_HOLD_SEC = 25;
+
+/**
+ * Updates whether a submerged boat is below the layer: it goes deep when hunted (evading or a
+ * hostile ship within ~2 km) and comes back up to periscope / snorkel depth when the area is quiet.
+ */
+export function updateThermoclineDepth(sub: Ship, dt: number, nearestHostileShip: number): void {
+  const surfaced = sub.isSubmerged === false || (sub.diveTimer ?? 0) > 0;
+  if (surfaced || sub.isSnorkeling) {
+    sub.belowLayer = false;
+    sub.layerTimer = 0;
+    return;
+  }
+  if ((sub.evadeTimer ?? 0) > 0 || nearestHostileShip < 500) sub.layerTimer = LAYER_HOLD_SEC;
+  else sub.layerTimer = Math.max(0, (sub.layerTimer ?? 0) - dt);
+  sub.belowLayer = sub.layerTimer > 0;
+}
+
+/** Fraction of a hull sonar's range left against a boat below the layer. */
+export function layerFactorForShipSonar(sonar: SonarSuite, hunter: Ship, sub: Ship, hunterIsSub: boolean): number {
+  if (!sub.belowLayer) return 1;
+  if (hunterIsSub) return hunter.belowLayer ? 1 : 0.5;
+  // Towed arrays and variable-depth sonars stream below the layer
+  if (/拖曳|VDS|可變深度/.test(sonar.label)) return 1;
+  // Low-frequency bow sonars use bottom bounce to reach under the layer
+  if (/SQS-26|SQS-53|Polinom/.test(sonar.label)) return 0.75;
+  return 0.55;
+}
+
+/** Aircraft sensors against a boat below the layer: sighting is lost, dipping sonar goes through. */
+export function layerFactorForAircraft(plane: Aircraft, sub: Ship): number {
+  if (!sub.belowLayer) return 1;
+  if (DIPPING_SONAR[plane.model]) return 1;
+  return MAD_MODELS.has(plane.model) ? 0.8 : 0;
+}
+
+/** Sonobuoys: early fixed shallow buoys sit above the layer; SSQ-41 and later set to depth. */
+export function layerFactorForSonobuoy(sub: Ship, era: Era): number {
+  if (!sub.belowLayer) return 1;
+  return era === 'era4' || era === 'era5' ? 1 : 0.5;
+}
+
+/** True for a surface ship carrying any anti-submarine weapon. */
+export function hasAswWeapon(ship: Ship): boolean {
+  return Boolean(ship.hasDepthCharges || ship.hasHedgehog || ship.hasASROC || ship.hasSVTT);
+}
