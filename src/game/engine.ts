@@ -2,6 +2,8 @@ import { ImpactEffect, ImpactSurface, impactFor, MAX_IMPACTS } from './impacts';
 import { resolveGroundRequisition } from './groundRequisition';
 import { AlliedHost, AlliedOps } from './allied/alliedOps';
 import { fitsInHold, formatHold, holdUsed, shipHold } from './naval/lift';
+import { CasualtyLedger, Outcome, attritionOutcome, defeatOutcome, victoryOutcome } from './outcome';
+import { Escalation, TIER_NAME, airEscalation, alliedEscalation, computeEscalation, ingressRoute } from './escalation';
 import { BuilderRequirement, BUILDER_RADIUS, builderRequirement, isEngineerType } from './construction';
 import {
   Ship,
@@ -164,6 +166,9 @@ function pickModel(models: readonly AircraftModel[], weights: readonly number[])
   }
   return models[models.length - 1];
 }
+
+/** Defensive positions that keep firing for whoever holds them. */
+const FIELD_WORK_TYPES = new Set<string>(['bunker_nest', 'infantry_squad', 'tank_platoon', 'tank_battalion']);
 
 export class GameEngine {
   public sectorNumber: number = 1;
@@ -675,6 +680,11 @@ export class GameEngine {
   >();
   public isVictory: boolean = false;
   public isDefeat: boolean = false;
+  /** Casualties on both sides, for the ending (outcome.ts). */
+  public forceLedger = new CasualtyLedger();
+  /** How the battle ended; set together with isVictory / isDefeat. */
+  public outcome: Outcome | null = null;
+  private attritionCheckTimer = 0;
   public isPaused: boolean = true;
   public gameSpeed: number = 1.0;
   public gameTime: number = 0;
@@ -683,6 +693,11 @@ export class GameEngine {
   public combatLogs: CombatLogEntry[] = [];
   public combatLogsVersion: number = 0;
   public islandsVersion: number = 0;
+  /** Campaign escalation from objectives taken (see escalation.ts). */
+  public escalation: Escalation = { progress: 0, tier: 0, captured: 0, total: 0 };
+  private escalationTimer = 0;
+  /** Mainland installations taken from the enemy. */
+  private capturedInstallations = 0;
 
   // Active ordnance loadouts for each aircraft role
   public activePayloads: Record<AircraftRole, AircraftPayloadType> = {
@@ -769,6 +784,7 @@ export class GameEngine {
   }
 
   private flakBarrageTimer: number = 0;
+  private enemyDiversionCooldown = 0;
   public opforSagTimer: number = 190; // 跨時代 OPFOR 水面打擊群 (SAG) 每 3 至 4 分鐘週期出擊
 
   constructor(sector: number = 1, era: Era = 'era1') {
@@ -880,6 +896,11 @@ export class GameEngine {
     this.particles = [];
     this.isVictory = false;
     this.isDefeat = false;
+    this.outcome = null;
+    this.forceLedger = new CasualtyLedger();
+    this.escalation = { progress: 0, tier: 0, captured: 0, total: 0 };
+    this.capturedInstallations = 0;
+    this.enemyDiversionCooldown = 0;
     this.isPaused = true;
     this.gameTime = 0;
     this.combatLogs = [];
@@ -2236,6 +2257,13 @@ export class GameEngine {
     // 8 大日軍戰術空中任務編組調度 (8 Enemy Air Doctrines Schedulers)
     // ══════════════════════════════════════════════════════════
 
+    this.escalationTimer -= effectiveDt;
+    if (this.escalationTimer <= 0) {
+      this.escalationTimer = 3;
+      this.updateEscalation();
+    }
+    const airEsc = airEscalation(this.escalation.tier);
+
     // 4, 5, 6: Strike Package 攻擊波 (旗艦 / 護航艦艇 / 陸基基地)
     this.enemyAirStrikeTimer -= effectiveDt;
     if (this.enemyAirStrikeTimer <= 0) {
@@ -2247,14 +2275,14 @@ export class GameEngine {
       } else {
         this.triggerEnemyAirDoctrine('strike_airbase');
       }
-      this.enemyAirStrikeTimer = Math.max(40, 62 - this.sectorNumber * 3);
+      this.enemyAirStrikeTimer = Math.max(40, 62 - this.sectorNumber * 3) * airEsc.intervalMul;
     }
 
     // 2: Air Sweep (空中制空掃蕩隊)
     this.enemySweepTimer -= effectiveDt;
     if (this.enemySweepTimer <= 0) {
       this.triggerEnemyAirDoctrine('air_sweep');
-      this.enemySweepTimer = 52;
+      this.enemySweepTimer = 52 * airEsc.intervalMul;
     }
 
     // 7: CAS (近距空中支援針對海灘登陸舟艇與部隊)
@@ -2266,14 +2294,14 @@ export class GameEngine {
       if (hasGroundAction) {
         this.triggerEnemyAirDoctrine('cas');
       }
-      this.enemyCasTimer = 55;
+      this.enemyCasTimer = 55 * airEsc.intervalMul;
     }
 
     // 8: CAP (常態戰鬥巡邏維護 — 提升全時代戰區防空機上限至 6 架)
     this.enemyCapTimer -= effectiveDt;
     if (this.enemyCapTimer <= 0) {
       const activeCaps = this.aircraft.filter((a) => a.side === 'enemy' && a.missionType === 'cap' && a.state !== 'shot_down');
-      if (activeCaps.length < 6) {
+      if (activeCaps.length < airEsc.capLimit) {
         this.triggerEnemyAirDoctrine('cap');
       }
       this.enemyCapTimer = 60;
@@ -2370,6 +2398,12 @@ export class GameEngine {
       this.alliedSagTimer = 130 + Math.random() * 30; // 130 to 160 seconds
     }
 
+    this.forceLedger.observe(
+      [this.playerShips, this.alliedShips, this.enemyShips],
+      this.aircraft,
+      this.groundUnits,
+      this.allInstallations(),
+    );
     this.updateScheduledActions(effectiveDt);
     this.updateSonobuoys(effectiveDt);
     this.updateSubmarineFogOfWar(effectiveDt);
@@ -4039,6 +4073,17 @@ export class GameEngine {
       plane.order = { type: 'rtb' };
       plane.state = 'returning';
       return true;
+    }
+
+    // Escalated raids fly their ingress turn points first (escalation.ts); weapons stay on the rails
+    if (plane.ingress && plane.ingress.length > 0) {
+      const wp = plane.ingress[0];
+      if (dist(plane.pos, wp) < 380 || dist(plane.pos, targetPos) < 1400) {
+        plane.ingress.shift();
+      } else {
+        plane.targetHeading = Math.atan2(wp.y - plane.pos.y, wp.x - plane.pos.x);
+        return false;
+      }
     }
 
     if (targetPos) {
@@ -6888,12 +6933,15 @@ export class GameEngine {
     const roll = Math.random();
     if (roll < 0.4) size += 1;
     else if (roll > 0.78) size -= 1;
-    return Math.max(4, Math.min(12, size));
+    // 戰役升級：據點佔領越多，敵軍投入的機隊越大
+    const esc = airEscalation(this.escalation.tier);
+    size += esc.waveBonus;
+    return Math.max(4, Math.min(esc.waveCap, size));
   }
 
-  public triggerEnemyAirDoctrine(missionType: EnemyAirMissionType) {
+  public triggerEnemyAirDoctrine(missionType: EnemyAirMissionType, spawnOverride?: Vector2D) {
     const flagship = this.getFlagship();
-    const spawnPos = this.getSafeEnemySpawnPos();
+    const spawnPos = spawnOverride ?? this.getSafeEnemySpawnPos();
     const sqId = `sq-opfor-${missionType}-${Date.now()}`;
     const isEra3 = this.era === 'era3';
     const isEra4 = this.era === 'era4';
@@ -6949,6 +6997,81 @@ export class GameEngine {
     } else if (missionType === 'asw_patrol' && (isEra4 || isEra5)) {
       this.launchEnemyAswPatrol(flagship, spawnPos, sqId, isEra4);
     }
+    if (missionType === 'strike_flagship' || missionType === 'strike_fleet' || missionType === 'strike_airbase' || missionType === 'cas') {
+      this.routeEnemyRaid(sqId, spawnPos, missionType);
+    }
+  }
+
+  /**
+   * Escalated raids: split the package over several approach axes and give each a dog-leg
+   * ingress round the defences; at the top tiers a fighter sweep from another bearing goes in
+   * ahead of them to pull the CAP away.
+   */
+  private routeEnemyRaid(sqId: string, spawnPos: Vector2D, missionType: EnemyAirMissionType): void {
+    const esc = airEscalation(this.escalation.tier);
+    if (!esc.dogLeg) return;
+    const members = this.aircraft.filter((a) => a.squadronId === sqId && a.state !== 'shot_down');
+    const strikers = members.filter(isStriker);
+    const target = strikers[0]?.order.targetPos ?? members[0]?.order.targetPos;
+    if (!target || members.length === 0) return;
+    const axes = Math.max(1, Math.min(esc.axes, Math.floor(strikers.length / 2)));
+    const routes = Array.from({ length: axes }, (_, k) => ingressRoute(spawnPos, target, k, axes, this.worldSize, this.escalation.tier >= 3));
+    const escorts = members.filter((a) => !isStriker(a));
+    strikers.forEach((s, i) => {
+      const k = i % axes;
+      if (k > 0) {
+        s.packageId = `${sqId}-ax${k}`;
+        s.squadronId = s.packageId;
+      }
+      s.ingress = routes[k].map((p) => ({ ...p }));
+    });
+    escorts.forEach((f, i) => {
+      const k = i % axes;
+      if (k > 0 && f.packageId) {
+        f.packageId = `${sqId}-ax${k}`;
+        f.squadronId = f.packageId;
+      }
+      // Escorts without a package (plain formations) fly the route themselves
+      if (!f.packageId) f.ingress = routes[k].map((p) => ({ ...p }));
+    });
+    if (axes > 1 && missionType !== 'cas') {
+      this.addBannerAlert(`📡【多軸向突襲】敵機群兵分 ${axes} 路，自不同方位迂迴進入！`, 'enemy', 'alert', 4.5);
+    }
+    if (esc.diversion && missionType !== 'cas' && this.enemyDiversionCooldown <= 0) {
+      this.enemyDiversionCooldown = 90;
+      // Sweep from the far flank of the direct line
+      const dx = target.x - spawnPos.x;
+      const dy = target.y - spawnPos.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const side = Math.random() < 0.5 ? 1 : -1;
+      const from = {
+        x: Math.max(400, Math.min(this.worldSize - 400, spawnPos.x - (dy / len) * 3500 * side)),
+        y: Math.max(400, Math.min(this.worldSize - 400, spawnPos.y + (dx / len) * 3500 * side)),
+      };
+      this.triggerEnemyAirDoctrine('air_sweep', from);
+    }
+  }
+
+  /** Recompute campaign escalation and announce a new stage. */
+  private updateEscalation(): void {
+    const prev = this.escalation.tier;
+    this.escalation = computeEscalation(this.islands, this.capturedInstallations);
+    if (this.enemyDiversionCooldown > 0) this.enemyDiversionCooldown -= 3;
+    const tier = this.escalation.tier;
+    if (tier <= prev) return;
+    const pct = Math.round(this.escalation.progress * 100);
+    const air = airEscalation(tier);
+    const allied = alliedEscalation(tier);
+    this.addBannerAlert(`📈【戰役升級：${TIER_NAME[tier]}】已掌握 ${pct}% 戰略據點！敵軍增派航空兵力，盟軍增兵跟進！`, 'player', 'capture', 7.0);
+    this.addCombatLog({
+      category: 'naval',
+      sourceSide: 'player',
+      sourceName: '聯合作戰司令部',
+      targetName: '戰役態勢',
+      actionType: 'recon_spotted',
+      isCrit: true,
+      text: `📈【戰役升級 → ${TIER_NAME[tier]}】我軍已控制 ${pct}% 據點。敵情：空襲機隊 +${air.waveBonus} 架、間隔縮短 ${Math.round((1 - air.intervalMul) * 100)}%${air.axes > 1 ? `、兵分 ${air.axes} 路迂迴` : air.dogLeg ? '、改採迂迴航線' : ''}${air.diversion ? '、佯動掃蕩誘離 CAP' : ''}。友軍：盟軍兵力上限 ${allied.maxUnits}${allied.fortify ? `、就地構築掩體 (上限 ${allied.maxWorks})` : ''}。`,
+    });
   }
 
   private launchEnemyAswPatrol(flagship: Ship | undefined, spawnPos: Vector2D, sqId: string, isEra4: boolean): void {
@@ -7874,7 +7997,7 @@ export class GameEngine {
           continue;
         }
 
-        if (inst.side === 'player') {
+        if (inst.side !== 'enemy') {
           // 友軍島上固定式重砲 (M1 240mm / 203mm / 155mm 岸防砲) 與野戰砲兵連主動迎敵砲擊
           if (inst.type === 'coastal_gun' || inst.type === 'towed_artillery') {
             const hasAmmoDepot = island.installations.some(
@@ -7945,25 +8068,27 @@ export class GameEngine {
               }
             }
           }
-          continue;
+          // Captured or allied field works (bunkers, MG posts, dug-in tanks) fight for their new
+          // owner below; other friendly facilities carry no direct-fire weapons.
+          if (!FIELD_WORK_TYPES.has(inst.type)) continue;
         }
 
         // ══════════════════════════════════════════════════════════
-        // 敵方地面單位 (OPFOR Ground Units) - 嚴格遵守 ASuW 限制
+        // 地面守備陣地 (Field works) — 依陣營判定敵我，佔領後轉而為新主人作戰
         // ══════════════════════════════════════════════════════════
 
         // 尋找射程內我方或盟軍水面艦艇、搶灘登陸部隊 (ASuW 專用目標)
-        const shipTarget = [...this.playerShips, ...this.alliedShips]
+        const shipTarget = (inst.side === 'enemy' ? [...this.playerShips, ...this.alliedShips] : this.enemyShips)
           .filter(
             (s) =>
               !s.isSunk &&
               this.isHostile(inst.side, s.side) &&
-              (!this.isSubmarine(s) || Boolean(s.isSpottedByEnemy)) &&
+              (!this.isSubmarine(s) || Boolean(inst.side === 'enemy' ? s.isSpottedByEnemy : s.isSpotted)) &&
               dist(inst.pos, s.pos) <= this.coastalReach(inst.pos, inst.range)
           )
           .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
         const groundTarget = !shipTarget
-          ? this.groundUnits.find((u) => u.side === 'player' && !u.isDestroyed && !u.embarkedInShipId && this.canEngageGroundAt(inst.pos, inst.range, u.pos, inst.type === 'towed_artillery'))
+          ? this.groundUnits.find((u) => this.isHostile(inst.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && this.canEngageGroundAt(inst.pos, inst.range, u.pos, inst.type === 'towed_artillery'))
           : null;
         const targetPos = shipTarget ? shipTarget.pos : groundTarget ? groundTarget.pos : null;
 
@@ -7977,7 +8102,7 @@ export class GameEngine {
               this.projectiles.push({
                 id: `shore-shell-${Date.now()}`,
                 type: 'shell',
-                side: 'enemy',
+                side: inst.side,
                 pos: { ...inst.pos },
                 vel: { x: 0, y: 0 },
                 originPos: { ...inst.pos },
@@ -8008,7 +8133,7 @@ export class GameEngine {
                 this.projectiles.push({
                   id: `mg-bullet-${Date.now()}-${b}`,
                   type: 'bullet',
-                  side: 'enemy',
+                  side: inst.side,
                   pos: { x: inst.pos.x + Math.cos(inst.angle) * 12, y: inst.pos.y + Math.sin(inst.angle) * 12 },
                   vel: { x: Math.cos(bAngle) * bSpeed, y: Math.sin(bAngle) * bSpeed },
                   originPos: { ...inst.pos },
@@ -8071,7 +8196,7 @@ export class GameEngine {
               this.projectiles.push({
                 id: `tank-shell-${Date.now()}`,
                 type: 'shell',
-                side: 'enemy',
+                side: inst.side,
                 pos: { x: inst.pos.x + Math.cos(inst.angle) * 20, y: inst.pos.y + Math.sin(inst.angle) * 20 },
                 vel: {
                   x: ((targetPos.x - inst.pos.x) / d) * 480,
@@ -8104,7 +8229,7 @@ export class GameEngine {
               this.projectiles.push({
                 id: `towed-art-shell-${Date.now()}`,
                 type: 'shell',
-                side: 'enemy',
+                side: inst.side,
                 pos: { x: inst.pos.x + Math.cos(inst.angle) * 24, y: inst.pos.y + Math.sin(inst.angle) * 24 },
                 vel: {
                   x: ((targetPos.x - inst.pos.x) / d) * 440,
@@ -8316,6 +8441,7 @@ export class GameEngine {
               text: `🏳️【全體繳械投降！】敵「${unit.name}」在猛烈火力與斷援包圍下士氣崩潰（組織度歸零），升起白旗舉手投降！我軍收押俘虜並接管陣地，獲得 +${cpReward} CP！`,
             });
             unit.isDestroyed = true;
+            this.forceLedger.loseGround(unit);
             this.groundUnits.splice(i, 1);
             continue;
           } else if (unit.side === 'allied') {
@@ -10385,7 +10511,9 @@ export class GameEngine {
         armor: 0.4,
         angle: instAngle,
       }));
-      targetIsland.isFriendlyBase = true;
+      // An airstrip only turns the island into a friendly base once it is secure; on a contested
+      // island the enemy garrison, its strongholds and its supply stay in play.
+      if (!this.islandHasHostiles(targetIsland)) targetIsland.isFriendlyBase = true;
     } else if (item.typeTag === 'command_post') {
       // 堅固防衛坑道指揮所
       targetIsland.installations.push(makeInstallation({
@@ -10508,6 +10636,13 @@ export class GameEngine {
     });
     return true;
     return false;
+  }
+
+  /** Whether an island still holds a live enemy installation, garrison or uncaptured stronghold. */
+  private islandHasHostiles(island: Island): boolean {
+    if (island.strongholds?.some((sh) => !sh.isCaptured) && !island.isFullyCaptured) return true;
+    if (island.installations.some((i) => !i.isDestroyed && i.side === 'enemy')) return true;
+    return this.groundUnits.some((u) => u.side === 'enemy' && !u.isDestroyed && isPointInPolygon(u.pos, island.points));
   }
 
   private purchaseGroundRequisition(item: RequisitionItem, targetIslandId: string | undefined, customPos: Vector2D | undefined, fleetPos: Vector2D): boolean {
@@ -13391,6 +13526,7 @@ export class GameEngine {
           if (inst.captureProgress >= 100) {
             inst.side = 'player';
             inst.captureProgress = 0;
+            this.capturedInstallations++;
             const rewardCP = 80;
             this.resourcePoints += rewardCP;
             this.totalCpEarned += rewardCP;
@@ -15939,6 +16075,10 @@ export class GameEngine {
         return t !== 0 && t !== 1 && t !== 11 && t !== 12 && t !== 13 && t !== 14 && t !== 16;
       },
       isHostileToAllied: (side) => side === 'enemy',
+      escalation: () => alliedEscalation(self.escalation.tier),
+      islandsChanged: () => {
+        self.islandsVersion++;
+      },
       groundRoute: (unit, to) => {
         const vehicle = !self.isFootUnit(unit);
         const direct = findGroundPath(self.terrain, unit.pos, to, vehicle);
@@ -18923,11 +19063,55 @@ export class GameEngine {
     }
   }
 
+  private allInstallations(): Installation[] {
+    const out: Installation[] = [];
+    for (const isl of this.islands) for (const i of isl.installations) out.push(i);
+    return out;
+  }
+
+  private endContext() {
+    return { era: this.era, ledger: this.forceLedger, progress: this.escalation.progress, gameTime: this.gameTime };
+  }
+
+  /** Close the battle with an ending: score, stars and the after-action entry. */
+  private concludeBattle(outcome: Outcome): void {
+    this.outcome = outcome;
+    if (outcome.tone === 'defeat') {
+      this.isDefeat = true;
+    } else {
+      this.isVictory = true;
+      this.score.sectorsCleared++;
+    }
+    this.score.totalScore += outcome.score;
+    this.score.stars += outcome.stars;
+    this.addCombatLog({
+      category: 'sunk',
+      sourceSide: outcome.tone === 'defeat' ? 'enemy' : 'player',
+      sourceName: '聯合作戰司令部',
+      targetName: '戰區全域',
+      actionType: 'recon_spotted',
+      isCrit: true,
+      text: `${outcome.tone === 'victory' ? '🏆' : outcome.tone === 'draw' ? '🕊️' : '⚓'}【${outcome.title}】${outcome.text}`,
+    });
+  }
+
   private checkVictoryConditions() {
+    if (this.isVictory || this.isDefeat) return;
     const flagship = this.getFlagship();
     if (!flagship || flagship.isSunk) {
-      this.isDefeat = true;
+      this.concludeBattle(defeatOutcome(this.endContext()));
       return;
+    }
+
+    // Endings decided by attrition (enemy collapse, withdrawal, armistice)
+    this.attritionCheckTimer -= 1;
+    if (this.attritionCheckTimer <= 0) {
+      this.attritionCheckTimer = 30;
+      const attrition = attritionOutcome(this.endContext());
+      if (attrition) {
+        this.concludeBattle(attrition);
+        return;
+      }
     }
 
     const enemyCarriers = this.enemyShips.filter((s) => s.type === 'carrier' || s.type === 'cvhg_kiev');
@@ -18938,18 +19122,9 @@ export class GameEngine {
     );
 
     if (enemyCarrierSunk && allCPsCaptured && !this.isVictory) {
-      this.isVictory = true;
-      this.score.sectorsCleared++;
       this.score.totalScore += 2500;
       this.score.stars += 8;
-      this.addCombatLog({
-        category: 'sunk',
-        sourceSide: 'player',
-        sourceName: '特混艦隊全體海空官兵',
-        targetName: '戰區全域',
-        actionType: 'recon_spotted',
-        text: `🏆【戰役大捷！全島解放！】敵艦隊航母主力已遭全殲，群島全部指揮所據點已徹底肅清解放！美利堅海軍陸戰隊與特遣艦隊大獲全勝！`,
-      });
+      this.concludeBattle(victoryOutcome(this.endContext()));
     }
   }
 }

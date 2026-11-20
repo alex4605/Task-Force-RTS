@@ -1683,6 +1683,8 @@ export interface Aircraft {
   disengageTimer?: number;
   bugOutHeading?: number;
   hitAndRunStage?: 'ingress' | 'slashing' | 'disengaging';
+  /** Turn points an escalated raid flies before running in on its target. */
+  ingress?: Vector2D[];
 }
 
 export type InstallationType =

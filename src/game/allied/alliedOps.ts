@@ -1,6 +1,8 @@
 import { Era, GroundUnit, GroundUnitType, Installation, Island, Ship, Vector2D } from '../../types/game';
 import { createGroundUnit, createLCVP, createLST, dist, isPointInPolygon, makeInstallation } from '../procedural';
 import { fitsInHold, holdUsed, shipHold } from '../naval/lift';
+import { AlliedEscalation } from '../escalation';
+import { groundSilhouetteClass } from '../unitPreviewRenderer';
 
 /**
  * Allied ground operations, run by the AI alongside the player:
@@ -26,6 +28,10 @@ export interface AlliedHost {
   isHostileToAllied(side: string): boolean;
   /** Terrain route for a ground unit (A* over the land grid), or null when unreachable. */
   groundRoute(unit: GroundUnit, to: Vector2D): Vector2D[] | null;
+  /** How hard the allies are committing at the campaign's current stage. */
+  escalation(): AlliedEscalation;
+  /** Installations were added or changed (refreshes the UI's island list). */
+  islandsChanged(): void;
   banner(text: string): void;
   log(text: string): void;
 }
@@ -117,7 +123,14 @@ const BASE_ROSTER: Partial<Record<Era, { base: string; units: CargoPlan[] }>> = 
   },
 };
 
-const MAX_BASE_UNITS = 8;
+/** Field works allied infantry dig on ground they hold, by era. */
+const FIELD_WORK_NAME: Record<Era, string> = {
+  era1: '澳軍沙包機槍掩體 (維克斯重機槍)',
+  era2: '澳軍椰木沙包機槍掩體 (維克斯重機槍)',
+  era3: '盟軍沙包機槍陣地 (勃朗寧 M1919)',
+  era4: '盟軍火力基地沙包掩體 (M60 機槍)',
+  era5: '北約野戰射擊掩體 (MG3 / GPMG)',
+};
 
 export class AlliedOps {
   private landingTimer = 150 + Math.random() * 90;
@@ -126,6 +139,7 @@ export class AlliedOps {
   private baseTimer = 40;
   private rosterIdx = 0;
   private aiTimer = 0;
+  private fortTimer = 25;
   private serial = 0;
 
   constructor(private host: AlliedHost) {}
@@ -138,6 +152,11 @@ export class AlliedOps {
     if (this.aiTimer <= 0) {
       this.aiTimer = 2.5;
       this.updateGroundAI();
+    }
+    this.fortTimer -= dt;
+    if (this.fortTimer <= 0) {
+      this.fortTimer = 20 + Math.random() * 10;
+      this.digIn();
     }
   }
 
@@ -168,7 +187,7 @@ export class AlliedOps {
     }
     this.landingTimer -= dt;
     if (this.landingTimer > 0) return;
-    this.landingTimer = 300 + Math.random() * 180;
+    this.landingTimer = (300 + Math.random() * 180) * this.host.escalation().landingMul;
     this.launchLanding();
   }
 
@@ -234,8 +253,10 @@ export class AlliedOps {
     if (useLst) {
       const lst = createLST(`allied-lst-${ts}`, h.era === 'era2' ? 'LST-467 (盟軍戰車登陸艦)' : 'LST-338 (盟軍戰車登陸艦)', { ...home }, h.era);
       transports.push(lst);
+      // Later in the campaign the LST comes with LCVPs carrying a follow-up wave of infantry
+      for (let i = 0; i < this.host.escalation().extraCraft; i++) transports.push(createLCVP(`allied-lcvp-${ts}-${i}`, `盟軍 LCVP 登陸艇 ${i + 1}`, { x: home.x + 60 + i * 40, y: home.y + 40 + i * 30 }, h.era));
     } else {
-      for (let i = 0; i < 3; i++) transports.push(createLCVP(`allied-lcvp-${ts}-${i}`, `盟軍 LCVP 登陸艇 ${i + 1}`, { x: home.x + i * 40, y: home.y + i * 30 }, h.era));
+      for (let i = 0; i < 3 + this.host.escalation().extraCraft; i++) transports.push(createLCVP(`allied-lcvp-${ts}-${i}`, `盟軍 LCVP 登陸艇 ${i + 1}`, { x: home.x + i * 40, y: home.y + i * 30 }, h.era));
     }
     for (const t of transports) {
       t.side = 'allied';
@@ -250,6 +271,12 @@ export class AlliedOps {
     for (const p of plans) {
       if (hold && !fitsInHold(hold, holdUsed(cargo.map((c) => c.type)), p.type)) continue;
       cargo.push(createGroundUnit(`allied-g-${ts}-${cargo.length}`, p.type, p.name, 'allied', h.era, { ...land }));
+    }
+    const lstLoad = cargo.length;
+    // Each additional landing craft lands one more rifle platoon
+    const rifle = cargoDef.lcvp[0];
+    for (let i = transports.length - (useLst ? 1 : 3); i > 0 && rifle; i--) {
+      cargo.push(createGroundUnit(`allied-g-${ts}-${cargo.length}`, rifle.type, rifle.name, 'allied', h.era, { ...land }));
     }
 
     const offshore = h.toWater(transports[0], { x: vertex.x + out.x * 110, y: vertex.y + out.y * 110 });
@@ -268,7 +295,12 @@ export class AlliedOps {
     }
 
     const cargoByShip: Record<string, GroundUnit[]> = {};
-    cargo.forEach((u, i) => (cargoByShip[transports[i % transports.length].id] ??= []).push(u));
+    if (useLst) {
+      // The LST carries its own load; each LCVP with it carries one of the extra rifle platoons
+      cargo.forEach((u, i) => (cargoByShip[transports[i < lstLoad ? 0 : 1 + ((i - lstLoad) % (transports.length - 1))].id] ??= []).push(u));
+    } else {
+      cargo.forEach((u, i) => (cargoByShip[transports[i % transports.length].id] ??= []).push(u));
+    }
     this.group = { id: `lg-${ts}`, escortId: escort?.id, transportIds: transports.map((t) => t.id), cargo, cargoByShip, landed: 0, island, offshore, land, home, phase: 'transit', age: 0, progress: {} };
     h.banner(`⚓【盟軍搶灘支隊出航】${cargoDef.title}：${escort ? escort.name + ' 護航，' : ''}${useLst ? '戰車登陸艦' : 'LCVP 登陸艇 ×3'} 載運 ${cargo.length} 個排駛向「${island.name.split(' (')[0]}」！`);
   }
@@ -396,6 +428,7 @@ export class AlliedOps {
     if (best) {
       const base = makeInstallation({ id: `allied-base-${h.era}`, type: 'battalion_cp', name: roster.base, side: 'allied', pos: best, health: 4200, armor: 0.5 });
       mainland.installations.push(base);
+      h.islandsChanged();
       this.baseId = base.id;
       h.log(`🏳️【盟軍前進基地進駐】${roster.base} 已在大陸前線開設，將定期派出盟軍部隊協同推進。`);
       return;
@@ -409,18 +442,76 @@ export class AlliedOps {
     if (!base || base.isDestroyed) return;
     this.baseTimer -= dt;
     if (this.baseTimer > 0) return;
-    this.baseTimer = 70 + Math.random() * 30;
+    const esc = this.host.escalation();
+    this.baseTimer = (70 + Math.random() * 30) * esc.spawnMul;
     const h = this.host;
     const roster = BASE_ROSTER[h.era];
     if (!roster) return;
     const alive = h.groundUnits.filter((u) => u.side === 'allied' && !u.isDestroyed).length;
-    if (alive >= MAX_BASE_UNITS) return;
+    if (alive >= esc.maxUnits) return;
     const plan = roster.units[this.rosterIdx++ % roster.units.length];
     const a = Math.random() * Math.PI * 2;
     const u = createGroundUnit(`allied-base-u-${++this.serial}`, plan.type, plan.name, 'allied', h.era, { x: base.pos.x + Math.cos(a) * 70, y: base.pos.y + Math.sin(a) * 70 });
     u.isSupplied = true;
     h.groundUnits.push(u);
     h.log(`🪖【盟軍部隊出發】「${plan.name}」自 ${roster.base.split(' [')[0]} 開出，向前線推進。`);
+  }
+
+  // ════ Field works ════
+
+  /**
+   * Allied infantry holding ground dig in: a sandbagged MG position on the spot, preferably at a
+   * captured stronghold or covering the approach to the allied base. Works keep firing for the
+   * allies at enemy troops that come back.
+   */
+  private digIn(): void {
+    const h = this.host;
+    const esc = h.escalation();
+    if (!esc.fortify) return;
+    const works: Installation[] = [];
+    for (const isl of h.islands) for (const i of isl.installations) if (!i.isDestroyed && i.id.startsWith('allied-work-')) works.push(i);
+    if (works.length >= esc.maxWorks) return;
+    const enemies = h.groundUnits.filter((u) => u.side === 'enemy' && !u.isDestroyed && !u.embarkedInShipId);
+    const captured: Vector2D[] = [];
+    for (const isl of h.islands) for (const sh of isl.strongholds ?? []) if (sh.isCaptured) captured.push(sh.cpPos);
+    let best: { unit: GroundUnit; island: Island; score: number } | null = null;
+    for (const u of h.groundUnits) {
+      if (u.side !== 'allied' || u.isDestroyed || u.embarkedInShipId || u.order.type !== 'idle') continue;
+      const kind = groundSilhouetteClass(u.type);
+      if (kind !== 'infantry' && kind !== 'engineer') continue;
+      if (works.some((w) => dist(w.pos, u.pos) < 320)) continue;
+      if (enemies.some((e) => dist(e.pos, u.pos) < 260)) continue; // not under direct fire
+      const island = h.islands.find((isl) => isPointInPolygon(u.pos, isl.points));
+      if (!island) continue;
+      let score = 0;
+      for (const c of captured) score = Math.max(score, 1000 - dist(c, u.pos));
+      score += Math.random() * 200;
+      if (!best || score > best.score) best = { unit: u, island, score };
+    }
+    if (!best) return;
+    const { unit, island } = best;
+    // Face the nearest enemy, or away from the island centre (the likely counter-landing coast)
+    const threat = enemies.reduce<GroundUnit | null>((m, e) => (!m || dist(e.pos, unit.pos) < dist(m.pos, unit.pos) ? e : m), null);
+    const facing = threat
+      ? Math.atan2(threat.pos.y - unit.pos.y, threat.pos.x - unit.pos.x)
+      : Math.atan2(unit.pos.y - island.center.y, unit.pos.x - island.center.x);
+    const pos = { x: unit.pos.x + Math.cos(facing) * 35, y: unit.pos.y + Math.sin(facing) * 35 };
+    const work = makeInstallation({
+      id: `allied-work-${++this.serial}`,
+      type: 'bunker_nest',
+      name: FIELD_WORK_NAME[h.era],
+      weaponDesc: '盟軍步兵就地構築之沙包機槍掩體 · 扼守已奪取的陣地',
+      side: 'allied',
+      pos,
+      angle: facing,
+      health: 1100,
+      armor: 0.45,
+      range: 520,
+      reloadTime: 1.6,
+    });
+    island.installations.push(work);
+    h.islandsChanged();
+    h.log(`🛠️【盟軍就地構工】「${unit.name}」在${island.isMainland ? '前線' : `「${island.name.split(' (')[0]}」`}構築${work.name}，鞏固已奪取的陣地。`);
   }
 
   // ════ Allied ground AI ════

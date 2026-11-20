@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
+import { Escalation, TIER_NAME } from '../game/escalation';
 import { CameraViewportState } from './GameCanvas';
 import {
   Ship,
@@ -113,6 +114,8 @@ interface HUDProps {
   onUnloadAircraft?: () => void;
   // Resource Points & Requisition System
   resourcePoints?: number;
+  /** Campaign escalation (objectives held and current stage). */
+  escalation?: Escalation;
   commandPointsPerSec?: number;
   totalCpEarned?: number;
   totalCpSpent?: number;
@@ -274,6 +277,7 @@ export const HUD: React.FC<HUDProps> = ({
   onBuildAirfield,
   onUnloadAircraft,
   resourcePoints = 1200,
+  escalation,
   commandPointsPerSec = 15,
   totalCpEarned: _totalCpEarned = 1200,
   totalCpSpent: _totalCpSpent = 0,
@@ -1520,6 +1524,19 @@ export const HUD: React.FC<HUDProps> = ({
                     {Math.floor(resourcePoints)} CP
                   </span>
                 </div>
+                {escalation && (
+                  <div
+                    className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 bg-[#040C16] border border-[#1E3A5F] rounded-lg text-[10px] font-mono"
+                    title={`戰役階段：據點控制 ${Math.round(escalation.progress * 100)}%。佔領越多據點，敵軍空襲規模與迂迴路線越複雜，盟軍增兵並就地構工。`}
+                  >
+                    <span className={['text-slate-400', 'text-sky-300', 'text-emerald-300', 'text-amber-300', 'text-red-300'][escalation.tier]}>
+                      {'▲'.repeat(escalation.tier + 1)} {TIER_NAME[escalation.tier]}
+                    </span>
+                    <span className="w-12 h-1.5 bg-[#0D1B2A] rounded overflow-hidden">
+                      <span className="block h-full bg-emerald-400" style={{ width: `${Math.round(escalation.progress * 100)}%` }} />
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2 shrink-0">

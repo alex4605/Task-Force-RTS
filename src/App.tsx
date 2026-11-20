@@ -514,6 +514,7 @@ export default function App() {
         convoyReinforceTimer={engine.convoyReinforceTimer}
         nextConvoyEscort={engine.nextConvoyEscort}
         resourcePoints={engine.resourcePoints}
+        escalation={engine.escalation}
         commandPointsPerSec={engine.commandPointsPerSec}
         totalCpEarned={engine.totalCpEarned}
         totalCpSpent={engine.totalCpSpent}
@@ -664,6 +665,8 @@ export default function App() {
           isVictory={isVictory}
           score={score}
           intel={intel}
+          outcome={engine.outcome}
+          casualties={engine.casualties}
           onNextSector={handleNextSector}
           onRestart={handleRestart}
         />

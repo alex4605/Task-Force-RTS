@@ -10,7 +10,9 @@ export interface InstallationStyle {
 }
 
 export function getInstallationStyle(inst: Installation, island?: Island): InstallationStyle {
-  const isPlayer = inst.side === 'player' || inst.side === 'allied' || island?.isFriendlyBase === true || inst.id.includes('friendly');
+  // Colour by the installation's own side: a friendly airstrip on a contested island does not make
+  // the enemy bunkers next to it friendly.
+  const isPlayer = inst.side ? inst.side !== 'enemy' : island?.isFriendlyBase === true || inst.id.includes('friendly');
   return {
     isPlayer,
     color: isPlayer ? '#4FC3F7' : '#EF5350',
