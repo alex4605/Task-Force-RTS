@@ -1,6 +1,7 @@
 import { AircraftPayloadType } from '../types/game';
 import { TANK_PLANS, drawTankPlan } from './render/groundPlan';
-import { SUPPORT_PLANS, drawSupportPlan } from './render/groundPlanSupport';
+import { SUPPORT_PLANS, drawRocketLauncherPlan, drawSupportPlan } from './render/groundPlanSupport';
+import { drawAtgmTeam, drawEngineerTeam, drawInfantryTeam, drawMortarSection } from './render/groundInfantry';
 
 export type UnitPreviewKind = 'ship' | 'aircraft' | 'ground' | 'installation';
 
@@ -575,200 +576,6 @@ function drawTowedGun(ctx: CanvasRenderingContext2D, sp: TowedSpec, pal: Vehicle
 // ════════════════════════════════════════════════════════════════════════════
 // Infantry
 // ════════════════════════════════════════════════════════════════════════════
-type InfantryWeapon = 'rifle' | 'long_rifle' | 'smg' | 'bar' | 'lmg' | 'rpg' | 'at4' | 'm79' | 'flame' | 'satchel' | 'radio' | 'knee_mortar';
-
-interface InfantrySpec {
-  match: RegExp;
-  /** Helmet / headgear colour: M1, IJA Type 90, Soviet SSh-40/68, PASGT, NVA pith helmet. */
-  helmet: 'm1' | 'ija' | 'soviet' | 'pasgt' | 'pith';
-  men: { x: number; y: number; w: InfantryWeapon }[];
-  /** Concealment foliage (ambush) and prone / crawling posture (sappers). */
-  foliage?: boolean;
-  prone?: boolean;
-  /** Air assault: helicopter-landing marker arc. */
-  airAssault?: boolean;
-}
-
-const HELMET_COLORS: Record<InfantrySpec['helmet'], string> = {
-  m1: '#556B2F',
-  ija: '#8D7B4A',
-  soviet: '#4E5B31',
-  pasgt: '#5D5A3A',
-  pith: '#A1887F',
-};
-
-const WEDGE4 = (a: InfantryWeapon, b: InfantryWeapon, c: InfantryWeapon, d: InfantryWeapon) => [
-  { x: 4, y: 0, w: a }, { x: 0, y: -4.2, w: b }, { x: 0, y: 4.2, w: c }, { x: -4.5, y: 0, w: d },
-];
-
-const INFANTRY_SPECS: InfantrySpec[] = [
-  // USMC 1944-45 fireteam: leader, BAR man, two riflemen (1945 adds an M2 flamethrower)
-  { match: /usmc_rifle_42/, helmet: 'm1', men: WEDGE4('rifle', 'bar', 'rifle', 'rifle') },
-  { match: /usmc_rifle_45/, helmet: 'm1', men: WEDGE4('rifle', 'bar', 'flame', 'rifle') },
-  // Korea: M1 Garand / BAR / radio
-  { match: /korea/, helmet: 'm1', men: WEDGE4('rifle', 'bar', 'rifle', 'radio') },
-  // 1965: M14/M16, M60 machine gun, M79 grenadier
-  { match: /air_assault_65/, helmet: 'm1', airAssault: true, men: WEDGE4('rifle', 'lmg', 'm79', 'radio') },
-  { match: /platoon_65/, helmet: 'm1', men: WEDGE4('rifle', 'lmg', 'm79', 'rifle') },
-  // 1983: PASGT, M16A2, M249 SAW, AT4
-  { match: /rifle_83/, helmet: 'pasgt', men: WEDGE4('rifle', 'lmg', 'at4', 'rifle') },
-  // IJA: Arisaka rifles, Type 96 LMG, Type 89 knee mortar
-  { match: /opfor_infantry_42/, helmet: 'ija', men: WEDGE4('long_rifle', 'lmg', 'long_rifle', 'long_rifle') },
-  { match: /opfor_infantry_45/, helmet: 'ija', men: WEDGE4('long_rifle', 'lmg', 'knee_mortar', 'long_rifle') },
-  // Soviet / Warsaw Pact: AK, PK machine gun, RPG-7
-  { match: /coldwar_infantry|motor_rifle/, helmet: 'soviet', men: WEDGE4('rifle', 'lmg', 'rpg', 'rifle') },
-  // NVA / VC sappers: prone, satchel charges, AK
-  { match: /sapper/, helmet: 'pith', prone: true, men: [{ x: 4, y: -2.5, w: 'satchel' }, { x: 2, y: 3, w: 'satchel' }, { x: -3, y: 0, w: 'rifle' }] },
-  // Ambush: concealed, RPG and rifles
-  { match: /ambush/, helmet: 'pith', foliage: true, men: [{ x: 3, y: -3, w: 'rpg' }, { x: 3, y: 3, w: 'rifle' }, { x: -2, y: 0, w: 'lmg' }] },
-  // Patrol: file formation
-  { match: /patrol/, helmet: 'pith', men: [{ x: 6, y: 0, w: 'rifle' }, { x: 1.5, y: 0.8, w: 'smg' }, { x: -3, y: -0.6, w: 'rifle' }, { x: -7.5, y: 0.4, w: 'rpg' }] },
-];
-const DEFAULT_SQUAD: InfantrySpec = { match: /./, helmet: 'm1', men: [{ x: 3.8, y: 0, w: 'rifle' }, { x: -2.4, y: -3.9, w: 'rifle' }, { x: -2.4, y: 3.9, w: 'rifle' }] };
-
-function drawSoldier(ctx: CanvasRenderingContext2D, x: number, y: number, w: InfantryWeapon, helmet: string, prone: boolean, pal: VehiclePalette) {
-  ctx.save();
-  ctx.translate(x, y);
-  // Weapon first (under the body), pointing forward (+x) from the right shoulder
-  const wy = 0.9;
-  ctx.strokeStyle = pal.barrelColor;
-  ctx.fillStyle = pal.barrelColor;
-  ctx.lineWidth = 0.9;
-  ctx.beginPath();
-  switch (w) {
-    case 'rifle': ctx.moveTo(0.5, wy); ctx.lineTo(5, wy); break;
-    case 'long_rifle': ctx.moveTo(0.5, wy); ctx.lineTo(6, wy); break;
-    case 'smg': ctx.moveTo(0.5, wy); ctx.lineTo(3.6, wy); break;
-    case 'bar':
-    case 'lmg':
-      ctx.lineWidth = 1.3;
-      ctx.moveTo(0.5, wy); ctx.lineTo(w === 'lmg' ? 6.2 : 5.6, wy);
-      // bipod
-      ctx.moveTo(4.6, wy); ctx.lineTo(5.4, wy - 1.2);
-      ctx.moveTo(4.6, wy); ctx.lineTo(5.4, wy + 1.2);
-      break;
-    case 'rpg':
-      ctx.lineWidth = 1.2;
-      ctx.moveTo(-2.5, wy); ctx.lineTo(3.5, wy);
-      ctx.stroke();
-      ctx.beginPath();
-      // conical PG-7 warhead
-      ctx.moveTo(3.5, wy - 1.2); ctx.lineTo(6, wy); ctx.lineTo(3.5, wy + 1.2); ctx.closePath();
-      ctx.fill();
-      break;
-    case 'at4':
-      ctx.lineWidth = 1.6;
-      ctx.moveTo(-2, wy); ctx.lineTo(4, wy);
-      break;
-    case 'm79':
-      ctx.lineWidth = 1.7;
-      ctx.moveTo(0.5, wy); ctx.lineTo(3.4, wy);
-      break;
-    case 'flame':
-      ctx.moveTo(0.5, wy); ctx.lineTo(4.6, wy);
-      break;
-    case 'knee_mortar':
-      ctx.lineWidth = 1.5;
-      ctx.moveTo(0.5, wy); ctx.lineTo(2.8, wy);
-      break;
-    case 'radio':
-    case 'satchel':
-      ctx.moveTo(0.5, wy); ctx.lineTo(4.2, wy);
-      break;
-  }
-  ctx.stroke();
-  // Body: shoulders (prone soldiers are stretched out behind)
-  ctx.fillStyle = pal.hullFill;
-  ctx.strokeStyle = pal.hullStroke;
-  ctx.lineWidth = 0.8;
-  ctx.beginPath();
-  if (prone) ctx.ellipse(-1.6, 0, 3.2, 1.6, 0, 0, Math.PI * 2);
-  else ctx.ellipse(-0.3, 0, 1.4, 2.6, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  // Back-mounted equipment
-  if (w === 'flame') {
-    ctx.fillStyle = '#8D6E63';
-    ctx.fillRect(-2.6, -1.4, 1.2, 1.2);
-    ctx.fillRect(-2.6, 0.2, 1.2, 1.2);
-  } else if (w === 'radio') {
-    ctx.fillStyle = '#455A64';
-    ctx.fillRect(-2.6, -1, 1.4, 2);
-    ctx.strokeStyle = '#CFD8DC';
-    ctx.lineWidth = 0.4;
-    ctx.beginPath();
-    ctx.moveTo(-2.2, -0.8);
-    ctx.lineTo(-5.5, -2.6);
-    ctx.stroke();
-  } else if (w === 'satchel') {
-    ctx.fillStyle = '#795548';
-    ctx.fillRect(-1, 1.8, 1.8, 1.4);
-  }
-  // Head / helmet
-  ctx.fillStyle = helmet;
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
-  ctx.lineWidth = 0.5;
-  ctx.beginPath();
-  ctx.arc(prone ? 1.2 : 0, 0, 1.3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawSquad(ctx: CanvasRenderingContext2D, sp: InfantrySpec, _isPlayer: boolean, pal: VehiclePalette) {
-  if (sp.foliage) {
-    // Concealment: brush and palm fronds around the team
-    ctx.fillStyle = 'rgba(46, 125, 50, 0.55)';
-    for (const [fx, fy, fr] of [[-5, -5, 3.4], [5, -6, 3], [-6, 5, 3.2], [6, 5.5, 3.6], [0, -8, 2.6], [0, 8, 2.8]] as const) {
-      ctx.beginPath();
-      ctx.arc(fx, fy, fr, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  } else if (sp.airAssault) {
-    ctx.strokeStyle = '#80DEEA';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.arc(1, 0, 8, -Math.PI * 0.55, Math.PI * 0.55);
-    ctx.stroke();
-  } else if (!sp.prone) {
-    // Hasty fighting position: sandbag / earth arc facing the enemy
-    ctx.strokeStyle = 'rgba(188, 170, 164, 0.75)';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.arc(2.5, 0, 8, -Math.PI * 0.5, Math.PI * 0.5);
-    ctx.stroke();
-  }
-  const helmet = HELMET_COLORS[sp.helmet];
-  for (const m of sp.men) drawSoldier(ctx, m.x, m.y, m.w, helmet, !!sp.prone, pal);
-}
-
-function drawMortarTeam(ctx: CanvasRenderingContext2D, _isPlayer: boolean, pal: VehiclePalette) {
-  // Baseplate, tube on its bipod, ammunition boxes and a two-man crew
-  ctx.fillStyle = '#37474F';
-  ctx.beginPath();
-  ctx.arc(-1, 0, 2.6, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = pal.barrelColor;
-  ctx.lineWidth = 1.8;
-  ctx.beginPath();
-  ctx.moveTo(-1, 0);
-  ctx.lineTo(5, 0);
-  ctx.stroke();
-  ctx.strokeStyle = '#90A4AE';
-  ctx.lineWidth = 0.8;
-  ctx.beginPath();
-  ctx.moveTo(3.2, 0);
-  ctx.lineTo(4.4, -2.6);
-  ctx.moveTo(3.2, 0);
-  ctx.lineTo(4.4, 2.6);
-  ctx.stroke();
-  ctx.fillStyle = '#6D4C41';
-  ctx.fillRect(-7, -6.5, 3, 2);
-  ctx.fillRect(-7, 4.5, 3, 2);
-  const helmet = HELMET_COLORS.soviet;
-  drawSoldier(ctx, -3.5, -3.6, 'smg', helmet, false, pal);
-  drawSoldier(ctx, -3.5, 3.6, 'smg', helmet, false, pal);
-}
 
 /** Silhouette family a ground unit type is drawn as. */
 export type GroundSilhouetteClass =
@@ -926,17 +733,22 @@ export function drawGroundSilhouette(
   ctx.save();
   ctx.scale(scale, scale);
 
-  // Crisp terrain contact drop-shadow
-  ctx.fillStyle = 'rgba(2, 6, 12, 0.62)';
-  ctx.beginPath();
-  ctx.ellipse(1.6, 2.2, 13.5, 8.2, 0, 0, Math.PI * 2);
-  ctx.fill();
+  // Contact drop-shadow under vehicles (soldiers cast their own small shadows)
+  const footKind = groundSilhouetteClass(t);
+  if (footKind !== 'infantry' && footKind !== 'mortar' && footKind !== 'atgm') {
+    ctx.fillStyle = 'rgba(2, 6, 12, 0.62)';
+    ctx.beginPath();
+    ctx.ellipse(1.6, 2.2, 13.5, 8.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   const kind = groundSilhouetteClass(t);
 
   if ((kind === 'tank' || kind === 'spg' || kind === 'air_defense') && SUPPORT_PLANS.some((p) => p.match.test(t))) {
     // Self-propelled guns, tank destroyers and air-defence vehicles from real dimensions
     drawSupportPlan(ctx, SUPPORT_PLANS.find((p) => p.match.test(t))!, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
+  } else if (kind === 'rocket' && drawRocketLauncherPlan(ctx, t, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor })) {
+    // Rocket artillery and missile launchers from real dimensions (groundPlanSupport.ts)
   } else if (kind === 'rocket') {
     const isNuke = t.includes('nuclear');
     const isAtacms = t.includes('atacms');
@@ -1411,44 +1223,13 @@ export function drawGroundSilhouette(
   } else if (kind === 'carrier') {
     drawArmoredCarrier(ctx, IFV_SPECS.find((sp) => sp.match.test(t)) ?? DEFAULT_IFV, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
   } else if (kind === 'engineer') {
-    ctx.fillStyle = trackColor;
-    ctx.fillRect(-9, -6.5, 18, 2.5);
-    ctx.fillRect(-9, 4, 18, 2.5);
-    ctx.fillStyle = '#4A3B12';
-    ctx.strokeStyle = '#FFD54F';
-    ctx.lineWidth = 1.2;
-    ctx.fillRect(-8, -4.5, 15, 9);
-    ctx.strokeRect(-8, -4.5, 15, 9);
-    // Angled heavy front bulldozer blade + push arms
-    ctx.fillStyle = '#FFB300';
-    ctx.fillRect(8, -6.8, 3.2, 13.6);
-    ctx.strokeRect(8, -6.8, 3.2, 13.6);
-    ctx.fillStyle = '#263238';
-    ctx.fillRect(6.5, -4.2, 1.8, 1.5);
-    ctx.fillRect(6.5, 2.7, 1.8, 1.5);
+    drawEngineerTeam(ctx, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
   } else if (kind === 'atgm') {
-    ctx.strokeStyle = '#BCAAA4';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(1, 0, 6.5, -Math.PI * 0.65, Math.PI * 0.65);
-    ctx.stroke();
-    ctx.strokeStyle = '#FFD54F';
-    ctx.lineWidth = 2.4;
-    ctx.beginPath();
-    ctx.moveTo(-4, 0);
-    ctx.lineTo(10, 0);
-    ctx.stroke();
-    ctx.fillStyle = '#FF5252';
-    ctx.fillRect(8.5, -1, 2, 2);
-    ctx.fillStyle = hullStroke;
-    ctx.beginPath();
-    ctx.arc(-2, -3.5, 2.2, 0, Math.PI * 2);
-    ctx.arc(-2, 3.5, 2.2, 0, Math.PI * 2);
-    ctx.fill();
+    drawAtgmTeam(ctx, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
   } else if (kind === 'mortar') {
-    drawMortarTeam(ctx, isPlayer, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
+    drawMortarSection(ctx, t, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
   } else {
-    drawSquad(ctx, INFANTRY_SPECS.find((sp) => sp.match.test(t)) ?? DEFAULT_SQUAD, isPlayer, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
+    drawInfantryTeam(ctx, t, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
   }
   ctx.restore();
 }

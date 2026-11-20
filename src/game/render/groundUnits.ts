@@ -47,12 +47,15 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
     ctx.translate(0, 2);
     ctx.rotate(moveHeading);
     // Soft ground contact shadow for crisp silhouette pop over island terrain
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
-    ctx.beginPath();
     // Same scale as the equipment drawn inside installations (see GROUND_SILHOUETTE_SCALE)
-    const scale = GROUND_SILHOUETTE_SCALE[groundSilhouetteClass(unit.type)];
-    ctx.ellipse(-1, 1.5, 12.5 * scale, 7.9 * scale, 0, 0, Math.PI * 2);
-    ctx.fill();
+    const silClass = groundSilhouetteClass(unit.type);
+    const scale = GROUND_SILHOUETTE_SCALE[silClass];
+    if (silClass !== 'infantry' && silClass !== 'mortar' && silClass !== 'atgm') {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.38)';
+      ctx.beginPath();
+      ctx.ellipse(-1, 1.5, 12.5 * scale, 7.9 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
     drawGroundDust(rc, unit, scale);
     drawGroundSilhouette(ctx, unit.type, isPlayer, scale);
     ctx.restore();

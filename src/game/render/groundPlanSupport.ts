@@ -4,7 +4,7 @@
  * box at the rear, the M109's turret behind a front engine, Tunguska's guns and missiles either
  * side of its turret, the SA-8's boat hull on six wheels.
  */
-import { drawGunTube, drawTracks, hullPath, K, Nose, PlanPalette, turretPath, TurretShape, WIDEN } from './groundPlan';
+import { drawGunTube, drawTankPlan, drawTracks, hullPath, K, Nose, PlanPalette, TANK_PLANS, turretPath, TurretShape, WIDEN } from './groundPlan';
 
 interface Gun {
   /** Lateral offset (m) and length from the mount centre (m). */
@@ -358,4 +358,241 @@ function drawSupportBody(ctx: CanvasRenderingContext2D, p: SupportPlan, pal: Pla
     ctx.lineTo(m(p.pulpit.x + 1.1), m(p.pulpit.y));
     ctx.stroke();
   }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// Rocket artillery and ballistic-missile launchers
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Wheels at given axle stations (m from the hull centre, + forward). */
+function drawAxles(ctx: CanvasRenderingContext2D, stations: number[], ow: number, wheelD: number, pal: PlanPalette) {
+  const m = (v: number) => v * K;
+  ctx.fillStyle = pal.trackColor;
+  for (const x of stations) {
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.roundRect(m(x) - m(wheelD / 2), s < 0 ? -ow / 2 : ow / 2 - m(0.42), m(wheelD), m(0.42), m(0.2));
+      ctx.fill();
+      ctx.strokeStyle = '#607D8B';
+      ctx.lineWidth = 0.35;
+      ctx.stroke();
+    }
+  }
+}
+
+/** Truck bed / chassis outline with a cab at the front: bonnet (Ural) or flat-fronted cab-over. */
+function drawTruck(ctx: CanvasRenderingContext2D, L: number, W: number, cab: { len: number; bonnet?: number; split?: boolean }, pal: PlanPalette) {
+  const m = (v: number) => v * K;
+  const hl = m(L);
+  const hw = m(W) * WIDEN * 0.76; // wheels show either side of the body
+  // Chassis / bed
+  ctx.fillStyle = pal.hullFill;
+  ctx.strokeStyle = pal.hullStroke;
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  ctx.roundRect(-hl / 2, -hw / 2, hl - m(cab.len + (cab.bonnet ?? 0)), hw, 0.6);
+  ctx.fill();
+  ctx.stroke();
+  const cx0 = hl / 2 - m(cab.len + (cab.bonnet ?? 0));
+  ctx.fillStyle = pal.turretFill;
+  if (cab.split) {
+    // MAZ-543: two separate cabs either side of the missile nose, engine between them
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.roundRect(cx0, s < 0 ? -hw / 2 : hw * 0.14, m(cab.len), hw * 0.36, 0.8);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.45)';
+      ctx.fillRect(cx0 + m(cab.len) - 1.2, s < 0 ? -hw / 2 + 0.6 : hw * 0.14 + 0.6, 0.8, hw * 0.36 - 1.2);
+      ctx.fillStyle = pal.turretFill;
+    }
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.fillRect(cx0, -hw * 0.14, m(cab.len), hw * 0.28);
+    return;
+  }
+  ctx.beginPath();
+  ctx.roundRect(cx0, -hw / 2, m(cab.len), hw, 0.8);
+  ctx.fill();
+  ctx.stroke();
+  // Windscreen
+  ctx.fillStyle = 'rgba(128, 222, 234, 0.45)';
+  ctx.fillRect(cx0 + m(cab.len) - 1.3, -hw * 0.42, 0.9, hw * 0.84);
+  if (cab.bonnet) {
+    // Engine bonnet ahead of the cab with its grille
+    ctx.fillStyle = pal.hullFill;
+    ctx.beginPath();
+    ctx.roundRect(cx0 + m(cab.len), -hw * 0.34, m(cab.bonnet), hw * 0.68, 1);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.fillRect(hl / 2 - 0.9, -hw * 0.26, 0.6, hw * 0.52);
+  }
+}
+
+/** Bundle of launch tubes seen from above: rows of tubes with their muzzles toward `dir`. */
+function drawTubeBundle(ctx: CanvasRenderingContext2D, x: number, len: number, wid: number, cols: number, colour: string, dir: 1 | -1) {
+  const m = (v: number) => v * K;
+  const x0 = m(x) - m(len) / 2;
+  const w = m(wid);
+  ctx.fillStyle = '#37474F';
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+  ctx.lineWidth = 0.5;
+  ctx.fillRect(x0, -w / 2, m(len), w);
+  ctx.strokeRect(x0, -w / 2, m(len), w);
+  const step = w / cols;
+  ctx.strokeStyle = 'rgba(176, 190, 197, 0.45)';
+  ctx.lineWidth = 0.35;
+  ctx.beginPath();
+  for (let i = 1; i < cols; i++) {
+    ctx.moveTo(x0, -w / 2 + i * step);
+    ctx.lineTo(x0 + m(len), -w / 2 + i * step);
+  }
+  ctx.stroke();
+  // Muzzles
+  ctx.fillStyle = colour;
+  const mx = dir > 0 ? x0 + m(len) - 0.5 : x0 + 0.5;
+  for (let i = 0; i < cols; i++) {
+    ctx.beginPath();
+    ctx.arc(mx, -w / 2 + (i + 0.5) * step, Math.min(step * 0.38, 0.9), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Frame cross-members
+  ctx.fillStyle = '#263238';
+  for (const f of [0.2, 0.55, 0.9]) ctx.fillRect(x0 + m(len) * f, -w / 2 - 0.3, 0.6, w + 0.6);
+}
+
+export function drawRocketLauncherPlan(ctx: CanvasRenderingContext2D, type: string, pal: PlanPalette): boolean {
+  const t = type.toLowerCase();
+  const m = (v: number) => v * K;
+  const scaled = (L: number, fn: () => void) => {
+    const f = Math.pow(6.3 / L, 0.35);
+    ctx.save();
+    ctx.scale(f, f);
+    fn();
+    ctx.restore();
+  };
+
+  if (t.includes('scud')) {
+    // 9P117 on MAZ-543: 8x8, split cabs, the 11.2 m R-17 lying nose-forward between the cabs
+    const nuke = t.includes('nuclear');
+    scaled(13.36, () => {
+      const ow = m(3.02) * WIDEN;
+      drawAxles(ctx, [4.6, 2.2, -1.6, -4.0], ow, 1.55, pal);
+      drawTruck(ctx, 13.36, 3.02, { len: 2.3, split: true }, pal);
+      // Erector beam and the missile on it
+      ctx.fillStyle = '#455A64';
+      ctx.fillRect(m(-6.4), -m(0.32), m(10.6), m(0.64));
+      ctx.fillStyle = '#ECEFF1';
+      ctx.strokeStyle = nuke ? '#FFAB00' : '#90A4AE';
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(m(-6.2), -m(0.44));
+      ctx.lineTo(m(3.4), -m(0.44));
+      ctx.quadraticCurveTo(m(4.9), -m(0.4), m(5.4), 0);
+      ctx.quadraticCurveTo(m(4.9), m(0.4), m(3.4), m(0.44));
+      ctx.lineTo(m(-6.2), m(0.44));
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      // Warhead section and tail fins
+      ctx.fillStyle = nuke ? '#FFAB00' : '#B0BEC5';
+      ctx.fillRect(m(2.6), -m(0.42), m(0.8), m(0.84));
+      ctx.fillStyle = '#546E7A';
+      ctx.beginPath();
+      ctx.moveTo(m(-6.2), -m(0.44));
+      ctx.lineTo(m(-6.4), -m(0.95));
+      ctx.lineTo(m(-5.4), -m(0.44));
+      ctx.moveTo(m(-6.2), m(0.44));
+      ctx.lineTo(m(-6.4), m(0.95));
+      ctx.lineTo(m(-5.4), m(0.44));
+      ctx.fill();
+    });
+    return true;
+  }
+  if (t.includes('uragan')) {
+    // BM-27 on ZIL-135LM: 8x8 in two widely spaced pairs, cab-over front, 16 x 220mm tubes
+    scaled(9.63, () => {
+      const ow = m(2.8) * WIDEN;
+      drawAxles(ctx, [3.2, 1.6, -1.6, -3.2], ow, 1.2, pal);
+      drawTruck(ctx, 9.63, 2.8, { len: 1.9 }, pal);
+      drawTubeBundle(ctx, -1.0, 5.6, 2.2, 6, '#FF8A65', -1);
+    });
+    return true;
+  }
+  if (t.includes('grad')) {
+    // BM-21 on Ural-375D: bonnet cab, 6x6 (front axle + rear tandem), 40 x 122mm tubes in four rows of ten
+    scaled(7.35, () => {
+      const ow = m(2.4) * WIDEN;
+      drawAxles(ctx, [2.5, -1.3, -2.7], ow, 1.1, pal);
+      drawTruck(ctx, 7.35, 2.4, { len: 1.5, bonnet: 1.1 }, pal);
+      drawTubeBundle(ctx, -1.4, 3.0, 1.9, 10, '#FF8A65', -1);
+    });
+    return true;
+  }
+  if (t.includes('calliope')) {
+    // T34 Calliope: 60-tube 4.5in rocket frame over the turret of an M4A3 Sherman
+    const sherman = TANK_PLANS.find((p) => p.match.test('usmc_armor_m4'));
+    if (sherman) drawTankPlan(ctx, sherman, pal);
+    scaled(5.84, () => {
+      drawTubeBundle(ctx, 0.6, 3.6, 2.5, 18, '#FFB300', 1);
+      // Elevating arm down to the gun mantlet
+      ctx.strokeStyle = '#90A4AE';
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(m(0.6), 0);
+      ctx.lineTo(m(2.4), 0);
+      ctx.stroke();
+    });
+    return true;
+  }
+  if (t.includes('m270') || t.includes('atacms') || t.includes('mlrs')) {
+    // M270: Bradley-derived chassis, armoured three-man cab forward, launcher-loader module with
+    // two pods aft (rocket pods: 6 tubes each; ATACMS: one missile per pod)
+    const atacms = t.includes('atacms');
+    const nuke = t.includes('nuclear');
+    scaled(6.85, () => {
+      const ow = m(2.97) * WIDEN;
+      const tw = m(0.53) * WIDEN;
+      drawTracks(ctx, m(6.85), ow, tw, pal);
+      const hw = ow - tw * 1.5;
+      hullPath(ctx, m(6.85), hw, 'glacis', m(0.7));
+      ctx.fillStyle = pal.hullFill;
+      ctx.strokeStyle = nuke ? '#FFAB00' : pal.hullStroke;
+      ctx.lineWidth = 1;
+      ctx.fill();
+      ctx.stroke();
+      // Cab
+      ctx.fillStyle = pal.turretFill;
+      ctx.beginPath();
+      ctx.roundRect(m(1.4), -hw / 2 + 0.3, m(1.8), hw - 0.6, 0.8);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(128, 222, 234, 0.45)';
+      for (const s of [-1, 1]) ctx.fillRect(m(3.0), s < 0 ? -hw * 0.4 : hw * 0.08, 0.8, hw * 0.32);
+      // Two pods side by side, muzzles aft in the travel position
+      for (const s of [-1, 1]) {
+        const y0 = s < 0 ? -hw / 2 + 0.4 : 0.3;
+        const pw = hw / 2 - 0.7;
+        ctx.fillStyle = nuke ? '#5D1F1F' : '#4E5B3A';
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+        ctx.lineWidth = 0.5;
+        ctx.fillRect(m(-3.2), y0, m(4.3), pw);
+        ctx.strokeRect(m(-3.2), y0, m(4.3), pw);
+        ctx.fillStyle = nuke ? '#FFEA00' : atacms ? '#FF8A65' : '#FFD54F';
+        if (atacms) {
+          ctx.beginPath();
+          ctx.arc(m(-3.2) + 1.4, y0 + pw / 2, pw * 0.34, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          for (let i = 0; i < 3; i++) {
+            ctx.beginPath();
+            ctx.arc(m(-3.2) + 1.0, y0 + (i + 0.5) * (pw / 3), pw / 7, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+    });
+    return true;
+  }
+  return false;
 }
