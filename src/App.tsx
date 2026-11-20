@@ -73,6 +73,7 @@ export default function App() {
   const [isArmamentOpen, setIsArmamentOpen] = useState<boolean>(false);
   const [isBattleLogOpen, setIsBattleLogOpen] = useState<boolean>(false);
   const [isMapOpen, setIsMapOpen] = useState<boolean>(false);
+  const [radarLayerOn, setRadarLayerOn] = useState<boolean>(false);
   const [isDockyardOpen, setIsDockyardOpen] = useState<boolean>(false);
   const [isGameOverOpen, setIsGameOverOpen] = useState<boolean>(false);
   const [isVictory, setIsVictory] = useState<boolean>(false);
@@ -404,6 +405,7 @@ export default function App() {
         onSelectUnits={(ids) => setSelectedUnitIds(ids)}
         onToggleMap={() => setIsMapOpen((prev) => !prev)}
         onTogglePause={handleTogglePause}
+        onRadarLayerChange={setRadarLayerOn}
         onCycleSpeed={handleCycleSpeed}
         externalCameraTarget={externalCameraTarget}
         onClearCameraTarget={() => setExternalCameraTarget(null)}
@@ -485,6 +487,11 @@ export default function App() {
         score={score}
         onOpenBriefing={() => setIsBriefingOpen(true)}
         onOpenMap={() => setIsMapOpen(true)}
+        radarLayerOn={radarLayerOn}
+        onToggleRadarLayer={() => {
+          engine.showRadarCoverage = !engine.showRadarCoverage;
+          setRadarLayerOn(engine.showRadarCoverage);
+        }}
         onOpenDockyard={() => setIsDockyardOpen(true)}
         onOpenAirPrep={() => setIsAirPrepOpen(true)}
         onOpenArmament={() => setIsArmamentOpen(true)}

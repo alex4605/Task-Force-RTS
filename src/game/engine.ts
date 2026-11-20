@@ -43,7 +43,7 @@ import { getShipAshmFit, getShipSamSystem } from './navalMissileSalvos';
 import { applyHistoricalGuns, bombSpec, bombsPerRelease, burstBullets, getGunBattery, rocketKind, rocketsPerSalvo, ROCKETS, roundsPerBurst, warheadVsGround, warheadVsInstallation, warheadVsShip } from './aircraftArmament';
 import { getTerrainMap, TERRAIN_NAMES, TerrainMap } from './terrain/terrainMap';
 import { requiredDepth, SUBMERGED_MIN_DEPTH_M } from './naval/draft';
-import { aircraftSensor, installationRadarKm, RadarSensor, sensorDetects, shipRadarKm, TRACK_MEMORY_S, visualDetects } from './radar';
+import { aircraftSensor, highCoverageRadius, installationRadarKm, lowCoveragePolygon, RadarSensor, sensorDetects, shipRadarKm, TRACK_MEMORY_S, visualDetects } from './radar';
 import { hasLineOfSight as hasLineOfSightAt } from './terrain/combat';
 import { canEngageGround, canSeeAircraft, coastalReach, concealment, findGroundPath, reverseSlopeFactor } from './terrain/combat';
 import { groundSilhouetteClass } from './unitPreviewRenderer';
@@ -120,6 +120,19 @@ import {
 } from './procedural';
 import { NavalNavigationGrid, computeShipSeparationSteering } from './navigation';
 import { soundEngine } from './audio';
+
+/** One radar's coverage for the overlay (engine.getRadarCoverage). */
+export interface RadarCoverage {
+  pos: Vector2D;
+  enemy: boolean;
+  airborne: boolean;
+  /** Low-level coverage outline (viewshed). */
+  low: Vector2D[];
+  /** High-altitude detection radius. */
+  highRadius: number;
+  rangeKm: number;
+  label: string;
+}
 
 export interface BattleAlertBanner {
   id: string;
@@ -3000,23 +3013,18 @@ export class GameEngine {
     const friendly = (side: ShipSide) => side === 'player' || side === 'allied';
 
     const sensorsFor = (enemySide: boolean): { radars: RadarSensor[]; eyes: Vector2D[]; airEyes: Vector2D[] } => {
-      const radars: RadarSensor[] = [];
+      const radars = this.radarSensorsOf(enemySide).map((r) => r.sensor);
       const eyes: Vector2D[] = [];
       const airEyes: Vector2D[] = [];
       const ships = enemySide ? this.enemyShips : [...this.playerShips, ...this.alliedShips];
       for (const s of ships) {
-        if (s.isSunk) continue;
-        if (!this.isSubmarine(s) || s.isSnorkeling) eyes.push(s.pos);
-        const km = shipRadarKm(s, this.era);
-        if (km > 0) radars.push({ pos: s.pos, heightM: 25 + s.length * 0.08, rangeKm: km, lookDown: false, airborne: false });
+        if (!s.isSunk && (!this.isSubmarine(s) || s.isSnorkeling)) eyes.push(s.pos);
       }
       for (const isl of this.islands) {
         for (const inst of isl.installations) {
           if (inst.isDestroyed || inst.isCivilian) continue;
           if ((inst.side === 'enemy') !== enemySide || (!enemySide && !friendly(inst.side))) continue;
           eyes.push(inst.pos);
-          const km = installationRadarKm(inst, this.era);
-          if (km > 0) radars.push({ pos: inst.pos, heightM: map.elevationAt(inst.pos.x, inst.pos.y) * 1500 + 20, rangeKm: km, lookDown: false, airborne: false });
         }
       }
       for (const u of this.groundUnits) {
@@ -3026,8 +3034,6 @@ export class GameEngine {
       for (const a of this.aircraft) {
         if (a.state === 'shot_down' || (a.side === 'enemy') !== enemySide) continue;
         airEyes.push(a.pos);
-        const r = aircraftSensor(a);
-        if (r) radars.push(r);
       }
       return { radars, eyes, airEyes };
     };
@@ -3070,6 +3076,68 @@ export class GameEngine {
         text: `📡【早期預警】雷達於方位 ${String(bearing).padStart(3, '0')}°、距艦隊 ${rangeU}m 處捕獲 ${newRaid.length} 架敵機回波 (${[...new Set(newRaid.map((p) => p.model.toUpperCase()))].join(' / ')})，請派遣戰鬥空中巡邏攔截！`,
       });
     }
+  }
+
+  /**
+   * Every radar of one side: warships' air search, ground / SAM / flak / GCI radars, AEW and
+   * fighter radars. With `knownOnly`, enemy aircraft radars are listed only while tracked
+   * (what the player can know of the enemy's coverage).
+   */
+  private radarSensorsOf(enemySide: boolean, knownOnly = false): { sensor: RadarSensor; label: string }[] {
+    const map = this.terrain;
+    const out: { sensor: RadarSensor; label: string }[] = [];
+    const ships = enemySide ? this.enemyShips : [...this.playerShips, ...this.alliedShips];
+    for (const s of ships) {
+      if (s.isSunk) continue;
+      const km = shipRadarKm(s, this.era);
+      if (km > 0) out.push({ sensor: { pos: s.pos, heightM: 25 + s.length * 0.08, rangeKm: km, lookDown: false, airborne: false }, label: s.name });
+    }
+    for (const isl of this.islands) {
+      for (const inst of isl.installations) {
+        if (inst.isDestroyed || inst.isCivilian) continue;
+        const isEnemy = inst.side === 'enemy';
+        if (isEnemy !== enemySide || (!enemySide && inst.side !== 'player' && inst.side !== 'allied')) continue;
+        const km = installationRadarKm(inst, this.era);
+        if (km > 0) out.push({ sensor: { pos: inst.pos, heightM: map.elevationAt(inst.pos.x, inst.pos.y) * 1500 + 20, rangeKm: km, lookDown: false, airborne: false }, label: inst.name });
+      }
+    }
+    for (const a of this.aircraft) {
+      if (a.state === 'shot_down' || (a.side === 'enemy') !== enemySide) continue;
+      if (knownOnly && enemySide && !this.isAirTracked(a)) continue;
+      const r = aircraftSensor(a);
+      if (r) out.push({ sensor: r, label: a.name });
+    }
+    return out;
+  }
+
+  /** Radar coverage overlay (toggled with R): see getRadarCoverage. */
+  public showRadarCoverage = false;
+  private coverageCache: { at: number; data: RadarCoverage[] } = { at: -1, data: [] };
+  private coverageShapes = new Map<string, Vector2D[]>();
+
+  /**
+   * Low-level coverage polygons (terrain shadows and radar horizon against a strike at ~300 m)
+   * and high-altitude rings of the player's radars and of the enemy radars the player knows of.
+   * Recomputed at most once a second; static sites' viewsheds are cached.
+   */
+  public getRadarCoverage(): RadarCoverage[] {
+    if (this.coverageCache.at >= 0 && this.gameTime - this.coverageCache.at < 1) return this.coverageCache.data;
+    const map = this.terrain;
+    const data: RadarCoverage[] = [];
+    for (const [enemy, list] of [[false, this.radarSensorsOf(false)], [true, this.radarSensorsOf(true, true)]] as const) {
+      for (const { sensor, label } of list) {
+        const key = `${Math.round(sensor.pos.x / 60)},${Math.round(sensor.pos.y / 60)},${sensor.rangeKm},${sensor.airborne ? Math.round(sensor.heightM / 500) : 0}`;
+        let low = this.coverageShapes.get(key);
+        if (!low) {
+          low = lowCoveragePolygon(map, sensor);
+          if (this.coverageShapes.size > 600) this.coverageShapes.clear();
+          this.coverageShapes.set(key, low);
+        }
+        data.push({ pos: { ...sensor.pos }, enemy, airborne: sensor.airborne, low, highRadius: highCoverageRadius(sensor), rangeKm: sensor.rangeKm, label });
+      }
+    }
+    this.coverageCache = { at: this.gameTime, data };
+    return data;
   }
 
   private updateAircraft(dt: number) {
@@ -3628,7 +3696,7 @@ export class GameEngine {
       plane.hitAndRunStage = 'ingress';
       plane.speed = plane.maxSpeed;
       // Re-target nearest hostile aircraft or naval ship to begin next slashing pass
-      const nextTarget = this.aircraft.find((a) => this.isHostile(plane.side, a.side) && a.state !== 'shot_down');
+      const nextTarget = this.aircraft.find((a) => this.isHostile(plane.side, a.side) && a.state !== 'shot_down' && this.isAirTrackedBy(a, plane.side));
       if (nextTarget) {
         plane.order = { type: 'attack', targetPos: nextTarget.pos, targetId: nextTarget.id };
       } else {
@@ -3684,7 +3752,7 @@ export class GameEngine {
 
     let targetEntity =
       (canSeeShipTarget ? rawShipTarget : undefined) ||
-      this.aircraft.find((a) => a.id === plane.order.targetId && a.state !== 'shot_down' && this.isHostile(plane.side, a.side)) ||
+      this.aircraft.find((a) => a.id === plane.order.targetId && a.state !== 'shot_down' && this.isHostile(plane.side, a.side) && this.isAirTrackedBy(a, plane.side)) ||
       (() => {
         const inst = this.findTargetInstallation(plane.order.targetId || '');
         return inst && this.isHostile(plane.side, inst.side) ? inst : null;
@@ -3711,6 +3779,13 @@ export class GameEngine {
       plane.model === 'ka27';
 
     if (plane.order.targetId && !targetEntity) {
+      // An air target that slipped out of the air picture: search where it was last seen
+      const lostAir = this.aircraft.find((a) => a.id === plane.order.targetId && a.state !== 'shot_down');
+      if (lostAir && plane.role === 'fighter') {
+        plane.order = { type: 'patrol', patrolOrigin: { ...(plane.order.targetPos ?? plane.pos) } };
+        plane.state = 'patrolling';
+        return true;
+      }
       if (isAswPlane && plane.hasPayload) {
         plane.order = { type: 'patrol', patrolOrigin: plane.order.patrolOrigin || { ...plane.pos } };
         plane.state = 'patrolling';
@@ -7516,8 +7591,9 @@ export class GameEngine {
 
     if (this.enemyDcaCooldown <= 0 && (enemyCarrier || enemyAirfield)) {
       const threatBasePos = enemyCarrier ? enemyCarrier.pos : enemyAirfield!.pos;
+      // DCA launches on what the defenders' radar (GCI) reports
       const incomingBomber = this.aircraft.find(
-        (a) => a.side === 'player' && a.state !== 'shot_down' &&
+        (a) => a.side === 'player' && a.state !== 'shot_down' && this.isAirTrackedBy(a, 'enemy') &&
           (a.role === 'dive_bomber' || a.role === 'torpedo_bomber' || a.role === 'level_bomber') &&
           dist(a.pos, threatBasePos) < 3600
       );
@@ -7529,7 +7605,7 @@ export class GameEngine {
 
     if (this.enemyScrambleCooldown <= 0 && enemyAirfield) {
       const nearPlanes = this.aircraft.find(
-        (a) => a.side === 'player' && a.state !== 'shot_down' && dist(a.pos, enemyAirfield.pos) < 2400
+        (a) => a.side === 'player' && a.state !== 'shot_down' && this.isAirTrackedBy(a, 'enemy') && dist(a.pos, enemyAirfield.pos) < 2400
       );
       if (nearPlanes) {
         this.triggerEnemyAirDoctrine('scramble');
@@ -9171,7 +9247,7 @@ export class GameEngine {
     } else if (targetEntity && targetEntity.id) {
       targetId = targetEntity.id;
     } else {
-      const hostilePlanes = this.aircraft.filter((a) => this.isHostile(plane.side, a.side) && a.state !== 'shot_down');
+      const hostilePlanes = this.aircraft.filter((a) => this.isHostile(plane.side, a.side) && a.state !== 'shot_down' && this.isAirTrackedBy(a, plane.side));
       const nearest = hostilePlanes.reduce<{ p: Aircraft | null; d: number }>(
         (acc, p) => {
           const dst = dist(plane.pos, p.pos);
@@ -11412,7 +11488,7 @@ export class GameEngine {
           } else {
             // 攔截進入防空圈之敵方在空戰機
             const targetPlayerPlanes = this.aircraft.filter(
-              (a) => this.isHostile(eShip.side, a.side) && a.state !== 'shot_down' && dist(eShip.pos, a.pos) <= samRange
+              (a) => this.isHostile(eShip.side, a.side) && a.state !== 'shot_down' && dist(eShip.pos, a.pos) <= samRange && this.aaCanSee(eShip.pos, a, 0.06)
             );
             if (targetPlayerPlanes.length > 0) {
               this.launchShipSamSalvo(eShip, targetPlayerPlanes, (a) => this.fireSovietShipSAM(eShip, a, samName), (a) => a.state !== 'shot_down');
@@ -15461,7 +15537,7 @@ export class GameEngine {
     const strikers = pool.filter((p) => p.role !== 'fighter');
     const pick = <T,>(list: T[]): T => list[Math.floor(Math.random() * list.length)];
 
-    const hostilePlanes = this.aircraft.filter((a) => this.isHostile('allied', a.side) && a.state !== 'shot_down');
+    const hostilePlanes = this.aircraft.filter((a) => this.isHostile('allied', a.side) && a.state !== 'shot_down' && this.isAirTrackedBy(a, 'allied'));
     const hostileShips = this.enemyShips.filter((s) => !s.isSunk);
     const hostileGround = this.groundUnits.filter((u) => this.isHostile('allied', u.side) && !u.isDestroyed);
     const fleetPos = this.getFlagship()?.pos ?? baseCenter;

@@ -13,6 +13,7 @@ import * as shipsRender from './render/ships';
 
 export type { Camera, OrderMarker } from './render/context';
 import type { Camera, OrderMarker } from './render/context';
+import type { RadarCoverage } from './engine';
 
 /**
  * Canvas renderer for the tactical map. Holds the shared RenderContext and delegates
@@ -44,6 +45,10 @@ export class VectorRenderer {
   }
 
   // Draw Islands
+  public drawRadarCoverage(coverage: RadarCoverage[], camera: Camera) {
+    overlaysRender.drawRadarCoverage(this.rc, coverage, camera);
+  }
+
   public drawIslands(islands: Island[], camera: Camera, worldSize = 14000) {
     islandsRender.drawIslands(this.rc, islands, camera, worldSize);
   }

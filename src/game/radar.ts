@@ -148,3 +148,47 @@ export function visualDetects(map: TerrainMap, from: Vector2D, plane: Aircraft, 
   if (d > gameRangeFromKm(VISUAL_KM)) return false;
   return airborne || canSeeAircraft(map, from, plane, 0.02);
 }
+
+/** Altitude used for the low-level coverage boundary (a strike run at ~300 m). */
+export const LOW_COVERAGE_ALTITUDE = 0.15;
+
+/**
+ * Low-level radar coverage as a polygon (viewshed): rays march out from the antenna keeping the
+ * steepest terrain slope met so far; the boundary on each ray is where an aircraft at
+ * LOW_COVERAGE_ALTITUDE would first drop into the terrain shadow or below the radar horizon.
+ * Airborne sensors are not terrain-limited.
+ */
+export function lowCoveragePolygon(map: TerrainMap, sensor: RadarSensor, rays = 72): Vector2D[] {
+  const hTarget = aircraftHeightM(LOW_COVERAGE_ALTITUDE);
+  const maxR = gameRangeFromKm(Math.min(sensor.rangeKm, radarHorizonKm(sensor.heightM, hTarget)));
+  const pts: Vector2D[] = [];
+  const eye = sensor.airborne ? Infinity : map.elevationAt(sensor.pos.x, sensor.pos.y) + 0.04;
+  const step = Math.max(40, maxR / 60);
+  for (let k = 0; k < rays; k++) {
+    const ang = (k / rays) * Math.PI * 2;
+    const cx = Math.cos(ang);
+    const cy = Math.sin(ang);
+    let reach = maxR;
+    if (isFinite(eye)) {
+      let maxSlope = -Infinity;
+      for (let d = step; d <= maxR; d += step) {
+        const x = sensor.pos.x + cx * d;
+        const y = sensor.pos.y + cy * d;
+        const ground = map.elevationAt(x, y);
+        const target = ground + 0.03 + LOW_COVERAGE_ALTITUDE * 0.35;
+        if ((target - eye) / d < maxSlope - 0.00002) {
+          reach = d;
+          break;
+        }
+        maxSlope = Math.max(maxSlope, (ground - eye) / d);
+      }
+    }
+    pts.push({ x: sensor.pos.x + cx * reach, y: sensor.pos.y + cy * reach });
+  }
+  return pts;
+}
+
+/** High-altitude detection radius (map units). */
+export function highCoverageRadius(sensor: RadarSensor): number {
+  return gameRangeFromKm(Math.min(sensor.rangeKm, radarHorizonKm(sensor.heightM, aircraftHeightM(0.8))));
+}

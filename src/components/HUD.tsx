@@ -79,6 +79,8 @@ interface HUDProps {
   score: GameScore;
   onOpenBriefing: () => void;
   onOpenMap: () => void;
+  radarLayerOn?: boolean;
+  onToggleRadarLayer?: () => void;
   onOpenDockyard: () => void;
   onOpenAirPrep: () => void;
   onOpenArmament: () => void;
@@ -240,6 +242,8 @@ export const HUD: React.FC<HUDProps> = ({
   score,
   onOpenBriefing,
   onOpenMap,
+  radarLayerOn,
+  onToggleRadarLayer,
   onOpenDockyard,
   onOpenAirPrep,
   onOpenArmament,
@@ -716,6 +720,17 @@ export const HUD: React.FC<HUDProps> = ({
           >
             <Sliders className="w-3.5 h-3.5 text-[#80DEEA]" />
             <span>機隊編制</span>
+          </button>
+
+          <button
+            onClick={onToggleRadarLayer}
+            className={`flex items-center gap-1.5 px-3 py-1 border rounded text-xs font-mono transition-colors ${
+              radarLayerOn ? 'bg-cyan-900/60 border-cyan-400 text-cyan-100' : 'bg-[#0B1E34] hover:bg-[#153252] border-[#1E3A5F] text-[#E0F7FA]'
+            }`}
+            title="顯示我方雷達與已知敵方雷達的覆蓋範圍：實線填色為低空 (~300m) 覆蓋含地形遮蔽，虛線圈為高空偵測距離"
+          >
+            <Radio className="w-3.5 h-3.5 text-[#80DEEA]" />
+            <span>雷達覆蓋 (R)</span>
           </button>
 
           <button

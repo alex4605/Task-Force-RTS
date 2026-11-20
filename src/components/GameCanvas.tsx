@@ -34,6 +34,8 @@ interface GameCanvasProps {
   onConfirmSonobuoyTarget?: (worldPos: Vector2D, keepActive?: boolean) => void;
   onCancelSonobuoy?: () => void;
   onTogglePause?: () => void;
+  /** Called when the R key toggles the radar coverage layer. */
+  onRadarLayerChange?: (on: boolean) => void;
   onCycleSpeed?: (delta: 1 | -1) => void;
 }
 
@@ -56,6 +58,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   onConfirmSonobuoyTarget,
   onCancelSonobuoy,
   onTogglePause,
+  onRadarLayerChange,
   onCycleSpeed,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -114,6 +117,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   onCancelSonobuoyRef.current = onCancelSonobuoy;
   const onTogglePauseRef = useRef(onTogglePause);
   onTogglePauseRef.current = onTogglePause;
+  const onRadarLayerChangeRef = useRef(onRadarLayerChange);
+  onRadarLayerChangeRef.current = onRadarLayerChange;
   const onCycleSpeedRef = useRef(onCycleSpeed);
   onCycleSpeedRef.current = onCycleSpeed;
   const onSelectUnitsRef = useRef(onSelectUnits);
@@ -284,6 +289,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       renderer.drawOcean(cameraRef.current, engine.worldSize, flagship ? flagship.pos : undefined);
       renderer.drawIslands(engine.islands, cameraRef.current, engine.worldSize);
       renderer.drawStrongholds(engine.islands, cameraRef.current);
+      if (engine.showRadarCoverage) renderer.drawRadarCoverage(engine.getRadarCoverage(), cameraRef.current);
       renderer.drawSonobuoys(engine.sonobuoys, cameraRef.current);
       renderer.drawShips(
         [...engine.playerShips, ...engine.enemyShips, ...(engine.alliedShips || [])],
@@ -836,6 +842,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         } else {
           engine.issueOrderToSelected({ type: 'rtb' });
         }
+      } else if (e.key === 'r' || e.key === 'R') {
+        // Radar coverage layer
+        engine.showRadarCoverage = !engine.showRadarCoverage;
+        onRadarLayerChangeRef.current?.(engine.showRadarCoverage);
       } else if (e.key === 'p' || e.key === 'P') {
         engine.issueOrderToSelected({ type: 'patrol' });
       } else if (e.key === 'u' || e.key === 'U') {
