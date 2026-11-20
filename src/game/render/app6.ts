@@ -22,7 +22,8 @@ export type App6Function =
   | 'rocket_artillery'
   | 'ssm'
   | 'air_defence_gun'
-  | 'air_defence_missile';
+  | 'air_defence_missile'
+  | 'special_forces';
 
 export type Echelon = 'team' | 'squad' | 'section' | 'platoon' | 'company' | 'battery' | 'battalion' | 'regiment' | 'brigade';
 export type Mobility = 'none' | 'tracked' | 'wheeled' | 'towed' | 'amphibious' | 'wheeled_tracked';
@@ -176,6 +177,14 @@ function drawIcon(ctx: CanvasRenderingContext2D, fn: App6Function, a: Affiliatio
     case 'recon':
       reconSlash();
       break;
+    case 'special_forces': {
+      // Special operations forces: "SF" in the frame
+      ctx.font = `bold ${Math.round(h * 1.15)}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('SF', 0, h * 0.05);
+      break;
+    }
     case 'engineer': {
       // Engineer: bridge-like "E" with three legs
       const ew = w * 0.55;
@@ -419,6 +428,43 @@ const EXPLICIT_FUNCTION: Record<string, App6Function> = {
   frg_gepard: 'air_defence_gun',
   frg_m109g: 'field_artillery',
   uk_milan_team: 'anti_armour',
+  sof_coastwatcher_42: 'recon',
+  sof_alamo_scouts_45: 'special_forces',
+  sof_udt_45: 'special_forces',
+  sof_ranger_50: 'special_forces',
+  sof_udt_50: 'special_forces',
+  sof_seal_65: 'special_forces',
+  sof_macv_sog_65: 'recon',
+  sof_force_recon_83: 'recon',
+  sof_seal_83: 'special_forces',
+  sof_ranger_83: 'special_forces',
+  opfor_ija_hmg_42: 'infantry',
+  opfor_ija_47mm_at: 'anti_armour',
+  opfor_ija_kami: 'armour',
+  opfor_ija_banzai_45: 'infantry',
+  opfor_pva_infantry_50: 'infantry',
+  opfor_zis3_76: 'field_artillery',
+  opfor_su76m: 'anti_armour_armoured',
+  opfor_vc_guerrilla_65: 'infantry',
+  opfor_rpg_team_65: 'anti_armour',
+  opfor_m46_130mm: 'field_artillery',
+  opfor_dshk_aa: 'air_defence_gun',
+  opfor_spetsnaz_83: 'special_forces',
+  opfor_bmd1: 'mech_infantry',
+  opfor_btr70: 'mech_infantry',
+  opfor_t64b: 'armour',
+  cw_bren_carrier: 'armoured_recon',
+  au_vickers_mg_45: 'infantry',
+  cw_churchill_50: 'armour',
+  gr_infantry_50: 'infantry',
+  fr_infantry_50: 'infantry',
+  th_cobra_67: 'infantry',
+  arvn_m48a3: 'armour',
+  au_sasr_66: 'special_forces',
+  nl_leopard1: 'armour',
+  nl_infantry_83: 'mech_infantry',
+  frg_luchs: 'armoured_recon',
+  uk_sas_83: 'special_forces',
 };
 
 const EXPLICIT_MOBILITY: Record<string, Mobility> = {
@@ -431,6 +477,19 @@ const EXPLICIT_MOBILITY: Record<string, Mobility> = {
   rok_m36: 'tracked',
   nz_l5_pack: 'towed',
   frg_gepard: 'tracked',
+  sof_udt_45: 'amphibious',
+  sof_udt_50: 'amphibious',
+  sof_seal_65: 'amphibious',
+  sof_force_recon_83: 'amphibious',
+  sof_seal_83: 'amphibious',
+  opfor_ija_47mm_at: 'towed',
+  opfor_ija_kami: 'amphibious',
+  opfor_zis3_76: 'towed',
+  opfor_su76m: 'tracked',
+  opfor_m46_130mm: 'towed',
+  opfor_dshk_aa: 'towed',
+  opfor_btr70: 'wheeled',
+  frg_luchs: 'wheeled',
   frg_m109g: 'tracked',
 };
 

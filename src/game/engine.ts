@@ -3,6 +3,8 @@ import { resolveGroundRequisition } from './groundRequisition';
 import { AlliedHost, AlliedOps } from './allied/alliedOps';
 import { fitsInHold, formatHold, holdUsed, shipHold } from './naval/lift';
 import { AwardKind, Bundle, Economy, MOBILISATION, award, costOf, formatBundle, incomeRate, nuclearCost } from './economy';
+import { CARRIER_ONLY_AIR } from './airRequisition';
+import { SOF_CAPTURE_BONUS, SOF_REVEAL_S, SOF_SABOTAGE_MULT, canSpotUnit, isSof, sofReconRange } from './sof';
 import { CasualtyLedger, Outcome, attritionOutcome, defeatOutcome, victoryOutcome } from './outcome';
 import { Escalation, STAGE_FLAVOUR, TIER_NAME, airEscalation, alliedEscalation, computeEscalation, ingressRoute } from './escalation';
 import { BuilderRequirement, BUILDER_RADIUS, builderRequirement, isEngineerType } from './construction';
@@ -256,6 +258,62 @@ export class GameEngine {
   }
 
   /** Terrain-aware engagement check (line of sight, high ground, concealment): terrain/combat.ts. */
+  /** Nearest hostile installation a special-forces team can reach with its demolition charges. */
+  private findSabotageTarget(unit: GroundUnit): Installation | null {
+    let best: Installation | null = null;
+    let bestD = unit.range * 1.1;
+    for (const isl of this.islands) {
+      for (const inst of isl.installations) {
+        if (inst.isDestroyed || inst.isCivilian || !this.isHostile(unit.side, inst.side)) continue;
+        const d = dist(unit.pos, inst.pos);
+        if (d < bestD) {
+          bestD = d;
+          best = inst;
+        }
+      }
+    }
+    return best;
+  }
+
+  /** A team that opens fire gives itself away for a few seconds; demolition hits hard. */
+  private onSofFired(unit: GroundUnit, projBefore: number): void {
+    unit.revealTimer = SOF_REVEAL_S;
+    if (!unit.sabotaging) return;
+    // Small-arms fire does nothing to concrete: the team places charges instead, which go off on
+    // the installation like a shell
+    for (let i = projBefore; i < this.projectiles.length; i++) {
+      const p = this.projectiles[i];
+      p.type = 'shell';
+      p.damage *= SOF_SABOTAGE_MULT;
+      p.blastRadius = Math.max(p.blastRadius, 18);
+      p.maxDistance = Math.hypot(p.targetPos.x - p.originPos.x, p.targetPos.y - p.originPos.y);
+      p.attackerName = `${unit.name} 【爆破破壞】`;
+    }
+  }
+
+  /**
+   * Special forces upkeep: reveal timers run down, and teams behind the lines report what they
+   * see — enemy ships off the coast and incoming air raids, the way the coastwatchers did.
+   */
+  private updateSof(dt: number): void {
+    for (const u of this.groundUnits) {
+      if (u.revealTimer) u.revealTimer = Math.max(0, u.revealTimer - dt);
+      if (u.isDestroyed || u.embarkedInShipId || u.side === 'enemy' || !isSof(u.type)) continue;
+      const r = sofReconRange(u.type);
+      for (const s of this.enemyShips) {
+        if (!s.isSunk && (!this.isSubmarine(s) || s.isSnorkeling) && dist(u.pos, s.pos) <= r.ships) s.isSpotted = true;
+      }
+      for (const a of this.aircraft) {
+        if (a.side === 'enemy' && a.state !== 'shot_down' && dist(u.pos, a.pos) <= r.air) a.trackedByPlayer = Math.max(a.trackedByPlayer ?? 0, 8);
+      }
+    }
+  }
+
+  /** Whether an observer can find this unit at all (special forces stay hidden until close or firing). */
+  private canSpotGround(observer: Vector2D, u: GroundUnit): boolean {
+    return canSpotUnit(observer, u, concealment(this.terrain, u.pos));
+  }
+
   private canEngageGroundAt(from: Vector2D, range: number, to: Vector2D, indirect: boolean): boolean {
     // Cheap reject first: terrain can extend reach by at most 25% (high ground)
     const dx = to.x - from.x;
@@ -2444,6 +2502,7 @@ export class GameEngine {
     this.updateEra3Mechanics(effectiveDt);
     this.updateEra4Mechanics(effectiveDt);
     this.updateEra5Mechanics(effectiveDt);
+    this.updateSof(effectiveDt);
     this.updateAntiShipMissilePointDefense(effectiveDt);
     this.updateModernNavalGunAA(effectiveDt);
     this.updateLifeRaftRescue(effectiveDt);
@@ -8034,7 +8093,7 @@ export class GameEngine {
 
             const groundTarget = !shipTarget
               ? this.groundUnits
-                  .filter((u) => !u.isDestroyed && !u.embarkedInShipId && this.isHostile(inst.side, u.side) && this.canEngageGroundAt(inst.pos, inst.range, u.pos, inst.type === 'towed_artillery'))
+                  .filter((u) => !u.isDestroyed && !u.embarkedInShipId && this.isHostile(inst.side, u.side) && this.canSpotGround(inst.pos, u) && this.canEngageGroundAt(inst.pos, inst.range, u.pos, inst.type === 'towed_artillery'))
                   .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0]
               : undefined;
 
@@ -8111,7 +8170,7 @@ export class GameEngine {
           )
           .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
         const groundTarget = !shipTarget
-          ? this.groundUnits.find((u) => this.isHostile(inst.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && this.canEngageGroundAt(inst.pos, inst.range, u.pos, inst.type === 'towed_artillery'))
+          ? this.groundUnits.find((u) => this.isHostile(inst.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && this.canSpotGround(inst.pos, u) && this.canEngageGroundAt(inst.pos, inst.range, u.pos, inst.type === 'towed_artillery'))
           : null;
         const targetPos = shipTarget ? shipTarget.pos : groundTarget ? groundTarget.pos : null;
 
@@ -8598,11 +8657,16 @@ export class GameEngine {
       }
 
       // Combat Behavior
+      const cooldownBefore = unit.cooldown;
+      const projBefore = this.projectiles.length;
+      let handled = false;
       if (unit.side === 'player' || unit.side === 'allied') {
-        if (this.updateFriendlyGroundCombat(unit)) continue;
+        handled = this.updateFriendlyGroundCombat(unit);
       } else {
         this.updateEnemyGroundCombat(dt, unit);
       }
+      if (unit.cooldown > cooldownBefore + 0.01 && isSof(unit.type)) this.onSofFired(unit, projBefore);
+      if (handled) continue;
     }
 
     // 3. 跨時代長程火箭/戰術飛彈與自走砲自動反砲擊雷達聯動 (Era 2-5 Long-Range MLRS/SSM & SPG Counter-Battery)
@@ -8619,6 +8683,7 @@ export class GameEngine {
       unit.type === 'opfor_ks19_heavy' ||
       unit.type === 'opfor_zsu23_shilka' ||
       unit.type === 'opfor_zu23_aa' ||
+      unit.type === 'opfor_dshk_aa' ||
       unit.type === 'opfor_zsu57_2' ||
       unit.type === 'opfor_btr_zd' ||
       unit.type === 'opfor_tunguska';
@@ -8631,6 +8696,8 @@ export class GameEngine {
           ? 1700
           : unit.type === 'opfor_s60_flak'
           ? 1550
+          : unit.type === 'opfor_dshk_aa'
+          ? 1000
           : 1400;
       const targetPlane = this.aircraft.find(
         (a) => this.isHostile(unit.side, a.side) && a.state !== 'shot_down' && dist(unit.pos, a.pos) <= aaRange && this.aaCanSee(unit.pos, a)
@@ -8648,13 +8715,14 @@ export class GameEngine {
         this.isHostile(unit.side, u.side) &&
         !u.isDestroyed &&
         !u.embarkedInShipId &&
+        this.canSpotGround(unit.pos, u) &&
         (unit.isBanzaiCharging ? dist(unit.pos, u.pos) <= 1200 : this.canEngageGroundAt(unit.pos, unit.range, u.pos, indirectFire))
     );
 
     // 局部反突擊判定: 若同一島嶼或1600m內有美軍或盟軍登陸部隊，敵機動部隊主動逼近
     const nearbyLandingForce = !targetGround
       ? this.groundUnits.find(
-          (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && dist(unit.pos, u.pos) <= 1600
+          (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && dist(unit.pos, u.pos) <= 1600 && this.canSpotGround(unit.pos, u)
         )
       : null;
 
@@ -8918,9 +8986,14 @@ export class GameEngine {
 
     const indirectFire = this.isIndirectFire(unit);
     const enemyGround = this.groundUnits.find(
-      (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && this.canEngageGroundAt(unit.pos, unit.range, u.pos, indirectFire)
+      (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && this.canSpotGround(unit.pos, u) && this.canEngageGroundAt(unit.pos, unit.range, u.pos, indirectFire)
     );
-    if (enemyGround) {
+    // Special forces: demolition parties go for the installations first
+    const sabotage = isSof(unit.type) ? this.findSabotageTarget(unit) : null;
+    unit.sabotaging = Boolean(sabotage);
+    if (sabotage) {
+      targetPos = sabotage.pos;
+    } else if (enemyGround) {
       targetPos = enemyGround.pos;
       targetUnit = enemyGround;
     } else {
@@ -9263,7 +9336,7 @@ export class GameEngine {
         // 3. CP 佔領推進判定 (Capture Progress)
         if (friendlyTroopsNearCP.length > 0 && hostileDefenders.length === 0) {
           // Progress advances based on number of troops in zone
-          const captureSpeed = 7 + friendlyTroopsNearCP.length * 3.5;
+          const captureSpeed = 7 + friendlyTroopsNearCP.length * 3.5 + (friendlyTroopsNearCP.some((u) => isSof(u.type)) ? SOF_CAPTURE_BONUS : 0);
           sh.captureProgress = Math.min(100, sh.captureProgress + dt * captureSpeed);
 
           if (sh.captureProgress >= 100) {
@@ -10716,8 +10789,9 @@ export class GameEngine {
     if (item.typeTag === 'fighter_pool') {
       const fighterModel = this.era === 'era1' ? 'f4f' : this.era === 'era2' ? 'f6f' : this.era === 'era3' ? 'f9f' : 'f4b';
       const landFighter = this.era === 'era1' ? 'p40' : this.era === 'era2' ? 'p51' : this.era === 'era3' ? 'f86' : 'f4e';
-      this.airbasePlanes[fighterModel] = (this.airbasePlanes[fighterModel] || 0) + 4;
-      this.airbasePlanes[landFighter] = (this.airbasePlanes[landFighter] || 0) + 4;
+      // Two carrier and two land-based fighters: the card's "+4" in all, priced like the others
+      this.airbasePlanes[fighterModel] = (this.airbasePlanes[fighterModel] || 0) + 2;
+      this.airbasePlanes[landFighter] = (this.airbasePlanes[landFighter] || 0) + 2;
     } else if (item.typeTag === 'air_f4j') {
       this.airbasePlanes.f4j = (this.airbasePlanes.f4j || 0) + 4;
     } else if (item.typeTag === 'air_f8') {
@@ -10835,6 +10909,15 @@ export class GameEngine {
       this.airbasePlanes.f111 = (this.airbasePlanes.f111 || 0) + 4;
     } else if (item.typeTag === 'air_c130') {
       this.airbasePlanes.c130 = (this.airbasePlanes.c130 || 0) + 2;
+    } else if (item.typeTag.startsWith('air_')) {
+      // Cards generated for the rest of the order of battle (airRequisition.ts)
+      const model = item.typeTag.slice(4) as AircraftModel;
+      const n = item.airCount ?? 4;
+      if (CARRIER_ONLY_AIR.has(model) && flagship?.carrierPlanes) {
+        flagship.carrierPlanes.ready[model] = (flagship.carrierPlanes.ready[model] || 0) + n;
+      } else {
+        this.airbasePlanes[model] = (this.airbasePlanes[model] || 0) + n;
+      }
     }
 
     this.addBannerAlert(`✈️【機隊補充】「${item.name}」已進駐起始前進基地航空庫存！`, 'player', 'capture', 5.0);
@@ -15607,7 +15690,7 @@ export class GameEngine {
             x: spawnBase.x + (Math.random() - 0.5) * 40,
             y: spawnBase.y + (Math.random() - 0.5) * 40,
           }),
-          createGroundUnit(`opfor-wave-tank-${ts}`, 'opfor_t34_85', 'PAVN 202nd Armored Regt T-54 (主力戰車排)', 'enemy', 'era4', {
+          createGroundUnit(`opfor-wave-tank-${ts}`, 'opfor_t54_tank', 'PAVN 202nd Armored Regt T-54 (主力戰車排)', 'enemy', 'era4', {
             x: spawnBase.x - 30 + (Math.random() - 0.5) * 40,
             y: spawnBase.y - 20 + (Math.random() - 0.5) * 40,
           }),
@@ -15627,8 +15710,22 @@ export class GameEngine {
           }),
         ];
 
+    // One more element from the era's wider order of battle
+    const extraPool: [GroundUnitType, string][] = isEra5
+      ? [['opfor_t64b', '蘇軍第20近衛集團軍 T-64B 戰車排'], ['opfor_btr70', '蘇軍摩步 BTR-70 裝甲運兵排'], ['opfor_bmd1', '蘇軍第103近衛空降師 BMD-1 傘兵戰車排'], ['opfor_spetsnaz_83', 'GRU 特種偵察排 (Spetsnaz)']]
+      : isEra4
+      ? [['opfor_vc_guerrilla_65', '越共第9師 地方游擊隊'], ['opfor_rpg_team_65', 'PAVN B-40/B-41 火箭筒組'], ['opfor_dshk_aa', 'PAVN DShK 12.7mm 防空機槍組']]
+      : [['opfor_pva_infantry_50', '中國人民志願軍第39軍 步兵排'], ['opfor_su76m', 'KPA SU-76M 自走突擊砲排'], ['opfor_zis3_76', 'KPA ZiS-3 76mm 加農砲連']];
+    const [extraType, extraName] = extraPool[Math.floor(Math.random() * extraPool.length)];
+    waveUnits.push(
+      createGroundUnit(`opfor-wave-x-${ts}`, extraType, extraName, 'enemy', this.era, {
+        x: spawnBase.x - 50 + (Math.random() - 0.5) * 40,
+        y: spawnBase.y + 50 + (Math.random() - 0.5) * 40,
+      })
+    );
+
     if (Math.random() < 0.5) {
-      const opforSpgType: GroundUnitType = isEra5 ? 'opfor_2s19' : isEra4 ? 'opfor_2s3' : 'opfor_su100';
+      const opforSpgType: GroundUnitType = isEra5 ? 'opfor_2s19' : isEra4 ? (Math.random() < 0.5 ? 'opfor_m46_130mm' : 'opfor_2s3') : 'opfor_su100';
       const opforSpgName = isEra5
         ? '蘇聯 2S19 Msta-S 152mm 自走榴彈砲 (反砲擊群)'
         : isEra4
@@ -18978,7 +19075,8 @@ export class GameEngine {
         this.isHostile(plane.side, u.side) &&
         !u.isDestroyed &&
         !u.embarkedInShipId &&
-        dist(plane.pos, u.pos) <= Math.max(700, searchRadius * concealment(this.terrain, u.pos))
+        dist(plane.pos, u.pos) <= Math.max(700, searchRadius * concealment(this.terrain, u.pos)) &&
+        this.canSpotGround(plane.pos, u)
     );
 
     // 2. 活體敵方防禦工事 (排除平民定居點，且與本機敵對)

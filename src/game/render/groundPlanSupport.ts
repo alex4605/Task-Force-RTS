@@ -92,6 +92,16 @@ export const SUPPORT_PLANS: SupportPlan[] = [
   { match: /m36/, L: 5.88, W: 3.05, track: 0.42, nose: 'glacis', noseLen: 0.9, engine: { len: 1.9, at: 'rear' }, mount: { x: 0.1, len: 2.6, wid: 2.5, kind: 'open', shape: 'cast', bustle: 0.5 }, guns: [{ y: 0, len: 5.2, bore: 90, brake: 'double' }] },
   // Flakpanzer Gepard: Leopard 1 hull, big turret with a 35mm KDA either side, search radar on the turret rear, tracking radar in front
   { match: /gepard/, L: 7.68, W: 3.27, track: 0.55, nose: 'glacis', noseLen: 1.0, engine: { len: 2.2, at: 'rear' }, mount: { x: -0.2, len: 3.0, wid: 2.5, kind: 'turret', shape: 'box' }, guns: [{ y: -1.15, len: 4.6, bore: 35, brake: 'single' }, { y: 1.15, len: 4.6, bore: 35, brake: 'single' }], radars: [{ x: -1.3, y: 0, r: 0.75, kind: 'bar' }, { x: 1.2, y: 0, r: 0.45, kind: 'dish' }] },
+  // Universal (Bren) Carrier: small open tracked box, Bren on the left front
+  { match: /bren_carrier/, L: 3.65, W: 2.06, track: 0.32, nose: 'flat', noseLen: 0.3, engine: { len: 0.9, at: 'rear' }, mount: { x: 0.5, len: 1.4, wid: 1.6, kind: 'open', shape: 'box' }, guns: [{ y: -0.4, len: 1.2, bore: 8 }] },
+  // Luchs 8x8: boat hull, small turret with the 20mm Rh 202
+  { match: /luchs/, L: 7.74, W: 2.98, track: 0, axles: 4, nose: 'glacis', noseLen: 0.9, engine: { len: 1.6, at: 'rear' }, mount: { x: 0.6, len: 1.7, wid: 1.7, kind: 'turret', shape: 'dome' }, guns: [{ y: 0, len: 2.4, bore: 20 }], amphib: true },
+  // BTR-70: 8x8 boat hull, small KPVT turret forward
+  { match: /btr70/, L: 7.54, W: 2.8, track: 0, axles: 4, nose: 'glacis', noseLen: 1.1, engine: { len: 1.8, at: 'rear' }, mount: { x: 1.0, len: 1.2, wid: 1.2, kind: 'turret', shape: 'dome' }, guns: [{ y: 0, len: 1.7, bore: 14.5 }], amphib: true },
+  // BMD-1: small air-droppable hull, BMP-1 turret with the 73mm Grom and a Malyutka rail
+  { match: /bmd/, L: 5.4, W: 2.63, track: 0.3, nose: 'glacis', noseLen: 1.0, engine: { len: 1.5, at: 'rear' }, mount: { x: 0.6, len: 1.9, wid: 1.9, kind: 'turret', shape: 'dome' }, guns: [{ y: 0, len: 1.4, bore: 73 }], missiles: { count: 1, len: 0.9, groups: [0], gap: 0, x: 0.9 }, amphib: true },
+  // SU-76M: open fighting compartment at the rear, 76mm with a double-baffle brake
+  { match: /su76/, L: 5.0, W: 2.74, track: 0.3, nose: 'glacis', noseLen: 0.7, engine: { len: 1.2, at: 'front_right' }, mount: { x: -0.9, len: 2.2, wid: 2.4, kind: 'open', shape: 'box' }, guns: [{ y: 0, len: 3.6, bore: 76, brake: 'double' }] },
   // ── Self-propelled artillery ──
   // M7 Priest: open box on the M3/M4 chassis, 105mm offset right, the "pulpit" at right front
   { match: /priest/, L: 6.02, W: 2.87, track: 0.42, nose: 'round', noseLen: 0.8, engine: { len: 1.6, at: 'rear' }, mount: { x: 0.2, len: 2.9, wid: 2.5, kind: 'open' }, guns: [{ y: 0.3, len: 3.4, bore: 105 }], pulpit: { x: 1.4, y: 0.95 } },

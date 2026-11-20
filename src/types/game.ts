@@ -142,6 +142,43 @@ export type GroundUnitType =
   | 'nz_l5_pack'            // 時代四 紐西蘭皇家砲兵第161砲兵連 L5 105mm 山砲
   | 'frg_gepard'            // 時代五 西德獵豹式 35mm 自走防空砲 (Flakpanzer Gepard)
   | 'frg_m109g'             // 時代五 西德 M109G 155mm 自走榴彈砲連
+  | 'sof_coastwatcher_42'     // 時代一 SOF 澳紐海岸監視員偵搜組 (費迪南行動 · 無線電預警)
+  | 'sof_alamo_scouts_45'     // 時代二 SOF 第6軍阿拉莫偵察隊 (卡巴納圖安突襲)
+  | 'sof_udt_45'              // 時代二 SOF 海軍水下爆破隊 UDT (灘頭障礙爆破)
+  | 'sof_ranger_50'           // 時代三 SOF 第8軍遊騎兵連 (滲透突擊)
+  | 'sof_udt_50'              // 時代三 SOF UDT-1 水下爆破隊 (韓國海岸鐵路爆破)
+  | 'sof_seal_65'             // 時代四 SOF 海豹第一分隊 (湄公河三角洲)
+  | 'sof_macv_sog_65'         // 時代四 SOF MACV-SOG 跨境偵察小組 (RT)
+  | 'sof_force_recon_83'      // 時代五 SOF 陸戰隊武裝偵察排 (Force Recon)
+  | 'sof_seal_83'             // 時代五 SOF 海豹第四分隊 (格瑞那達)
+  | 'sof_ranger_83'           // 時代五 SOF 第75遊騎兵團排 (緊急狂怒行動)
+  | 'opfor_ija_hmg_42'        // 時代一/二 日軍九二式重機槍隊
+  | 'opfor_ija_47mm_at'       // 時代一/二 日軍一式機動四十七粍速射砲
+  | 'opfor_ija_kami'          // 時代一/二 特二式內火艇「カミ」水陸戰車
+  | 'opfor_ija_banzai_45'     // 時代二 日軍挺身斬込隊 (刺突爆雷)
+  | 'opfor_pva_infantry_50'   // 時代三 中國人民志願軍步兵排 (棉衣 · 衝鋒號)
+  | 'opfor_zis3_76'           // 時代三 ZiS-3 76mm 師屬加農砲連
+  | 'opfor_su76m'             // 時代三 SU-76M 自走突擊砲排
+  | 'opfor_vc_guerrilla_65'   // 時代四 越共地方游擊隊 (黑衣 · 斗笠)
+  | 'opfor_rpg_team_65'       // 時代四 北越 B-40/B-41 火箭筒組
+  | 'opfor_m46_130mm'         // 時代四 M-46 130mm 加農砲連 (射程壓制美軍砲兵)
+  | 'opfor_dshk_aa'           // 時代四 DShK 12.7mm 防空機槍陣地
+  | 'opfor_spetsnaz_83'       // 時代五 蘇軍 GRU 特種偵察排 (Spetsnaz)
+  | 'opfor_bmd1'              // 時代五 蘇軍空降兵 BMD-1 傘兵戰車排
+  | 'opfor_btr70'             // 時代五 蘇軍摩步 BTR-70 輪型裝甲運兵車排
+  | 'opfor_t64b'              // 時代五 蘇軍 T-64B 主力戰車排
+  | 'cw_bren_carrier'         // 時代一至三 大英國協通用載具 (布倫機槍運載車)
+  | 'au_vickers_mg_45'        // 時代二 澳軍維克斯重機槍排
+  | 'cw_churchill_50'         // 時代三 第7皇家坦克團 邱吉爾鱷魚戰車排
+  | 'gr_infantry_50'          // 時代三 希臘遠征軍斯巴達營步兵排
+  | 'fr_infantry_50'          // 時代三 法國營步兵排 (砥平里)
+  | 'th_cobra_67'             // 時代四 泰國皇家志願團「女王眼鏡蛇」排
+  | 'arvn_m48a3'              // 時代四 越南共和國陸軍 M48A3 戰車排 (第20戰車團)
+  | 'au_sasr_66'              // 時代四 澳洲特種空勤團巡邏隊 (SASR)
+  | 'nl_leopard1'             // 時代五 荷蘭第1軍 豹1V 戰車排
+  | 'nl_infantry_83'          // 時代五 荷蘭第1軍 機械化步兵排
+  | 'frg_luchs'               // 時代五 西德山貓式 8x8 裝甲偵察車
+  | 'uk_sas_83'               // 時代五 英國第22特種空勤團 (SAS) 巡邏隊
   | 'uk_milan_team'         // 時代五 英國萊茵軍團 MILAN 反戰車飛彈組
   // OPFOR 歷史各時代守軍
   | 'opfor_infantry_42'  // 時代一 日軍海軍特別陸戰隊步槍排 (SNLF)
@@ -257,6 +294,10 @@ export interface GroundUnit {
   isMLRS?: boolean;
   /** What the ground under the unit does to it (refreshed every tick; shown in the unit panel). */
   terrainInfo?: GroundTerrainInfo;
+  /** Special forces: seconds left visible after firing. */
+  revealTimer?: number;
+  /** Special forces: currently placing charges on an installation. */
+  sabotaging?: boolean;
   /** Allied garrison post (a captured stronghold) this unit holds. */
   holdPost?: Vector2D;
   /** Terrain route for AI movement that is not a standing order (chases, charges). */
@@ -2097,6 +2138,8 @@ export interface RequisitionItem {
   requiresIsland?: boolean;
   /** Ground entries: the unit this requisition raises (drives the menu card artwork). */
   unitType?: GroundUnitType;
+  /** Aircraft entries: how many airframes the card delivers. */
+  airCount?: number;
 }
 
 /** War economy snapshot (MP / RP / PP / TP, see game/economy.ts). */

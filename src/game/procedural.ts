@@ -7362,6 +7362,38 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
 }
 
 // 敵軍機動地面部隊 (OPFOR Mobile Ground Units) - 常駐要塞與機場島嶼，執行巡邏與防守反突擊
+/** Supporting weapons and specialists that vary the island garrisons, by era. */
+const GARRISON_SUPPORT: Record<Era, { type: GroundUnitType; name: string }[]> = {
+  era1: [
+    { type: 'opfor_ija_hmg_42', name: '九二式重機槍隊' },
+    { type: 'opfor_ija_47mm_at', name: '一式機動四十七粍速射砲隊' },
+    { type: 'opfor_ija_kami', name: '特二式內火艇「カミ」水陸戰車隊' },
+  ],
+  era2: [
+    { type: 'opfor_ija_banzai_45', name: '挺身斬込隊 (刺突爆雷)' },
+    { type: 'opfor_ija_hmg_42', name: '九二式重機槍隊' },
+    { type: 'opfor_ija_47mm_at', name: '一式機動四十七粍速射砲隊' },
+    { type: 'opfor_ija_kami', name: '特二式內火艇「カミ」水陸戰車隊' },
+  ],
+  era3: [
+    { type: 'opfor_pva_infantry_50', name: '志願軍步兵排 (衝鋒號)' },
+    { type: 'opfor_su76m', name: 'SU-76M 自走突擊砲排' },
+    { type: 'opfor_zis3_76', name: 'ZiS-3 76mm 加農砲連' },
+  ],
+  era4: [
+    { type: 'opfor_vc_guerrilla_65', name: '越共地方游擊隊' },
+    { type: 'opfor_rpg_team_65', name: 'B-40/B-41 火箭筒組' },
+    { type: 'opfor_dshk_aa', name: 'DShK 12.7mm 防空機槍陣地' },
+    { type: 'opfor_m46_130mm', name: 'M-46 130mm 加農砲連' },
+  ],
+  era5: [
+    { type: 'opfor_spetsnaz_83', name: 'GRU 特種偵察排 (Spetsnaz)' },
+    { type: 'opfor_btr70', name: 'BTR-70 海軍步兵裝甲運兵排' },
+    { type: 'opfor_bmd1', name: 'BMD-1 空降突擊排' },
+    { type: 'opfor_t64b', name: 'T-64B 戰車排' },
+  ],
+};
+
 /** OPFOR mobile ground units garrisoning the fortress and airfield islands. */
 function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundUnit[]): void {
   for (let i = 1; i < islands.length; i++) {
@@ -7401,6 +7433,18 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
         { x: center.x - 35, y: center.y + 35 }
       )
     );
+
+    // One supporting unit per island (two on the big ones), rotating through the era's list
+    const support = GARRISON_SUPPORT[era];
+    for (let k = 0; k < (isl.radius > 380 ? 2 : 1); k++) {
+      const pick = support[(i + k * 2) % support.length];
+      groundUnits.push(
+        createGroundUnit(`opfor-sup-${i}-${k}`, pick.type, `${islShortName} · ${pick.name}`, 'enemy', era, {
+          x: center.x + (k === 0 ? 25 : -60),
+          y: center.y + (k === 0 ? 60 : 5),
+        })
+      );
+    }
 
     // 較大要塞島嶼配置機動裝甲小隊、迫擊砲排與野戰重砲隊
     if (isl.radius > 380) {

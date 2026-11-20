@@ -61,6 +61,10 @@ export const TANK_PLANS: TankPlan[] = [
   { match: /m4a3r3/, L: 5.84, W: 2.62, track: 0.42, nose: 'round', noseLen: 0.8, turret: { x: 0.2, len: 2.3, wid: 2.0, shape: 'cast', bustle: 0.35 }, gun: { bore: 110, len: 2.2 }, cupola: { x: -0.45, y: 0.45, r: 0.35 }, loaderHatch: true, engineDeck: 2.0, driver: -1 },
   // M24 Chaffee: low hull, small turret, lightweight 75mm M6
   { match: /chaffee/, L: 5.56, W: 2.95, track: 0.41, nose: 'glacis', noseLen: 0.8, turret: { x: 0.1, len: 2.3, wid: 2.0, shape: 'cast', bustle: 0.3 }, gun: { bore: 75, len: 3.3 }, cupola: { x: -0.45, y: 0.5, r: 0.35 }, loaderHatch: true, engineDeck: 1.9, driver: -1 },
+  // Churchill: tracks running the full hull side, square hull, 75mm turret (Crocodile trailer left behind)
+  { match: /churchill/, L: 7.44, W: 3.25, track: 0.62, nose: 'flat', noseLen: 0.4, turret: { x: 0.5, len: 2.4, wid: 2.2, shape: 'cast', bustle: 0.2 }, gun: { bore: 75, len: 2.7 }, cupola: { x: -0.35, y: 0.45, r: 0.35 }, loaderHatch: true, engineDeck: 2.3, skirts: true, driver: 1 },
+  // Leopard 1: cast turret with the long L7 105mm and thermal sleeve
+  { match: /leopard1/, L: 7.09, W: 3.25, track: 0.55, nose: 'glacis', noseLen: 1.0, turret: { x: 0.0, len: 3.4, wid: 3.0, shape: 'cast', bustle: 0.5 }, gun: { bore: 105, len: 5.4, evac: 0.55 }, cupola: { x: -0.5, y: 0.7, r: 0.42 }, loaderHatch: true, engineDeck: 2.4, skirts: true, driver: 1 },
   // Matilda Frog: the Australian flame conversion, a stubby flame projector in place of the 2pdr
   { match: /matilda_frog/, L: 5.61, W: 2.59, track: 0.35, nose: 'flat', noseLen: 0.5, turret: { x: 0.3, len: 1.9, wid: 1.7, shape: 'cast', bustle: 0.25 }, gun: { bore: 110, len: 2.1 }, cupola: { x: -0.35, y: 0.35, r: 0.3 }, engineDeck: 1.8, skirts: true, driver: 0 },
   // Matilda II: armoured skirts over the tracks, small cast turret, 2pdr
@@ -94,6 +98,8 @@ export const TANK_PLANS: TankPlan[] = [
   // M60A1: needle-nose turret, 105mm M68
   { match: /m60/, L: 6.95, W: 3.63, track: 0.71, nose: 'glacis', noseLen: 1.3, turret: { x: -0.1, len: 4.2, wid: 3.0, shape: 'needle' }, gun: { bore: 105, len: 5.4, evac: 0.55 }, cupola: { x: -0.7, y: 0.75, r: 0.55 }, loaderHatch: true, engineDeck: 2.5, driver: 0 },
   // Type 95 Ha-Go: tiny hull, turret offset to the left, 37mm
+  // Type 2 Ka-Mi: Type 95 running gear in a boat hull with bow and stern pontoons
+  { match: /kami/, L: 7.42, W: 2.8, track: 0.28, nose: 'boat', noseLen: 1.8, turret: { x: 0.1, len: 1.6, wid: 1.5, shape: 'cone' }, gun: { bore: 37, len: 1.7 }, engineDeck: 1.8, trimVane: true, driver: 1 },
   { match: /type95/, L: 4.38, W: 2.07, track: 0.25, nose: 'flat', noseLen: 0.6, turret: { x: 0.35, y: -0.3, len: 1.5, wid: 1.4, shape: 'cone' }, gun: { bore: 37, len: 1.6 }, engineDeck: 1.6, driver: 1 },
   // Type 97 Chi-Ha: turret offset to the right with the horseshoe antenna, short 57mm
   { match: /type97/, L: 5.55, W: 2.33, track: 0.3, nose: 'flat', noseLen: 0.7, turret: { x: 0.2, y: 0.3, len: 1.8, wid: 1.6, shape: 'cone' }, gun: { bore: 57, len: 1.5 }, engineDeck: 2.0, hachimaki: true, driver: -1 },
@@ -106,6 +112,8 @@ export const TANK_PLANS: TankPlan[] = [
   // PT-76: long boat hull with trim vane, small conical turret forward, slotted brake
   { match: /pt76/, L: 7.63, W: 3.15, track: 0.36, nose: 'boat', noseLen: 1.6, turret: { x: 1.3, len: 2.3, wid: 2.3, shape: 'cone' }, gun: { bore: 76, len: 3.8, brake: 'slotted' }, cupola: { x: -0.4, y: -0.5, r: 0.35 }, engineDeck: 2.6, trimVane: true, driver: 0 },
   // T-72B: low dome with Kontakt ERA, 125mm 2A46, rear drums and unditching log
+  // T-64B: low hull with small road wheels, dome turret, 125mm with the Kobra launcher
+  { match: /t64/, L: 6.54, W: 3.42, track: 0.56, nose: 'glacis', noseLen: 1.1, turret: { x: 0.1, len: 3.0, wid: 2.9, shape: 'dome' }, gun: { bore: 125, len: 6.2, evac: 0.42 }, cupola: { x: -0.5, y: 0.7, r: 0.42 }, loaderHatch: true, engineDeck: 2.2, fenderTanks: 3, rearDrums: true, skirts: true, driver: 0 },
   { match: /t72/, L: 6.95, W: 3.59, track: 0.58, nose: 'glacis', noseLen: 1.2, turret: { x: 0.2, len: 3.1, wid: 2.95, shape: 'dome' }, gun: { bore: 125, len: 6.4, evac: 0.42 }, cupola: { x: -0.5, y: 0.7, r: 0.45 }, loaderHatch: true, engineDeck: 2.4, fenderTanks: 3, rearDrums: true, unditchingLog: true, skirts: true, era: true, driver: 0 },
   // T-80B: same family with the wide gas-turbine exhaust grille at the rear
   { match: /t80/, L: 7.0, W: 3.6, track: 0.58, nose: 'glacis', noseLen: 1.2, turret: { x: 0.2, len: 3.1, wid: 2.95, shape: 'dome' }, gun: { bore: 125, len: 6.4, evac: 0.42 }, cupola: { x: -0.5, y: 0.7, r: 0.45 }, loaderHatch: true, engineDeck: 2.8, fenderTanks: 3, skirts: true, era: true, driver: 0 },

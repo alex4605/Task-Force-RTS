@@ -491,6 +491,14 @@ const TOWED_SPECS: TowedSpec[] = [
   { match: /25pdr/, carriage: 'box', trailLen: 13, track: 5, wheel: 2.8, shield: 5, gunLen: 10, gunW: 1.8, muzzle: 'double' },
   // L5 105mm pack howitzer: light split trail, short tube with multi-baffle brake, no shield
   { match: /l5_pack/, carriage: 'split', trailLen: 10, track: 4.2, wheel: 2.2, gunLen: 8, gunW: 1.5, muzzle: 'double' },
+  // Type 1 47mm: low split trail, shield, long thin tube
+  { match: /47mm_at/, carriage: 'split', trailLen: 11, track: 4.8, wheel: 2.4, shield: 4.6, gunLen: 12, gunW: 1.2 },
+  // ZiS-3: light split trail, shield, single-baffle brake
+  { match: /zis3/, carriage: 'split', trailLen: 12, track: 5, wheel: 2.6, shield: 5, gunLen: 12, gunW: 1.5, muzzle: 'single' },
+  // M-46 130mm: very long tube with the pepperpot brake, long split trails
+  { match: /m46_130/, carriage: 'split', trailLen: 18, track: 6.2, wheel: 3.0, shield: 5.5, gunLen: 21, gunW: 1.9, muzzle: 'double' },
+  // DShK on its wheeled tripod in the AA role
+  { match: /dshk/, carriage: 'star3', trailLen: 6, track: 0, wheel: 0, gunLen: 9, gunW: 0.9 },
   // M3 37mm anti-tank gun: light split trail, small shield
   { match: /37mm_at/, carriage: 'split', trailLen: 10, track: 4.5, wheel: 2.2, shield: 4.5, gunLen: 10, gunW: 1.1 },
   // ZU-23-2: light three-legged mount, twin 23mm
@@ -652,6 +660,43 @@ const EXPLICIT_SILHOUETTE_CLASS: Record<string, GroundSilhouetteClass> = {
   frg_gepard: 'air_defense',
   frg_m109g: 'spg',
   uk_milan_team: 'atgm',
+  sof_coastwatcher_42: 'infantry',
+  sof_alamo_scouts_45: 'infantry',
+  sof_udt_45: 'infantry',
+  sof_ranger_50: 'infantry',
+  sof_udt_50: 'infantry',
+  sof_seal_65: 'infantry',
+  sof_macv_sog_65: 'infantry',
+  sof_force_recon_83: 'infantry',
+  sof_seal_83: 'infantry',
+  sof_ranger_83: 'infantry',
+  opfor_ija_hmg_42: 'infantry',
+  opfor_ija_47mm_at: 'towed',
+  opfor_ija_kami: 'tank',
+  opfor_ija_banzai_45: 'infantry',
+  opfor_pva_infantry_50: 'infantry',
+  opfor_zis3_76: 'towed',
+  opfor_su76m: 'spg',
+  opfor_vc_guerrilla_65: 'infantry',
+  opfor_rpg_team_65: 'infantry',
+  opfor_m46_130mm: 'towed',
+  opfor_dshk_aa: 'towed',
+  opfor_spetsnaz_83: 'infantry',
+  opfor_bmd1: 'carrier',
+  opfor_btr70: 'carrier',
+  opfor_t64b: 'tank',
+  cw_bren_carrier: 'carrier',
+  au_vickers_mg_45: 'infantry',
+  cw_churchill_50: 'tank',
+  gr_infantry_50: 'infantry',
+  fr_infantry_50: 'infantry',
+  th_cobra_67: 'infantry',
+  arvn_m48a3: 'tank',
+  au_sasr_66: 'infantry',
+  nl_leopard1: 'tank',
+  nl_infantry_83: 'infantry',
+  frg_luchs: 'carrier',
+  uk_sas_83: 'infantry',
 };
 
 const silhouetteClassCache = new Map<string, GroundSilhouetteClass>();

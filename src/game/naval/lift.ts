@@ -24,7 +24,8 @@ function vehiclesPerUnit(type: GroundUnitType, kind: ReturnType<typeof groundSil
 /** Space one vehicle of this type takes, in Sherman equivalents (weight and footprint). */
 function vehicleSize(type: GroundUnitType, kind: ReturnType<typeof groundSilhouetteClass>): number {
   if (kind === 'tank') {
-    if (/armor_m3|chaffee|type95|type97|sheridan|ontos|pt76/.test(type)) return 0.6;
+    if (/armor_m3|chaffee|type95|type97|sheridan|ontos|pt76|kami/.test(type)) return 0.6;
+    if (/churchill/.test(type)) return 1.3;
     if (/matilda/.test(type)) return 0.8;
     if (/m1a1|m1ip|leopard|challenger/.test(type)) return 1.8;
     if (/m60|t72|t80/.test(type)) return 1.6;

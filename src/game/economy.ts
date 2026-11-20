@@ -1,6 +1,7 @@
 import { Era, RequisitionItem } from '../types/game';
 import { EscalationTier } from './escalation';
 import { groundSilhouetteClass } from './unitPreviewRenderer';
+import { isSof } from './sof';
 
 /**
  * War economy: four pools instead of a single command-point currency.
@@ -114,7 +115,14 @@ const PROFILE: Record<string, Profile> = {
   aircraft: { mp: 0.25, rp: 0.65, pp: 0.1, tp: 0.4 },
   installation: { mp: 0.4, rp: 0.6, pp: 0, tp: 0.3 },
   nuclear: { mp: 0, rp: 0.1, pp: 0.9, tp: 0.1 },
+  // Elite teams: few men, long selection and training, politically sensitive missions
+  sof: { mp: 0.3, rp: 0.2, pp: 0.5, tp: 0.7 },
+  // Strategic bombers, AWACS and the deterrent: national assets, committed by Washington
+  strategic: { mp: 0.15, rp: 0.55, pp: 0.3, tp: 0.5 },
+  deterrent: { mp: 0.1, rp: 0.45, pp: 0.45, tp: 0.6 },
 };
+
+const STRATEGIC_TAGS = new Set(['air_b52', 'heavy_bomber_pool', 'air_f111', 'air_e3a', 'air_b17_late']);
 
 const CAPITAL = /^(carrier|cv63|cvn|battleship|bb_|essex|cve|lph|kongo|iowa)/;
 const LANDING = /^(lst|lcvp|lcm|lcac|lsm|lpd|lvt)/;
@@ -122,6 +130,9 @@ const LANDING = /^(lst|lcvp|lcm|lcac|lsm|lpd|lvt)/;
 function profileOf(item: RequisitionItem): Profile {
   const tag = item.typeTag;
   if (/nuclear|atacms_nuc/.test(tag) || /nuclear|nuke/.test(item.unitType ?? '')) return PROFILE.nuclear;
+  if (tag === 'ohio_ssbn') return PROFILE.deterrent;
+  if (STRATEGIC_TAGS.has(tag)) return PROFILE.strategic;
+  if (item.unitType && isSof(item.unitType)) return PROFILE.sof;
   if (item.category === 'ships') return CAPITAL.test(tag) ? PROFILE.capital : LANDING.test(tag) ? PROFILE.landing : PROFILE.ship;
   if (item.category === 'aircraft') return PROFILE.aircraft;
   if (item.category === 'installations') return PROFILE.installation;
