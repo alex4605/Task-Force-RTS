@@ -2,6 +2,7 @@ import { ImpactEffect, ImpactSurface, impactFor, MAX_IMPACTS } from './impacts';
 import { resolveGroundRequisition } from './groundRequisition';
 import { AlliedHost, AlliedOps } from './allied/alliedOps';
 import { fitsInHold, formatHold, holdUsed, shipHold } from './naval/lift';
+import { AwardKind, Bundle, Economy, MOBILISATION, award, costOf, formatBundle, incomeRate, nuclearCost } from './economy';
 import { CasualtyLedger, Outcome, attritionOutcome, defeatOutcome, victoryOutcome } from './outcome';
 import { Escalation, STAGE_FLAVOUR, TIER_NAME, airEscalation, alliedEscalation, computeEscalation, ingressRoute } from './escalation';
 import { BuilderRequirement, BUILDER_RADIUS, builderRequirement, isEngineerType } from './construction';
@@ -473,10 +474,10 @@ export class GameEngine {
   // ══════════════════════════════════════════════════════════
   // 戰區資源點數 (Command Points) 與 後勤採購系統
   // ══════════════════════════════════════════════════════════
-  public resourcePoints: number = 1200;
-  public commandPointsPerSec: number = 15; // 基礎每秒產出提升3倍 (15 CP/s)
-  public totalCpEarned: number = 1200;
-  public totalCpSpent: number = 0;
+  /** War economy: MP / RP / PP / TP pools (economy.ts). */
+  public economy = new Economy();
+  private economyRateTimer = 0;
+  private lastFriendlyLossWeight = 0;
 
   // ══════════════════════════════════════════════════════════
   // 雙方戰損總表 (Casualties Summary & Force Balance)
@@ -771,16 +772,46 @@ export class GameEngine {
   }
 
   public getResourceState(): ResourceState {
-    const capturedIslands = this.islands.filter((i) => i.isFullyCaptured || i.isFriendlyBase).length;
-    const islandBonus = capturedIslands * 2.5;
-    return {
-      points: Math.floor(this.resourcePoints),
-      ratePerSecond: this.commandPointsPerSec + islandBonus,
-      totalEarned: Math.floor(this.totalCpEarned),
-      totalSpent: Math.floor(this.totalCpSpent),
-      islandBonus,
-      killBonus: 0,
-    };
+    const e = this.economy;
+    return { stock: { ...e.stock }, rate: { ...e.rate }, earned: { ...e.earned }, spent: { ...e.spent }, mobilisation: MOBILISATION[this.escalation.tier].name };
+  }
+
+  /** Income per second at the current era, stage and holdings. */
+  private computeIncome(): Bundle {
+    let islands = 0;
+    let ports = 0;
+    let hospitals = 0;
+    for (const isl of this.islands) {
+      if (isl.isFullyCaptured || isl.isFriendlyBase) islands++;
+      for (const i of isl.installations) {
+        if (i.isDestroyed || i.side !== 'player') continue;
+        if (i.type === 'major_naval_port' && isl.isFullyCaptured) ports++;
+        if (i.type === 'field_hospital') hospitals++;
+      }
+    }
+    return incomeRate({ era: this.era, tier: this.escalation.tier, islands, ports, hospitals, gameTime: this.gameTime });
+  }
+
+  /** Accrue income; our own losses cost political support. */
+  private tickEconomy(dt: number): void {
+    this.economyRateTimer -= dt;
+    if (this.economyRateTimer <= 0) {
+      this.economyRateTimer = 1;
+      this.economy.rate = this.computeIncome();
+    }
+    this.economy.tick(this.economy.rate, dt);
+    const lost = this.forceLedger.lost.friendly.weight;
+    if (lost > this.lastFriendlyLossWeight) {
+      this.economy.lose({ pp: (lost - this.lastFriendlyLossWeight) * 4 });
+      this.lastFriendlyLossWeight = lost;
+    }
+  }
+
+  /** Add an event reward and return it as text for the logs. */
+  private grant(oldCp: number, kind: AwardKind): string {
+    const b = award(oldCp, kind);
+    this.economy.add(b);
+    return formatBundle(b);
   }
 
   private flakBarrageTimer: number = 0;
@@ -898,6 +929,9 @@ export class GameEngine {
     this.isDefeat = false;
     this.outcome = null;
     this.forceLedger = new CasualtyLedger();
+    this.economy = new Economy();
+    this.economyRateTimer = 0;
+    this.lastFriendlyLossWeight = 0;
     this.escalation = { progress: 0, tier: 0, captured: 0, total: 0 };
     this.capturedInstallations = 0;
     this.enemyDiversionCooldown = 0;
@@ -2044,23 +2078,22 @@ export class GameEngine {
     // 時代四 B61 戰術核彈 4000 CP 政治授權檢定 (Carrier Tactical Nuke CP)
     // ══════════════════════════════════════════════════════════
     if (payloadType === 'tactical_b61_nuke') {
-      if (this.resourcePoints < 4000) {
+      if (!this.economy.canAfford(nuclearCost(4000))) {
         flagship.carrierPlanes.ready[model] += actualCount;
-        this.addBannerAlert('❌【政治授權不足】動用 B61 戰術核武器需耗費 4,000 CP 戰略指揮點數！目前 CP 不足！', 'player', 'sunk', 5.5);
+        this.addBannerAlert(`❌【政治授權不足】動用 B61 戰術核武器需耗費 ${formatBundle(nuclearCost(4000))}！目前資源不足！`, 'player', 'sunk', 5.5);
         this.addCombatLog({
           category: 'air',
           sourceSide: 'player',
           sourceName: '參謀長聯席會議 (JCS)',
           targetName: `${flagship.name} 艦載機隊`,
           actionType: 'recon_spotted',
-          text: `❌【戰術核授權駁回】動用 B61 戰術核航彈需耗費 4,000 CP 政治與戰略資源！目前指揮點數不足 (${Math.floor(this.resourcePoints)} / 4000 CP)！`,
+          text: `❌【戰術核授權駁回】動用 B61 戰術核航彈需耗費 ${formatBundle(nuclearCost(4000))} 政治與戰略資源！尚缺 ${formatBundle(this.economy.shortfall(nuclearCost(4000)))}！`,
         });
         return false;
       }
-      this.resourcePoints -= 4000;
-      this.totalCpSpent += 4000;
+      this.economy.spend(nuclearCost(4000));
       this.hasPlayerUsedNuke = true;
-      this.addBannerAlert(`☢️【國家最高指揮授權核准】「${flagship.name}」彈射掛載 B61 戰術核武器之打擊編隊！消耗 4,000 CP！`, 'player', 'sunk', 7.5);
+      this.addBannerAlert(`☢️【國家最高指揮授權核准】「${flagship.name}」彈射掛載 B61 戰術核武器之打擊編隊！消耗 ${formatBundle(nuclearCost(4000))}！`, 'player', 'sunk', 7.5);
     }
 
     // High-performance naval and land-based aviation speeds (Supersonic Mach 1.8~2.5+ in Era 5)
@@ -2222,11 +2255,7 @@ export class GameEngine {
     // ══════════════════════════════════════════════════════════
     // 資源點數累積 (Command Points: Base + Islands Bonus)
     // ══════════════════════════════════════════════════════════
-    const capturedCount = this.islands.filter((i) => i.isFullyCaptured || i.isFriendlyBase).length;
-    const islandBonus = capturedCount * 2.5;
-    const cpGain = (this.commandPointsPerSec + islandBonus) * effectiveDt;
-    this.resourcePoints += cpGain;
-    this.totalCpEarned += cpGain;
+    this.tickEconomy(effectiveDt);
 
     // ══════════════════════════════════════════════════════════
     // 頂部擊沉與空戰戰報橫條更新 (Banner Alerts Duration)
@@ -5900,7 +5929,7 @@ export class GameEngine {
         sourceName: attackerName,
         targetName: '目標戰略島嶼',
         actionType: 'bomb_hit',
-        text: `☢️【戰術核武器投放】${attackerName} 於目標核心上空投擲 Mk 4 戰術原子彈！減速降落傘張開緩緩降落！B-29 啟動緊急超壓加力以 145m/s (522km/h) 狂飆加速脫離爆震波範圍！消耗 4,500 CP！`,
+        text: `☢️【戰術核武器投放】${attackerName} 於目標核心上空投擲 Mk 4 戰術原子彈！減速降落傘張開緩緩降落！B-29 啟動緊急超壓加力以 145m/s (522km/h) 狂飆加速脫離爆震波範圍！消耗 ${formatBundle(nuclearCost(4500))}！`,
       });
       return;
     }
@@ -6540,9 +6569,8 @@ export class GameEngine {
         this.score.enemyPlanesDowned += 2;
         this.score.totalScore += 200;
         cpAward = 140;
-        this.resourcePoints += cpAward;
-        this.totalCpEarned += cpAward;
-        this.addBannerAlert(`🎯【空戰大捷】凌空打爆敵「一式陸攻」與櫻花特攻火箭！+${cpAward} CP`, 'enemy', 'down', 6.0);
+        const gainTxt = this.grant(cpAward, 'kill');
+        this.addBannerAlert(`🎯【空戰大捷】凌空打爆敵「一式陸攻」與櫻花特攻火箭！+${gainTxt}`, 'enemy', 'down', 6.0);
         this.addCombatLog({
           category: 'aa',
           sourceSide: 'player',
@@ -6557,15 +6585,14 @@ export class GameEngine {
             result: 'crit',
             rollDesc: '空中打爆一式陸攻並引爆機腹櫻花火箭彈',
           },
-          text: `🎯【長程截擊大捷】巡邏空優戰機凌空打爆敵「一式陸攻」！機腹掛載之櫻花火箭特攻彈連環殉爆！特遣艦隊化險為夷！獲得 +200 分，+${cpAward} CP！`,
+          text: `🎯【長程截擊大捷】巡邏空優戰機凌空打爆敵「一式陸攻」！機腹掛載之櫻花火箭特攻彈連環殉爆！特遣艦隊化險為夷！獲得 +200 分，+${gainTxt}！`,
         });
       } else if (plane.model === 'ohka') {
         this.score.enemyPlanesDowned++;
         this.score.totalScore += 150;
         cpAward = 100;
-        this.resourcePoints += cpAward;
-        this.totalCpEarned += cpAward;
-        this.addBannerAlert(`🎯【擊墜戰報】防空火網凌空粉碎「櫻花火箭反艦飛彈」！+${cpAward} CP`, 'enemy', 'down', 5.5);
+        const gainTxt = this.grant(cpAward, 'kill');
+        this.addBannerAlert(`🎯【擊墜戰報】防空火網凌空粉碎「櫻花火箭反艦飛彈」！+${gainTxt}`, 'enemy', 'down', 5.5);
         this.addCombatLog({
           category: 'aa',
           sourceSide: 'player',
@@ -6580,15 +6607,14 @@ export class GameEngine {
             result: 'crit',
             rollDesc: '防空雷達導引近炸信管凌空打爆櫻花火箭',
           },
-          text: `🎯【神風櫻花擊落！】艦隊集中防空火網凌空打爆高速來襲之「櫻花火箭反艦飛彈」！獲得 +150 分，+${cpAward} CP！`,
+          text: `🎯【神風櫻花擊落！】艦隊集中防空火網凌空打爆高速來襲之「櫻花火箭反艦飛彈」！獲得 +150 分，+${gainTxt}！`,
         });
       } else if (plane.isKamikaze || plane.model === 'kamikaze_zero' || plane.model === 'kamikaze_judy') {
         this.score.enemyPlanesDowned++;
         this.score.totalScore += 100;
         cpAward = 80;
-        this.resourcePoints += cpAward;
-        this.totalCpEarned += cpAward;
-        this.addBannerAlert(`🎯【擊墜戰報】防空彈幕阻截凌空粉碎「${pName}」！+${cpAward} CP`, 'enemy', 'down', 5.0);
+        const gainTxt = this.grant(cpAward, 'kill');
+        this.addBannerAlert(`🎯【擊墜戰報】防空彈幕阻截凌空粉碎「${pName}」！+${gainTxt}`, 'enemy', 'down', 5.0);
         this.addCombatLog({
           category: 'aa',
           sourceSide: 'player',
@@ -6603,15 +6629,14 @@ export class GameEngine {
             result: 'crit',
             rollDesc: `D100擊墜: ${actualRoll} vs 門檻 ${actualThresh}`,
           },
-          text: `🎯【神風特攻阻截成功】防空火網於半空中粉碎來襲「${pName}」！成功化解特攻撞擊！獲得 +100 分，+${cpAward} CP！`,
+          text: `🎯【神風特攻阻截成功】防空火網於半空中粉碎來襲「${pName}」！成功化解特攻撞擊！獲得 +100 分，+${gainTxt}！`,
         });
       } else if (plane.model === 'mig15') {
         this.score.enemyPlanesDowned++;
         this.score.totalScore += 120;
         cpAward = 75;
-        this.resourcePoints += cpAward;
-        this.totalCpEarned += cpAward;
-        this.addBannerAlert(`🎯【空戰大捷】成功擊落敵「MiG-15 後掠翼噴射戰鬥機」！+${cpAward} CP`, 'enemy', 'down', 5.5);
+        const gainTxt = this.grant(cpAward, 'kill');
+        this.addBannerAlert(`🎯【空戰大捷】成功擊落敵「MiG-15 後掠翼噴射戰鬥機」！+${gainTxt}`, 'enemy', 'down', 5.5);
         this.addCombatLog({
           category: 'air',
           sourceSide: 'player',
@@ -6626,15 +6651,14 @@ export class GameEngine {
             result: 'crit',
             rollDesc: '穿透高空高速阻截擊落MiG-15',
           },
-          text: `🎯【空戰擊落 MiG-15！】我方戰機穿透高空攔截，以 20mm 機砲精準咬尾擊落敵方「MiG-15 噴射戰鬥機」！獲得 +120 分，+${cpAward} CP！`,
+          text: `🎯【空戰擊落 MiG-15！】我方戰機穿透高空攔截，以 20mm 機砲精準咬尾擊落敵方「MiG-15 噴射戰鬥機」！獲得 +120 分，+${gainTxt}！`,
         });
       } else if (plane.model === 'tu14') {
         this.score.enemyPlanesDowned++;
         this.score.totalScore += 140;
         cpAward = 90;
-        this.resourcePoints += cpAward;
-        this.totalCpEarned += cpAward;
-        this.addBannerAlert(`🎯【阻截成功】擊落敵「Tu-14 噴射魚雷/水平轟炸機」！+${cpAward} CP`, 'enemy', 'down', 5.5);
+        const gainTxt = this.grant(cpAward, 'kill');
+        this.addBannerAlert(`🎯【阻截成功】擊落敵「Tu-14 噴射魚雷/水平轟炸機」！+${gainTxt}`, 'enemy', 'down', 5.5);
         this.addCombatLog({
           category: 'aa',
           sourceSide: 'player',
@@ -6642,15 +6666,14 @@ export class GameEngine {
           targetName: 'Tu-14 雙噴射魚雷轟炸機',
           actionType: 'aa_down',
           isCrit: true,
-          text: `🎯【擊落 Tu-14！】防空火網擊碎掠海突擊之「Tu-14 噴射魚雷機」，化解反艦魚雷威脅！獲得 +140 分，+${cpAward} CP！`,
+          text: `🎯【擊落 Tu-14！】防空火網擊碎掠海突擊之「Tu-14 噴射魚雷機」，化解反艦魚雷威脅！獲得 +140 分，+${gainTxt}！`,
         });
       } else {
         this.score.enemyPlanesDowned++;
         this.score.totalScore += 75;
         cpAward = 50;
-        this.resourcePoints += cpAward;
-        this.totalCpEarned += cpAward;
-        this.addBannerAlert(`✈️【擊墜戰報】成功擊墜敵「${pName}」！獲得 +${cpAward} CP`, 'enemy', 'down', 4.5);
+        const gainTxt = this.grant(cpAward, 'kill');
+        this.addBannerAlert(`✈️【擊墜戰報】成功擊墜敵「${pName}」！獲得 +${gainTxt}`, 'enemy', 'down', 4.5);
         this.addCombatLog({
           category: 'aa',
           sourceSide: 'player',
@@ -6664,7 +6687,7 @@ export class GameEngine {
             result: 'crit',
             rollDesc: `D100擊墜擲骰: ${actualRoll} vs 門檻 ${actualThresh}`,
           },
-          text: `✈️【敵機擊落 · 擲骰判定】🎲 D100: ${actualRoll} (門檻 ${actualThresh})！成功擊墜敵方「${pName}」！獲得 +75 分，+${cpAward} CP！`,
+          text: `✈️【敵機擊落 · 擲骰判定】🎲 D100: ${actualRoll} (門檻 ${actualThresh})！成功擊墜敵方「${pName}」！獲得 +75 分，+${gainTxt}！`,
         });
       }
 
@@ -6692,7 +6715,7 @@ export class GameEngine {
           sourceName: '落難信號 (SOS)',
           targetName: pName,
           actionType: 'recon_spotted',
-          text: `🪂【敵機組員跳傘】「${pName}」被擊墜後飛行員跳傘（座標 [${Math.round(plane.pos.x)}, ${Math.round(plane.pos.y)}]）！派遣水面艦（<85-120m）或地面部隊（<85m）物理接近可將其捕獲為 POW (+100 CP)！`,
+          text: `🪂【敵機組員跳傘】「${pName}」被擊墜後飛行員跳傘（座標 [${Math.round(plane.pos.x)}, ${Math.round(plane.pos.y)}]）！派遣水面艦（<85-120m）或地面部隊（<85m）物理接近可將其捕獲為 POW (可獲政治值與人力值)！`,
         });
       }
     } else {
@@ -6726,7 +6749,7 @@ export class GameEngine {
         sourceName: '跳傘緊急頻道 (SAR Channel)',
         targetName: pName,
         actionType: 'recon_spotted',
-        text: `🛟【飛行員跳傘】「${pName}」遭擊落後飛行員成功開啟救生筏（座標 [${Math.round(plane.pos.x)}, ${Math.round(plane.pos.y)}]，90秒窗口）！水面艦（<85-120m）、地面部隊（<85m）或搜救直升機物理接近即可救起補回 1 架該型戰機；若遭敵軍先接觸將損失 -80 CP！`,
+        text: `🛟【飛行員跳傘】「${pName}」遭擊落後飛行員成功開啟救生筏（座標 [${Math.round(plane.pos.x)}, ${Math.round(plane.pos.y)}]，90秒窗口）！水面艦（<85-120m）、地面部隊（<85m）或搜救直升機物理接近即可救起補回 1 架該型戰機；若遭敵軍先接觸將損失政治值 PP -80！`,
       });
     }
   }
@@ -7070,7 +7093,7 @@ export class GameEngine {
       targetName: '戰役態勢',
       actionType: 'recon_spotted',
       isCrit: true,
-      text: `📈【戰役推進 → ${TIER_NAME[tier]}】我軍已控制 ${pct}% 據點。敵情：空襲機隊 +${air.waveBonus} 架、間隔縮短 ${Math.round((1 - air.intervalMul) * 100)}%${air.axes > 1 ? `、兵分 ${air.axes} 路迂迴` : air.dogLeg ? '、改採迂迴航線' : ''}${air.diversion ? '、佯動掃蕩誘離 CAP' : ''}。友軍：${this.era === 'era1' || this.era === 'era2' ? `同時 ${allied.landingGroups} 支搶灘支隊、每支加派 ${allied.extraCraft} 艘登陸艇` : `兵力上限 ${allied.maxUnits}、每批投入 ${allied.echelon} 個單位${tier >= 2 ? '、開設前進集結點' : ''}`}${tier >= 1 ? '、派兵駐守已奪據點' : ''}${allied.fortify ? `、就地構築掩體 (上限 ${allied.maxWorks})` : ''}${tier >= 2 ? '、投入重裝與砲兵' : ''}。`,
+      text: `📈【戰役推進 → ${TIER_NAME[tier]}】我軍已控制 ${pct}% 據點。敵情：空襲機隊 +${air.waveBonus} 架、間隔縮短 ${Math.round((1 - air.intervalMul) * 100)}%${air.axes > 1 ? `、兵分 ${air.axes} 路迂迴` : air.dogLeg ? '、改採迂迴航線' : ''}${air.diversion ? '、佯動掃蕩誘離 CAP' : ''}。友軍：${this.era === 'era1' || this.era === 'era2' ? `同時 ${allied.landingGroups} 支搶灘支隊、每支加派 ${allied.extraCraft} 艘登陸艇` : `兵力上限 ${allied.maxUnits}、每批投入 ${allied.echelon} 個單位${tier >= 2 ? '、開設前進集結點' : ''}`}${tier >= 1 ? '、派兵駐守已奪據點' : ''}${allied.fortify ? `、就地構築掩體 (上限 ${allied.maxWorks})` : ''}${tier >= 2 ? '、投入重裝與砲兵' : ''}。國內動員程度：「${MOBILISATION[tier].name}」，產出倍率 MP×${MOBILISATION[tier].mult.mp} · RP×${MOBILISATION[tier].mult.rp} · PP×${MOBILISATION[tier].mult.pp} · TP×${MOBILISATION[tier].mult.tp}。`,
     });
   }
 
@@ -8294,7 +8317,7 @@ export class GameEngine {
               if (inst.upgradeTimer >= 35.0) {
                 inst.type = 'major_naval_port';
                 inst.name = `正規深水軍港 (${isl.name})`;
-                inst.weaponDesc = '全功能深水軍港 · 大型混凝土突堤起重港埠 · 穩定建立全島補給線 (+1.5 CP/s)';
+                inst.weaponDesc = '全功能深水軍港 · 大型混凝土突堤起重港埠 · 穩定建立全島補給線 (+1.5 RP/s)';
                 inst.health = 4200;
                 inst.maxHealth = 4200;
                 inst.armor = 0.5;
@@ -8322,11 +8345,8 @@ export class GameEngine {
         }
       }
 
-      // 正規軍港持續產出後勤資源加成 (+1.5 CP/s)
-      if (hasMajorPort && isl.isFullyCaptured) {
-        this.resourcePoints += 1.5 * dt * 0.2;
-        this.totalCpEarned += 1.5 * dt * 0.2;
-      }
+      // 正規軍港持續產出後勤資源加成 (+1.5 RP/s)
+      // (deep-water ports now feed RP income: see computeIncome)
 
       islandSupplyMap.set(isl.id, { playerSupplied, enemySupplied, hasHospital, hasDepot, hasMajorPort });
     }
@@ -8427,18 +8447,17 @@ export class GameEngine {
           unit.isSurrendered = true;
           if (unit.side === 'enemy') {
             const cpReward = unit.type.includes('armor') ? 120 : 80;
-            this.resourcePoints += cpReward;
-            this.totalCpEarned += cpReward;
+            const gainTxt = this.grant(cpReward, 'pow');
             this.score.totalScore += 250;
             soundEngine.playPlaneSortie();
-            this.addBannerAlert(`🎖️【敵軍全體繳械投降！】成功收押「${unit.name}」！獲得戰區後勤 +${cpReward} CP！`, 'player', 'capture', 6.0);
+            this.addBannerAlert(`🎖️【敵軍全體繳械投降！】成功收押「${unit.name}」！獲得戰區後勤 +${gainTxt}！`, 'player', 'capture', 6.0);
             this.addCombatLog({
               category: 'naval',
               sourceSide: 'player',
               sourceName: '前線陸戰突擊隊',
               targetName: unit.name,
               actionType: 'recon_spotted',
-              text: `🏳️【全體繳械投降！】敵「${unit.name}」在猛烈火力與斷援包圍下士氣崩潰（組織度歸零），升起白旗舉手投降！我軍收押俘虜並接管陣地，獲得 +${cpReward} CP！`,
+              text: `🏳️【全體繳械投降！】敵「${unit.name}」在猛烈火力與斷援包圍下士氣崩潰（組織度歸零），升起白旗舉手投降！我軍收押俘虜並接管陣地，獲得 +${gainTxt}！`,
             });
             unit.isDestroyed = true;
             this.forceLedger.loseGround(unit);
@@ -8450,15 +8469,15 @@ export class GameEngine {
             this.groundUnits.splice(i, 1);
             continue;
           } else {
-            this.resourcePoints = Math.max(0, this.resourcePoints - 50);
-            this.addBannerAlert(`⚠️【我軍部隊被迫投降】「${unit.name}」組織度瓦解被迫繳械... 扣除 50 CP！`, 'enemy', 'sunk', 6.0);
+            this.economy.lose({ pp: 50, mp: 20 });
+            this.addBannerAlert(`⚠️【我軍部隊被迫投降】「${unit.name}」組織度瓦解被迫繳械... PP -50 · MP -20！`, 'enemy', 'sunk', 6.0);
             this.addCombatLog({
               category: 'naval',
               sourceSide: 'enemy',
               sourceName: '敵要塞守備隊',
               targetName: unit.name,
               actionType: 'recon_spotted',
-              text: `🏳️【部隊被迫繳械】我軍「${unit.name}」彈盡援絕且遭受重重包圍，組織度耗盡不幸被俘... 扣除 50 CP！`,
+              text: `🏳️【部隊被迫繳械】我軍「${unit.name}」彈盡援絕且遭受重重包圍，組織度耗盡不幸被俘... 政治值 PP -50、人力值 MP -20！`,
             });
             unit.isDestroyed = true;
             this.groundUnits.splice(i, 1);
@@ -9258,9 +9277,8 @@ export class GameEngine {
             this.score.totalScore += 500;
             this.score.stars += 2;
             const shCp = 150;
-            this.resourcePoints += shCp;
-            this.totalCpEarned += shCp;
-            this.addBannerAlert(`🚩【據點攻克！】成功肅清並佔領「${sh.name}」！獲得戰利 +${shCp} CP！`, 'player', 'capture', 6.0);
+            const gainTxt = this.grant(shCp, 'capture');
+            this.addBannerAlert(`🚩【據點攻克！】成功肅清並佔領「${sh.name}」！獲得戰利 +${gainTxt}！`, 'player', 'capture', 6.0);
 
             this.addCombatLog({
               category: 'sunk',
@@ -9268,7 +9286,7 @@ export class GameEngine {
               sourceName: 'USMC 登陸突擊部隊',
               targetName: sh.name,
               actionType: 'installation_down',
-              text: `🚩【據點攻克！】我方部隊成功肅清並佔領「${sh.name}」！俘獲敵軍指揮通訊密碼本！+500分，★+2星，+${shCp} CP！`,
+              text: `🚩【據點攻克！】我方部隊成功肅清並佔領「${sh.name}」！俘獲敵軍指揮通訊密碼本！+500分，★+2星，+${gainTxt}！`,
             });
 
             // Check if all strongholds on this island are captured
@@ -9276,18 +9294,17 @@ export class GameEngine {
             if (allCaptured) {
               island.isFullyCaptured = true;
               const islandCp = 500;
-              this.resourcePoints += islandCp;
-              this.totalCpEarned += islandCp;
+              const gainTxt = this.grant(islandCp, 'capture');
               this.score.totalScore += 1200;
               this.score.stars += 4;
-              this.addBannerAlert(`🏆【全島解放宣告！】「${island.name}」全部核心據點完全肅清！繳獲敵戰略軍火庫 +${islandCp} CP！`, 'player', 'capture', 7.5);
+              this.addBannerAlert(`🏆【全島解放宣告！】「${island.name}」全部核心據點完全肅清！繳獲敵戰略軍火庫 +${gainTxt}！`, 'player', 'capture', 7.5);
               this.addCombatLog({
                 category: 'sunk',
                 sourceSide: 'player',
                 sourceName: '海軍陸戰隊特混遠征隊',
                 targetName: island.name,
                 actionType: 'installation_down',
-                text: `🏆【全島解放宣告！】「${island.name}」全部核心據點與要塞已完全肅清解放！國旗於制高點冉冉升起！繳獲大量物資，+1200分，★+4星，+${islandCp} CP！`,
+                text: `🏆【全島解放宣告！】「${island.name}」全部核心據點與要塞已完全肅清解放！國旗於制高點冉冉升起！繳獲大量物資，+1200分，★+4星，+${gainTxt}！`,
               });
             }
           }
@@ -9954,61 +9971,58 @@ export class GameEngine {
     // ══════════════════════════════════════════════════════════
     if (pType === 'b52_megaton_nuke') {
       const nukeCost = 900;
-      if (this.resourcePoints < nukeCost) {
+      if (!this.economy.canAfford(nuclearCost(nukeCost))) {
         pool[model] += count;
-        this.addBannerAlert(`❌【戰略授權不足】動用 B28/B41 百萬噸級戰略熱核武器需耗費 ${nukeCost} CP！目前 CP 不足！`, 'player', 'sunk', 5.5);
+        this.addBannerAlert(`❌【戰略授權不足】動用 B28/B41 百萬噸級戰略熱核武器需耗費 ${formatBundle(nuclearCost(nukeCost))}！目前資源不足！`, 'player', 'sunk', 5.5);
         this.addCombatLog({
           category: 'air',
           sourceSide: 'player',
           sourceName: '戰略空軍司令部 (SAC)',
           targetName: 'B-52 戰略打擊機隊',
           actionType: 'recon_spotted',
-          text: `❌【戰略核授權駁回】動用百萬噸級戰略熱核武器需耗費 ${nukeCost} CP！目前指揮點數不足 (${Math.floor(this.resourcePoints)} / ${nukeCost} CP)！`,
+          text: `❌【戰略核授權駁回】動用百萬噸級戰略熱核武器需耗費 ${formatBundle(nuclearCost(nukeCost))}！尚缺 ${formatBundle(this.economy.shortfall(nuclearCost(nukeCost)))}！`,
         });
         return;
       }
-      this.resourcePoints -= nukeCost;
-      this.totalCpSpent += nukeCost;
+      this.economy.spend(nuclearCost(nukeCost));
       this.hasPlayerUsedNuke = true;
-      this.addBannerAlert(`☢️【國家最高指揮授權核准】B-52 戰略轟炸機裝載百萬噸級熱核武器升空！消耗 ${nukeCost} CP！`, 'player', 'sunk', 7.5);
+      this.addBannerAlert(`☢️【國家最高指揮授權核准】B-52 戰略轟炸機裝載百萬噸級熱核武器升空！消耗 ${formatBundle(nuclearCost(nukeCost))}！`, 'player', 'sunk', 7.5);
       this.checkOpforNuclearRetaliation();
     } else if (pType === 'tactical_b61_nuke') {
-      if (this.resourcePoints < 4000) {
+      if (!this.economy.canAfford(nuclearCost(4000))) {
         pool[model] += count;
-        this.addBannerAlert('❌【政治授權不足】動用 B61 戰術核武器需耗費 4,000 CP！目前 CP 不足！', 'player', 'sunk', 5.5);
+        this.addBannerAlert(`❌【政治授權不足】動用 B61 戰術核武器需耗費 ${formatBundle(nuclearCost(4000))}！目前資源不足！`, 'player', 'sunk', 5.5);
         this.addCombatLog({
           category: 'air',
           sourceSide: 'player',
           sourceName: '參謀長聯席會議 (JCS)',
           targetName: '戰術攻擊機隊',
           actionType: 'recon_spotted',
-          text: `❌【戰術核授權駁回】動用 B61 戰術核航彈需耗費 4,000 CP 政治與戰略資源！目前指揮點數不足 (${Math.floor(this.resourcePoints)} / 4000 CP)！`,
+          text: `❌【戰術核授權駁回】動用 B61 戰術核航彈需耗費 ${formatBundle(nuclearCost(4000))} 政治與戰略資源！尚缺 ${formatBundle(this.economy.shortfall(nuclearCost(4000)))}！`,
         });
         return;
       }
-      this.resourcePoints -= 4000;
-      this.totalCpSpent += 4000;
+      this.economy.spend(nuclearCost(4000));
       this.hasPlayerUsedNuke = true;
-      this.addBannerAlert('☢️【國家最高指揮授權核准】戰術攻擊機群裝載 B61 戰術核航彈升空！消耗 4,000 CP！', 'player', 'sunk', 7.5);
+      this.addBannerAlert(`☢️【國家最高指揮授權核准】戰術攻擊機群裝載 B61 戰術核航彈升空！消耗 ${formatBundle(nuclearCost(4000))}！`, 'player', 'sunk', 7.5);
     } else if (pType === 'tactical_nuke') {
-      if (this.resourcePoints < 4500) {
+      if (!this.economy.canAfford(nuclearCost(4500))) {
         // Return available planes since sortie cannot proceed
         pool[model] += count;
-        this.addBannerAlert('❌【政治授權不足】動用戰術核武器需耗費 4,500 CP 戰略指揮點數！目前 CP 不足！', 'player', 'sunk', 5.5);
+        this.addBannerAlert(`❌【政治授權不足】動用戰術核武器需耗費 ${formatBundle(nuclearCost(4500))}！目前資源不足！`, 'player', 'sunk', 5.5);
         this.addCombatLog({
           category: 'air',
           sourceSide: 'player',
           sourceName: '參謀長聯席會議 (JCS)',
           targetName: 'B-29 戰略打擊機隊',
           actionType: 'recon_spotted',
-          text: `❌【戰略核授權駁回】動用戰術原子彈需耗費 4,500 CP 政治與戰略資源！目前指揮點數不足 (${Math.floor(this.resourcePoints)} / 4500 CP)！`,
+          text: `❌【戰略核授權駁回】動用戰術原子彈需耗費 ${formatBundle(nuclearCost(4500))} 政治與戰略資源！尚缺 ${formatBundle(this.economy.shortfall(nuclearCost(4500)))}！`,
         });
         return;
       }
-      this.resourcePoints -= 4500;
-      this.totalCpSpent += 4500;
+      this.economy.spend(nuclearCost(4500));
       this.hasPlayerUsedNuke = true;
-      this.addBannerAlert('☢️【國家最高指揮授權核准】B-29 超高空戰略轟炸機裝載 Mk 4 戰術核武器升空！消耗 4,500 CP！', 'player', 'sunk', 7.5);
+      this.addBannerAlert(`☢️【國家最高指揮授權核准】B-29 超高空戰略轟炸機裝載 Mk 4 戰術核武器升空！消耗 ${formatBundle(nuclearCost(4500))}！`, 'player', 'sunk', 7.5);
     }
 
     const roleZh =
@@ -10209,26 +10223,21 @@ export class GameEngine {
     freeSandbox: boolean = false
   ): boolean {
     if (!freeSandbox) {
-      if (this.resourcePoints < item.cost) {
-        this.addBannerAlert(
-          `⚠️【CP 點數不足】需要 ${item.cost} CP，目前僅有 ${Math.floor(this.resourcePoints)} CP！請等待累積或開啟【免CP沙盒模式】！`,
-          'player',
-          'alert',
-          4.0
-        );
+      const price = costOf(item);
+      if (!this.economy.canAfford(price)) {
+        const short = formatBundle(this.economy.shortfall(price));
+        this.addBannerAlert(`⚠️【資源不足】「${item.name}」尚缺 ${short}！請等待累積、佔領據點或開啟【免費沙盒模式】！`, 'player', 'alert', 4.0);
         this.addCombatLog({
           category: 'naval',
           sourceSide: 'player',
           sourceName: '後勤司令部 (LOGCOM)',
           targetName: item.name,
           actionType: 'recon_spotted',
-          text: `⚠️ 資源點數不足！需要 ${item.cost} CP，目前僅有 ${Math.floor(this.resourcePoints)} CP。請等待時間累積、佔領據點或擊沉敵艦！`,
+          text: `⚠️ 資源不足！「${item.name}」需要 ${formatBundle(price)}，尚缺 ${short}。動員程度提升、佔領據點與戰果都能增加產出。`,
         });
         return false;
       }
-
-      this.resourcePoints -= item.cost;
-      this.totalCpSpent += item.cost;
+      this.economy.spend(price);
     }
 
     const flagship = this.getFlagship();
@@ -10259,8 +10268,7 @@ export class GameEngine {
   /** A purchase that could not be carried out costs nothing. */
   private refundRequisition(item: RequisitionItem, freeSandbox: boolean): void {
     if (freeSandbox) return;
-    this.resourcePoints += item.cost;
-    this.totalCpSpent -= item.cost;
+    this.economy.refund(costOf(item));
   }
 
   /** A friendly unit able to build `need` works within the builder radius of a site. */
@@ -10462,7 +10470,7 @@ export class GameEngine {
         id: instId,
         type: 'major_naval_port',
         name: `正規深水軍港突堤 (${targetIsland.name})`,
-        weaponDesc: '大型深水突堤起重港埠 · 穩定建立全島補給線 · 產出補給點 (+1.5 CP/s)',
+        weaponDesc: '大型深水突堤起重港埠 · 穩定建立全島補給線 · 產出補給點 (+1.5 RP/s)',
         side: 'player',
         pos: instPos,
         health: 4200,
@@ -10632,7 +10640,7 @@ export class GameEngine {
       sourceName: '海軍工兵團 (Seabees)',
       targetName: item.name,
       actionType: 'recon_spotted',
-      text: `🏗️【設施工事落成】${freeSandbox ? '【免CP沙盒建造】' : `耗費 ${item.cost} CP`}！「${item.name}」已在 ${targetIsland.name} (${locationLabel}) 構築完成並即刻投入戰備！`,
+      text: `🏗️【設施工事落成】${freeSandbox ? '【免費沙盒建造】' : `耗費 ${formatBundle(costOf(item))}`}！「${item.name}」已在 ${targetIsland.name} (${locationLabel}) 構築完成並即刻投入戰備！`,
     });
     return true;
     return false;
@@ -10695,7 +10703,7 @@ export class GameEngine {
         sourceName: '陸戰隊司令部',
         targetName: gUnit.name,
         actionType: 'recon_spotted',
-        text: `🪖【陸戰戰力進駐】耗費 ${item.cost} CP！「${gUnit.name}」於 ${spawnLabel} 完成戰備集結，隨時準備發動突擊或加固防衛！`,
+        text: `🪖【陸戰戰力進駐】耗費 ${formatBundle(costOf(item))}！「${gUnit.name}」於 ${spawnLabel} 完成戰備集結，隨時準備發動突擊或加固防衛！`,
       });
       return true;
     }
@@ -10836,7 +10844,7 @@ export class GameEngine {
       sourceName: '海軍航空兵部 (BuAer)',
       targetName: item.name,
       actionType: 'recon_spotted',
-      text: `✈️【航空戰力充實】${freeSandbox ? '【免CP沙盒配置】' : `耗費 ${item.cost} CP`}！${item.name} 戰機群已進駐起始前進基地機庫，可隨時自基地起飛或轉場！`,
+      text: `✈️【航空戰力充實】${freeSandbox ? '【免費沙盒配置】' : `耗費 ${formatBundle(costOf(item))}`}！${item.name} 戰機群已進駐起始前進基地機庫，可隨時自基地起飛或轉場！`,
     });
     return true;
     return false;
@@ -10945,7 +10953,7 @@ export class GameEngine {
         sourceName: '後勤調遣司令部',
         targetName: newShip.name,
         actionType: 'recon_spotted',
-        text: `⚓【海軍調遣就緒】${freeSandbox ? '【免CP沙盒建造】' : `耗費 ${item.cost} CP`} 調派「${newShip.name}」自地圖西南邊疆外海駛入戰區！火砲裝備、航向與戰術編隊已就緒！`,
+        text: `⚓【海軍調遣就緒】${freeSandbox ? '【免費沙盒建造】' : `耗費 ${formatBundle(costOf(item))}`} 調派「${newShip.name}」自地圖西南邊疆外海駛入戰區！火砲裝備、航向與戰術編隊已就緒！`,
       });
       return true;
     }
@@ -13528,17 +13536,16 @@ export class GameEngine {
             inst.captureProgress = 0;
             this.capturedInstallations++;
             const rewardCP = 80;
-            this.resourcePoints += rewardCP;
-            this.totalCpEarned += rewardCP;
+            const gainTxt = this.grant(rewardCP, 'capture');
             soundEngine.playPlaneSortie();
-            this.addBannerAlert(`🚩【戰線據點佔領】成功控制大陸設施「${inst.name}」！獲得戰利 +${rewardCP} CP！`, 'player', 'capture', 5.0);
+            this.addBannerAlert(`🚩【戰線據點佔領】成功控制大陸設施「${inst.name}」！獲得戰利 +${gainTxt}！`, 'player', 'capture', 5.0);
             this.addCombatLog({
               category: 'sunk',
               sourceSide: 'player',
               sourceName: nearbyFriendly[0].name,
               targetName: inst.name,
               actionType: 'installation_down',
-              text: `🚩【大陸設施控制】友軍地面部隊成功奪取並控制戰略設施「${inst.name}」！繳獲戰地物資 +${rewardCP} CP！`,
+              text: `🚩【大陸設施控制】友軍地面部隊成功奪取並控制戰略設施「${inst.name}」！繳獲戰地物資 +${gainTxt}！`,
             });
           }
         }
@@ -15337,13 +15344,12 @@ export class GameEngine {
           soundEngine.playPlaneSortie();
 
           const cpReward = 100;
-          this.resourcePoints += cpReward;
-          this.totalCpEarned += cpReward;
+          const gainTxt = this.grant(cpReward, 'pow');
           this.score.totalScore += 100;
           this.score.stars += 1;
 
           this.addBannerAlert(
-            `🎖️【俘獲敵方飛行員戰俘！】「${rescuerName}」成功捕獲「${raft.pilotName}」為 POW！獲取戰術情資 +100 CP！`,
+            `🎖️【俘獲敵方飛行員戰俘！】「${rescuerName}」成功捕獲「${raft.pilotName}」為 POW！獲取戰術情資 +${gainTxt}！`,
             'player',
             'capture',
             6.5
@@ -15354,7 +15360,7 @@ export class GameEngine {
             sourceName: rescuerName,
             targetName: raft.pilotName,
             actionType: 'recon_spotted',
-            text: `🎖️【戰俘捕獲 (POW)】我軍「${rescuerName}」在現場俘虜敵機組員「${raft.pilotName}」！審訊情資提供重要戰術與密碼價值，獲頒 +100 CP！`,
+            text: `🎖️【戰俘捕獲 (POW)】我軍「${rescuerName}」在現場俘虜敵機組員「${raft.pilotName}」！審訊情資提供重要戰術與密碼價值，獲頒 +${gainTxt}！`,
           });
 
           this.lifeRafts.splice(i, 1);
@@ -15373,10 +15379,10 @@ export class GameEngine {
           // 我方飛行員遭敵俘獲！懲罰扣除 80 CP
           soundEngine.playKlaxon();
           const penalty = 80;
-          this.resourcePoints = Math.max(0, this.resourcePoints - penalty);
+          this.economy.lose({ pp: penalty });
 
           this.addBannerAlert(
-            `⚠️【我方飛行員遭敵俘虜！】「${raft.pilotName}」遭敵「${captorName}」俘獲！情資外洩扣除 80 CP！`,
+            `⚠️【我方飛行員遭敵俘虜！】「${raft.pilotName}」遭敵「${captorName}」俘獲！情資外洩，政治值 PP -80！`,
             'enemy',
             'sunk',
             6.5
@@ -15387,7 +15393,7 @@ export class GameEngine {
             sourceName: captorName,
             targetName: raft.pilotName,
             actionType: 'recon_spotted',
-            text: `⚠️【飛行員不幸被俘】我軍落難飛行員「${raft.pilotName}」未及時搜救，遭敵「${captorName}」捕獲！密碼本與戰術外洩，遭受 -80 CP 懲罰！`,
+            text: `⚠️【飛行員不幸被俘】我軍落難飛行員「${raft.pilotName}」未及時搜救，遭敵「${captorName}」捕獲！密碼本與戰術外洩，政治值 PP -80！`,
           });
 
           this.lifeRafts.splice(i, 1);
@@ -16349,12 +16355,12 @@ export class GameEngine {
     if (this.civilianCollateralCooldowns[inst.id] && this.civilianCollateralCooldowns[inst.id] > 0) return;
     this.civilianCollateralCooldowns[inst.id] = 4.0; // 4s cooldown per installation
 
-    const penalty = 15;
-    this.resourcePoints = Math.max(0, this.resourcePoints - penalty);
+    const penalty = 25;
+    this.economy.lose({ pp: penalty });
     soundEngine.playKlaxon();
 
     this.addBannerAlert(
-      `⚠️【附帶損害警告】平民區「${inst.name}」遭砲火誤擊！司令部嚴正訓誡，懲處 -${penalty} CP！`,
+      `⚠️【附帶損害警告】平民區「${inst.name}」遭砲火誤擊！司令部嚴正訓誡，政治值 PP -${penalty}！`,
       'player',
       'sunk',
       6.0
@@ -16367,7 +16373,7 @@ export class GameEngine {
       targetName: inst.name,
       actionType: 'recon_spotted',
       isCrit: true,
-      text: `⚠️【平民附帶損害嚴正訓誡】${attacker} 砲火/航彈誤傷非軍事保護區「${inst.name}」造成嚴重附帶損害 (Collateral Damage)！戰區司令部依戰時國際法規嚴厲斥責並懲處扣除 15 CP！`,
+      text: `⚠️【平民附帶損害嚴正訓誡】${attacker} 砲火/航彈誤傷非軍事保護區「${inst.name}」造成嚴重附帶損害 (Collateral Damage)！戰區司令部依戰時國際法規嚴厲斥責並懲處政治值 PP -${penalty}！`,
     });
   }
 
@@ -17634,8 +17640,7 @@ export class GameEngine {
             soundEngine.playExplosion(false);
             if (u.side === 'enemy') {
               this.casualties.enemyGroundLost++;
-              this.resourcePoints += 40;
-              this.totalCpEarned += 40;
+              this.grant(40, 'kill');
             } else {
               this.casualties.playerGroundLost++;
             }
@@ -18515,8 +18520,7 @@ export class GameEngine {
           soundEngine.playExplosion(false);
           if (unit.side === 'enemy') {
             this.casualties.enemyGroundLost++;
-            this.resourcePoints += 40;
-            this.totalCpEarned += 40;
+            this.grant(40, 'kill');
           } else {
             this.casualties.playerGroundLost++;
           }
@@ -18864,11 +18868,10 @@ export class GameEngine {
       const cpAward = ship.type === 'carrier' ? 750 : ship.type === 'battleship' ? 600 : ship.type === 'cruiser' ? 350 : 200;
       this.score.totalScore += points;
       this.score.stars += stars;
-      this.resourcePoints += cpAward;
-      this.totalCpEarned += cpAward;
+      const gainTxt = this.grant(cpAward, 'kill');
 
       this.addBannerAlert(
-        `⚓【重大擊沉戰報】敵艦「${shipName}」(${ship.type.toUpperCase()}) 徹底沉沒！獲得 +${cpAward} CP`,
+        `⚓【重大擊沉戰報】敵艦「${shipName}」(${ship.type.toUpperCase()}) 徹底沉沒！獲得 +${gainTxt}`,
         'enemy',
         'sunk',
         7.5
@@ -18879,7 +18882,7 @@ export class GameEngine {
         sourceName: '特混艦隊',
         targetName: shipName,
         actionType: 'ship_sunk',
-        text: `⚓【重大擊沉戰報】敵艦「${shipName}」(${ship.type.toUpperCase()}) 發生災難性殉爆，徹底沉沒！排水量 ${tonnage.toLocaleString()}噸 沉入海底！獲取 +${points} 分，★+${stars} 星，+${cpAward} CP！`,
+        text: `⚓【重大擊沉戰報】敵艦「${shipName}」(${ship.type.toUpperCase()}) 發生災難性殉爆，徹底沉沒！排水量 ${tonnage.toLocaleString()}噸 沉入海底！獲取 +${points} 分，★+${stars} 星，+${gainTxt}！`,
       });
     } else {
       this.casualties.playerShipsLost++;
@@ -18916,17 +18919,16 @@ export class GameEngine {
     const cpAward = 120;
     this.score.totalScore += points;
     this.score.stars += stars;
-    this.resourcePoints += cpAward;
-    this.totalCpEarned += cpAward;
+    const gainTxt = this.grant(cpAward, 'kill');
 
-    this.addBannerAlert(`💥【要塞攻陷】敵「${inst.name}」已被我軍徹底摧毀！獲得 +${cpAward} CP`, 'enemy', 'capture', 5.5);
+    this.addBannerAlert(`💥【要塞攻陷】敵「${inst.name}」已被我軍徹底摧毀！獲得 +${gainTxt}`, 'enemy', 'capture', 5.5);
     this.addCombatLog({
       category: 'sunk',
       sourceSide: 'player',
       sourceName: '航空打擊群',
       targetName: inst.name,
       actionType: 'installation_down',
-      text: `💥【要塞攻陷】敵方重要岸防設施「${inst.name}」已被我軍徹底摧毀！獲取 +${points} 分，★+1 星，+${cpAward} CP！`,
+      text: `💥【要塞攻陷】敵方重要岸防設施「${inst.name}」已被我軍徹底摧毀！獲取 +${points} 分，★+1 星，+${gainTxt}！`,
     });
   }
 

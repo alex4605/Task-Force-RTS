@@ -1,4 +1,6 @@
 import React, { useEffect } from 'react';
+import { RES_KEYS, formatBundle, nuclearCost } from '../../game/economy';
+import { ResourceBundle } from '../../types/game';
 import { Check, Wrench } from 'lucide-react';
 import { AircraftPayloadType, AircraftRole, PAYLOAD_CATALOG } from '../../types/game';
 
@@ -13,7 +15,7 @@ export interface ActiveArmamentTrayState {
 
 interface ArmamentTrayModalProps {
   tray: ActiveArmamentTrayState | null;
-  resourcePoints: number;
+  stock: ResourceBundle;
   onClose: () => void;
   onSelectPayload: (pid: AircraftPayloadType) => void;
 }
@@ -26,7 +28,7 @@ const NUKE_PAYLOADS = new Set<AircraftPayloadType>([
 
 export const ArmamentTrayModal: React.FC<ArmamentTrayModalProps> = ({
   tray,
-  resourcePoints,
+  stock,
   onClose,
   onSelectPayload,
 }) => {
@@ -63,14 +65,14 @@ export const ArmamentTrayModal: React.FC<ArmamentTrayModalProps> = ({
                 </span>
               </div>
               <div className="text-[11px] text-slate-400 mt-0.5">
-                作戰用途標註 · 殺傷破壞半徑 (m) · 戰略CP授權 · 機體外觀掛載標籤
+                作戰用途標註 · 殺傷破壞半徑 (m) · 政治授權 · 機體外觀掛載標籤
               </div>
             </div>
           </div>
           <div className="flex items-center gap-3 shrink-0">
             <div className="text-right text-xs">
-              <span className="text-slate-400">{'目前可用 CP: '}</span>
-              <span className="text-amber-400 font-bold tabular-nums">{Math.floor(resourcePoints)} CP</span>
+              <span className="text-slate-400">{'政治值 PP: '}</span>
+              <span className="text-purple-300 font-bold tabular-nums">{Math.floor(stock.pp)}</span>
             </div>
             <button
               type="button"
@@ -90,7 +92,8 @@ export const ArmamentTrayModal: React.FC<ArmamentTrayModalProps> = ({
             const isSelected = tray.currentPayload === pid;
             const isNuke = NUKE_PAYLOADS.has(pid);
             const cpCost = item.cpCost || 0;
-            const canAfford = !cpCost || resourcePoints >= cpCost;
+            const bill = nuclearCost(cpCost);
+            const canAfford = !cpCost || RES_KEYS.every((k) => stock[k] >= bill[k]);
 
             return (
               <div
@@ -149,15 +152,15 @@ export const ArmamentTrayModal: React.FC<ArmamentTrayModalProps> = ({
                       </span>
                     </div>
                     <div className="col-span-2 flex items-center justify-between pt-1 border-t border-[#1E3A5F]/40">
-                      <span className="text-slate-400">{'戰略CP授權: '}</span>
+                      <span className="text-slate-400">{'政治授權: '}</span>
                       <span
                         className={`font-bold tabular-nums ${
                           cpCost > 0 ? (canAfford ? 'text-amber-400' : 'text-red-400') : 'text-emerald-400'
                         }`}
                       >
                         {cpCost > 0
-                          ? `☢️ ${cpCost.toLocaleString()} CP`
-                          : '✅ 常規庫存 (0 CP)'}
+                          ? `☢️ ${formatBundle(bill)}`
+                          : '✅ 常規庫存 (免授權)'}
                       </span>
                     </div>
                   </div>
@@ -192,7 +195,7 @@ export const ArmamentTrayModal: React.FC<ArmamentTrayModalProps> = ({
                       <span>☢️ 立即掛載核彈 (CP 授權足額)</span>
                     ) : (
                       <span>
-                        {`⚠️ 掛載核彈 (出擊需 ${(cpCost || 4500).toLocaleString()} CP)`}
+                        {`⚠️ 掛載核彈 (出擊需 ${formatBundle(nuclearCost(cpCost || 4500))})`}
                       </span>
                     )
                   ) : (

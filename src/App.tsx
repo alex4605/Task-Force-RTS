@@ -513,11 +513,8 @@ export default function App() {
         airbaseReplenishTimer={engine.airbaseReplenishTimer}
         convoyReinforceTimer={engine.convoyReinforceTimer}
         nextConvoyEscort={engine.nextConvoyEscort}
-        resourcePoints={engine.resourcePoints}
+        resources={engine.getResourceState()}
         escalation={engine.escalation}
-        commandPointsPerSec={engine.commandPointsPerSec}
-        totalCpEarned={engine.totalCpEarned}
-        totalCpSpent={engine.totalCpSpent}
         casualties={engine.casualties}
         activeBannerAlerts={engine.activeBannerAlerts}
         activePlacementItem={activePlacementItem}

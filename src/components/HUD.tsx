@@ -1,7 +1,10 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
+import { CostTag, ResourceBar, affords, itemCost, itemCostText, shortfallText, stockOf } from './hud/resources';
+import { nuclearCost } from '../game/economy';
 import { Escalation, TIER_NAME } from '../game/escalation';
 import { CameraViewportState } from './GameCanvas';
 import {
+  ResourceState,
   Ship,
   Aircraft,
   AircraftModel,
@@ -113,12 +116,10 @@ interface HUDProps {
   onBuildAirfield?: (engineerId: string) => void;
   onUnloadAircraft?: () => void;
   // Resource Points & Requisition System
-  resourcePoints?: number;
+  /** War economy: MP / RP / PP / TP pools and income. */
+  resources?: ResourceState;
   /** Campaign escalation (objectives held and current stage). */
   escalation?: Escalation;
-  commandPointsPerSec?: number;
-  totalCpEarned?: number;
-  totalCpSpent?: number;
   casualties?: CasualtiesReport;
   activePlacementItem?: RequisitionItem | null;
   onStartPlacement?: (item: RequisitionItem) => void;
@@ -276,11 +277,8 @@ export const HUD: React.FC<HUDProps> = ({
   onTriggerLSMRocket,
   onBuildAirfield,
   onUnloadAircraft,
-  resourcePoints = 1200,
+  resources,
   escalation,
-  commandPointsPerSec = 15,
-  totalCpEarned: _totalCpEarned = 1200,
-  totalCpSpent: _totalCpSpent = 0,
   casualties: _casualties,
   onPurchaseRequisition,
   activePlacementItem,
@@ -301,6 +299,7 @@ export const HUD: React.FC<HUDProps> = ({
   onCancelSonobuoy,
   onSelectUnitIds,
 }) => {
+  const stock = stockOf(resources);
   // Every friendly deck with an air group: the flagship carrier, escort carriers and amphibious ships
   const carriers = useMemo(() => playerShips.filter((s) => !s.isSunk && s.carrierPlanes), [playerShips]);
   const [selectedCarrierId, setSelectedCarrierId] = useState<string | undefined>(undefined);
@@ -826,13 +825,7 @@ export const HUD: React.FC<HUDProps> = ({
             <span className="text-[#90CAF9]/70 text-[10px]">空中在航</span>
           </div>
 
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-[#040C16] border border-amber-500/70 rounded text-xs font-mono font-bold text-amber-300 shadow-sm" title="指揮點數 (CP)">
-            <Layers className="w-3.5 h-3.5 text-amber-400" />
-            <span>{Math.floor(resourcePoints)} CP</span>
-            <span className="text-[10px] text-emerald-400 font-normal">
-              (+{commandPointsPerSec.toFixed(1)}/s)
-            </span>
-          </div>
+          <ResourceBar state={resources} />
 
           <div className="flex items-center gap-1 text-[#FFD54F]">
             <span>★</span>
@@ -864,7 +857,7 @@ export const HUD: React.FC<HUDProps> = ({
                     ? 'bg-emerald-950/90 text-emerald-300 border-emerald-400 ring-1 ring-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]'
                     : 'bg-[#071322] hover:bg-[#0c1f36] text-slate-300 border-[#1E3A5F]'
                 }`}
-                title="開啟後戳記建造設施完全不扣除 CP 資源點數，可無限制自由測試與佈防"
+                title="開啟後戳記建造設施完全不扣除任何資源，可無限制自由測試與佈防"
               >
                 <input
                   type="checkbox"
@@ -872,7 +865,7 @@ export const HUD: React.FC<HUDProps> = ({
                   onChange={() => onToggleSandboxStamp?.()}
                   className="rounded text-emerald-400 focus:ring-0 cursor-pointer"
                 />
-                <span>✨ 免CP沙盒自由建造</span>
+                <span>✨ 免費沙盒自由建造</span>
               </label>
 
               <label className="flex items-center gap-1.5 cursor-pointer text-[11px] text-amber-300 bg-amber-950/60 px-2 py-1 rounded border border-amber-600/40">
@@ -884,10 +877,7 @@ export const HUD: React.FC<HUDProps> = ({
                 />
                 <span>連續戳記模式</span>
               </label>
-              <div className="flex items-center gap-1 font-bold text-amber-300 text-xs px-2 py-0.5 bg-[#071322] border border-amber-500/60 rounded">
-                <Layers className="w-3.5 h-3.5 text-amber-400" />
-                <span>{Math.floor(resourcePoints)} CP</span>
-              </div>
+              <ResourceBar state={resources} compact />
               <button
                 type="button"
                 onClick={() => onCancelPlacement?.()}
@@ -902,7 +892,7 @@ export const HUD: React.FC<HUDProps> = ({
           <div className="flex items-center gap-2 overflow-x-auto w-full pt-1 pb-0.5 max-w-full">
             {currentCatalog.filter((i) => i.category === 'installations').map((fac) => {
               const isSelected = activePlacementItem?.id === fac.id;
-              const canAfford = sandboxStamp || resourcePoints >= fac.cost;
+              const canAfford = sandboxStamp || affords(stock, itemCost(fac));
               return (
                 <button
                   key={fac.id}
@@ -915,7 +905,7 @@ export const HUD: React.FC<HUDProps> = ({
                       ? 'bg-[#071526] hover:bg-[#102A45] border-[#1E3A5F] text-slate-200 hover:border-amber-400'
                       : 'bg-slate-900 border-slate-800 text-slate-500 opacity-60'
                   }`}
-                  title={`${fac.name} (${fac.cost} CP)\n${fac.desc}`}
+                  title={`${fac.name} (${itemCostText(fac)})\n${fac.desc}`}
                 >
                   <UnitPreviewCanvas
                     kind="installation"
@@ -926,7 +916,7 @@ export const HUD: React.FC<HUDProps> = ({
                   />
                   <span className="font-bold">{fac.name.split(' ')[0]}</span>
                   <span className={`tabular-nums text-[10px] px-1 rounded font-bold ${isSelected ? 'bg-black/40 text-amber-300' : 'text-amber-400'}`}>
-                    {fac.cost} CP
+                    <CostTag cost={itemCost(fac)} stock={stock} free={sandboxStamp} />
                   </span>
                 </button>
               );
@@ -1518,11 +1508,8 @@ export const HUD: React.FC<HUDProps> = ({
                   </button>
                 )}
 
-                <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#040C16] border border-amber-500/40 rounded-lg text-xs font-mono ml-1">
-                  <span className="text-[10px] text-slate-400">戰術點數:</span>
-                  <span className="text-amber-300 font-bold tabular-nums">
-                    {Math.floor(resourcePoints)} CP
-                  </span>
+                <div className="ml-1">
+                  <ResourceBar state={resources} compact />
                 </div>
                 {escalation && (
                   <div
@@ -1928,8 +1915,8 @@ export const HUD: React.FC<HUDProps> = ({
                       currentPayload === 'tactical_nuke' ||
                       currentPayload === 'b52_megaton_nuke' ||
                       currentPayload === 'tactical_b61_nuke';
-                    const requiredNukeCp = payloadData.cpCost || 4500;
-                    const canAffordNuke = resourcePoints >= requiredNukeCp;
+                    const nukeBill = nuclearCost(payloadData.cpCost || 4500);
+                    const canAffordNuke = affords(stock, nukeBill);
 
                     const roleBadge =
                       role === 'level_bomber'
@@ -2060,10 +2047,8 @@ export const HUD: React.FC<HUDProps> = ({
 
                           {payloadData.cpCost ? (
                             <div className="text-[9px] font-bold flex items-center justify-between pt-0.5 border-t border-red-900/40">
-                              <span className="text-amber-400">☢️ 戰略授權 CP:</span>
-                              <span className={canAffordNuke ? 'text-amber-300' : 'text-red-400'}>
-                                {payloadData.cpCost} CP
-                              </span>
+                              <span className="text-amber-400">☢️ 政治授權:</span>
+                              <CostTag cost={nukeBill} stock={stock} />
                             </div>
                           ) : null}
 
@@ -2131,7 +2116,7 @@ export const HUD: React.FC<HUDProps> = ({
                                 ? isNukeEquipped
                                   ? canAffordNuke
                                     ? ('☢️ 核打擊出擊')
-                                    : (`☢️ 差${Math.max(0, requiredNukeCp - Math.floor(resourcePoints))} CP`)
+                                    : (`☢️ 缺 ${shortfallText(stock, nukeBill)}`)
                                   : (`出擊 ${effectiveCount}機`)
                                 : ('無機')}
                             </span>
@@ -2211,25 +2196,25 @@ export const HUD: React.FC<HUDProps> = ({
                 <div className="flex items-center gap-1.5 overflow-x-auto max-w-full py-0.5">
                   {(era === 'era4' || era === 'era5'
                     ? [
-                        { id: 'req-fac-sam-hawk', label: '⚡ 霍克SAM飛彈', cost: '380 CP' },
-                        { id: 'req-fac-airfield', label: '⚡ 前進野戰跑道', cost: '320 CP' },
-                        { id: 'req-fac-fob', label: '⚡ 前進基地(FOB)', cost: '450 CP' },
-                        { id: 'req-fac-radar', label: '⚡ SPS-40長程雷達', cost: '220 CP' },
-                        { id: 'req-fac-dockyard', label: '⚡ 應急修護浮塢', cost: '260 CP' },
-                        { id: 'req-fac-m1-240mm', label: '⚡ M1 240mm重砲', cost: '360 CP' },
+                        { id: 'req-fac-sam-hawk', label: '⚡ 霍克SAM飛彈' },
+                        { id: 'req-fac-airfield', label: '⚡ 前進野戰跑道' },
+                        { id: 'req-fac-fob', label: '⚡ 前進基地(FOB)' },
+                        { id: 'req-fac-radar', label: '⚡ SPS-40長程雷達' },
+                        { id: 'req-fac-dockyard', label: '⚡ 應急修護浮塢' },
+                        { id: 'req-fac-m1-240mm', label: '⚡ M1 240mm重砲' },
                       ]
                     : [
-                        { id: 'req-fac-forward-airfield', label: '⚡ 前進野戰跑道', cost: '320 CP' },
-                        { id: 'req-fac-heavy-aa', label: '⚡ 雙聯重型防空砲', cost: '220 CP' },
-                        { id: 'req-fac-battalion-cp', label: '⚡ 營前進指揮所', cost: '250 CP' },
-                        { id: 'req-fac-dockyard', label: '⚡ 戰地修護浮塢', cost: '220 CP' },
-                        { id: 'req-fac-coastal-gun', label: '⚡ 岸防重砲', cost: '350 CP' },
-                        { id: 'req-fac-m1-240mm', label: '⚡ M1 240mm重砲', cost: '340 CP' },
+                        { id: 'req-fac-forward-airfield', label: '⚡ 前進野戰跑道' },
+                        { id: 'req-fac-heavy-aa', label: '⚡ 雙聯重型防空砲' },
+                        { id: 'req-fac-battalion-cp', label: '⚡ 營前進指揮所' },
+                        { id: 'req-fac-dockyard', label: '⚡ 戰地修護浮塢' },
+                        { id: 'req-fac-coastal-gun', label: '⚡ 岸防重砲' },
+                        { id: 'req-fac-m1-240mm', label: '⚡ M1 240mm重砲' },
                       ]
                   ).map((qItem) => {
                     const matchedItem = currentCatalog.find((c) => c.id === qItem.id);
                     if (!matchedItem) return null;
-                    const canAfford = sandboxStamp || resourcePoints >= matchedItem.cost;
+                    const canAfford = sandboxStamp || affords(stock, itemCost(matchedItem));
 
                     return (
                       <button
@@ -2244,7 +2229,7 @@ export const HUD: React.FC<HUDProps> = ({
                             ? 'bg-[#0B2138] hover:bg-[#12365D] border-amber-400/60 text-amber-200 hover:text-white shadow-sm'
                             : 'bg-slate-900 border-slate-800 text-slate-500 cursor-not-allowed'
                         }`}
-                        title={`${matchedItem.name} — ${matchedItem.desc} (${matchedItem.cost} CP)`}
+                        title={`${matchedItem.name} — ${matchedItem.desc} (${itemCostText(matchedItem)})`}
                       >
                         <UnitPreviewCanvas
                           kind="installation"
@@ -2254,7 +2239,7 @@ export const HUD: React.FC<HUDProps> = ({
                           compact
                         />
                         <span>{qItem.label}</span>
-                        <span className="tabular-nums text-[9px] text-amber-400 font-mono">({qItem.cost})</span>
+                        <span className="text-[9px] font-mono"><CostTag cost={itemCost(matchedItem)} stock={stock} free={sandboxStamp} /></span>
                       </button>
                     );
                   })}
@@ -2284,15 +2269,15 @@ export const HUD: React.FC<HUDProps> = ({
                     return true;
                   })
                   .map((item) => {
-                    const canAfford = sandboxStamp || resourcePoints >= item.cost;
-                    const shortCp = Math.ceil(item.cost - resourcePoints);
+                    const canAfford = sandboxStamp || affords(stock, itemCost(item));
+                    const shortCp = shortfallText(stock, itemCost(item));
                     const isPierFacility =
                       item.typeTag === 'dockyard' || item.typeTag === 'pontoon_pier' || item.typeTag === 'major_naval_port';
 
                     return (
                       <div
                         key={item.id}
-                        title={`${item.name} (${item.cost} CP)\n${item.desc}\n${item.statsDesc}`}
+                        title={`${item.name} (${itemCostText(item)})\n${item.desc}\n${item.statsDesc}`}
                         className="flex flex-col justify-between bg-[#071526] border border-amber-500/40 hover:border-amber-400 rounded-lg p-2 text-xs font-mono shadow-md min-w-[162px] max-w-[172px] transition-all shrink-0"
                       >
                         <div>
@@ -2309,7 +2294,7 @@ export const HUD: React.FC<HUDProps> = ({
                               height={46}
                             />
                             <span className="absolute top-1 right-1 px-1 py-0.2 rounded bg-[#040C16]/90 border border-amber-500/60 text-amber-300 font-bold text-[9.5px] tabular-nums">
-                              {item.cost} CP
+                              <CostTag cost={itemCost(item)} stock={stock} free={sandboxStamp} />
                             </span>
                           </div>
                           <div className="flex items-center justify-between gap-1 mt-1">
@@ -2350,7 +2335,7 @@ export const HUD: React.FC<HUDProps> = ({
                                   ? isPierFacility
                                     ? `在海圖上指定「${item.name}」突堤碼頭建造座標`
                                     : `在海圖上指定建造座標`
-                                  : `資源不足 (尚欠 ${shortCp} CP)`
+                                  : `資源不足 (尚缺 ${shortCp})`
                               }
                             >
                               <MapPin className="w-2.5 h-2.5 text-cyan-200 shrink-0" />
@@ -2427,8 +2412,8 @@ export const HUD: React.FC<HUDProps> = ({
               {/* Items Catalog Cards for Battalion CP Support */}
               <DraggableScrollContainer className="gap-2 pb-1 max-w-full">
                 {currentCatalog.filter((item) => item.category === requisitionTab).map((item) => {
-                  const canAfford = sandboxStamp || resourcePoints >= item.cost;
-                  const shortCp = Math.ceil(item.cost - resourcePoints);
+                  const canAfford = sandboxStamp || affords(stock, itemCost(item));
+                  const shortCp = shortfallText(stock, itemCost(item));
 
                   const previewKind =
                     requisitionTab === 'ships'
@@ -2440,7 +2425,7 @@ export const HUD: React.FC<HUDProps> = ({
                   return (
                     <div
                       key={item.id}
-                      title={`${item.name} (${item.cost} CP)\n${item.desc}\n${item.statsDesc}`}
+                      title={`${item.name} (${itemCostText(item)})\n${item.desc}\n${item.statsDesc}`}
                       className="flex flex-col justify-between bg-[#071526] border border-[#1E3A5F] hover:border-emerald-400/80 rounded-lg p-2 text-xs font-mono shadow-md min-w-[162px] max-w-[172px] transition-all shrink-0"
                     >
                       <div>
@@ -2457,7 +2442,7 @@ export const HUD: React.FC<HUDProps> = ({
                             height={46}
                           />
                           <span className="absolute top-1 right-1 px-1 py-0.2 rounded bg-[#040C16]/90 border border-emerald-500/60 text-amber-300 font-bold text-[9.5px] tabular-nums">
-                            {item.cost} CP
+                            <CostTag cost={itemCost(item)} stock={stock} free={sandboxStamp} />
                           </span>
                         </div>
                         <div className="flex items-center justify-between gap-1 mt-1">
@@ -2486,10 +2471,10 @@ export const HUD: React.FC<HUDProps> = ({
                               ? 'bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white border border-emerald-400/80 shadow'
                               : 'bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed'
                           }`}
-                          title={canAfford ? `呼叫支援 ${item.name}` : `資源點數不足 (尚欠 ${shortCp} CP)`}
+                          title={canAfford ? `呼叫支援 ${item.name}` : `資源點數不足 (尚缺 ${shortCp})`}
                         >
                           <ShoppingCart className="w-2.5 h-2.5 shrink-0" />
-                          <span className="truncate">{canAfford ? ('呼叫支援') : `差 ${shortCp} CP`}</span>
+                          <span className="truncate">{canAfford ? ('呼叫支援') : `缺 ${shortCp}`}</span>
                         </button>
                       </div>
                     </div>
@@ -2505,7 +2490,7 @@ export const HUD: React.FC<HUDProps> = ({
       {/* 戰地軍械庫掛載選擇盤 (Tactical Armament Selector Tray Modal) */}
       <ArmamentTrayModal
         tray={activeArmamentTray}
-        resourcePoints={resourcePoints}
+        stock={stock}
         onClose={() => setActiveArmamentTray(null)}
         onSelectPayload={(pid) => {
           if (!activeArmamentTray) return;

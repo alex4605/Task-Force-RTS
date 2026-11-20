@@ -2099,13 +2099,17 @@ export interface RequisitionItem {
   unitType?: GroundUnitType;
 }
 
+/** War economy snapshot (MP / RP / PP / TP, see game/economy.ts). */
+export type ResourceBundle = Record<'mp' | 'rp' | 'pp' | 'tp', number>;
+
 export interface ResourceState {
-  points: number;
-  ratePerSecond: number;
-  totalEarned: number;
-  totalSpent: number;
-  islandBonus: number;
-  killBonus: number;
+  stock: ResourceBundle;
+  /** Income per second. */
+  rate: ResourceBundle;
+  earned: ResourceBundle;
+  spent: ResourceBundle;
+  /** Current mobilisation level name. */
+  mobilisation: string;
 }
 
 export interface CasualtiesReport {
