@@ -1,9 +1,10 @@
 import { Ship, ShipType } from '../../../types/game';
 import { RenderContext } from '../context';
-import { drawAkizukiDD, drawBattleship, drawCVE, drawCarrier, drawChokaiCA, drawCruiser, drawDestroyer, drawKongoBB, drawLCVP, drawLSMR, drawLST, drawSubmarine } from './ww2';
+import { drawAkizukiDD, drawBattleship, drawChokaiCA, drawCruiser, drawDestroyer, drawKongoBB, drawLCVP, drawLSMR, drawLST, drawSubmarine } from './ww2';
 import { drawAdamsDDG, drawBelknapCG, drawCV63, drawForrestShermanDD, drawFoxtrotSS, drawKashinDDG, drawKnoxFFG, drawKomarPTG, drawKyndaCG, drawLCM8, drawLPHIwoJima, drawOsaPTG, drawP6TorpedoBoat, drawPetyaFFG, drawRigaFFG, drawSverdlovCL } from './coldWar';
 import { drawAustinLPD, drawIowaModernized, drawKiddDDG, drawKievCVHG, drawKirovCGN, drawLCAC, drawLosAngelesSSN, drawNimitzCVN, drawOscarSSGN, drawPerryFFG, drawSovremennyDD, drawSpruanceDD, drawTiconderogaCG, drawUdaloyDD, drawVirginiaCG } from './modern';
 
+import { drawCVE, drawCarrier } from './ww2Carriers';
 import { drawPBR, drawRiverGunboat, drawSlavaCG, drawTarawaLHA } from './additions';
 
 /** Draws a hull silhouette in the ship's local frame (bow along +x). */

@@ -4,6 +4,7 @@ import { Ship, Vector2D } from '../../../types/game';
 import { RenderContext, Camera, isWorldCircleVisible } from '../context';
 import { drawAlliedSAGShip } from './alliedSag';
 import { SHIP_HULL_DRAWERS } from './hulls';
+import { planView } from './planform';
 
 function isSubmarineShip(ship: Ship): boolean {
   return (
@@ -46,7 +47,7 @@ export function drawShips(rc: RenderContext, ships: Ship[], camera: Camera, sele
     const hullColor = isPlayer ? '#E0F7FA' : isAllied ? '#B9F6CA' : '#FFCDD2';
     const detailColor = isPlayer ? '#80DEEA' : isAllied ? '#00E676' : '#EF9A9A';
 
-    drawHull(rc, ship, hullColor, detailColor);
+    drawHull(rc, planView(ship), hullColor, detailColor);
 
     drawFunnelSmoke(rc, ship);
 

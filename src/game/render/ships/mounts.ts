@@ -66,9 +66,12 @@ export function drawShipTurrets(rc: RenderContext, ship: Ship, color: string) {
     if (style.kind === 'casemate') ctx.rotate(Math.sign(turret.relY || 1) * Math.PI / 2 + clampBeamTrain(turret.angle - ship.heading, turret.relY));
     else if (!(style.kind === 'box' && style.fixed)) ctx.rotate(turret.angle - ship.heading);
     switch (style.kind) {
-      case 'gun':
-        drawGunHouse(ctx, style.radius, style.bore, turret.barrelCount, color);
+      case 'gun': {
+        // A gun house never spans more than ~3/4 of the beam it sits on
+        const r = Math.min(style.radius, Math.max(1.6, ship.width * 0.36));
+        drawGunHouse(ctx, r, style.bore, turret.barrelCount, color);
         break;
+      }
       case 'aa':
         drawAAMount(ctx, style.bore, turret.barrelCount, color);
         break;
