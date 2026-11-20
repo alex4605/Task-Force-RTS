@@ -16,6 +16,8 @@ export function drawInstallation(rc: RenderContext, inst: Installation, island?:
     const zR = inst.civilianZoneRadius;
     ctx.save();
     ctx.setLineDash([6, 6]);
+    // Towns are drawn as street blocks by the terrain layer; only the camp keeps its marked perimeter
+    if (inst.type !== 'refugee_camp') ctx.globalAlpha = 0;
     if (inst.isCivilian) {
       ctx.strokeStyle = inst.type === 'refugee_camp' ? 'rgba(255, 238, 88, 0.45)' : 'rgba(128, 222, 234, 0.45)';
       ctx.fillStyle = inst.type === 'refugee_camp' ? 'rgba(255, 238, 88, 0.05)' : 'rgba(0, 229, 255, 0.05)';
@@ -30,6 +32,7 @@ export function drawInstallation(rc: RenderContext, inst: Installation, island?:
     ctx.stroke();
     ctx.setLineDash([]);
 
+    ctx.globalAlpha = 1;
     ctx.fillStyle = inst.type === 'refugee_camp' ? '#FFE082' : '#80DEEA';
     ctx.font = 'bold 8px monospace';
     ctx.textAlign = 'center';

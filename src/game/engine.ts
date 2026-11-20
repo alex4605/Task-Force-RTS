@@ -41,6 +41,8 @@ import { getAfbModelsForEra, getCarrierModelsForEra, getCatalogRole } from './ai
 import { AIR_WEAPON_RANGE, gameRangeFromKm, getInstallationRange } from './rangeScale';
 import { getShipAshmFit, getShipSamSystem } from './navalMissileSalvos';
 import { applyHistoricalGuns, bombSpec, bombsPerRelease, burstBullets, getGunBattery, rocketKind, rocketsPerSalvo, ROCKETS, roundsPerBurst, warheadVsGround, warheadVsInstallation, warheadVsShip } from './aircraftArmament';
+import { getTerrainMap, TerrainMap } from './terrain/terrainMap';
+import { groundSilhouetteClass } from './unitPreviewRenderer';
 import { GroundWreck, leavesWreck, WRECK_LIFETIME } from './render/unitDetails';
 import { AHEAD_THROWERS, hasAswWeapon, layerFactorForAircraft, layerFactorForShipSonar, layerFactorForSonobuoy, updateThermoclineDepth, STANDOFF_ASW, aircraftDetectionRange, applyHistoricalAswFit, svttLabel, depthChargePattern, enemyAswWeapon, isDieselBoat, isSurfacedBoat, shipSonar, sonarDeadZone, sonarDetectionRange, sonobuoySensitivity, updateDieselBattery } from './asw';
 import { barrierStation, isStriker, selectAirTarget } from './airMissions';
@@ -150,6 +152,11 @@ export class GameEngine {
   public groundUnits: GroundUnit[] = [];
   /** Burnt-out vehicles left where ground units were destroyed (render only). */
   public groundWrecks: GroundWreck[] = [];
+
+  /** Classified terrain of the current sector (built on first use, shared with the renderer). */
+  public get terrain(): TerrainMap {
+    return getTerrainMap(this.islands, this.worldSize, this.era);
+  }
   public aircraft: Aircraft[] = [];
   public projectiles: Projectile[] = [];
   public particles: Particle[] = [];
@@ -7755,10 +7762,11 @@ export class GameEngine {
       // 城市戰地形與掩體判定 (Urban Terrain & Air Raid Cover)
       // 進入城市/城鎮/定居點掩體內: 空襲減傷70%、步火直射防禦掩護50%
       // ══════════════════════════════════════════════════════════
-      let inUrban = false;
-      for (const isl of this.islands) {
+      // Built-up area from the terrain map; refugee camps keep their marked perimeter
+      let inUrban = this.terrain.isUrban(unit.pos.x, unit.pos.y);
+      for (const isl of inUrban ? [] : this.islands) {
         for (const inst of isl.installations) {
-          if (!inst.isDestroyed && (inst.civilianZoneRadius || 0) > 0) {
+          if (!inst.isDestroyed && inst.type === 'refugee_camp' && (inst.civilianZoneRadius || 0) > 0) {
             if (dist(unit.pos, inst.pos) <= inst.civilianZoneRadius!) {
               inUrban = true;
               break;
@@ -7803,6 +7811,10 @@ export class GameEngine {
             const penalty = Math.min(0.80, 0.30 + ((unit.suppression ?? 0) / 100) * 0.50);
             moveSpeed *= (1 - penalty);
           }
+          // Terrain: roads speed vehicles up; paddies, jungle, marsh, mountains and fords slow them
+          const kind = groundSilhouetteClass(unit.type);
+          const onFoot = kind === 'infantry' || kind === 'atgm' || kind === 'mortar';
+          moveSpeed *= this.terrain.moveFactor(unit.pos.x, unit.pos.y, !onFoot);
           unit.speed = moveSpeed;
 
           // ══════════════════════════════════════════════════════════
@@ -16809,7 +16821,8 @@ export class GameEngine {
           const urbanCoverMod = u.isInUrbanCover ? 0.50 : 1.0;
           // Machine-gun rounds bounce off tanks; 30 mm GAU-8 depleted uranium goes through
           const armourMod = (u.armor || 0.2) >= 0.55 ? proj.vsArmour ?? 0.1 : 1 - (u.armor || 0.2) * 0.35;
-          const dmg = Math.round(proj.damage * orgDmgScale * armourMod * urbanCoverMod);
+          const canopy = proj.warhead === 'gun' ? this.terrain.airConcealment(u.pos.x, u.pos.y) : 1;
+          const dmg = Math.round(proj.damage * orgDmgScale * armourMod * urbanCoverMod * canopy);
           u.health = Math.max(0, u.health - dmg);
           u.strength = Math.max(0, Math.round((u.health / u.maxHealth) * 100));
           u.organization = Math.max(0, currentOrg - (u.isInUrbanCover ? 2 : 4));
@@ -17678,7 +17691,10 @@ export class GameEngine {
         const isBunkerBusterMod = proj.isBunkerBuster ? 1.7 : 1.0;
         const armoured = unitArmor >= 0.55;
         const warheadMod = warheadVsGround(proj.warhead, armoured, proj.vsArmour);
-        const physicalDmg = Math.round(proj.damage * (1 - unitArmor * (proj.isBunkerBuster ? 0.1 : 0.4)) * coverReduction * orgDmgScale * urbanCoverMod * isBunkerBusterMod * warheadMod);
+        // Forest and jungle canopy hide troops from pilots
+        const fromAir = Boolean(proj.sourceModel) || proj.warhead === 'gun';
+        const canopy = fromAir ? this.terrain.airConcealment(unit.pos.x, unit.pos.y) : 1;
+        const physicalDmg = Math.round(proj.damage * (1 - unitArmor * (proj.isBunkerBuster ? 0.1 : 0.4)) * coverReduction * orgDmgScale * urbanCoverMod * isBunkerBusterMod * warheadMod * canopy);
         unit.health = Math.max(0, unit.health - physicalDmg);
         unit.strength = Math.max(0, Math.round((unit.health / unit.maxHealth) * 100));
 

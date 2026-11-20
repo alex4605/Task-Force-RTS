@@ -282,7 +282,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       // Render Scene with Carrier Radar Sweep
       const flagship = engine.getFlagship();
       renderer.drawOcean(cameraRef.current, engine.worldSize, flagship ? flagship.pos : undefined);
-      renderer.drawIslands(engine.islands, cameraRef.current);
+      renderer.drawIslands(engine.islands, cameraRef.current, engine.worldSize);
       renderer.drawStrongholds(engine.islands, cameraRef.current);
       renderer.drawSonobuoys(engine.sonobuoys, cameraRef.current);
       renderer.drawShips(

@@ -44,8 +44,8 @@ export class VectorRenderer {
   }
 
   // Draw Islands
-  public drawIslands(islands: Island[], camera: Camera) {
-    islandsRender.drawIslands(this.rc, islands, camera);
+  public drawIslands(islands: Island[], camera: Camera, worldSize = 14000) {
+    islandsRender.drawIslands(this.rc, islands, camera, worldSize);
   }
 
   // Draw Ships with RTS Selection Indicators & Submarine Fog of War
