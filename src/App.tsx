@@ -384,6 +384,7 @@ export default function App() {
   };
 
   const flagship = engine.getFlagship();
+  const radarCoverage = radarLayerOn ? engine.getRadarCoverage() : undefined;
 
   const selectedUnits: (Ship | Aircraft | GroundUnit)[] = [
     ...playerShips.filter((s) => selectedUnitIds.includes(s.id)),
@@ -488,6 +489,7 @@ export default function App() {
         onOpenBriefing={() => setIsBriefingOpen(true)}
         onOpenMap={() => setIsMapOpen(true)}
         radarLayerOn={radarLayerOn}
+        radarCoverage={radarCoverage}
         onToggleRadarLayer={() => {
           engine.showRadarCoverage = !engine.showRadarCoverage;
           setRadarLayerOn(engine.showRadarCoverage);
@@ -637,6 +639,7 @@ export default function App() {
         }}
         sectorName={intel?.sectorName || 'Coral Atoll'}
         era={engine.era}
+        radarCoverage={radarCoverage}
       />
 
       {/* Pearl Harbor Dockyard & Era Modernization */}

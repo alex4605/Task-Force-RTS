@@ -20,7 +20,7 @@ import {
   Sonobuoy,
 } from '../types/game';
 import { getRequisitionCatalog } from '../game/requisition';
-import { BattleAlertBanner } from '../game/engine';
+import { BattleAlertBanner, RadarCoverage } from '../game/engine';
 import {
   DEFAULT_AFB_FORMATION_COUNTS,
   DEFAULT_CARRIER_FORMATION_COUNTS,
@@ -94,6 +94,7 @@ interface HUDProps {
   onSelectPayload?: (role: AircraftRole, payload: AircraftPayloadType) => void;
   onMiniMapClick: (worldPos: Vector2D) => void;
   cameraViewport?: CameraViewportState | null;
+  radarCoverage?: RadarCoverage[];
   isMuted: boolean;
   onToggleMute: () => void;
   // AFB and Convoy Reinforcements
@@ -257,6 +258,7 @@ export const HUD: React.FC<HUDProps> = ({
   onSelectPayload,
   onMiniMapClick,
   cameraViewport = null,
+  radarCoverage,
   isMuted,
   onToggleMute,
   airbasePlanes = {},
@@ -1046,6 +1048,7 @@ export const HUD: React.FC<HUDProps> = ({
             worldSize={worldSize}
             cameraViewport={cameraViewport}
             onMiniMapClick={onMiniMapClick}
+            radarCoverage={radarCoverage}
           />
 
           {/* Right Panel Tab Switcher */}

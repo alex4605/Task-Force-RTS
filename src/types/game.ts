@@ -256,6 +256,8 @@ export interface UnitOrder {
   pendingSonobuoyPos?: Vector2D;
   /** A terrain route has been planned for this order (ground units). */
   routed?: boolean;
+  /** Riverine craft following a river channel (naval/riverine.ts). */
+  riverine?: boolean;
 }
 
 export interface ShipArmamentSpec {

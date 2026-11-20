@@ -1,6 +1,8 @@
 import React, { useRef, useEffect } from 'react';
 import { Island, Ship, Aircraft, GroundUnit, Era, Sonobuoy, Vector2D } from '../types/game';
 import { CameraViewportState } from './GameCanvas';
+import type { RadarCoverage } from '../game/engine';
+import { drawCoverageOnMap } from './hud/drawCoverage';
 import { X, Radio } from 'lucide-react';
 
 
@@ -19,6 +21,8 @@ interface TacticalMapModalProps {
   onFocusWorldPos?: (pos: Vector2D) => void;
   sectorName: string;
   era?: Era;
+  /** Radar coverage layer, when switched on. */
+  radarCoverage?: RadarCoverage[];
 }
 
 export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
@@ -33,6 +37,7 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
   groundUnits = [],
   sonobuoys = [],
   cameraViewport = null,
+  radarCoverage,
   onFocusWorldPos,
   sectorName,
   era = 'era1',
@@ -442,6 +447,8 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
       );
     }
 
+    drawCoverageOnMap(ctx, radarCoverage, scale, 2);
+
     // Draw Aircraft (With Special Kamikaze / Ohka indicators)
     for (const plane of aircraft) {
       if (plane.state === 'shot_down') continue;
@@ -509,7 +516,7 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
       ctx.strokeRect(vx, vy, vw, vh);
       ctx.setLineDash([]);
     }
-  }, [isOpen, worldSize, islands, playerShips, alliedShips, enemyShips, aircraft, groundUnits, sonobuoys, cameraViewport]);
+  }, [isOpen, worldSize, islands, playerShips, alliedShips, enemyShips, aircraft, groundUnits, sonobuoys, cameraViewport, radarCoverage]);
 
   if (!isOpen) return null;
 

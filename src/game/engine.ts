@@ -41,8 +41,10 @@ import { getAfbModelsForEra, getCarrierModelsForEra, getCatalogRole } from './ai
 import { AIR_WEAPON_RANGE, gameRangeFromKm, getInstallationRange } from './rangeScale';
 import { getShipAshmFit, getShipSamSystem } from './navalMissileSalvos';
 import { applyHistoricalGuns, bombSpec, bombsPerRelease, burstBullets, getGunBattery, rocketKind, rocketsPerSalvo, ROCKETS, roundsPerBurst, warheadVsGround, warheadVsInstallation, warheadVsShip } from './aircraftArmament';
-import { getTerrainMap, TERRAIN_NAMES, TerrainMap } from './terrain/terrainMap';
+import { getTerrainMap, TERRAIN, TERRAIN_NAMES, TerrainMap } from './terrain/terrainMap';
+const TERRAIN_WATER = TERRAIN.water;
 import { requiredDepth, SUBMERGED_MIN_DEPTH_M } from './naval/draft';
+import { inRiverChannel, isRiverine, nearestRiverPoint, planRiverRoute } from './naval/riverine';
 import { aircraftSensor, highCoverageRadius, installationRadarKm, lowCoveragePolygon, RadarSensor, sensorDetects, shipRadarKm, TRACK_MEMORY_S, visualDetects } from './radar';
 import { hasLineOfSight as hasLineOfSightAt } from './terrain/combat';
 import { canEngageGround, canSeeAircraft, coastalReach, concealment, findGroundPath, reverseSlopeFactor } from './terrain/combat';
@@ -251,6 +253,36 @@ export class GameEngine {
       airDamage: m.airConcealment(x, y),
       deepRiver: ci >= 0 && ci < m.deepRiver.length && m.deepRiver[ci] === 1,
     };
+  }
+
+  /**
+   * Route for a riverine craft (PBR, LCM-8, LCVP): when the destination is on or beside a river,
+   * or the boat is already in one, sail by sea to the right river mouth and up the channel
+   * (naval/riverine.ts). Null when the order is an ordinary sea move.
+   */
+  private planRiverineOrder(ship: Ship, target: Vector2D): { waypoints: Vector2D[]; targetPos: Vector2D } | null {
+    if (!isRiverine(ship) || !this.navGrid) return null;
+    const map = this.terrain;
+    const inRiver = inRiverChannel(map, ship.pos);
+    const reach = nearestRiverPoint(map, target);
+    const targetIsSea = map.at(target.x, target.y) === TERRAIN_WATER;
+    if (!inRiver && (!reach || reach.dist > 450 || targetIsSea)) return null;
+    const route = planRiverRoute(map, ship.pos, target, inRiver);
+    if (!route || route.channel.length === 0) return null;
+    const need = requiredDepth(ship);
+    const waypoints: Vector2D[] = [];
+    if (route.mouth) {
+      const seaLeg = this.navGrid.findPath(ship.pos, this.navGrid.projectToWalkableWater(route.mouth, need), need);
+      waypoints.push(...seaLeg);
+    }
+    waypoints.push(...route.channel);
+    if (inRiver && targetIsSea) {
+      // Down to the mouth and out to the sea destination
+      const exit = route.channel[route.channel.length - 1];
+      waypoints.push(...this.navGrid.findPath(this.navGrid.projectToWalkableWater(exit, need), target, need));
+      return { waypoints, targetPos: target };
+    }
+    return { waypoints, targetPos: waypoints[waypoints.length - 1] };
   }
 
   /** Terrain masking of low fliers from an air-defence site or ship (terrain/combat.ts). */
@@ -1040,12 +1072,17 @@ export class GameEngine {
         targetPos.x += Math.cos(offsetAngle) * offsetDist;
         targetPos.y += Math.sin(offsetAngle) * offsetDist;
       }
-      if (targetPos && this.navGrid) {
+      // Brown water: riverine craft ordered up a river (or already in one) take the channel
+      const river = order.type === 'move' && targetPos ? this.planRiverineOrder(ship, targetPos) : null;
+      if (!river && targetPos && this.navGrid) {
         targetPos = this.navGrid.projectToWalkableWater(targetPos, requiredDepth(ship));
       }
 
       let waypoints: Vector2D[] | undefined = undefined;
-      if (order.type === 'move' && targetPos) {
+      if (river) {
+        waypoints = river.waypoints;
+        targetPos = river.targetPos;
+      } else if (order.type === 'move' && targetPos) {
         waypoints = this.navGrid ? this.navGrid.findPath(ship.pos, targetPos, requiredDepth(ship)) : [targetPos];
       }
 
@@ -1054,6 +1091,7 @@ export class GameEngine {
         targetPos,
         waypoints,
         activeWaypointIndex: 0,
+        riverine: Boolean(river),
       };
 
       if (order.type === 'move' && targetPos) {
@@ -2208,8 +2246,9 @@ export class GameEngine {
       // RTS Navigation Orders with A* Waypoint Progression & Dynamic Island Perimeter Avoidance
       if (ship.order.type === 'move' && ship.order.targetPos) {
         if (ship.navStuck && this.navGrid) {
-          // No headway for several seconds: replan the sea lane from where the ship actually is
-          ship.order.waypoints = this.navGrid.findPath(ship.pos, ship.order.targetPos, requiredDepth(ship));
+          // No headway for several seconds: replan from where the ship actually is
+          const river = ship.order.riverine ? this.planRiverineOrder(ship, ship.order.targetPos) : null;
+          ship.order.waypoints = river ? river.waypoints : this.navGrid.findPath(ship.pos, ship.order.targetPos, requiredDepth(ship));
           ship.order.activeWaypointIndex = 0;
           ship.navStuck = false;
         }
@@ -2218,10 +2257,12 @@ export class GameEngine {
         let activeTarget = ship.order.targetPos;
 
         if (wps && wps.length > 0 && wpIdx < wps.length) {
-          activeTarget = this.advanceSeaLane(ship, wps);
+          // In a river channel the boat takes every bend: no look-ahead shortcuts, tight arrivals
+          const inChannel = Boolean(ship.order.riverine) && inRiverChannel(this.terrain, ship.pos);
+          activeTarget = ship.order.riverine ? wps[wpIdx] : this.advanceSeaLane(ship, wps);
           wpIdx = ship.order.activeWaypointIndex ?? wpIdx;
           const isFinalWp = wpIdx >= wps.length - 1;
-          const arriveDist = isFinalWp ? 45 : 95;
+          const arriveDist = isFinalWp ? 45 : inChannel ? 30 : 95;
           if (dist(ship.pos, activeTarget) < arriveDist) {
             if (!isFinalWp) {
               wpIdx += 1;
@@ -2242,9 +2283,15 @@ export class GameEngine {
           const dy = activeTarget.y - ship.pos.y;
           const d = Math.hypot(dx, dy);
           const desiredHeading = Math.atan2(dy, dx);
-          const avoidance = this.calculateNavalSteeringAvoidance(ship, desiredHeading, d);
-          ship.targetHeading = avoidance.targetHeading;
-          ship.targetSpeed = ship.maxSpeed * avoidance.speedScale;
+          if (ship.order.riverine && inRiverChannel(this.terrain, ship.pos)) {
+            // Between the banks: steer straight along the channel at river speed
+            ship.targetHeading = desiredHeading;
+            ship.targetSpeed = ship.maxSpeed * 0.75;
+          } else {
+            const avoidance = this.calculateNavalSteeringAvoidance(ship, desiredHeading, d);
+            ship.targetHeading = avoidance.targetHeading;
+            ship.targetSpeed = ship.maxSpeed * avoidance.speedScale;
+          }
         }
       }
 
@@ -2356,7 +2403,16 @@ export class GameEngine {
         const nx = ship.pos.x + ship.vel.x * dt;
         const ny = ship.pos.y + ship.vel.y * dt;
         const depthNext = need > 0 ? this.terrain.depthAt(nx, ny) : Infinity;
-        if (depthNext > 0 && depthNext < need && depthNext < this.terrain.depthAt(ship.pos.x, ship.pos.y)) {
+        const offChannel =
+          isRiverine(ship) &&
+          inRiverChannel(this.terrain, ship.pos) &&
+          depthNext <= 0 &&
+          !inRiverChannel(this.terrain, { x: nx, y: ny });
+        if (offChannel) {
+          // Riverine craft keep between the banks
+          ship.speed *= 0.6;
+          ship.navStuck = true;
+        } else if (depthNext > 0 && depthNext < need && depthNext < this.terrain.depthAt(ship.pos.x, ship.pos.y)) {
           ship.speed *= 0.5;
           ship.navStuck = true;
           if (ship.side === 'player' && !ship.shoalWarned) {
@@ -2380,8 +2436,10 @@ export class GameEngine {
         ship.vel.y = 0;
       }
 
-      // Island collision bounce and smooth shoreline sliding (prevent sticking/beaching)
-      for (const island of this.islands) {
+      // Island collision bounce and smooth shoreline sliding (prevent sticking/beaching);
+      // riverine craft inside a river channel are afloat, not aground
+      const afloatInRiver = isRiverine(ship) && inRiverChannel(this.terrain, ship.pos);
+      for (const island of afloatInRiver ? [] : this.islands) {
         if (isPointOnIslandLand(ship.pos, island)) {
           const pushAngle = Math.atan2(ship.pos.y - island.center.y, ship.pos.x - island.center.x);
           ship.pos.x += Math.cos(pushAngle) * 5;
@@ -2843,6 +2901,23 @@ export class GameEngine {
           targetShips
             .filter((s) => !s.isSunk && this.isGunTarget(s, ship.side) && dist(ship.pos, s.pos) <= effectiveRange && this.seaLineClear(ship.pos, s.pos))
             .sort((a, b) => dist(ship.pos, a.pos) - dist(ship.pos, b.pos))[0] || null;
+      }
+
+      // Brown-water craft rake the banks: hostile troops and positions in sight of the river
+      if (!target && isRiverine(ship) && turret.cooldown <= 0 && wcsEfficiency >= 0.15) {
+        const bank =
+          this.groundUnits.find(
+            (u) => this.isHostile(ship.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && this.canEngageGroundAt(ship.pos, effectiveRange, u.pos, false)
+          )?.pos ??
+          this.islands
+            .flatMap((isl) => isl.installations)
+            .find((i) => !i.isDestroyed && !i.isCivilian && this.isHostile(ship.side, i.side) && this.canEngageGroundAt(ship.pos, effectiveRange, i.pos, false))?.pos;
+        if (bank) {
+          turret.angle = Math.atan2(bank.y - ship.pos.y, bank.x - ship.pos.x);
+          this.fireTurretSalvo(ship, turret, bank);
+          turret.cooldown = turret.reloadTime / Math.max(0.3, wcsEfficiency);
+          continue;
+        }
       }
 
       if (target) {

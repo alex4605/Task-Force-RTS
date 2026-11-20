@@ -1,6 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { Aircraft, Island, Ship, Sonobuoy, Vector2D } from '../../types/game';
 import { CameraViewportState } from '../GameCanvas';
+import type { RadarCoverage } from '../../game/engine';
+import { drawCoverageOnMap } from './drawCoverage';
 
 interface MiniRadarProps {
   title: string;
@@ -12,6 +14,8 @@ interface MiniRadarProps {
   worldSize: number;
   cameraViewport: CameraViewportState | null;
   onMiniMapClick: (worldPos: Vector2D) => void;
+  /** Radar coverage layer, when switched on. */
+  radarCoverage?: RadarCoverage[];
 }
 
 export const MiniRadar: React.FC<MiniRadarProps> = ({
@@ -24,6 +28,7 @@ export const MiniRadar: React.FC<MiniRadarProps> = ({
   worldSize,
   cameraViewport,
   onMiniMapClick,
+  radarCoverage,
 }) => {
   const miniMapCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const isMiniMapDraggingRef = useRef<boolean>(false);
@@ -127,6 +132,8 @@ export const MiniRadar: React.FC<MiniRadarProps> = ({
       ctx.fillRect(bx - 1.5, by - 1.5, 3, 3);
     }
 
+    drawCoverageOnMap(ctx, radarCoverage, scale, 1);
+
     // Airborne Planes
     for (const p of aircraft) {
       if (p.state === 'shot_down') continue;
@@ -145,7 +152,7 @@ export const MiniRadar: React.FC<MiniRadarProps> = ({
       ctx.lineWidth = 1;
       ctx.strokeRect(vx, vy, Math.min(vw, size - 1), Math.min(vh, size - 1));
     }
-  }, [islands, playerShips, enemyShips, aircraft, sonobuoys, worldSize, cameraViewport]);
+  }, [islands, playerShips, enemyShips, aircraft, sonobuoys, worldSize, cameraViewport, radarCoverage]);
 
   const panMiniMapFromClient = (clientX: number, clientY: number) => {
     const canvas = miniMapCanvasRef.current;

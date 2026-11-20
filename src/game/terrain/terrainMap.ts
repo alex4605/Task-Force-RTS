@@ -418,6 +418,25 @@ export class TerrainMap {
           }
         }
         const width = rv.width || 14;
+        // A river authored to end at the coast must actually reach open water: carry its last
+        // reach on in the same direction until it meets the sea (up to ~500 m)
+        for (const atEnd of [true, false]) {
+          const tip = atEnd ? pts[pts.length - 1] : pts[0];
+          const prev = atEnd ? pts[Math.max(0, pts.length - 4)] : pts[Math.min(pts.length - 1, 3)];
+          const len = Math.hypot(tip.x - prev.x, tip.y - prev.y) || 1;
+          const ux = (tip.x - prev.x) / len;
+          const uy = (tip.y - prev.y) / len;
+          // Only river ends near the sea
+          let sea = -1;
+          for (let k = 1; k <= 12; k++) {
+            if (this.at(tip.x + ux * k * 40, tip.y + uy * k * 40) === TERRAIN.water) { sea = k; break; }
+          }
+          if (sea < 0) continue;
+          const ext: Vector2D[] = [];
+          for (let k = 1; k <= sea + 1; k++) ext.push({ x: tip.x + ux * k * 40, y: tip.y + uy * k * 40 });
+          if (atEnd) pts.push(...ext);
+          else pts.unshift(...ext.reverse());
+        }
         this.rivers.push({ points: pts, width, kind: rv.straight ? 'canal' : 'river', name: rv.name });
         const deep = width >= 26 || rv.straight;
         this.stampLine(pts, width * 0.5 + CELL * 0.5, (i) => {
@@ -798,6 +817,20 @@ export class TerrainMap {
       else if (t === TERRAIN.lake) depth = Math.min(depth, 10 + 30 * banks);
       else depth = Math.min(depth, 400);
       this.depth[i] = depth;
+    }
+    // River channels: navigable by shallow-draught craft (depth grows with width); the channel
+    // carries on through the river mouth across the coastal shallows (estuary scour)
+    for (const rv of this.rivers) {
+      const d = 1.5 + rv.width * 0.12;
+      this.stampLine(rv.points, rv.width / 2 + CELL * 0.6, (i) => {
+        const t = this.type[i];
+        if (t === TERRAIN.river || t === TERRAIN.water) this.depth[i] = Math.max(this.depth[i], d);
+      });
+      for (const end of [rv.points[0], rv.points[rv.points.length - 1]]) {
+        this.stampDisc(end.x, end.y, 160, (i, dd) => {
+          if (this.type[i] === TERRAIN.water) this.depth[i] = Math.max(this.depth[i], d * (1 - dd / 320));
+        });
+      }
     }
     // Coral reef flats around atolls: a ring of 1-2 m water just off the island
     for (const isl of islands) {
