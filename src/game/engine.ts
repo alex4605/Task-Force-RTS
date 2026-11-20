@@ -7824,7 +7824,8 @@ export class GameEngine {
           const nextX = unit.pos.x + Math.cos(unit.heading) * unit.speed * dt * 15;
           const nextY = unit.pos.y + Math.sin(unit.heading) * unit.speed * dt * 15;
           const isLVT = unit.isAmphibious || unit.type === 'usmc_lvt_42' || unit.type === 'usmc_lvt_45' || unit.type === 'usmc_lvtp5';
-          const onAnyIsland = this.islands.some((isl) => isPointInPolygon({ x: nextX, y: nextY }, isl.points));
+          // Lakes and reservoirs count as water: only amphibians cross them
+          const onAnyIsland = this.islands.some((isl) => isPointInPolygon({ x: nextX, y: nextY }, isl.points)) && !this.terrain.isLake(nextX, nextY);
 
           if (!onAnyIsland && !isLVT) {
             // 非兩棲裝備無法涉水，停駐於灘頭

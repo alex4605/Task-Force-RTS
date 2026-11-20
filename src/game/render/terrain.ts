@@ -23,7 +23,7 @@ const BASE: Record<TerrainType, RGB> = {
   2: [62, 66, 50], // beach strip (sand itself is drawn along the coastline)
   3: [38, 58, 42], // grass / kunai
   4: [52, 60, 40], // farmland
-  5: [44, 70, 48], // rice paddies
+  5: [50, 66, 44], // rice paddies
   6: [24, 50, 34], // temperate forest
   7: [18, 52, 30], // jungle
   8: [20, 44, 38], // mangrove
@@ -33,6 +33,8 @@ const BASE: Record<TerrainType, RGB> = {
   12: [60, 58, 54], // built-up
   13: [34, 54, 46], // marsh
   14: [36, 62, 48], // river banks (the water itself is a vector line)
+  15: [62, 56, 50], // heather moor
+  16: [0, 0, 0], // lakes: vector fill
 };
 
 const RASTER_PX = 1536;
@@ -94,7 +96,7 @@ function bake(map: TerrainMap): Baked {
       const rr = Math.max(0, Math.min(map.rows - 1, r0 + (ty >= 0.5 ? 1 : 0)));
       const t = map.type[rr * map.cols + cc] as TerrainType;
       const o = (py * px + pxl) * 4;
-      if (t === TERRAIN.water || t === TERRAIN.lagoon) {
+      if (t === TERRAIN.water || t === TERRAIN.lagoon || t === TERRAIN.lake) {
         data[o + 3] = 0;
         continue;
       }
@@ -129,7 +131,7 @@ function bake(map: TerrainMap): Baked {
         // Paddy dykes: small flooded squares with bright water glints
         const ex = ((x * 0.9 + y * 0.44) % 60 + 60) % 60;
         const ey = ((y * 0.9 - x * 0.44) % 46 + 46) % 46;
-        if (ex < scale * 1.2 || ey < scale * 1.2) tex -= 10;
+        if (ex < scale * 1.2 || ey < scale * 1.2) tex -= 6;
         else {
           const flood = hash2(Math.floor((x * 0.9 + y * 0.44) / 60), Math.floor((y * 0.9 - x * 0.44) / 46), s + 13);
           b += flood * 12;
@@ -137,6 +139,10 @@ function bake(map: TerrainMap): Baked {
         }
       } else if (t === TERRAIN.urban) {
         tex += grain * 8;
+      } else if (t === TERRAIN.heath) {
+        // Heather tussocks and sandy tracks
+        tex += (fbm(x / 35, y / 35, s + 21, 2) - 0.5) * 22;
+        r += (fbm(x / 140, y / 140, s + 22, 2) - 0.4) * 22; // patches of flowering heather
       } else if (t === TERRAIN.marsh) {
         tex += (fbm(x / 60, y / 60, s + 15, 2) > 0.55 ? 14 : -6);
         b += 8;
@@ -252,6 +258,30 @@ export function drawTerrainOverlays(rc: RenderContext, map: TerrainMap, camera: 
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
+  // Lakes and reservoirs
+  for (const lake of map.lakes) {
+    if (!lineVisible(rc, camera, lake.points)) continue;
+    ctx.beginPath();
+    for (let i = 0; i < lake.points.length; i++) {
+      const p = lake.points[i];
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    }
+    ctx.closePath();
+    ctx.fillStyle = '#17496A';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(129, 212, 250, 0.45)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    if (lake.name && zoom >= 0.1) {
+      const c = lake.points.reduce((a, p) => ({ x: a.x + p.x / lake.points.length, y: a.y + p.y / lake.points.length }), { x: 0, y: 0 });
+      ctx.font = `italic ${Math.round(11 / Math.max(zoom, 0.25))}px serif`;
+      ctx.fillStyle = 'rgba(179, 229, 252, 0.85)';
+      ctx.textAlign = 'center';
+      ctx.fillText(lake.name, c.x, c.y);
+    }
+  }
+
   // Rivers: dark bank, water, faint highlight
   for (const rv of map.rivers) {
     if (!lineVisible(rc, camera, rv.points)) continue;
@@ -264,12 +294,54 @@ export function drawTerrainOverlays(rc: RenderContext, map: TerrainMap, camera: 
     ctx.strokeStyle = 'rgba(129, 212, 250, 0.35)';
     ctx.lineWidth = Math.max(1, rv.width * 0.25);
     strokeLine(ctx, rv.points);
+    if (rv.kind === 'canal') {
+      // Canal embankments
+      ctx.strokeStyle = 'rgba(200, 200, 190, 0.35)';
+      ctx.lineWidth = 1.2;
+      ctx.setLineDash([2, 10]);
+      strokeLine(ctx, rv.points);
+      ctx.setLineDash([]);
+    }
+    if (rv.name && zoom >= 0.12 && zoom < 0.6) {
+      const mid = rv.points[Math.floor(rv.points.length * 0.4)];
+      const nxt = rv.points[Math.min(rv.points.length - 1, Math.floor(rv.points.length * 0.4) + 3)];
+      let ang = Math.atan2(nxt.y - mid.y, nxt.x - mid.x);
+      if (ang > Math.PI / 2 || ang < -Math.PI / 2) ang += Math.PI;
+      ctx.save();
+      ctx.translate(mid.x, mid.y);
+      ctx.rotate(ang);
+      ctx.font = `italic ${Math.round(11 / zoom)}px serif`;
+      ctx.fillStyle = 'rgba(179, 229, 252, 0.75)';
+      ctx.textAlign = 'center';
+      ctx.fillText(rv.name, 0, -rv.width - 6 / zoom);
+      ctx.restore();
+    }
   }
 
   // Roads: casing and surface; trails dashed
   for (const rd of map.roads) {
     if (!lineVisible(rc, camera, rd.points)) continue;
-    if (rd.kind === 'trail') {
+    if (rd.kind === 'rail') {
+      // Railway: dark line with sleepers
+      ctx.strokeStyle = 'rgba(20, 20, 24, 0.85)';
+      ctx.lineWidth = 3.2;
+      strokeLine(ctx, rd.points);
+      ctx.strokeStyle = 'rgba(200, 200, 200, 0.7)';
+      ctx.lineWidth = 5;
+      ctx.setLineDash([1.5, 9]);
+      strokeLine(ctx, rd.points);
+      ctx.setLineDash([]);
+    } else if (rd.kind === 'highway') {
+      ctx.strokeStyle = 'rgba(15, 18, 22, 0.8)';
+      ctx.lineWidth = rd.width + 4;
+      strokeLine(ctx, rd.points);
+      ctx.strokeStyle = 'rgba(214, 196, 140, 0.9)';
+      ctx.lineWidth = rd.width;
+      strokeLine(ctx, rd.points);
+      ctx.strokeStyle = 'rgba(40, 40, 40, 0.8)';
+      ctx.lineWidth = 1;
+      strokeLine(ctx, rd.points);
+    } else if (rd.kind === 'trail') {
       ctx.setLineDash([7, 6]);
       ctx.strokeStyle = 'rgba(161, 136, 127, 0.75)';
       ctx.lineWidth = 2.4;

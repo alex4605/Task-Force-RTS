@@ -1,4 +1,4 @@
-import { Era, Island, Vector2D } from '../../types/game';
+import { Era, Island, TerrainZone, Vector2D } from '../../types/game';
 import { chaikin, fbm, meander, rng } from './noise';
 
 /**
@@ -36,19 +36,21 @@ export const TERRAIN = {
   urban: 12,
   marsh: 13,
   river: 14,
+  heath: 15,
+  lake: 16,
 } as const;
 export type TerrainType = (typeof TERRAIN)[keyof typeof TERRAIN];
 
 export const TERRAIN_NAMES: Record<TerrainType, string> = {
   0: '海域', 1: '潟湖', 2: '海灘', 3: '平原草地', 4: '農田', 5: '水稻田', 6: '森林', 7: '熱帶叢林',
-  8: '紅樹林', 9: '椰林', 10: '丘陵', 11: '山地', 12: '市街', 13: '沼澤', 14: '河流',
+  8: '紅樹林', 9: '椰林', 10: '丘陵', 11: '山地', 12: '市街', 13: '沼澤', 14: '河流', 15: '石南荒原', 16: '湖泊',
 };
 
 /** Ground speed multipliers: [foot, vehicle]. Roads override with ROAD_SPEED. */
 const MOVE: Record<TerrainType, [number, number]> = {
   0: [0, 0], 1: [0, 0], 2: [0.85, 0.75], 3: [1, 1], 4: [0.95, 0.9], 5: [0.6, 0.4], 6: [0.75, 0.6],
   7: [0.6, 0.4], 8: [0.45, 0.25], 9: [0.85, 0.75], 10: [0.8, 0.7], 11: [0.5, 0.3], 12: [0.85, 0.75],
-  13: [0.45, 0.3], 14: [0.4, 0.3],
+  13: [0.45, 0.3], 14: [0.4, 0.3], 15: [0.9, 0.85], 16: [0, 0],
 };
 const ROAD_SPEED: [number, number] = [1.15, 1.35];
 
@@ -78,7 +80,8 @@ export interface UrbanDistrict {
 export interface TerrainLine {
   points: Vector2D[];
   width: number;
-  kind: 'river' | 'road' | 'trail';
+  kind: 'river' | 'canal' | 'road' | 'trail' | 'highway' | 'rail';
+  name?: string;
 }
 
 export interface Peak {
@@ -103,6 +106,7 @@ export class TerrainMap {
   readonly bridges: { pos: Vector2D; angle: number }[] = [];
   readonly districts: UrbanDistrict[] = [];
   readonly peaks: Peak[] = [];
+  readonly lakes: { name?: string; points: Vector2D[] }[] = [];
   /** Bumped when the map changes, so cached rasters know to rebuild. */
   version = 0;
 
@@ -154,7 +158,38 @@ export class TerrainMap {
     return this.at(x, y) === TERRAIN.urban;
   }
 
+  /** Inland water a ground unit cannot walk into (lakes, reservoirs). */
+  isLake(x: number, y: number): boolean {
+    return this.at(x, y) === TERRAIN.lake;
+  }
+
   // ── Build ───────────────────────────────────────────────────────────────────────────────────
+
+  /** Calls `fn` for every cell whose centre is inside the polygon; `ragged` pushes the edge in/out by noise. */
+  private fillPolygon(poly: Vector2D[], fn: (i: number) => void, ragged = 0, seed = 0): void {
+    const ys = poly.map((p) => p.y);
+    const xs = poly.map((p) => p.x);
+    const r0 = Math.max(0, Math.floor((Math.min(...ys) - ragged) / CELL));
+    const r1 = Math.min(this.rows - 1, Math.floor((Math.max(...ys) + ragged) / CELL));
+    const c0 = Math.max(0, Math.floor((Math.min(...xs) - ragged) / CELL));
+    const c1 = Math.min(this.cols - 1, Math.floor((Math.max(...xs) + ragged) / CELL));
+    for (let row = r0; row <= r1; row++) {
+      const y = (row + 0.5) * CELL;
+      if (!ragged) {
+        const cross = scanline(poly, y);
+        for (let k = 0; k + 1 < cross.length; k += 2) {
+          for (let col = Math.max(c0, Math.ceil(cross[k] / CELL - 0.5)); col <= Math.min(c1, Math.floor(cross[k + 1] / CELL - 0.5)); col++) fn(row * this.cols + col);
+        }
+        continue;
+      }
+      for (let col = c0; col <= c1; col++) {
+        const x = (col + 0.5) * CELL;
+        const inside = pointInPolygon(x, y, poly);
+        const n = fbm(x / 300, y / 300, seed, 3) - 0.5;
+        if (inside ? n > -0.25 || distToPolygon(x, y, poly) > ragged * (0.5 - n) : n > 0.12 && distToPolygon(x, y, poly) < ragged * n * 2) fn(row * this.cols + col);
+      }
+    }
+  }
 
   /** Iterates the cells within `r` of a point (cell centres). */
   private stampDisc(cx: number, cy: number, r: number, fn: (i: number, d: number, x: number, y: number) => void): void {
@@ -247,7 +282,24 @@ export class TerrainMap {
         }
       }
     }
-    const isLand = (i: number) => this.type[i] !== TERRAIN.water && this.type[i] !== TERRAIN.lagoon;
+    for (const isl of islands) {
+      for (const lake of isl.lakes ?? []) {
+        const pts = chaikin(lake.points, 2, true);
+        this.lakes.push({ name: lake.name, points: pts });
+        this.fillPolygon(pts, (i) => (this.type[i] = TERRAIN.lake));
+      }
+    }
+    const isLand = (i: number) => this.type[i] !== TERRAIN.water && this.type[i] !== TERRAIN.lagoon && this.type[i] !== TERRAIN.lake;
+    const zones: { kind: TerrainZone['kind']; mask: Uint8Array }[] = [];
+    for (const isl of islands) {
+      for (const z of isl.terrainZones ?? []) {
+        const mask = new Uint8Array(this.type.length);
+        // Zone edges are softened with noise unless they are man-made (plantations)
+        const pts = z.kind === 'plantation' ? z.points : chaikin(z.points, 2, true);
+        this.fillPolygon(pts, (i) => (mask[i] = 1), z.kind === 'plantation' ? 0 : 220, s + zones.length * 13);
+        zones.push({ kind: z.kind, mask });
+      }
+    }
 
     // 2. Elevation: rolling ground, rising inland, plus ridges and hills
     for (let row = 0; row < this.rows; row++) {
@@ -262,6 +314,45 @@ export class TerrainMap {
     // Distance from the coast (in cells, capped) lifts the interior of large islands and the mainland
     const coastDist = this.distanceFromWater(isLand, 40);
     for (let i = 0; i < coastDist.length; i++) if (isLand(i)) this.elev[i] += Math.min(1, coastDist[i] / 40) * 0.18;
+
+    for (const z of zones) {
+      if (z.kind !== 'upland' && z.kind !== 'plateau' && z.kind !== 'delta' && z.kind !== 'tidal_flat') continue;
+      // Effects fade in over ~600 m from the zone edge, so there is no cliff at the boundary
+      const ramp = this.distanceInside(z.mask, 15);
+      for (let i = 0; i < z.mask.length; i++) {
+        if (!z.mask[i] || !isLand(i)) continue;
+        const w = ramp[i] / 15;
+        const x = ((i % this.cols) + 0.5) * CELL;
+        const y = (Math.floor(i / this.cols) + 0.5) * CELL;
+        const e = this.elev[i];
+        let target: number;
+        if (z.kind === 'upland') target = e + 0.12 + 0.28 * fbm(x / 500, y / 500, s + 51, 4);
+        else if (z.kind === 'plateau') target = Math.max(e, 0.4 + 0.18 * fbm(x / 700, y / 700, s + 53, 3));
+        else target = Math.min(e, 0.06 + 0.08 * fbm(x / 400, y / 400, s + 55, 2)); // dead-flat delta and flats
+        this.elev[i] = e + (target - e) * w;
+      }
+    }
+    // Karst: hundreds of steep limestone towers rising out of the paddies (Ha Long, Ninh Binh)
+    for (const z of zones) {
+      if (z.kind !== 'karst') continue;
+      const rand = rng(s + 57);
+      let minI = Infinity;
+      let maxI = -1;
+      for (let i = 0; i < z.mask.length; i++) if (z.mask[i]) { minI = Math.min(minI, i); maxI = i; }
+      if (maxI < 0) continue;
+      const count = Math.round((maxI - minI) / this.cols / 3);
+      for (let k = 0; k < count * 14; k++) {
+        const i = minI + Math.floor(rand() * (maxI - minI));
+        if (!z.mask[i] || !isLand(i)) continue;
+        const cx = ((i % this.cols) + 0.5) * CELL;
+        const cy = (Math.floor(i / this.cols) + 0.5) * CELL;
+        const r = 40 + rand() * 80;
+        const h = 0.6 + rand() * 0.3;
+        this.stampDisc(cx, cy, r, (j, d) => {
+          if (isLand(j)) this.elev[j] = Math.max(this.elev[j], h * Math.pow(1 - d / r, 0.6));
+        });
+      }
+    }
 
     for (const isl of islands) {
       for (const ridge of isl.mountainRidges ?? []) {
@@ -295,23 +386,29 @@ export class TerrainMap {
     // 3. Rivers and roads: meander the authored polylines, then mark the cells
     for (const isl of islands) {
       for (const rv of isl.rivers ?? []) {
-        const pts = meander(rv.points, 240, 200, s + rv.points.length * 31);
+        const pts = rv.straight ? rv.points : meander(rv.points, 240, 200, s + rv.points.length * 31);
         const width = rv.width || 14;
-        this.rivers.push({ points: pts, width, kind: 'river' });
+        this.rivers.push({ points: pts, width, kind: rv.straight ? 'canal' : 'river', name: rv.name });
         this.stampLine(pts, width * 0.5 + CELL * 0.5, (i) => {
           if (isLand(i)) this.type[i] = TERRAIN.river;
         });
         // Valley floor: the river cuts the ground down gently, and marks its flood plain
-        this.stampLine(pts, 700, (i, d) => {
+        const depth = era === 'era5' ? 0.25 : 0.6; // shallow valleys on the plain
+        this.stampLine(pts, rv.straight ? 0 : 1000, (i, d, x, y) => {
           if (!isLand(i)) return;
-          const t = d / 700;
-          this.elev[i] = this.elev[i] * (0.35 + 0.65 * t * t);
-          this.riverNear[i] = Math.min(this.riverNear[i], d);
+          // Valley width varies along the river: gorges and broad basins
+          const span = 350 + 650 * fbm(x / 1400, y / 1400, s + 33, 3);
+          const t = Math.min(1, d / span);
+          const k = 1 - depth * (1 - t * t) * (1 - t * t);
+          this.elev[i] *= k;
+          if (d < span) this.riverNear[i] = Math.min(this.riverNear[i], d / span);
         });
       }
       for (const rd of isl.roads ?? []) {
-        const pts = meander(rd.points, rd.type === 'trail' ? 45 : 25, 160, s + rd.points.length * 17);
-        this.roads.push({ points: pts, width: rd.type === 'trail' ? 3 : 5, kind: rd.type });
+        // Autobahns and railways are engineered: gentle curves only
+        const wiggle = rd.type === 'trail' ? 45 : rd.type === 'road' ? 25 : 8;
+        const pts = meander(rd.points, wiggle, rd.type === 'highway' || rd.type === 'rail' ? 400 : 160, s + rd.points.length * 17);
+        this.roads.push({ points: pts, width: rd.type === 'trail' ? 3 : rd.type === 'highway' ? 8 : rd.type === 'rail' ? 3 : 5, kind: rd.type });
       }
     }
 
@@ -387,17 +484,37 @@ export class TerrainMap {
         else if (pacific) t = veg > 0.4 ? TERRAIN.jungle : e > 0.45 ? TERRAIN.hill : TERRAIN.plain; // jungle and kunai grass
         else if (era === 'era3') {
           // Korea: forested slopes, terraced farms in the valleys
-          const floodPlain = this.riverNear[i] < 450;
+          const floodPlain = this.riverNear[i] < 0.4 + 0.3 * wet;
           t = e > 0.45 ? (veg > 0.45 ? TERRAIN.forest : TERRAIN.hill) : floodPlain && wet > 0.4 ? TERRAIN.paddy : veg > 0.6 ? TERRAIN.forest : TERRAIN.farmland;
         } else if (era === 'era4') {
           // Tonkin: jungle hills, rice paddies and marsh in the delta
-          const floodPlain = this.riverNear[i] < 650 || coastDist[i] < 8;
+          const floodPlain = this.riverNear[i] < 0.45 + 0.4 * wet || coastDist[i] < 8;
           t = e > 0.42 ? (veg > 0.35 ? TERRAIN.jungle : TERRAIN.hill) : floodPlain && wet > 0.66 ? TERRAIN.marsh : floodPlain && wet > 0.3 ? TERRAIN.paddy : veg > 0.5 ? TERRAIN.jungle : TERRAIN.plain;
         } else {
           // North Germany / Baltic plain: farmland patchwork, woods, wet heath
-          t = e > 0.42 ? (veg > 0.4 ? TERRAIN.forest : TERRAIN.farmland) : veg > 0.6 ? TERRAIN.forest : wet > 0.72 && this.riverNear[i] < 700 ? TERRAIN.marsh : TERRAIN.farmland;
+          t = e > 0.42 ? (veg > 0.4 ? TERRAIN.forest : TERRAIN.farmland) : veg > 0.6 ? TERRAIN.forest : wet > 0.72 && this.riverNear[i] < 0.8 ? TERRAIN.marsh : TERRAIN.farmland;
         }
         this.type[i] = t;
+      }
+    }
+
+    // Zone land cover
+    for (const z of zones) {
+      for (let i = 0; i < z.mask.length; i++) {
+        if (!z.mask[i] || !isLand(i) || this.type[i] === TERRAIN.river) continue;
+        const x = ((i % this.cols) + 0.5) * CELL;
+        const y = (Math.floor(i / this.cols) + 0.5) * CELL;
+        const n = fbm(x / 600, y / 600, s + 61, 3);
+        if (z.kind === 'delta') {
+          if (this.elev[i] > 0.5) continue;
+          if (era === 'era3') this.type[i] = n > 0.55 ? TERRAIN.paddy : TERRAIN.farmland;
+          else this.type[i] = n > 0.7 ? TERRAIN.marsh : n < 0.2 ? TERRAIN.plain : TERRAIN.paddy;
+        }
+        else if (z.kind === 'karst') this.type[i] = this.elev[i] > 0.5 ? TERRAIN.jungle : this.riverNear[i] < 1 || n > 0.35 ? TERRAIN.paddy : TERRAIN.plain;
+        else if (z.kind === 'heath') this.type[i] = n > 0.62 ? TERRAIN.forest : TERRAIN.heath;
+        else if (z.kind === 'tidal_flat') this.type[i] = TERRAIN.marsh;
+        else if (z.kind === 'plantation') this.type[i] = TERRAIN.forest;
+        else if (z.kind === 'upland' && this.type[i] === TERRAIN.farmland && n > 0.4) this.type[i] = TERRAIN.forest;
       }
     }
 
@@ -429,13 +546,14 @@ export class TerrainMap {
 
     // Road cells (after classification so roads survive towns and forests)
     for (const rd of this.roads) {
+      if (rd.kind === 'rail') continue;
       this.stampLine(rd.points, CELL * 0.75, (i) => {
         if (isLand(i)) this.road[i] = 1;
       });
     }
     // Bridges where a road crosses a river
     for (const rd of this.roads) {
-      if (rd.kind !== 'road') continue;
+      if (rd.kind === 'trail') continue;
       for (const rv of this.rivers) {
         for (const hit of polylineIntersections(rd.points, rv.points)) {
           if (!this.bridges.some((b) => Math.hypot(b.pos.x - hit.pos.x, b.pos.y - hit.pos.y) < 200)) this.bridges.push(hit);
@@ -444,6 +562,11 @@ export class TerrainMap {
     }
     this.version++;
     return this;
+  }
+
+  /** Distance (cells, capped) from each masked cell to the edge of the mask. */
+  private distanceInside(mask: Uint8Array, cap: number): Uint8Array {
+    return this.distanceFromWater((i) => mask[i] === 1, cap);
   }
 
   /** Chebyshev distance (in cells, capped) from each land cell to the nearest water cell. */

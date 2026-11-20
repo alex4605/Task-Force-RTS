@@ -1716,6 +1716,11 @@ export interface LagoonWater {
   channelBreaches?: { angle: number; width: number }[];
 }
 
+export interface TerrainZone {
+  kind: 'delta' | 'karst' | 'heath' | 'upland' | 'plateau' | 'tidal_flat' | 'plantation';
+  points: Vector2D[];
+}
+
 export interface Island {
   id: string;
   name: string;
@@ -1733,9 +1738,14 @@ export interface Island {
   forestBelts?: ForestBelt[];
   mountainRidges?: MountainRidge[];
   jungles?: { x: number; y: number; radius: number; density: number }[];
-  roads?: { points: Vector2D[]; type: 'road' | 'trail' }[];
+  roads?: { points: Vector2D[]; type: 'road' | 'trail' | 'highway' | 'rail' }[];
   hills?: { x: number; y: number; radius: number }[];
-  rivers?: { points: Vector2D[]; width: number }[];
+  /** `straight` keeps a canal ruler-straight (no meander); `name` labels it on the map. */
+  rivers?: { points: Vector2D[]; width: number; straight?: boolean; name?: string }[];
+  /** Inland lakes and reservoirs (impassable to ground units). */
+  lakes?: { id: string; name?: string; points: Vector2D[] }[];
+  /** Regions with a distinct land form: river delta, karst towers, heath, uplands, tidal flats ... */
+  terrainZones?: TerrainZone[];
 }
 
 export type ProjectileType =
