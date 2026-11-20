@@ -387,7 +387,13 @@ export default function App() {
   const selectedUnits: (Ship | Aircraft | GroundUnit)[] = [
     ...playerShips.filter((s) => selectedUnitIds.includes(s.id)),
     ...aircraft.filter((a) => selectedUnitIds.includes(a.id)),
-    ...groundUnits.filter((u) => selectedUnitIds.includes(u.id) && u.side === 'player' && !u.isDestroyed),
+    ...groundUnits
+      .filter((u) => selectedUnitIds.includes(u.id) && u.side === 'player' && !u.isDestroyed)
+      .map((u) => {
+        // Keep the terrain readout current even while the game is paused
+        if (!u.embarkedInShipId) engine.refreshGroundTerrainInfo(u);
+        return u;
+      }),
   ];
 
   return (

@@ -145,6 +145,22 @@ export type GroundUnitType =
   | 'opfor_sa15_tor'       // 時代五 9K330 道爾 (SA-15 Gauntlet) 垂直發射野戰防空/反飛彈戰車 (攔截戰機與來襲飛彈)
   | 'opfor_btr_zd';        // 時代五 BTR-ZD「喀嚓」空降兵履帶雙管 23mm + SA-7 防空自走砲
 
+export interface GroundTerrainInfo {
+  /** Terrain name, e.g. 叢林 / 水稻田 / 市街. */
+  name: string;
+  /** Height above sea level (m). */
+  elevationM: number;
+  onRoad: boolean;
+  /** Speed multiplier for this unit here. */
+  move: number;
+  /** Spotting-range multiplier: how close an enemy must be to see it. */
+  concealment: number;
+  /** Multiplier on damage from air attack (canopy). */
+  airDamage: number;
+  /** Deep river: vehicles need a bridge. */
+  deepRiver: boolean;
+}
+
 export interface GroundUnit {
   id: string;
   type: GroundUnitType;
@@ -197,6 +213,8 @@ export interface GroundUnit {
   counterBatteryTarget?: Vector2D;
   isNuclearTEL?: boolean;
   isMLRS?: boolean;
+  /** What the ground under the unit does to it (refreshed every tick; shown in the unit panel). */
+  terrainInfo?: GroundTerrainInfo;
   /** Terrain route for AI movement that is not a standing order (chases, charges). */
   route?: Vector2D[];
   routeIdx?: number;

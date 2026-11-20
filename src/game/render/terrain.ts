@@ -58,11 +58,20 @@ function bake(map: TerrainMap): Baked {
   const canvas = makeCanvas(px, px);
   const ctx = canvas.getContext('2d') as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
   const img = ctx.createImageData(px, px);
-  const data = img.data;
-  const scale = map.worldSize / px; // world units per pixel
+  const shader = makeShader(map, map.worldSize / px);
+  for (let row = 0; row < px; row++) shader.row(img.data, px, row, 0, 0);
+  ctx.putImageData(img, 0, 0);
+  return { canvas, version: map.version };
+}
+
+/**
+ * Per-pixel ground shading at a given resolution (world units per pixel), shared by the
+ * whole-map raster and the zoomed-in tiles. Hashes use global pixel indices at that resolution,
+ * so neighbouring tiles join seamlessly.
+ */
+function makeShader(map: TerrainMap, scale: number) {
   const cell = map.cell;
   const s = map.seed;
-
   // Bilinear elevation lookup (cell centres)
   const elevAt = (x: number, y: number) => {
     const fx = x / cell - 0.5;
@@ -76,112 +85,246 @@ function bake(map: TerrainMap): Baked {
     return (e[i] * (1 - tx) + e[i + 1] * tx) * (1 - ty) + (e[i + map.cols] * (1 - tx) + e[i + map.cols + 1] * tx) * ty;
   };
 
-  for (let py = 0; py < px; py++) {
-    for (let pxl = 0; pxl < px; pxl++) {
-      const x = (pxl + 0.5) * scale;
-      const y = (py + 0.5) * scale;
-      // Domain warp the type lookup so cell edges become ragged, natural boundaries
-      // Smooth low-frequency warp (organic edges) plus a little grain (no stair-steps)
-      const wx = x + (valueNoise(x / 90, y / 90, s) - 0.5) * cell * 1.6 + (hash2(pxl, py, s + 2) - 0.5) * scale;
-      const wy = y + (valueNoise(x / 90, y / 90, s + 1) - 0.5) * cell * 1.6 + (hash2(py, pxl, s + 3) - 0.5) * scale;
-      // Pick among the four surrounding cells with a noisy nearest-corner rule: boundaries
-      // become smooth curves at sub-cell scale instead of 40 m stair-steps
-      const gx = wx / cell - 0.5;
-      const gy = wy / cell - 0.5;
-      const c0 = Math.floor(gx);
-      const r0 = Math.floor(gy);
-      const tx = gx - c0 + (valueNoise(x / 22, y / 22, s + 4) - 0.5) * 0.9;
-      const ty = gy - r0 + (valueNoise(x / 22, y / 22, s + 6) - 0.5) * 0.9;
-      const cc = Math.max(0, Math.min(map.cols - 1, c0 + (tx >= 0.5 ? 1 : 0)));
-      const rr = Math.max(0, Math.min(map.rows - 1, r0 + (ty >= 0.5 ? 1 : 0)));
-      const t = map.type[rr * map.cols + cc] as TerrainType;
-      const o = (py * px + pxl) * 4;
-      if (t === TERRAIN.water || t === TERRAIN.lagoon || t === TERRAIN.lake) {
-        data[o + 3] = 0;
-        continue;
+  const shade = (data: Uint8ClampedArray, rowWidth: number, row: number, col: number, pxl: number, py: number): void => {
+    const x = (pxl + 0.5) * scale;
+    const y = (py + 0.5) * scale;
+    // Domain warp the type lookup so cell edges become ragged, natural boundaries
+    // Smooth low-frequency warp (organic edges) plus a little grain (no stair-steps)
+    // Open sea well clear of any coast: nothing to shade
+    if (map.at(x, y) === TERRAIN.water && map.at(x + 70, y) === TERRAIN.water && map.at(x - 70, y) === TERRAIN.water && map.at(x, y + 70) === TERRAIN.water && map.at(x, y - 70) === TERRAIN.water) {
+      data[(row * rowWidth + col) * 4 + 3] = 0;
+      return;
+    }
+    const wx = x + (valueNoise(x / 90, y / 90, s) - 0.5) * cell * 1.6 + (hash2(pxl, py, s + 2) - 0.5) * scale;
+    const wy = y + (valueNoise(x / 90, y / 90, s + 1) - 0.5) * cell * 1.6 + (hash2(py, pxl, s + 3) - 0.5) * scale;
+    // Pick among the four surrounding cells with a noisy nearest-corner rule: boundaries
+    // become smooth curves at sub-cell scale instead of 40 m stair-steps
+    const gx = wx / cell - 0.5;
+    const gy = wy / cell - 0.5;
+    const c0 = Math.floor(gx);
+    const r0 = Math.floor(gy);
+    const tx = gx - c0 + (valueNoise(x / 22, y / 22, s + 4) - 0.5) * 0.9;
+    const ty = gy - r0 + (valueNoise(x / 22, y / 22, s + 6) - 0.5) * 0.9;
+    const cc = Math.max(0, Math.min(map.cols - 1, c0 + (tx >= 0.5 ? 1 : 0)));
+    const rr = Math.max(0, Math.min(map.rows - 1, r0 + (ty >= 0.5 ? 1 : 0)));
+    const t = map.type[rr * map.cols + cc] as TerrainType;
+    const o = (row * rowWidth + col) * 4;
+    if (t === TERRAIN.water || t === TERRAIN.lagoon || t === TERRAIN.lake) {
+      data[o + 3] = 0;
+      return;
+    }
+    const base = BASE[t];
+    let r = base[0];
+    let g = base[1];
+    let b = base[2];
+
+    // Texture by type
+    const grain = hash2(pxl, py, s + 5) - 0.5;
+    let tex = grain * 10;
+    if (t === TERRAIN.jungle || t === TERRAIN.forest || t === TERRAIN.palms || t === TERRAIN.mangrove) {
+      // Canopy clumps
+      tex += (fbm(x / 45, y / 45, s + 7, 2) - 0.5) * 34;
+    } else if (t === TERRAIN.farmland) {
+      // Field parcels: a rotated grid of rectangles in varied crops
+      // Field orientation drifts across the map, so the patchwork does not read as a grid
+      const rot = (hash2(Math.floor(x / 1400), Math.floor(y / 1400), s + 8) - 0.5) * 1.4;
+      const ca = Math.cos(rot);
+      const sa = Math.sin(rot);
+      const u = x * ca + y * sa;
+      const v = y * ca - x * sa;
+      const fw = 120 + 60 * hash2(Math.floor(v / 90), 3, s + 10);
+      const fx = Math.floor(u / fw);
+      const fy = Math.floor(v / 90);
+      const crop = hash2(fx, fy, s + 9);
+      r += (crop - 0.5) * 18;
+      g += (crop - 0.4) * 14;
+      b += (crop - 0.6) * 6;
+      if (((u % fw) + fw) % fw < scale || ((v % 90) + 90) % 90 < scale) tex -= 9; // hedgerows and tracks
+    } else if (t === TERRAIN.paddy) {
+      // Paddy dykes: small flooded squares with bright water glints
+      const ex = ((x * 0.9 + y * 0.44) % 60 + 60) % 60;
+      const ey = ((y * 0.9 - x * 0.44) % 46 + 46) % 46;
+      if (ex < scale * 1.2 || ey < scale * 1.2) tex -= 6;
+      else {
+        const flood = hash2(Math.floor((x * 0.9 + y * 0.44) / 60), Math.floor((y * 0.9 - x * 0.44) / 46), s + 13);
+        b += flood * 12;
+        g += flood * 6;
       }
-      const base = BASE[t];
-      let r = base[0];
-      let g = base[1];
-      let b = base[2];
+    } else if (t === TERRAIN.urban) {
+      tex += grain * 8;
+    } else if (t === TERRAIN.heath) {
+      // Heather tussocks and sandy tracks
+      tex += (fbm(x / 35, y / 35, s + 21, 2) - 0.5) * 22;
+      r += (fbm(x / 140, y / 140, s + 22, 2) - 0.4) * 22; // patches of flowering heather
+    } else if (t === TERRAIN.marsh) {
+      tex += (fbm(x / 60, y / 60, s + 15, 2) > 0.55 ? 14 : -6);
+      b += 8;
+    } else if (t === TERRAIN.mountain) {
+      tex += (fbm(x / 70, y / 70, s + 17, 3) - 0.5) * 30;
+    } else {
+      tex += (fbm(x / 120, y / 120, s + 19, 2) - 0.5) * 16;
+    }
+    r += tex;
+    g += tex;
+    b += tex * 0.8;
 
-      // Texture by type
-      const grain = hash2(pxl, py, s + 5) - 0.5;
-      let tex = grain * 10;
-      if (t === TERRAIN.jungle || t === TERRAIN.forest || t === TERRAIN.palms || t === TERRAIN.mangrove) {
-        // Canopy clumps
-        tex += (fbm(x / 45, y / 45, s + 7, 2) - 0.5) * 34;
-      } else if (t === TERRAIN.farmland) {
-        // Field parcels: a rotated grid of rectangles in varied crops
-        // Field orientation drifts across the map, so the patchwork does not read as a grid
-        const rot = (hash2(Math.floor(x / 1400), Math.floor(y / 1400), s + 8) - 0.5) * 1.4;
-        const ca = Math.cos(rot);
-        const sa = Math.sin(rot);
-        const u = x * ca + y * sa;
-        const v = y * ca - x * sa;
-        const fw = 120 + 60 * hash2(Math.floor(v / 90), 3, s + 10);
-        const fx = Math.floor(u / fw);
-        const fy = Math.floor(v / 90);
-        const crop = hash2(fx, fy, s + 9);
-        r += (crop - 0.5) * 18;
-        g += (crop - 0.4) * 14;
-        b += (crop - 0.6) * 6;
-        if (((u % fw) + fw) % fw < scale || ((v % 90) + 90) % 90 < scale) tex -= 9; // hedgerows and tracks
-      } else if (t === TERRAIN.paddy) {
-        // Paddy dykes: small flooded squares with bright water glints
-        const ex = ((x * 0.9 + y * 0.44) % 60 + 60) % 60;
-        const ey = ((y * 0.9 - x * 0.44) % 46 + 46) % 46;
-        if (ex < scale * 1.2 || ey < scale * 1.2) tex -= 6;
-        else {
-          const flood = hash2(Math.floor((x * 0.9 + y * 0.44) / 60), Math.floor((y * 0.9 - x * 0.44) / 46), s + 13);
-          b += flood * 12;
-          g += flood * 6;
-        }
-      } else if (t === TERRAIN.urban) {
-        tex += grain * 8;
-      } else if (t === TERRAIN.heath) {
-        // Heather tussocks and sandy tracks
-        tex += (fbm(x / 35, y / 35, s + 21, 2) - 0.5) * 22;
-        r += (fbm(x / 140, y / 140, s + 22, 2) - 0.4) * 22; // patches of flowering heather
-      } else if (t === TERRAIN.marsh) {
-        tex += (fbm(x / 60, y / 60, s + 15, 2) > 0.55 ? 14 : -6);
-        b += 8;
-      } else if (t === TERRAIN.mountain) {
-        tex += (fbm(x / 70, y / 70, s + 17, 3) - 0.5) * 30;
-      } else {
-        tex += (fbm(x / 120, y / 120, s + 19, 2) - 0.5) * 16;
+    // Hill shading: light from the north-west
+    const e = elevAt(x, y);
+    // One set of neighbour samples serves both the hill shading and the contour test
+    const dd = Math.max(scale * 2, 6);
+    const exP = elevAt(x + dd, y);
+    const eyP = elevAt(x, y + dd);
+    const ex = (exP - elevAt(x - dd, y)) * ((scale * 2) / dd);
+    const ey = (eyP - elevAt(x, y - dd)) * ((scale * 2) / dd);
+    const shade = Math.max(-0.45, Math.min(0.45, -(ex + ey) * 22));
+    const lift = 1 + shade + e * 0.25;
+    r *= lift;
+    g *= lift;
+    b *= lift;
+
+    // Contour lines every 0.08 of elevation (≈100 m)
+    const band = Math.floor(e / 0.1);
+    if (band > 1 && (Math.floor(exP / 0.1) !== band || Math.floor(eyP / 0.1) !== band)) {
+      const major = band % 4 === 0;
+      r = r * 0.7 + (major ? 150 : 110) * 0.3;
+      g = g * 0.7 + (major ? 140 : 105) * 0.3;
+      b = b * 0.7 + (major ? 110 : 85) * 0.3;
+    }
+
+    data[o] = Math.max(0, Math.min(255, r));
+    data[o + 1] = Math.max(0, Math.min(255, g));
+    data[o + 2] = Math.max(0, Math.min(255, b));
+    data[o + 3] = 255;
+  };
+  return {
+    /** Shades one row of an image whose top-left pixel is global pixel (gx0, gy0). */
+    row(data: Uint8ClampedArray, rowWidth: number, row: number, gx0: number, gy0: number): void {
+      for (let col = 0; col < rowWidth; col++) shade(data, rowWidth, row, col, gx0 + col, gy0 + row);
+    },
+  };
+}
+
+// ── Zoomed-in tiles ───────────────────────────────────────────────────────────────────────────
+
+/** Tile edge in pixels; each LOD covers 512 px of ground at its own resolution. */
+const TILE_PX = 512;
+/** Detail levels: world units per pixel, and the zoom from which each is used. */
+const LODS = [
+  { scale: 2, minZoom: 0.3 },
+  { scale: 1, minZoom: 0.9 },
+];
+/** Tiles kept in memory (512² RGBA ≈ 1 MB each). */
+const MAX_TILES = 48;
+/** Milliseconds of shading work allowed per frame, so zooming in never stalls a frame. */
+const FRAME_BUDGET_MS = 7;
+
+interface Tile {
+  key: string;
+  lod: number;
+  tx: number;
+  ty: number;
+  canvas?: HTMLCanvasElement | OffscreenCanvas;
+  img?: ImageData;
+  nextRow: number;
+  lastUsed: number;
+}
+
+interface TileCache {
+  version: number;
+  tiles: Map<string, Tile>;
+  shaders: ReturnType<typeof makeShader>[];
+  frame: number;
+}
+const TILES = new WeakMap<TerrainMap, TileCache>();
+
+function tileCache(map: TerrainMap): TileCache {
+  let c = TILES.get(map);
+  if (!c || c.version !== map.version) {
+    c = { version: map.version, tiles: new Map(), shaders: LODS.map((l) => makeShader(map, l.scale)), frame: 0 };
+    TILES.set(map, c);
+  }
+  return c;
+}
+
+/**
+ * Draws the sharpest ground available for the view: the whole-map raster underneath, then any
+ * finished tiles of the zoom's detail level on top. Missing tiles are queued nearest-first and
+ * shaded a few rows per frame within FRAME_BUDGET_MS; the least recently used are evicted.
+ */
+function drawGroundTiles(rc: RenderContext, map: TerrainMap, camera: Camera, budgetMs = FRAME_BUDGET_MS): void {
+  let lod = -1;
+  for (let i = 0; i < LODS.length; i++) if (camera.zoom >= LODS[i].minZoom) lod = i;
+  if (lod < 0) return;
+  const cache = tileCache(map);
+  cache.frame++;
+  const { scale } = LODS[lod];
+  const tileWorld = TILE_PX * scale;
+  const halfW = rc.width / 2 / camera.zoom;
+  const halfH = rc.height / 2 / camera.zoom;
+  const x0 = Math.max(0, Math.floor((camera.x - halfW) / tileWorld));
+  const x1 = Math.min(Math.ceil(map.worldSize / tileWorld) - 1, Math.floor((camera.x + halfW) / tileWorld));
+  const y0 = Math.max(0, Math.floor((camera.y - halfH) / tileWorld));
+  const y1 = Math.min(Math.ceil(map.worldSize / tileWorld) - 1, Math.floor((camera.y + halfH) / tileWorld));
+
+  const pending: Tile[] = [];
+  for (let ty = y0; ty <= y1; ty++) {
+    for (let tx = x0; tx <= x1; tx++) {
+      // Skip open sea: nothing to draw where no land touches the tile
+      if (!tileHasLand(map, tx * tileWorld, ty * tileWorld, tileWorld)) continue;
+      const key = `${lod}:${tx}:${ty}`;
+      let tile = cache.tiles.get(key);
+      if (!tile) {
+        tile = { key, lod, tx, ty, nextRow: 0, lastUsed: cache.frame };
+        cache.tiles.set(key, tile);
       }
-      r += tex;
-      g += tex;
-      b += tex * 0.8;
-
-      // Hill shading: light from the north-west
-      const e = elevAt(x, y);
-      const ex = elevAt(x + scale * 2, y) - elevAt(x - scale * 2, y);
-      const ey = elevAt(x, y + scale * 2) - elevAt(x, y - scale * 2);
-      const shade = Math.max(-0.45, Math.min(0.45, -(ex + ey) * 22));
-      const lift = 1 + shade + e * 0.25;
-      r *= lift;
-      g *= lift;
-      b *= lift;
-
-      // Contour lines every 0.08 of elevation (≈100 m)
-      const band = Math.floor(e / 0.1);
-      if (band > 1 && (Math.floor(elevAt(x + scale, y) / 0.1) !== band || Math.floor(elevAt(x, y + scale) / 0.1) !== band)) {
-        const major = band % 4 === 0;
-        r = r * 0.7 + (major ? 150 : 110) * 0.3;
-        g = g * 0.7 + (major ? 140 : 105) * 0.3;
-        b = b * 0.7 + (major ? 110 : 85) * 0.3;
-      }
-
-      data[o] = Math.max(0, Math.min(255, r));
-      data[o + 1] = Math.max(0, Math.min(255, g));
-      data[o + 2] = Math.max(0, Math.min(255, b));
-      data[o + 3] = 255;
+      tile.lastUsed = cache.frame;
+      if (tile.canvas) rc.ctx.drawImage(tile.canvas as CanvasImageSource, tx * tileWorld, ty * tileWorld, tileWorld, tileWorld);
+      else pending.push(tile);
     }
   }
-  ctx.putImageData(img, 0, 0);
-  return { canvas, version: map.version };
+
+  // Shade pending tiles, the one nearest the screen centre first
+  pending.sort((a, b) => Math.hypot((a.tx + 0.5) * tileWorld - camera.x, (a.ty + 0.5) * tileWorld - camera.y) - Math.hypot((b.tx + 0.5) * tileWorld - camera.x, (b.ty + 0.5) * tileWorld - camera.y));
+  const t0 = performance.now();
+  for (const tile of pending) {
+    if (performance.now() - t0 > budgetMs) break;
+    if (!tile.img) tile.img = new ImageData(TILE_PX, TILE_PX);
+    const shader = cache.shaders[tile.lod];
+    while (tile.nextRow < TILE_PX && performance.now() - t0 <= budgetMs) {
+      shader.row(tile.img.data, TILE_PX, tile.nextRow, tile.tx * TILE_PX, tile.ty * TILE_PX);
+      tile.nextRow++;
+    }
+    if (tile.nextRow >= TILE_PX) {
+      const canvas = makeCanvas(TILE_PX, TILE_PX);
+      (canvas.getContext('2d') as CanvasRenderingContext2D).putImageData(tile.img, 0, 0);
+      tile.canvas = canvas;
+      tile.img = undefined;
+      rc.ctx.drawImage(canvas as CanvasImageSource, tile.tx * tileWorld, tile.ty * tileWorld, tileWorld, tileWorld);
+    }
+  }
+
+  // Evict the least recently used tiles beyond the budget
+  if (cache.tiles.size > MAX_TILES) {
+    const old = [...cache.tiles.values()].sort((a, b) => a.lastUsed - b.lastUsed);
+    for (const t of old.slice(0, cache.tiles.size - MAX_TILES)) cache.tiles.delete(t.key);
+  }
+}
+
+/** Coarse check (every 4th cell) whether any land lies in a square of the world. */
+function tileHasLand(map: TerrainMap, wx: number, wy: number, size: number): boolean {
+  const step = map.cell * 4;
+  for (let y = wy; y < wy + size; y += step) {
+    for (let x = wx; x < wx + size; x += step) {
+      const t = map.at(x, y);
+      if (t !== TERRAIN.water) return true;
+    }
+  }
+  return false;
+}
+
+/** Finishes every tile the current view needs (tests and screenshots only). */
+export function flushTerrainTiles(rc: RenderContext, map: TerrainMap, camera: Camera): void {
+  drawGroundTiles(rc, map, camera, Infinity);
 }
 
 function tracePolygon(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[]): void {
@@ -193,7 +336,7 @@ function tracePolygon(ctx: CanvasRenderingContext2D, pts: { x: number; y: number
 }
 
 /** The baked ground raster, clipped to the coastlines (lagoons cut out). World transform must be set. */
-export function drawTerrainGround(rc: RenderContext, map: TerrainMap, islands: Island[]): void {
+export function drawTerrainGround(rc: RenderContext, map: TerrainMap, islands: Island[], camera?: Camera): void {
   let baked = BAKED.get(map);
   if (!baked || baked.version !== map.version) {
     baked = bake(map);
@@ -209,6 +352,8 @@ export function drawTerrainGround(rc: RenderContext, map: TerrainMap, islands: I
   ctx.clip('evenodd');
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(baked.canvas as CanvasImageSource, 0, 0, RASTER_PX, RASTER_PX, 0, 0, map.worldSize, map.worldSize);
+  // Sharper tiles over it when zoomed in
+  if (camera) drawGroundTiles(rc, map, camera);
   // Smooth beach band just inside the coastline (still clipped to land)
   const sand = map.era === 'era4' ? 'rgba(120, 112, 84, 0.4)' : 'rgba(150, 140, 100, 0.5)';
   ctx.strokeStyle = sand;

@@ -41,7 +41,7 @@ import { getAfbModelsForEra, getCarrierModelsForEra, getCatalogRole } from './ai
 import { AIR_WEAPON_RANGE, gameRangeFromKm, getInstallationRange } from './rangeScale';
 import { getShipAshmFit, getShipSamSystem } from './navalMissileSalvos';
 import { applyHistoricalGuns, bombSpec, bombsPerRelease, burstBullets, getGunBattery, rocketKind, rocketsPerSalvo, ROCKETS, roundsPerBurst, warheadVsGround, warheadVsInstallation, warheadVsShip } from './aircraftArmament';
-import { getTerrainMap, TerrainMap } from './terrain/terrainMap';
+import { getTerrainMap, TERRAIN_NAMES, TerrainMap } from './terrain/terrainMap';
 import { canEngageGround, concealment, findGroundPath } from './terrain/combat';
 import { groundSilhouetteClass } from './unitPreviewRenderer';
 import { GroundWreck, leavesWreck, WRECK_LIFETIME } from './render/unitDetails';
@@ -219,6 +219,22 @@ export class GameEngine {
   /** Terrain-aware engagement check (line of sight, high ground, concealment): terrain/combat.ts. */
   private canEngageGroundAt(from: Vector2D, range: number, to: Vector2D, indirect: boolean): boolean {
     return canEngageGround(this.terrain, from, range, to, indirect);
+  }
+
+  /** Updates the unit's terrain snapshot (what the ground under it does) for the unit panel. */
+  public refreshGroundTerrainInfo(unit: GroundUnit): void {
+    const m = this.terrain;
+    const { x, y } = unit.pos;
+    const ci = Math.floor(y / m.cell) * m.cols + Math.floor(x / m.cell);
+    unit.terrainInfo = {
+      name: TERRAIN_NAMES[m.at(x, y)],
+      elevationM: Math.round(m.elevationAt(x, y) * 1500),
+      onRoad: m.onRoad(x, y),
+      move: m.moveFactor(x, y, !this.isFootUnit(unit)),
+      concealment: concealment(m, unit.pos),
+      airDamage: m.airConcealment(x, y),
+      deepRiver: ci >= 0 && ci < m.deepRiver.length && m.deepRiver[ci] === 1,
+    };
   }
 
   /** On-foot units (infantry, AT teams, mortars) versus vehicles, for terrain movement. */
@@ -7858,6 +7874,8 @@ export class GameEngine {
       }
       unit.isInUrbanCover = inUrban;
       unit.urbanCoverFactor = inUrban ? 0.5 : 1.0;
+
+      this.refreshGroundTerrainInfo(unit);
 
       unit.cooldown = Math.max(0, unit.cooldown - dt);
 

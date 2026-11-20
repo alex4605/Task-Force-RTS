@@ -66,7 +66,7 @@ export function drawIslands(rc: RenderContext, islands: Island[], camera: Camera
     ctx.fill();
   }
   const terrain = getTerrainMap(islands, worldSize, rc.era);
-  drawTerrainGround(rc, terrain, visible);
+  drawTerrainGround(rc, terrain, visible, camera);
 
   // 3. Lagoons and coastline
   for (const island of visible) {
