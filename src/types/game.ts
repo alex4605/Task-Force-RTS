@@ -197,6 +197,13 @@ export interface GroundUnit {
   counterBatteryTarget?: Vector2D;
   isNuclearTEL?: boolean;
   isMLRS?: boolean;
+  /** Terrain route for AI movement that is not a standing order (chases, charges). */
+  route?: Vector2D[];
+  routeIdx?: number;
+  routeGoal?: Vector2D;
+  routeAge?: number;
+  /** Seconds spent crawling (river, swamp) on a straight-line fallback; triggers a re-plan. */
+  routeStuck?: number;
 }
 
 export type ShipSide = 'player' | 'enemy' | 'neutral' | 'allied';
@@ -229,6 +236,8 @@ export interface UnitOrder {
   activeWaypointIndex?: number;
   pendingUnload?: boolean;
   pendingSonobuoyPos?: Vector2D;
+  /** A terrain route has been planned for this order (ground units). */
+  routed?: boolean;
 }
 
 export interface ShipArmamentSpec {

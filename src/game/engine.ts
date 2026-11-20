@@ -159,6 +159,58 @@ export class GameEngine {
     return getTerrainMap(this.islands, this.worldSize, this.era);
   }
 
+  /** Terrain routes planned per tick (A* calls), so a whole wave spawning at once spreads out. */
+  private groundPathBudget = 4;
+
+  private isAmphibiousUnit(unit: GroundUnit): boolean {
+    return Boolean(unit.isAmphibious) || unit.type.startsWith('usmc_lvt') || unit.type === 'usmc_aav7a1';
+  }
+
+  /**
+   * Plans a terrain route toward `goal`: the waypoints, null when there is no land route (or the
+   * unit swims), undefined when this tick's planning budget is spent (try again next tick).
+   */
+  private planGroundRoute(unit: GroundUnit, goal: Vector2D): Vector2D[] | null | undefined {
+    if (this.isAmphibiousUnit(unit)) return null;
+    if (this.groundPathBudget <= 0) return undefined;
+    this.groundPathBudget--;
+    return findGroundPath(this.terrain, unit.pos, goal, !this.isFootUnit(unit));
+  }
+
+  /**
+   * AI movement toward a moving goal (counter-attacks, banzai charges) along a terrain route,
+   * re-planned when the goal moves away or the route is old; speed scaled by terrain, and never
+   * into the sea or a lake unless the unit is amphibious.
+   */
+  private moveGroundUnitToward(unit: GroundUnit, goal: Vector2D, speed: number, dt: number, scale: number): void {
+    unit.routeAge = (unit.routeAge ?? 0) + dt;
+    if (!unit.routeGoal || dist(unit.routeGoal, goal) > 250 || unit.routeAge > 8) {
+      const r = this.planGroundRoute(unit, goal);
+      if (r !== undefined) {
+        unit.route = r && r.length > 1 ? r : undefined;
+        unit.routeIdx = 0;
+        unit.routeGoal = { ...goal };
+        unit.routeAge = 0;
+      }
+    }
+    let steer = goal;
+    if (unit.route) {
+      let i = unit.routeIdx ?? 0;
+      while (i < unit.route.length - 1 && dist(unit.pos, unit.route[i]) < 40) i++;
+      unit.routeIdx = i;
+      steer = i < unit.route.length - 1 ? unit.route[i] : goal;
+    }
+    unit.heading = Math.atan2(steer.y - unit.pos.y, steer.x - unit.pos.x);
+    const amphib = this.isAmphibiousUnit(unit);
+    const factor = amphib ? 1 : Math.max(0.08, this.terrain.moveFactor(unit.pos.x, unit.pos.y, !this.isFootUnit(unit)));
+    const nx = unit.pos.x + Math.cos(unit.heading) * speed * factor * dt * scale;
+    const ny = unit.pos.y + Math.sin(unit.heading) * speed * factor * dt * scale;
+    const onLand = this.islands.some((isl) => isPointInPolygon({ x: nx, y: ny }, isl.points)) && !this.terrain.isLake(nx, ny);
+    if (!onLand && !amphib) return;
+    unit.pos.x = nx;
+    unit.pos.y = ny;
+  }
+
   /** Artillery, mortars and rockets fire indirect: no line of sight needed, only a spotter's view. */
   private isIndirectFire(unit: GroundUnit): boolean {
     return Boolean(unit.isArtillery || unit.isSPG || unit.isMLRS || unit.isNuclearTEL) || /artillery|howitzer|mortar|mlrs|grad|uragan|scud|atacms|calliope|m198|2s1/.test(unit.type);
@@ -1008,6 +1060,7 @@ export class GameEngine {
       if (order.type === 'move' && targetPos && !unit.embarkedInShipId) {
         const amphibious = unit.isAmphibious || unit.type.startsWith('usmc_lvt') || unit.type === 'usmc_aav7a1';
         const path = amphibious ? null : findGroundPath(this.terrain, unit.pos, targetPos, !this.isFootUnit(unit));
+        unit.order.routed = true;
         if (path && path.length > 1) {
           unit.order.waypoints = path;
           unit.order.activeWaypointIndex = 0;
@@ -7665,6 +7718,7 @@ export class GameEngine {
     // ══════════════════════════════════════════════════════════
     // 2. 地面部隊狀態更新、組織度/建制度計算與投降審查 (Ground Unit Logic)
     // ══════════════════════════════════════════════════════════
+    this.groundPathBudget = 4;
     for (let i = this.groundUnits.length - 1; i >= 0; i--) {
       const unit = this.groundUnits[i];
       if (unit.isDestroyed) {
@@ -7821,6 +7875,17 @@ export class GameEngine {
 
       // RTS Navigation (混亂壓制狀態下速度減緩 60%)
       if (unit.order.type === 'move' && unit.order.targetPos) {
+        // Any move order (player or AI) gets a terrain route, planned once and lazily
+        if (!unit.order.routed && !unit.embarkedInShipId) {
+          const r = this.planGroundRoute(unit, unit.order.targetPos);
+          if (r !== undefined) {
+            unit.order.routed = true;
+            if (r && r.length > 1) {
+              unit.order.waypoints = r;
+              unit.order.activeWaypointIndex = 0;
+            }
+          }
+        }
         // Follow the terrain route's waypoints, then the final target
         const wps = unit.order.waypoints;
         let wi = unit.order.activeWaypointIndex ?? 0;
@@ -7850,6 +7915,15 @@ export class GameEngine {
           const terrainMod = this.terrain.moveFactor(unit.pos.x, unit.pos.y, !onFoot);
           // Amphibians swim rivers; everyone else crawls (never fully stuck, so a unit can back out)
           moveSpeed *= amphib && this.terrain.at(unit.pos.x, unit.pos.y) === 14 ? 0.5 : Math.max(0.08, terrainMod);
+          // Crawling through a river or swamp for a while: plan a better way round from here
+          if (!amphib && terrainMod < 0.15) {
+            unit.routeStuck = (unit.routeStuck ?? 0) + dt;
+            if (unit.routeStuck > 3) {
+              unit.routeStuck = 0;
+              unit.order.routed = false;
+              unit.order.waypoints = undefined;
+            }
+          } else unit.routeStuck = 0;
           unit.speed = moveSpeed;
 
           // ══════════════════════════════════════════════════════════
@@ -7936,14 +8010,12 @@ export class GameEngine {
       : null;
 
     if (nearbyLandingForce && dist(unit.pos, nearbyLandingForce.pos) > unit.range) {
-      unit.heading = Math.atan2(nearbyLandingForce.pos.y - unit.pos.y, nearbyLandingForce.pos.x - unit.pos.x);
       let advanceSpeed = (unit.disorganized || (unit.organization ?? 100) < 20) ? unit.maxSpeed * 0.5 : unit.maxSpeed;
       if ((unit.suppression ?? 0) > 0) {
         const pen = Math.min(0.80, 0.30 + ((unit.suppression ?? 0) / 100) * 0.50);
         advanceSpeed *= (1 - pen);
       }
-      unit.pos.x += Math.cos(unit.heading) * advanceSpeed * dt * 12;
-      unit.pos.y += Math.sin(unit.heading) * advanceSpeed * dt * 12;
+      this.moveGroundUnitToward(unit, nearbyLandingForce.pos, advanceSpeed, dt, 12);
     }
 
     if (targetGround) {
@@ -7951,8 +8023,7 @@ export class GameEngine {
 
       // Banzai charge: 狂熱白刃刺刀突擊
       if (unit.isBanzaiCharging) {
-        unit.pos.x += Math.cos(unit.heading) * unit.maxSpeed * 1.6 * dt * 18;
-        unit.pos.y += Math.sin(unit.heading) * unit.maxSpeed * 1.6 * dt * 18;
+        this.moveGroundUnitToward(unit, targetGround.pos, unit.maxSpeed * 1.6, dt, 18);
 
         if (dist(unit.pos, targetGround.pos) < 60 && unit.cooldown <= 0) {
           soundEngine.playExplosion(false);
