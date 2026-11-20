@@ -445,6 +445,7 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
     // Draw Aircraft (With Special Kamikaze / Ohka indicators)
     for (const plane of aircraft) {
       if (plane.state === 'shot_down') continue;
+      if (plane.side === 'enemy' && (plane.trackedByPlayer ?? 1) <= 0) continue; // not on our scopes
       const px = plane.pos.x * scale;
       const py = plane.pos.y * scale;
 

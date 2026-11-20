@@ -42,6 +42,8 @@ import { AIR_WEAPON_RANGE, gameRangeFromKm, getInstallationRange } from './range
 import { getShipAshmFit, getShipSamSystem } from './navalMissileSalvos';
 import { applyHistoricalGuns, bombSpec, bombsPerRelease, burstBullets, getGunBattery, rocketKind, rocketsPerSalvo, ROCKETS, roundsPerBurst, warheadVsGround, warheadVsInstallation, warheadVsShip } from './aircraftArmament';
 import { getTerrainMap, TERRAIN_NAMES, TerrainMap } from './terrain/terrainMap';
+import { requiredDepth, SUBMERGED_MIN_DEPTH_M } from './naval/draft';
+import { aircraftSensor, installationRadarKm, RadarSensor, sensorDetects, shipRadarKm, TRACK_MEMORY_S, visualDetects } from './radar';
 import { hasLineOfSight as hasLineOfSightAt } from './terrain/combat';
 import { canEngageGround, canSeeAircraft, coastalReach, concealment, findGroundPath, reverseSlopeFactor } from './terrain/combat';
 import { groundSilhouetteClass } from './unitPreviewRenderer';
@@ -240,7 +242,8 @@ export class GameEngine {
 
   /** Terrain masking of low fliers from an air-defence site or ship (terrain/combat.ts). */
   private aaCanSee(from: Vector2D, plane: Aircraft, mast = 0.04): boolean {
-    return canSeeAircraft(this.terrain, from, plane, mast);
+    // Fire control needs the target in the side's air picture and a clear line to it
+    return this.isAirTracked(plane) && canSeeAircraft(this.terrain, from, plane, mast);
   }
 
   /** Coastal battery reach against ships, longer from high ground. */
@@ -698,6 +701,17 @@ export class GameEngine {
     this.controlGroups = {};
     this.enemyBeringSeaCoordTimer = 26;
     this.navGrid = new NavalNavigationGrid(this.worldSize, this.islands, 110);
+    // Bathymetry: deep-draught ships keep out of shallows, reefs and delta flats
+    {
+      const terrain = this.terrain;
+      this.navGrid.setDepthModel((x, y) => terrain.depthAt(x, y));
+      // Ships placed by the scenario in water too shallow for them move to the nearest deep enough water
+      for (const ship of [...this.playerShips, ...this.enemyShips]) {
+        const need = requiredDepth(ship);
+        const d = terrain.depthAt(ship.pos.x, ship.pos.y);
+        if (need > 0 && d > 0 && d < need) ship.pos = this.navGrid.projectToWalkableWater(ship.pos, need);
+      }
+    }
 
     // 確保初始潛艦進入水下靜默隱蔽 (Fog of War Stealth Defaults)
     for (const s of [...this.playerShips, ...this.enemyShips]) {
@@ -1014,12 +1028,12 @@ export class GameEngine {
         targetPos.y += Math.sin(offsetAngle) * offsetDist;
       }
       if (targetPos && this.navGrid) {
-        targetPos = this.navGrid.projectToWalkableWater(targetPos);
+        targetPos = this.navGrid.projectToWalkableWater(targetPos, requiredDepth(ship));
       }
 
       let waypoints: Vector2D[] | undefined = undefined;
       if (order.type === 'move' && targetPos) {
-        waypoints = this.navGrid ? this.navGrid.findPath(ship.pos, targetPos) : [targetPos];
+        waypoints = this.navGrid ? this.navGrid.findPath(ship.pos, targetPos, requiredDepth(ship)) : [targetPos];
       }
 
       ship.order = {
@@ -2182,7 +2196,7 @@ export class GameEngine {
       if (ship.order.type === 'move' && ship.order.targetPos) {
         if (ship.navStuck && this.navGrid) {
           // No headway for several seconds: replan the sea lane from where the ship actually is
-          ship.order.waypoints = this.navGrid.findPath(ship.pos, ship.order.targetPos);
+          ship.order.waypoints = this.navGrid.findPath(ship.pos, ship.order.targetPos, requiredDepth(ship));
           ship.order.activeWaypointIndex = 0;
           ship.navStuck = false;
         }
@@ -2279,6 +2293,11 @@ export class GameEngine {
         const diesel = updateDieselBattery(ship, dt, this.era, nearestShip, nearestAircraft);
         const wasBelow = ship.belowLayer;
         updateThermoclineDepth(ship, dt, nearestShip);
+        // Too shallow to dive: the boat runs on the surface or at snorkel depth, noisy and visible
+        if (this.terrain.depthAt(ship.pos.x, ship.pos.y) < SUBMERGED_MIN_DEPTH_M) {
+          ship.isSnorkeling = true;
+          ship.belowLayer = false;
+        }
         if (ship.belowLayer && !wasBelow && ship.side === 'enemy' && ship.isSpotted) {
           this.addCombatLog({
             category: 'naval',
@@ -2318,8 +2337,30 @@ export class GameEngine {
         const mapSpeed = shipMapSpeed(ship.speed);
         ship.vel.x = Math.cos(ship.heading) * mapSpeed;
         ship.vel.y = Math.sin(ship.heading) * mapSpeed;
-        ship.pos.x += ship.vel.x * dt;
-        ship.pos.y += ship.vel.y * dt;
+        // Draught: never steam into water shallower than the hull needs (but a ship that is
+        // already in shoal water may always work its way out toward deeper water)
+        const need = requiredDepth(ship);
+        const nx = ship.pos.x + ship.vel.x * dt;
+        const ny = ship.pos.y + ship.vel.y * dt;
+        const depthNext = need > 0 ? this.terrain.depthAt(nx, ny) : Infinity;
+        if (depthNext > 0 && depthNext < need && depthNext < this.terrain.depthAt(ship.pos.x, ship.pos.y)) {
+          ship.speed *= 0.5;
+          ship.navStuck = true;
+          if (ship.side === 'player' && !ship.shoalWarned) {
+            ship.shoalWarned = true;
+            this.addCombatLog({
+              category: 'naval',
+              sourceSide: 'player',
+              sourceName: ship.name,
+              targetName: '航道',
+              actionType: 'recon_spotted',
+              text: `⚓【水深不足】「${ship.name}」吃水 ${need.toFixed(1)}m，前方水深僅 ${depthNext.toFixed(1)}m，停車改走深水航道！`,
+            });
+          }
+        } else {
+          ship.pos.x = nx;
+          ship.pos.y = ny;
+        }
         this.checkNavigationProgress(ship, dt);
       } else {
         ship.vel.x = 0;
@@ -2583,7 +2624,7 @@ export class GameEngine {
     const dTotal = dist(ship.pos, dest);
     if (dTotal < 520) return dest;
     if (!ship.order.waypoints || ship.order.waypoints.length === 0 || (ship.repathCooldown || 0) <= 0 || ship.navStuck) {
-      ship.order.waypoints = this.navGrid.findPath(ship.pos, dest);
+      ship.order.waypoints = this.navGrid.findPath(ship.pos, dest, requiredDepth(ship));
       ship.order.activeWaypointIndex = 0;
       ship.repathCooldown = 3.5;
       ship.navStuck = false;
@@ -2686,13 +2727,16 @@ export class GameEngine {
       return { targetHeading: desiredHeading, speedScale: 1.0 };
     }
 
-    // Fraction of the probe at which land is first met, or > 1 when the probe is clear
+    // Submarines also keep to water deep enough to dive in
+    const need = this.isSubmarine(ship) ? SUBMERGED_MIN_DEPTH_M : requiredDepth(ship);
+    // Fraction of the probe at which land (or water too shallow for this hull) is first met, or > 1 when clear
     const landAt = (heading: number): number => {
       const cx = Math.cos(heading);
       const cy = Math.sin(heading);
       for (const f of [0.3, 0.55, 0.8, 1]) {
         const p = { x: ship.pos.x + cx * lookahead * f, y: ship.pos.y + cy * lookahead * f };
         if (nearby.some((isl) => isPointOnIslandLand(p, isl))) return f;
+        if (need > 0 && this.terrain.depthAt(p.x, p.y) < need) return f; // shoal water
       }
       return 2;
     };
@@ -2927,8 +2971,110 @@ export class GameEngine {
   }
 
   // 2. Update Aircraft with Air Warfare RTS Logic
+  private airPictureTimer = 0;
+  private raidWarningCooldown = 0;
+
+  /** Whether the side opposing this aircraft currently tracks it (radar or eyes). */
+  public isAirTracked(plane: Aircraft): boolean {
+    return ((plane.side === 'enemy' ? plane.trackedByPlayer : plane.trackedByEnemy) ?? 0) > 0;
+  }
+
+  /** Whether a given side's air picture holds this aircraft. */
+  private isAirTrackedBy(plane: Aircraft, side: ShipSide): boolean {
+    if (plane.side === side || (side !== 'enemy' && plane.side !== 'enemy')) return true;
+    return ((side === 'enemy' ? plane.trackedByEnemy : plane.trackedByPlayer) ?? 0) > 0;
+  }
+
+  /**
+   * Builds each side's air picture (radar.ts): ground and SAM radars, warships, AEW and fighter
+   * radars, and short-range eyes everywhere. Runs every 0.4 s; a lost track is held for a few
+   * seconds. Announces new enemy raids picked up beyond visual range (early warning).
+   */
+  private updateAirPicture(dt: number): void {
+    this.airPictureTimer -= dt;
+    this.raidWarningCooldown = Math.max(0, this.raidWarningCooldown - dt);
+    if (this.airPictureTimer > 0) return;
+    const step = 0.4;
+    this.airPictureTimer = step;
+    const map = this.terrain;
+    const friendly = (side: ShipSide) => side === 'player' || side === 'allied';
+
+    const sensorsFor = (enemySide: boolean): { radars: RadarSensor[]; eyes: Vector2D[]; airEyes: Vector2D[] } => {
+      const radars: RadarSensor[] = [];
+      const eyes: Vector2D[] = [];
+      const airEyes: Vector2D[] = [];
+      const ships = enemySide ? this.enemyShips : [...this.playerShips, ...this.alliedShips];
+      for (const s of ships) {
+        if (s.isSunk) continue;
+        if (!this.isSubmarine(s) || s.isSnorkeling) eyes.push(s.pos);
+        const km = shipRadarKm(s, this.era);
+        if (km > 0) radars.push({ pos: s.pos, heightM: 25 + s.length * 0.08, rangeKm: km, lookDown: false, airborne: false });
+      }
+      for (const isl of this.islands) {
+        for (const inst of isl.installations) {
+          if (inst.isDestroyed || inst.isCivilian) continue;
+          if ((inst.side === 'enemy') !== enemySide || (!enemySide && !friendly(inst.side))) continue;
+          eyes.push(inst.pos);
+          const km = installationRadarKm(inst, this.era);
+          if (km > 0) radars.push({ pos: inst.pos, heightM: map.elevationAt(inst.pos.x, inst.pos.y) * 1500 + 20, rangeKm: km, lookDown: false, airborne: false });
+        }
+      }
+      for (const u of this.groundUnits) {
+        if (u.isDestroyed || u.embarkedInShipId || (u.side === 'enemy') !== enemySide) continue;
+        eyes.push(u.pos);
+      }
+      for (const a of this.aircraft) {
+        if (a.state === 'shot_down' || (a.side === 'enemy') !== enemySide) continue;
+        airEyes.push(a.pos);
+        const r = aircraftSensor(a);
+        if (r) radars.push(r);
+      }
+      return { radars, eyes, airEyes };
+    };
+    const pictures = { friendly: sensorsFor(false), enemy: sensorsFor(true) };
+
+    let newRaid: Aircraft[] = [];
+    for (const a of this.aircraft) {
+      if (a.state === 'shot_down') continue;
+      const watcher = a.side === 'enemy' ? pictures.friendly : pictures.enemy;
+      const seen =
+        watcher.radars.some((r) => sensorDetects(map, r, a)) ||
+        watcher.airEyes.some((p) => visualDetects(map, p, a, true)) ||
+        watcher.eyes.some((p) => visualDetects(map, p, a, false));
+      if (a.side === 'enemy') {
+        const was = (a.trackedByPlayer ?? 0) > 0;
+        a.trackedByPlayer = seen ? TRACK_MEMORY_S : Math.max(0, (a.trackedByPlayer ?? 0) - step);
+        if (seen && !was && a.trackedByPlayer > 0) {
+          const nearestEye = Math.min(...pictures.friendly.eyes.map((p) => dist(p, a.pos)), Infinity);
+          if (nearestEye > gameRangeFromKm(12)) newRaid.push(a);
+        }
+      } else {
+        a.trackedByEnemy = seen ? TRACK_MEMORY_S : Math.max(0, (a.trackedByEnemy ?? 0) - step);
+      }
+    }
+
+    // Early warning: a new formation on the scopes, well before anyone can see it
+    if (newRaid.length > 0 && this.raidWarningCooldown <= 0) {
+      this.raidWarningCooldown = 15;
+      const ref = this.getFlagship()?.pos ?? this.friendlyBase?.center ?? { x: 7000, y: 7000 };
+      const c = newRaid.reduce((acc, p) => ({ x: acc.x + p.pos.x / newRaid.length, y: acc.y + p.pos.y / newRaid.length }), { x: 0, y: 0 });
+      const bearing = Math.round(((Math.atan2(c.x - ref.x, -(c.y - ref.y)) * 180) / Math.PI + 360) % 360);
+      const rangeU = Math.round(dist(ref, c));
+      this.addBannerAlert(`📡【雷達接觸】方位 ${String(bearing).padStart(3, '0')}° · 距艦隊 ${rangeU}m · ${newRaid.length} 架不明機進入早期預警雷達網！`, 'enemy', 'alert', 5.5);
+      this.addCombatLog({
+        category: 'air',
+        sourceSide: 'player',
+        sourceName: '早期預警雷達網',
+        targetName: '來襲機群',
+        actionType: 'recon_spotted',
+        text: `📡【早期預警】雷達於方位 ${String(bearing).padStart(3, '0')}°、距艦隊 ${rangeU}m 處捕獲 ${newRaid.length} 架敵機回波 (${[...new Set(newRaid.map((p) => p.model.toUpperCase()))].join(' / ')})，請派遣戰鬥空中巡邏攔截！`,
+      });
+    }
+  }
+
   private updateAircraft(dt: number) {
     const flagship = this.getFlagship();
+    this.updateAirPicture(dt);
     this.updateAirMissions(dt);
 
     for (let i = this.aircraft.length - 1; i >= 0; i--) {
@@ -4114,7 +4260,8 @@ export class GameEngine {
     // sweep hunts fighters, an escort fights only what threatens its package
     const hostile = selectAirTarget(
       plane,
-      this.aircraft.filter((a) => this.isHostile(plane.side, a.side)),
+      // Vectored only onto contacts in the side's air picture (GCI / AEW / own radar)
+      this.aircraft.filter((a) => this.isHostile(plane.side, a.side) && this.isAirTrackedBy(a, plane.side)),
       center,
       radarPerimeter,
       plane.airMission ?? 'cap'
@@ -15516,8 +15663,8 @@ export class GameEngine {
       };
       applyHistoricalAswFit(ship);
       if (this.navGrid) {
-        ship.pos = this.navGrid.projectToWalkableWater(ship.pos);
-        ship.order.waypoints = this.navGrid.findPath(ship.pos, { x: this.worldSize - 600, y: shipY });
+        ship.pos = this.navGrid.projectToWalkableWater(ship.pos, requiredDepth(ship));
+        ship.order.waypoints = this.navGrid.findPath(ship.pos, { x: this.worldSize - 600, y: shipY }, requiredDepth(ship));
         ship.order.activeWaypointIndex = 0;
       }
       this.alliedShips.push(ship);
@@ -15557,7 +15704,7 @@ export class GameEngine {
       const closestEnemy = enemySurfaceShips[0];
       const d = dist(ship.pos, closestEnemy.pos);
 
-      if (d < 1600 && (!this.navGrid || this.navGrid.hasClearWaterLine(ship.pos, closestEnemy.pos))) {
+      if (d < 1600 && (!this.navGrid || this.navGrid.hasClearWaterLine(ship.pos, closestEnemy.pos, true, requiredDepth(ship)))) {
         const bearing = Math.atan2(closestEnemy.pos.y - ship.pos.y, closestEnemy.pos.x - ship.pos.x);
         tacticalInterceptHeading = d < 1050 ? bearing + Math.PI * 0.72 : bearing + Math.PI * 0.25;
         ship.targetSpeed = ship.maxSpeed;
@@ -15583,14 +15730,14 @@ export class GameEngine {
       }
 
       if (this.navGrid) {
-        navDestination = this.navGrid.projectToWalkableWater(navDestination);
+        navDestination = this.navGrid.projectToWalkableWater(navDestination, requiredDepth(ship));
         const needNewPath =
           !ship.order.waypoints ||
           ship.order.waypoints.length === 0 ||
           (ship.repathCooldown || 0) <= 0 ||
           ship.navStuck;
         if (needNewPath) {
-          ship.order.waypoints = this.navGrid.findPath(ship.pos, navDestination);
+          ship.order.waypoints = this.navGrid.findPath(ship.pos, navDestination, requiredDepth(ship));
           ship.order.activeWaypointIndex = 0;
           ship.order.targetPos = navDestination;
           ship.repathCooldown = 3.5;
@@ -16006,7 +16153,8 @@ export class GameEngine {
         x: anchorPos.x + (i - (packSize - 1) / 2) * 190,
         y: anchorPos.y + (i % 2 === 0 ? -90 : 90),
       };
-      const subPos = this.navGrid ? this.navGrid.projectToWalkableWater(offsetPosRaw) : offsetPosRaw;
+      // Wolfpacks deploy where they can dive
+      const subPos = this.navGrid ? this.navGrid.projectToWalkableWater(offsetPosRaw, SUBMERGED_MIN_DEPTH_M) : offsetPosRaw;
 
       let sub: Ship;
       if (this.era === 'era1' || this.era === 'era2') {

@@ -21,6 +21,8 @@ export function drawAircraft(rc: RenderContext, aircraftList: Aircraft[], camera
 
   for (const plane of aircraftList) {
     if (plane.state === 'shot_down' && (plane.deathTimer || 0) <= 0) continue;
+    // Fog of war: enemy aircraft appear only while the player's air picture holds them
+    if (plane.side === 'enemy' && plane.state !== 'shot_down' && (plane.trackedByPlayer ?? 1) <= 0) continue;
 
     const isSelected = selectedUnitIds.includes(plane.id);
     if (!isSelected && !isWorldCircleVisible(rc, plane.pos.x, plane.pos.y, 180, camera)) {

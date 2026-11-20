@@ -314,6 +314,8 @@ export interface Ship {
   repathCooldown?: number;
   battery?: number; // 柴電潛艦電池電量 (0-1)：水下高速航行急速耗電，呼吸管航行充電
   rbuCooldown?: number; // 敵艦反潛火箭 / 深水炸彈再裝填
+  /** Player already told this ship was stopped by shoal water. */
+  shoalWarned?: boolean;
   isSnorkeling?: boolean;
   diveTimer?: number; // 緊急下潛剩餘秒數：仍浮在水面、可被砲火與航彈攻擊
   belowLayer?: boolean; // 潛艦潛入溫躍層下方：水面艦艦殼聲納大幅失效
@@ -1594,6 +1596,10 @@ export interface Aircraft {
   packageId?: string; // 所屬打擊編隊 (護航機與打擊機共用)
   missionTimer?: number; // 掃蕩滯空剩餘時間
   interceptTargetId?: string; // 目前鎖定的攔截目標 (避免每格切換)
+  /** Seconds the player side's air picture still holds this aircraft (radar / visual track). */
+  trackedByPlayer?: number;
+  /** Seconds the enemy side's air picture still holds this aircraft. */
+  trackedByEnemy?: number;
   isWinchester?: boolean;
   // 半主動雷達導引機頭照射狀態 (SARH Nose Radar Illumination)
   sarhIlluminatingTargetId?: string;

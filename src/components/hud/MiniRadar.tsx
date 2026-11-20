@@ -130,6 +130,7 @@ export const MiniRadar: React.FC<MiniRadarProps> = ({
     // Airborne Planes
     for (const p of aircraft) {
       if (p.state === 'shot_down') continue;
+      if (p.side === 'enemy' && (p.trackedByPlayer ?? 1) <= 0) continue; // not on our scopes
       ctx.fillStyle = p.side === 'player' ? '#80DEEA' : '#FF8A80';
       ctx.fillRect(p.pos.x * scale - 1, p.pos.y * scale - 1, 2, 2);
     }

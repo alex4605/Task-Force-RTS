@@ -100,6 +100,8 @@ export class TerrainMap {
   readonly riverNear: Float32Array;
   /** 1 on a river too deep and wide to ford (vehicles need a bridge). */
   readonly deepRiver: Uint8Array;
+  /** Water depth (m) of sea, lagoon and lake cells; 0 on land. */
+  readonly depth: Float32Array;
   readonly rivers: TerrainLine[] = [];
   readonly roads: TerrainLine[] = [];
   readonly bridges: { pos: Vector2D; angle: number }[] = [];
@@ -117,6 +119,7 @@ export class TerrainMap {
     this.road = new Uint8Array(this.cols * this.rows);
     this.riverNear = new Float32Array(this.cols * this.rows).fill(Infinity);
     this.deepRiver = new Uint8Array(this.cols * this.rows);
+    this.depth = new Float32Array(this.cols * this.rows);
   }
 
   private idx(x: number, y: number): number {
@@ -576,6 +579,8 @@ export class TerrainMap {
       }
     }
 
+    this.computeDepth(islands);
+
     // Road cells (after classification so roads survive towns and forests)
     for (const rd of this.roads) {
       if (rd.kind === 'rail') continue;
@@ -715,6 +720,98 @@ export class TerrainMap {
       }
     }
     return { name, center, radius, kind, blocks, streets };
+  }
+
+  /** Water depth (m) at a point; 0 on land. */
+  depthAt(x: number, y: number): number {
+    const i = this.idx(x, y);
+    if (i < 0) return 400;
+    return this.depth[i];
+  }
+
+  /**
+   * Bathymetry from the coast outward: each water cell takes the slope of the nearest shore —
+   * gentle off beaches, deltas, marsh and mangrove (the Tonkin Gulf, the Wadden Sea), steep off
+   * cliffs and mountain coasts — plus noise for banks and holes. Atolls get a reef flat ringing
+   * the island (Tarawa's reef), lagoons shoal toward their beaches but are 20-30 m deep, lakes
+   * 10-40 m.
+   */
+  private computeDepth(islands: Island[]): void {
+    const n = this.type.length;
+    const dist = new Float32Array(n).fill(Infinity);
+    const slope = new Float32Array(n);
+    let frontier: number[] = [];
+    const isWater = (t: number) => t === TERRAIN.water || t === TERRAIN.lagoon || t === TERRAIN.lake;
+    // Sources: land cells touching water, each with the slope of its kind of coast
+    for (let i = 0; i < n; i++) {
+      if (isWater(this.type[i])) continue;
+      const r = Math.floor(i / this.cols);
+      const c = i % this.cols;
+      let shore = false;
+      for (let dr = -1; dr <= 1 && !shore; dr++) for (let dc = -1; dc <= 1; dc++) {
+        const rr = r + dr;
+        const cc = c + dc;
+        if (rr >= 0 && cc >= 0 && rr < this.rows && cc < this.cols && isWater(this.type[rr * this.cols + cc])) { shore = true; break; }
+      }
+      if (!shore) continue;
+      const t = this.type[i];
+      const e = this.elev[i];
+      const gentle = t === TERRAIN.marsh || t === TERRAIN.mangrove || t === TERRAIN.paddy || t === TERRAIN.river || e < 0.1;
+      slope[i] = gentle ? 0.012 : e > 0.35 ? 0.12 : t === TERRAIN.beach ? 0.025 : 0.045;
+      dist[i] = 0;
+      frontier.push(i);
+    }
+    // Multi-source BFS outward over water (8-neighbour, metres)
+    for (let step = 0; step < 120 && frontier.length; step++) {
+      const next: number[] = [];
+      for (const i of frontier) {
+        const r = Math.floor(i / this.cols);
+        const c = i % this.cols;
+        for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+          if (!dr && !dc) continue;
+          const rr = r + dr;
+          const cc = c + dc;
+          if (rr < 0 || cc < 0 || rr >= this.rows || cc >= this.cols) continue;
+          const j = rr * this.cols + cc;
+          if (!isWater(this.type[j])) continue;
+          const d = dist[i] + CELL * (dr && dc ? 1.414 : 1);
+          if (d < dist[j]) {
+            dist[j] = d;
+            slope[j] = slope[i];
+            next.push(j);
+          }
+        }
+      }
+      frontier = next;
+    }
+    for (let i = 0; i < n; i++) {
+      const t = this.type[i];
+      if (!isWater(t)) continue;
+      const x = ((i % this.cols) + 0.5) * CELL;
+      const y = (Math.floor(i / this.cols) + 0.5) * CELL;
+      const d = isFinite(dist[i]) ? dist[i] : 6000;
+      const banks = 0.75 + 0.5 * fbm(x / 700, y / 700, this.seed + 71, 3);
+      // Nearshore slope by coast type, then the shelf falls away (map distances are compressed,
+      // so the profile steepens with distance: 30 m about 400 m out, 200 m+ beyond 1.5 km)
+      let depth = 1.2 + d * (slope[i] || 0.04) * banks + Math.pow(d / 400, 2) * 12 * banks;
+      if (t === TERRAIN.lagoon) depth = Math.min(depth, 22 + 8 * banks);
+      else if (t === TERRAIN.lake) depth = Math.min(depth, 10 + 30 * banks);
+      else depth = Math.min(depth, 400);
+      this.depth[i] = depth;
+    }
+    // Coral reef flats around atolls: a ring of 1-2 m water just off the island
+    for (const isl of islands) {
+      if (!isl.isAtoll) continue;
+      this.stampDisc(isl.center.x, isl.center.y, isl.radius * 1.6, (i, _d, x, y) => {
+        if (this.type[i] !== TERRAIN.water || dist[i] > 110) return;
+        // Passes through the reef where the lagoon's channels break out
+        const ang = Math.atan2(y - isl.center.y, x - isl.center.x);
+        const pass = (isl.lagoons ?? []).some((lag) =>
+          (lag.channelBreaches ?? []).some((ch) => Math.abs(Math.atan2(Math.sin(ang - ch.angle), Math.cos(ang - ch.angle))) < ch.width / isl.radius + 0.06)
+        );
+        if (!pass) this.depth[i] = Math.min(this.depth[i], 1.2 + fbm(x / 90, y / 90, this.seed + 73, 2) * 1.2);
+      });
+    }
   }
 
   /** Distance (cells, capped) from each masked cell to the edge of the mask. */
