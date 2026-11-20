@@ -253,3 +253,44 @@ export function findGroundPath(map: TerrainMap, from: Vector2D, to: Vector2D, ve
   }
   return out;
 }
+
+// ── Air and naval effects ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Whether an air-defence site (or a ship) at `from` can see an aircraft. Aircraft above ~40 %
+ * altitude are above all terrain; low fliers, helicopters and aircraft on a torpedo or strafing
+ * run hug the ground, and a ridge, hill or island between them and the site hides them (radar
+ * and gun-laying need a line of sight). `mast` is the sensor height above the site's ground
+ * (a ship's radar mast, a flak director, a SAM radar on its trailer).
+ */
+export function canSeeAircraft(map: TerrainMap, from: Vector2D, plane: { pos: Vector2D; altitude?: number }, mast = 0.04): boolean {
+  const alt = plane.altitude ?? 0.8;
+  if (alt >= 0.4) return true;
+  const ea = map.elevationAt(from.x, from.y) + mast;
+  const eb = map.elevationAt(plane.pos.x, plane.pos.y) + 0.03 + alt * 0.35;
+  const d = Math.hypot(plane.pos.x - from.x, plane.pos.y - from.y);
+  if (d < map.cell * 2) return true;
+  const steps = Math.min(40, Math.ceil(d / (map.cell * 1.5)));
+  for (let k = 1; k < steps; k++) {
+    const t = k / steps;
+    const h = map.elevationAt(from.x + (plane.pos.x - from.x) * t, from.y + (plane.pos.y - from.y) * t);
+    if (h > ea + (eb - ea) * t + 0.02) return false;
+  }
+  return true;
+}
+
+/**
+ * Reach of a coastal battery against ships: a gun or missile radar high on a headland sees
+ * further over the horizon (up to +30 % from the highest ground).
+ */
+export function coastalReach(map: TerrainMap, pos: Vector2D, base: number): number {
+  return base * (1 + Math.min(0.3, map.elevationAt(pos.x, pos.y) * 0.45));
+}
+
+/**
+ * Naval gunfire is flat: a target on the reverse slope of a ridge or behind an island's crest,
+ * out of the ship's line of sight, is only hit by shells that clear the crest and plunge (×0.45).
+ */
+export function reverseSlopeFactor(map: TerrainMap, shipPos: Vector2D, impact: Vector2D): number {
+  return hasLineOfSight(map, shipPos, impact) ? 1 : 0.45;
+}

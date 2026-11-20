@@ -42,7 +42,8 @@ import { AIR_WEAPON_RANGE, gameRangeFromKm, getInstallationRange } from './range
 import { getShipAshmFit, getShipSamSystem } from './navalMissileSalvos';
 import { applyHistoricalGuns, bombSpec, bombsPerRelease, burstBullets, getGunBattery, rocketKind, rocketsPerSalvo, ROCKETS, roundsPerBurst, warheadVsGround, warheadVsInstallation, warheadVsShip } from './aircraftArmament';
 import { getTerrainMap, TERRAIN_NAMES, TerrainMap } from './terrain/terrainMap';
-import { canEngageGround, concealment, findGroundPath } from './terrain/combat';
+import { hasLineOfSight as hasLineOfSightAt } from './terrain/combat';
+import { canEngageGround, canSeeAircraft, coastalReach, concealment, findGroundPath, reverseSlopeFactor } from './terrain/combat';
 import { groundSilhouetteClass } from './unitPreviewRenderer';
 import { GroundWreck, leavesWreck, WRECK_LIFETIME } from './render/unitDetails';
 import { AHEAD_THROWERS, hasAswWeapon, layerFactorForAircraft, layerFactorForShipSonar, layerFactorForSonobuoy, updateThermoclineDepth, STANDOFF_ASW, aircraftDetectionRange, applyHistoricalAswFit, svttLabel, depthChargePattern, enemyAswWeapon, isDieselBoat, isSurfacedBoat, shipSonar, sonarDeadZone, sonarDetectionRange, sonobuoySensitivity, updateDieselBattery } from './asw';
@@ -235,6 +236,21 @@ export class GameEngine {
       airDamage: m.airConcealment(x, y),
       deepRiver: ci >= 0 && ci < m.deepRiver.length && m.deepRiver[ci] === 1,
     };
+  }
+
+  /** Terrain masking of low fliers from an air-defence site or ship (terrain/combat.ts). */
+  private aaCanSee(from: Vector2D, plane: Aircraft, mast = 0.04): boolean {
+    return canSeeAircraft(this.terrain, from, plane, mast);
+  }
+
+  /** Coastal battery reach against ships, longer from high ground. */
+  private coastalReach(pos: Vector2D, base: number): number {
+    return coastalReach(this.terrain, pos, base);
+  }
+
+  /** Line of fire between two points at sea: an island's high ground blocks naval guns. */
+  private seaLineClear(a: Vector2D, b: Vector2D): boolean {
+    return hasLineOfSightAt(this.terrain, a, b);
   }
 
   /** On-foot units (infantry, AT teams, mortars) versus vehicles, for terrain movement. */
@@ -2768,7 +2784,7 @@ export class GameEngine {
       if (!target || dist(ship.pos, target.pos) > effectiveRange) {
         target =
           targetShips
-            .filter((s) => !s.isSunk && this.isGunTarget(s, ship.side) && dist(ship.pos, s.pos) <= effectiveRange)
+            .filter((s) => !s.isSunk && this.isGunTarget(s, ship.side) && dist(ship.pos, s.pos) <= effectiveRange && this.seaLineClear(ship.pos, s.pos))
             .sort((a, b) => dist(ship.pos, a.pos) - dist(ship.pos, b.pos))[0] || null;
       }
 
@@ -2807,7 +2823,7 @@ export class GameEngine {
 
     if (ship.flakCooldown <= 0 && wcsEfficiency >= 0.12) {
       const hostilePlanes = this.aircraft.filter(
-        (a) => this.isHostile(ship.side, a.side) && a.state !== 'shot_down' && dist(ship.pos, a.pos) < ship.flakRange
+        (a) => this.isHostile(ship.side, a.side) && a.state !== 'shot_down' && dist(ship.pos, a.pos) < ship.flakRange && this.aaCanSee(ship.pos, a, 0.05)
       );
 
       if (hostilePlanes.length > 0) {
@@ -7387,7 +7403,7 @@ export class GameEngine {
         if (inst.type === 'flak_battery') {
           // 防空高射砲陣地 (雙方皆可自動對敵機射擊)
           const targetPlane = this.aircraft.find(
-            (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= inst.range
+            (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= inst.range && this.aaCanSee(inst.pos, a)
           );
           if (targetPlane && inst.cooldown <= 0) {
             this.fireFlakBurst(inst.pos, targetPlane, inst.side);
@@ -7405,7 +7421,7 @@ export class GameEngine {
             const reloadMod = hasAmmoDepot ? 0.75 : 1.0;
 
             const shipTarget = this.enemyShips
-              .filter((s) => !s.isSunk && this.isHostile(inst.side, s.side) && (!this.isSubmarine(s) || Boolean(s.isSpotted)) && dist(inst.pos, s.pos) <= inst.range)
+              .filter((s) => !s.isSunk && this.isHostile(inst.side, s.side) && (!this.isSubmarine(s) || Boolean(s.isSpotted)) && dist(inst.pos, s.pos) <= this.coastalReach(inst.pos, inst.range))
               .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
 
             const groundTarget = !shipTarget
@@ -7481,7 +7497,7 @@ export class GameEngine {
               !s.isSunk &&
               this.isHostile(inst.side, s.side) &&
               (!this.isSubmarine(s) || Boolean(s.isSpottedByEnemy)) &&
-              dist(inst.pos, s.pos) <= inst.range
+              dist(inst.pos, s.pos) <= this.coastalReach(inst.pos, inst.range)
           )
           .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
         const groundTarget = !shipTarget
@@ -8002,7 +8018,7 @@ export class GameEngine {
           ? 1550
           : 1400;
       const targetPlane = this.aircraft.find(
-        (a) => this.isHostile(unit.side, a.side) && a.state !== 'shot_down' && dist(unit.pos, a.pos) <= aaRange
+        (a) => this.isHostile(unit.side, a.side) && a.state !== 'shot_down' && dist(unit.pos, a.pos) <= aaRange && this.aaCanSee(unit.pos, a)
       );
       if (targetPlane) {
         unit.heading = Math.atan2(targetPlane.pos.y - unit.pos.y, targetPlane.pos.x - unit.pos.x);
@@ -10504,7 +10520,7 @@ export class GameEngine {
           (a) =>
             a.side === 'enemy' &&
             a.state !== 'shot_down' &&
-            dist(ship.pos, a.pos) <= samRange
+            dist(ship.pos, a.pos) <= samRange && this.aaCanSee(ship.pos, a, 0.06)
         );
 
         if (hostileAircraft.length > 0) {
@@ -10646,7 +10662,7 @@ export class GameEngine {
     // 扇歌火控雷達主動波束照射偵測: 當雷達照射在空友機時，在空野鼬戰機即刻感應波束並發動反輻射狙擊
     if (fanSongAlive && activeFanSong && this.era === 'era4') {
       const planeInBeam = this.aircraft.find(
-        (a) => this.isHostile(activeFanSong!.side, a.side) && a.state !== 'shot_down' && a.state !== 'landing' && dist(activeFanSong!.pos, a.pos) <= 3200
+        (a) => this.isHostile(activeFanSong!.side, a.side) && a.state !== 'shot_down' && a.state !== 'landing' && dist(activeFanSong!.pos, a.pos) <= 3200 && this.aaCanSee(activeFanSong!.pos, a, 0.06)
       );
       if (planeInBeam && Math.random() < 0.28 * dt) {
         this.triggerSeadAutoRetaliation(activeFanSong, planeInBeam);
@@ -10720,7 +10736,7 @@ export class GameEngine {
             (a) =>
               this.isHostile(inst.side, a.side) &&
               a.state !== 'shot_down' &&
-              dist(inst.pos, a.pos) <= samRange
+              dist(inst.pos, a.pos) <= samRange && this.aaCanSee(inst.pos, a)
           );
 
           if (targetPlane) {
@@ -10747,7 +10763,7 @@ export class GameEngine {
             (a) =>
               this.isHostile(inst.side, a.side) &&
               a.state !== 'shot_down' &&
-              dist(inst.pos, a.pos) <= samRange
+              dist(inst.pos, a.pos) <= samRange && this.aaCanSee(inst.pos, a)
           );
 
           if (targetPlane) {
@@ -11013,7 +11029,7 @@ export class GameEngine {
           }
           // 其次攔截進入空域之敵方超音速戰機或轟炸機
           const hostileJet = this.aircraft.find(
-            (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= samRange
+            (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= samRange && this.aaCanSee(inst.pos, a)
           );
           if (hostileJet) {
             this.firePatriotSAM(inst, hostileJet);
@@ -11052,7 +11068,7 @@ export class GameEngine {
           const isSA3 = inst.type === 'sa3_sam_site';
           const samRange = isSA3 ? (inst.range || 2900) : 4200;
           const targetPlayerPlane = this.aircraft.find(
-            (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= samRange
+            (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= samRange && this.aaCanSee(inst.pos, a)
           );
           if (targetPlayerPlane) {
             if (isSA3) {
@@ -11084,7 +11100,7 @@ export class GameEngine {
                 !s.isSunk &&
                 !this.isSubmarine(s) &&
                 this.isHostile(inst.side, s.side) &&
-                dist(inst.pos, s.pos) <= 4800
+                dist(inst.pos, s.pos) <= this.coastalReach(inst.pos, 4800)
             )
             .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
           if (targetPlayerShip) {
@@ -11346,7 +11362,7 @@ export class GameEngine {
                 a.side === 'enemy' &&
                 a.state !== 'shot_down' &&
                 a.state !== 'landing' &&
-                dist(ship.pos, a.pos) <= samRange
+                dist(ship.pos, a.pos) <= samRange && this.aaCanSee(ship.pos, a, 0.06)
             );
             if (targetPlanes.length > 0) {
               this.launchShipSamSalvo(ship, targetPlanes, (a) => this.fireSAM(ship, a, 'aircraft'), (a) => a.state !== 'shot_down');
@@ -15673,7 +15689,7 @@ export class GameEngine {
         } else {
           // 攔截防空射程內之敵方戰鬥機或轟炸機
           const hostilePlanes = this.aircraft.filter(
-            (a) => this.isHostile(ship.side, a.side) && a.state !== 'shot_down' && dist(ship.pos, a.pos) <= samRange
+            (a) => this.isHostile(ship.side, a.side) && a.state !== 'shot_down' && dist(ship.pos, a.pos) <= samRange && this.aaCanSee(ship.pos, a, 0.06)
           );
           if (hostilePlanes.length > 0) {
             this.launchShipSamSalvo(ship, hostilePlanes, (a) => this.fireSAM(ship, a, 'aircraft'), (a) => a.state !== 'shot_down');
@@ -17243,6 +17259,11 @@ export class GameEngine {
   }
 
   private detonateProjectile(proj: Projectile, directHitShip?: Ship) {
+    // Naval gunfire from the sea is flat: a target behind a crest (reverse slope) is hard to hit
+    if (proj.type === 'shell' && proj.originPos) {
+      const ot = this.terrain.at(proj.originPos.x, proj.originPos.y);
+      if (ot === 0 || ot === 1) proj.damage = Math.round(proj.damage * reverseSlopeFactor(this.terrain, proj.originPos, proj.pos));
+    }
     if (this.applyNuclearDetonation(proj)) return;
 
     if (this.applyNapalmImpact(proj)) return;
