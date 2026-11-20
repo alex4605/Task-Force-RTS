@@ -61,6 +61,8 @@ export const TANK_PLANS: TankPlan[] = [
   { match: /m4a3r3/, L: 5.84, W: 2.62, track: 0.42, nose: 'round', noseLen: 0.8, turret: { x: 0.2, len: 2.3, wid: 2.0, shape: 'cast', bustle: 0.35 }, gun: { bore: 110, len: 2.2 }, cupola: { x: -0.45, y: 0.45, r: 0.35 }, loaderHatch: true, engineDeck: 2.0, driver: -1 },
   // M24 Chaffee: low hull, small turret, lightweight 75mm M6
   { match: /chaffee/, L: 5.56, W: 2.95, track: 0.41, nose: 'glacis', noseLen: 0.8, turret: { x: 0.1, len: 2.3, wid: 2.0, shape: 'cast', bustle: 0.3 }, gun: { bore: 75, len: 3.3 }, cupola: { x: -0.45, y: 0.5, r: 0.35 }, loaderHatch: true, engineDeck: 1.9, driver: -1 },
+  // Matilda Frog: the Australian flame conversion, a stubby flame projector in place of the 2pdr
+  { match: /matilda_frog/, L: 5.61, W: 2.59, track: 0.35, nose: 'flat', noseLen: 0.5, turret: { x: 0.3, len: 1.9, wid: 1.7, shape: 'cast', bustle: 0.25 }, gun: { bore: 110, len: 2.1 }, cupola: { x: -0.35, y: 0.35, r: 0.3 }, engineDeck: 1.8, skirts: true, driver: 0 },
   // Matilda II: armoured skirts over the tracks, small cast turret, 2pdr
   { match: /matilda/, L: 5.61, W: 2.59, track: 0.35, nose: 'flat', noseLen: 0.5, turret: { x: 0.3, len: 1.9, wid: 1.7, shape: 'cast', bustle: 0.25 }, gun: { bore: 40, len: 2.3 }, cupola: { x: -0.35, y: 0.35, r: 0.3 }, engineDeck: 1.8, skirts: true, driver: 0 },
   // Centurion Mk 3: long hull with side plates, big cast turret with stowage, 20pdr with fume extractor

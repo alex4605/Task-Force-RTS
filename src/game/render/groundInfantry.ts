@@ -34,6 +34,17 @@ const KITS = {
   au_vietnam: { uniform: '#4C5638', helmet: 'slouch', helmetColour: '#6A6646', pack: 'alice' },
   // Bundeswehr 1983: olive "Moleskin" (Flecktarn only from 1990), M1-pattern steel helmet
   frg_83: { uniform: '#5E6142', helmet: 'm1', helmetColour: '#4E5236', pack: 'alice' },
+  // 3rd NZ Division in jungle green with the Brodie helmet; Fijian scouts and Australian commandos in bush hats
+  nz_ww2: { uniform: '#4D5839', helmet: 'brodie', helmetColour: '#56603E', pack: 'haversack' },
+  fj_ww2: { uniform: '#535C3C', helmet: 'slouch', helmetColour: '#5B5A3E', pack: 'haversack' },
+  // Philippine guerrillas: khaki and denim, straw and cloth hats, whatever kit was to hand
+  ph_guerrilla: { uniform: '#7C7258', camo: '#4A5468', helmet: 'slouch', helmetColour: '#B59B62', pack: 'haversack' },
+  // Turkish Brigade in US-issue kit
+  tr_korea: { uniform: '#626343', helmet: 'm1', helmetColour: '#535A38', pack: 'haversack' },
+  // ROK Capital (Tiger) Division in Vietnam: tiger-stripe over OG-107, covered M1
+  rok_tiger: { uniform: '#58623E', camo: '#2B2A1C', helmet: 'm1_cover', helmetColour: '#5A6A3C', pack: 'alice' },
+  // BAOR 1983: DPM smock, Mk 6 helmet with scrim
+  uk_83: { uniform: '#5F6040', camo: '#3B2F22', helmet: 'brodie', helmetColour: '#4F5536', pack: 'alice' },
 } satisfies Record<string, Kit>;
 
 interface Member {
@@ -72,6 +83,18 @@ const TEAMS: TeamSpec[] = [
   { match: /arvn_ranger/, kit: KITS.arvn_ranger, men: WEDGE4('rifle', 'lmg', 'm79', 'radio') },
   // 1 ATF: L1A1 SLR, M60, Owen
   { match: /au_rar/, kit: KITS.au_vietnam, men: WEDGE4('long_rifle', 'lmg', 'smg', 'long_rifle') },
+  // 3rd NZ Division: SMLE, Bren, Thompson
+  { match: /nz_infantry/, kit: KITS.nz_ww2, men: WEDGE4('long_rifle', 'type96', 'smg', 'long_rifle') },
+  // Fiji Commandos: light, fast jungle scouts
+  { match: /fj_commando/, kit: KITS.fj_ww2, men: [{ x: 6.5, y: 0, w: 'smg' }, { x: 2, y: 0.8, w: 'long_rifle' }, { x: -2.5, y: -0.6, w: 'smg' }, { x: -7, y: 0.4, w: 'radio' }] },
+  // Australian independent commandos: Owen guns, Bren
+  { match: /au_commando/, kit: KITS.au_ww2, men: WEDGE4('smg', 'type96', 'smg', 'smg') },
+  // USAFIP-NL guerrillas: Springfields, a BAR, a radio to call the Thunderbolts
+  { match: /ph_guerrilla/, kit: KITS.ph_guerrilla, men: WEDGE4('long_rifle', 'bar', 'radio', 'long_rifle') },
+  // Turkish Brigade: Garands with fixed bayonets, BAR
+  { match: /tr_infantry/, kit: KITS.tr_korea, men: WEDGE4('rifle', 'bar', 'rifle', 'rifle') },
+  // ROK Tiger Division: M16, M60, M79
+  { match: /rok_tiger/, kit: KITS.rok_tiger, men: WEDGE4('rifle', 'lmg', 'm79', 'rifle') },
   // Panzergrenadiere: G3, MG3, Panzerfaust
   { match: /frg_infantry/, kit: KITS.frg_83, men: WEDGE4('rifle', 'lmg', 'at4', 'rifle') },
   // USMC fireteam: leader, BAR man, two riflemen (1945 brings an M2 flamethrower)

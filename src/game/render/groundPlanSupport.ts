@@ -88,6 +88,10 @@ export const SUPPORT_PLANS: SupportPlan[] = [
   { match: /marder/, L: 6.88, W: 3.24, track: 0.45, nose: 'glacis', noseLen: 0.9, engine: { len: 1.6, at: 'front_right' }, mount: { x: 0.3, len: 1.8, wid: 1.5, kind: 'turret', shape: 'box' }, guns: [{ y: 0, len: 2.6, bore: 20 }], missiles: { count: 1, len: 1.2, groups: [0.95], gap: 0, x: 0.3, canister: true } },
   // FV510 Warrior: turret with the 30mm RARDEN, rear troop doors
   { match: /warrior/, L: 6.34, W: 3.03, track: 0.5, nose: 'glacis', noseLen: 0.9, engine: { len: 1.5, at: 'front_right' }, mount: { x: 0.1, len: 2.2, wid: 2.0, kind: 'turret', shape: 'box' }, guns: [{ y: 0, len: 3.0, bore: 30 }] },
+  // M36 Jackson: open-topped turret with the long 90mm M3 and its double-baffle brake, Sherman-derived hull
+  { match: /m36/, L: 5.88, W: 3.05, track: 0.42, nose: 'glacis', noseLen: 0.9, engine: { len: 1.9, at: 'rear' }, mount: { x: 0.1, len: 2.6, wid: 2.5, kind: 'open', shape: 'cast', bustle: 0.5 }, guns: [{ y: 0, len: 5.2, bore: 90, brake: 'double' }] },
+  // Flakpanzer Gepard: Leopard 1 hull, big turret with a 35mm KDA either side, search radar on the turret rear, tracking radar in front
+  { match: /gepard/, L: 7.68, W: 3.27, track: 0.55, nose: 'glacis', noseLen: 1.0, engine: { len: 2.2, at: 'rear' }, mount: { x: -0.2, len: 3.0, wid: 2.5, kind: 'turret', shape: 'box' }, guns: [{ y: -1.15, len: 4.6, bore: 35, brake: 'single' }, { y: 1.15, len: 4.6, bore: 35, brake: 'single' }], radars: [{ x: -1.3, y: 0, r: 0.75, kind: 'bar' }, { x: 1.2, y: 0, r: 0.45, kind: 'dish' }] },
   // ── Self-propelled artillery ──
   // M7 Priest: open box on the M3/M4 chassis, 105mm offset right, the "pulpit" at right front
   { match: /priest/, L: 6.02, W: 2.87, track: 0.42, nose: 'round', noseLen: 0.8, engine: { len: 1.6, at: 'rear' }, mount: { x: 0.2, len: 2.9, wid: 2.5, kind: 'open' }, guns: [{ y: 0.3, len: 3.4, bore: 105 }], pulpit: { x: 1.4, y: 0.95 } },

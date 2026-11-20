@@ -34,7 +34,7 @@ function vehicleSize(type: GroundUnitType, kind: ReturnType<typeof groundSilhoue
   if (kind === 'carrier') return /lvt|aav|bradley|warrior|marder/.test(type) ? 0.9 : /hmmwv/.test(type) ? 0.3 : 0.6;
   if (kind === 'spg') return /m107|paladin|2s19/.test(type) ? 1.1 : 0.9;
   if (kind === 'rocket') return /scud/.test(type) ? 2.0 : 1.0;
-  if (kind === 'air_defense') return /avenger|lav_ad/.test(type) ? 0.4 : 0.7;
+  if (kind === 'air_defense') return /avenger|lav_ad/.test(type) ? 0.4 : /gepard/.test(type) ? 1.4 : 0.7;
   return 0.5;
 }
 

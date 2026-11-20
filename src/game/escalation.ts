@@ -15,15 +15,29 @@ export interface Escalation {
   total: number;
 }
 
+/** One line on what the new stage means, for the banner. */
+export const STAGE_FLAVOUR: Record<EscalationTier, string> = {
+  0: '雙方以小部隊試探虛實。',
+  1: '敵我主力開始接觸，敵機改走迂迴航線，盟軍加快增援！',
+  2: '戰事全面展開，敵機兵分多路來襲，盟軍重裝部隊投入戰線！',
+  3: '敵軍孤注一擲傾巢而出，盟軍以營級梯隊全力投入！',
+  4: '敵軍殘部頑抗，盟軍全面接手肅清作戰，肅清最後據點！',
+};
+
 /** Progress thresholds for tiers 1–4. */
 const TIER_AT = [0.1, 0.3, 0.55, 0.8];
 
+/**
+ * Stage names: probing actions while the landing force feels out the defences, meeting
+ * engagements once both sides commit, general operations, the decisive battle, and mopping up
+ * the last pockets once the outcome is no longer in doubt.
+ */
 export const TIER_NAME: Record<EscalationTier, string> = {
-  0: '初期接觸',
-  1: '灘頭鞏固',
-  2: '戰線擴張',
-  3: '全面攻勢',
-  4: '決戰階段',
+  0: '試探性作戰階段',
+  1: '遭遇戰階段',
+  2: '全面作戰階段',
+  3: '決戰階段',
+  4: '收尾階段',
 };
 
 /**
@@ -89,6 +103,11 @@ export interface AlliedEscalation {
   fortify: boolean;
   /** Most allied field works standing at once. */
   maxWorks: number;
+  /** Allied beach groups that may be under way at the same time (eras 1–2). */
+  landingGroups: number;
+  /** Units sent forward from the allied base per reinforcement cycle (eras 3–5). */
+  echelon: number;
+  tier: EscalationTier;
 }
 
 export function alliedEscalation(tier: EscalationTier): AlliedEscalation {
@@ -99,6 +118,9 @@ export function alliedEscalation(tier: EscalationTier): AlliedEscalation {
     extraCraft: tier >= 3 ? 2 : tier >= 1 ? 1 : 0,
     fortify: tier >= 1,
     maxWorks: 2 + tier * 2,
+    landingGroups: tier >= 4 ? 3 : tier >= 2 ? 2 : 1,
+    echelon: [1, 1, 2, 2, 3][tier],
+    tier,
   };
 }
 

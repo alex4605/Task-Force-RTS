@@ -3,7 +3,7 @@ import { resolveGroundRequisition } from './groundRequisition';
 import { AlliedHost, AlliedOps } from './allied/alliedOps';
 import { fitsInHold, formatHold, holdUsed, shipHold } from './naval/lift';
 import { CasualtyLedger, Outcome, attritionOutcome, defeatOutcome, victoryOutcome } from './outcome';
-import { Escalation, TIER_NAME, airEscalation, alliedEscalation, computeEscalation, ingressRoute } from './escalation';
+import { Escalation, STAGE_FLAVOUR, TIER_NAME, airEscalation, alliedEscalation, computeEscalation, ingressRoute } from './escalation';
 import { BuilderRequirement, BUILDER_RADIUS, builderRequirement, isEngineerType } from './construction';
 import {
   Ship,
@@ -7062,7 +7062,7 @@ export class GameEngine {
     const pct = Math.round(this.escalation.progress * 100);
     const air = airEscalation(tier);
     const allied = alliedEscalation(tier);
-    this.addBannerAlert(`📈【戰役升級：${TIER_NAME[tier]}】已掌握 ${pct}% 戰略據點！敵軍增派航空兵力，盟軍增兵跟進！`, 'player', 'capture', 7.0);
+    this.addBannerAlert(`📈【進入${TIER_NAME[tier]}】已掌握 ${pct}% 戰略據點！${STAGE_FLAVOUR[tier]}`, 'player', 'capture', 7.0);
     this.addCombatLog({
       category: 'naval',
       sourceSide: 'player',
@@ -7070,7 +7070,7 @@ export class GameEngine {
       targetName: '戰役態勢',
       actionType: 'recon_spotted',
       isCrit: true,
-      text: `📈【戰役升級 → ${TIER_NAME[tier]}】我軍已控制 ${pct}% 據點。敵情：空襲機隊 +${air.waveBonus} 架、間隔縮短 ${Math.round((1 - air.intervalMul) * 100)}%${air.axes > 1 ? `、兵分 ${air.axes} 路迂迴` : air.dogLeg ? '、改採迂迴航線' : ''}${air.diversion ? '、佯動掃蕩誘離 CAP' : ''}。友軍：盟軍兵力上限 ${allied.maxUnits}${allied.fortify ? `、就地構築掩體 (上限 ${allied.maxWorks})` : ''}。`,
+      text: `📈【戰役推進 → ${TIER_NAME[tier]}】我軍已控制 ${pct}% 據點。敵情：空襲機隊 +${air.waveBonus} 架、間隔縮短 ${Math.round((1 - air.intervalMul) * 100)}%${air.axes > 1 ? `、兵分 ${air.axes} 路迂迴` : air.dogLeg ? '、改採迂迴航線' : ''}${air.diversion ? '、佯動掃蕩誘離 CAP' : ''}。友軍：${this.era === 'era1' || this.era === 'era2' ? `同時 ${allied.landingGroups} 支搶灘支隊、每支加派 ${allied.extraCraft} 艘登陸艇` : `兵力上限 ${allied.maxUnits}、每批投入 ${allied.echelon} 個單位${tier >= 2 ? '、開設前進集結點' : ''}`}${tier >= 1 ? '、派兵駐守已奪據點' : ''}${allied.fortify ? `、就地構築掩體 (上限 ${allied.maxWorks})` : ''}${tier >= 2 ? '、投入重裝與砲兵' : ''}。`,
     });
   }
 
@@ -8927,7 +8927,7 @@ export class GameEngine {
       const isCalliope = unit.type === 'us_m4_calliope';
       const isMlrs = unit.type === 'us_m270_mlrs';
       const silClass = groundSilhouetteClass(unit.type);
-      const isAtgm = unit.type === 'us_dragon_atgm' || unit.type === 'us_m2_bradley' || unit.type === 'us_hmmwv_tow' || unit.type === 'frg_marder';
+      const isAtgm = unit.type === 'us_dragon_atgm' || unit.type === 'us_m2_bradley' || unit.type === 'us_hmmwv_tow' || unit.type === 'frg_marder' || unit.type === 'uk_milan_team';
       const isArty = unit.isArtillery || unit.isSPG || unit.type.includes('artillery') || unit.type.includes('howitzer') || unit.type === 'us_m198_155';
       const isTank = silClass === 'tank' || unit.type.includes('armor');
       const isShell = isTank || isArty || unit.type === 'usmc_lvt_45' || unit.type === 'usmc_lvtp5a1' || unit.type === 'usmc_aav7a1' || unit.type === 'usmc_lav25' || unit.type === 'uk_warrior' || unit.type === 'usmc_37mm_at';
@@ -8953,7 +8953,7 @@ export class GameEngine {
         soundEngine.playRocketWhoosh();
         const atgmSpeed = 440;
         const atgmName =
-          unit.type === 'us_m2_bradley' || unit.type === 'us_hmmwv_tow' ? 'BGM-71 TOW 重型反戰車飛彈' : unit.type === 'frg_marder' ? 'MILAN 反戰車飛彈' : 'M47 龍式反戰車飛彈';
+          unit.type === 'us_m2_bradley' || unit.type === 'us_hmmwv_tow' ? 'BGM-71 TOW 重型反戰車飛彈' : unit.type === 'frg_marder' || unit.type === 'uk_milan_team' ? 'MILAN 反戰車飛彈' : 'M47 龍式反戰車飛彈';
         this.projectiles.push({
           id: `atgm-${Date.now()}-${Math.random()}`,
           type: 'missile_arm',
@@ -11506,16 +11506,16 @@ export class GameEngine {
           this.fireChaparralSAM(gUnit, targetPlane);
           gUnit.cooldown = gUnit.type === 'usmc_lav_ad' ? 3.5 : gUnit.type === 'us_avenger' ? 3.0 : 4.0;
         }
-      } else if (gUnit.side !== 'enemy' && (gUnit.type === 'usmc_duster_m42' || gUnit.type === 'us_m16_quad50')) {
-        // Gun air defence: twin 40mm Bofors (Duster) and the quad .50 "meat chopper"
-        const reach = gUnit.type === 'usmc_duster_m42' ? 1400 : 1000;
+      } else if (gUnit.side !== 'enemy' && (gUnit.type === 'usmc_duster_m42' || gUnit.type === 'us_m16_quad50' || gUnit.type === 'frg_gepard')) {
+        // Gun air defence: twin 40mm Bofors (Duster), the quad .50 "meat chopper", radar-laid twin 35mm (Gepard)
+        const reach = gUnit.type === 'frg_gepard' ? 2000 : gUnit.type === 'usmc_duster_m42' ? 1400 : 1000;
         const targetPlane = this.aircraft.find(
           (a) => this.isHostile(gUnit.side, a.side) && a.state !== 'shot_down' && dist(gUnit.pos, a.pos) <= reach && this.aaCanSee(gUnit.pos, a)
         );
         if (targetPlane) {
           gUnit.heading = Math.atan2(targetPlane.pos.y - gUnit.pos.y, targetPlane.pos.x - gUnit.pos.x);
           this.fireFlakBurst(gUnit.pos, targetPlane, gUnit.side);
-          gUnit.cooldown = gUnit.type === 'usmc_duster_m42' ? 1.3 : 0.9;
+          gUnit.cooldown = gUnit.type === 'frg_gepard' ? 0.7 : gUnit.type === 'usmc_duster_m42' ? 1.3 : 0.9;
         }
       } else if (
         gUnit.side === 'enemy' &&
@@ -18998,7 +18998,8 @@ export class GameEngine {
       'usmc_armor_m3', 'usmc_armor_m4', 'usmc_patton_m46', 'us_army_armor_korea',
       'usmc_duster_m42', 'usmc_armor_m48', 'usmc_ontos_m50', 'us_m551_sheridan', 'us_m26_pershing', 'us_m1a1_abrams', 'us_army_m113_mech', 'us_army_chaparral_sam',
       'usmc_m4a3r3_flame', 'us_m24_chaffee', 'us_m16_quad50', 'us_m113_acav', 'us_avenger', 'au_matilda', 'cw_centurion', 'arvn_m41',
-      'frg_marder', 'frg_leopard2', 'uk_challenger1', 'uk_warrior'
+      'frg_marder', 'frg_leopard2', 'uk_challenger1', 'uk_warrior',
+      'au_matilda_frog', 'rok_m36', 'au_centurion_68', 'arvn_m113_acav', 'frg_gepard', 'frg_m109g'
     ];
     const armorUnits = validGround.filter((u) => armorTypes.includes(u.type));
     if (armorUnits.length > 0) {

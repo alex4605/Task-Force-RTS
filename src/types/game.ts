@@ -128,6 +128,21 @@ export type GroundUnitType =
   | 'frg_leopard2'        // 時代五 豹 2A4 主力戰車 (120mm Rh)
   | 'uk_challenger1'      // 時代五 英國挑戰者 1 主力戰車 (120mm L11)
   | 'uk_warrior'          // 時代五 英國武士步兵戰車 (30mm 拉登砲)
+  | 'nz_infantry_43'        // 時代一 紐西蘭第3師步兵排 (所羅門群島 · 布倫機槍)
+  | 'fj_commando_43'        // 時代一 斐濟突擊隊叢林偵搜排 (所羅門群島)
+  | 'cw_25pdr'              // 時代一至三 大英國協 25 磅野戰砲連 (QF 25-pounder)
+  | 'au_commando_45'        // 時代二 澳洲第2/x 獨立突擊中隊 (婆羅洲)
+  | 'ph_guerrilla_45'       // 時代二 菲律賓美軍游擊隊 (USAFIP-NL) 排
+  | 'au_matilda_frog'       // 時代二 澳軍瑪蒂達「青蛙」噴火戰車排 (婆羅洲)
+  | 'tr_infantry_50'        // 時代三 土耳其旅步兵排 (軍隅里 · 刺刀衝鋒)
+  | 'rok_m36'               // 時代三 南韓陸軍 M36 傑克森驅逐戰車排 (90mm)
+  | 'rok_tiger_65'          // 時代四 南韓陸軍首都師「猛虎部隊」排
+  | 'au_centurion_68'       // 時代四 澳洲第1裝甲團 百夫長 Mk 5/1 戰車排
+  | 'arvn_m113_acav'        // 時代四 越南共和國陸軍 M113「綠龍」裝騎排
+  | 'nz_l5_pack'            // 時代四 紐西蘭皇家砲兵第161砲兵連 L5 105mm 山砲
+  | 'frg_gepard'            // 時代五 西德獵豹式 35mm 自走防空砲 (Flakpanzer Gepard)
+  | 'frg_m109g'             // 時代五 西德 M109G 155mm 自走榴彈砲連
+  | 'uk_milan_team'         // 時代五 英國萊茵軍團 MILAN 反戰車飛彈組
   // OPFOR 歷史各時代守軍
   | 'opfor_infantry_42'  // 時代一 日軍海軍特別陸戰隊步槍排 (SNLF)
   | 'opfor_infantry_45'  // 時代二 日軍要塞守備步兵排 / 萬歲突擊排 (Late-war IJA)
@@ -242,6 +257,8 @@ export interface GroundUnit {
   isMLRS?: boolean;
   /** What the ground under the unit does to it (refreshed every tick; shown in the unit panel). */
   terrainInfo?: GroundTerrainInfo;
+  /** Allied garrison post (a captured stronghold) this unit holds. */
+  holdPost?: Vector2D;
   /** Terrain route for AI movement that is not a standing order (chases, charges). */
   route?: Vector2D[];
   routeIdx?: number;

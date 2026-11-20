@@ -124,10 +124,28 @@ export const GROUND_UNIT_STATS: Record<GroundUnitType, GroundUnitStats> = {
   frg_leopard2: { health: 5200, armor: 0.86, speed: 7.0, damage: 850, reloadTime: 2.0 },
   uk_challenger1: { health: 5300, armor: 0.88, speed: 5.6, damage: 820, reloadTime: 2.1 },
   uk_warrior: { health: 3300, armor: 0.64, speed: 6.4, damage: 320, reloadTime: 1.2 },
+  nz_infantry_43: { health: 1800, armor: 0.35, speed: 4.0, damage: 86, reloadTime: 1.1 },
+  fj_commando_43: { health: 1500, armor: 0.3, speed: 5.0, damage: 95, reloadTime: 0.9 },
+  cw_25pdr: { health: 1700, armor: 0.3, speed: 2.4, damage: 360, reloadTime: 3.6 },
+  au_commando_45: { health: 1650, armor: 0.32, speed: 4.9, damage: 98, reloadTime: 0.9 },
+  ph_guerrilla_45: { health: 1450, armor: 0.25, speed: 4.6, damage: 80, reloadTime: 1.1 },
+  au_matilda_frog: { health: 3200, armor: 0.78, speed: 3.0, damage: 420, reloadTime: 2.8 },
+  tr_infantry_50: { health: 2100, armor: 0.38, speed: 4.4, damage: 108, reloadTime: 1.0 },
+  rok_m36: { health: 2900, armor: 0.5, speed: 5.2, damage: 420, reloadTime: 2.4 },
+  rok_tiger_65: { health: 2200, armor: 0.4, speed: 4.6, damage: 122, reloadTime: 0.9 },
+  au_centurion_68: { health: 4000, armor: 0.78, speed: 4.8, damage: 450, reloadTime: 2.2 },
+  arvn_m113_acav: { health: 2800, armor: 0.58, speed: 5.8, damage: 200, reloadTime: 0.7, isAmphibious: true },
+  nz_l5_pack: { health: 1500, armor: 0.28, speed: 2.6, damage: 330, reloadTime: 3.2 },
+  frg_gepard: { health: 3400, armor: 0.55, speed: 6.4, damage: 300, reloadTime: 0.45 },
+  frg_m109g: { health: 3000, armor: 0.48, speed: 5.4, damage: 520, reloadTime: 4.0 },
+  uk_milan_team: { health: 1500, armor: 0.3, speed: 4.2, damage: 560, reloadTime: 3.2 },
 };
 
 /** Indirect-fire units: towed and self-propelled guns, rocket artillery and ballistic missiles. */
 export const ARTILLERY_UNIT_TYPES: ReadonlySet<GroundUnitType> = new Set<GroundUnitType>([
+  'cw_25pdr',
+  'nz_l5_pack',
+  'frg_m109g',
   'us_m4_calliope',
   'us_m7_priest',
   'us_m44_spg',
@@ -154,6 +172,7 @@ export const ARTILLERY_UNIT_TYPES: ReadonlySet<GroundUnitType> = new Set<GroundU
 
 /** Self-propelled guns (counter-battery capable). */
 export const SPG_UNIT_TYPES: ReadonlySet<GroundUnitType> = new Set<GroundUnitType>([
+  'frg_m109g',
   'us_m107_175',
   'us_m7_priest',
   'us_m44_spg',
@@ -182,6 +201,10 @@ export const NUCLEAR_TEL_UNIT_TYPES: ReadonlySet<GroundUnitType> = new Set<Groun
 
 /** Units fielded as a battery (artillery, rocket and air-defence); the rest are platoons unless listed as companies. */
 export const BATTERY_ECHELON_TYPES: ReadonlySet<GroundUnitType> = new Set<GroundUnitType>([
+  'cw_25pdr',
+  'nz_l5_pack',
+  'frg_m109g',
+  'frg_gepard',
   'us_m107_175',
   'us_m16_quad50',
   'us_avenger',

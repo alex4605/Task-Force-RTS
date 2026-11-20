@@ -404,6 +404,21 @@ const EXPLICIT_FUNCTION: Record<string, App6Function> = {
   frg_leopard2: 'armour',
   uk_challenger1: 'armour',
   uk_warrior: 'mech_infantry',
+  nz_infantry_43: 'infantry',
+  fj_commando_43: 'recon',
+  cw_25pdr: 'field_artillery',
+  au_commando_45: 'infantry',
+  ph_guerrilla_45: 'infantry',
+  au_matilda_frog: 'armour',
+  tr_infantry_50: 'infantry',
+  rok_m36: 'anti_armour_armoured',
+  rok_tiger_65: 'infantry',
+  au_centurion_68: 'armour',
+  arvn_m113_acav: 'armoured_recon',
+  nz_l5_pack: 'field_artillery',
+  frg_gepard: 'air_defence_gun',
+  frg_m109g: 'field_artillery',
+  uk_milan_team: 'anti_armour',
 };
 
 const EXPLICIT_MOBILITY: Record<string, Mobility> = {
@@ -412,6 +427,11 @@ const EXPLICIT_MOBILITY: Record<string, Mobility> = {
   us_m107_175: 'tracked',
   us_hmmwv_tow: 'wheeled',
   us_avenger: 'wheeled',
+  cw_25pdr: 'towed',
+  rok_m36: 'tracked',
+  nz_l5_pack: 'towed',
+  frg_gepard: 'tracked',
+  frg_m109g: 'tracked',
 };
 
 export function app6Function(type: string): App6Function {

@@ -57,68 +57,101 @@ interface LandingGroup {
 interface CargoPlan {
   type: GroundUnitType;
   name: string;
+  /** Campaign stage from which this formation is committed (escalation tier, default 0). */
+  minTier?: number;
 }
+
+/** Plans available at a stage. */
+const atTier = (plans: CargoPlan[], tier: number): CargoPlan[] => plans.filter((p) => (p.minTier ?? 0) <= tier);
 
 const LANDING_CARGO: Partial<Record<Era, { lcvp: CargoPlan[]; lst: CargoPlan[]; title: string }>> = {
   era1: {
     title: '澳紐聯軍搶灘支隊',
     lcvp: [
       { type: 'cw_infantry_ww2', name: '澳洲第7師 第2/14營 步兵排' },
+      { type: 'nz_infantry_43', name: '紐西蘭第3師 第30營 步兵排' },
       { type: 'cw_infantry_ww2', name: '澳洲第7師 第2/16營 步兵排' },
-      { type: 'cw_infantry_ww2', name: '紐西蘭第3師 第30營 步兵排' },
+      { type: 'fj_commando_43', name: '斐濟第1突擊隊 叢林偵搜排', minTier: 1 },
+      { type: 'nz_infantry_43', name: '紐西蘭第3師 第37營 步兵排', minTier: 1 },
+      { type: 'us_army_rifle_45', name: '美陸軍亞美利加師 第164團 步兵排', minTier: 2 },
     ],
     lst: [
       { type: 'cw_infantry_ww2', name: '澳洲第7師 第2/27營 步兵排' },
-      { type: 'cw_infantry_ww2', name: '澳洲第7師 第2/14營 步兵排' },
       { type: 'au_matilda', name: '澳洲第1裝甲團 瑪蒂達戰車排' },
-      { type: 'cw_infantry_ww2', name: '紐西蘭第3師 第35營 步兵排' },
+      { type: 'nz_infantry_43', name: '紐西蘭第3師 第35營 步兵排' },
+      { type: 'cw_25pdr', name: '紐西蘭第3師 第17野戰砲兵團 25磅砲連', minTier: 1 },
+      { type: 'au_matilda', name: '澳洲第2/4裝甲團 瑪蒂達戰車排', minTier: 2 },
+      { type: 'cw_infantry_ww2', name: '澳洲第7師 第2/14營 步兵排' },
     ],
   },
   era2: {
     title: '澳洲第9師搶灘支隊 (婆羅洲)',
     lcvp: [
       { type: 'cw_infantry_ww2', name: '澳洲第9師 第2/43營 步兵排' },
-      { type: 'cw_infantry_ww2', name: '澳洲第9師 第2/48營 步兵排' },
       { type: 'us_army_rifle_45', name: '美陸軍第41師 第163團 步兵排' },
+      { type: 'cw_infantry_ww2', name: '澳洲第9師 第2/48營 步兵排' },
+      { type: 'ph_guerrilla_45', name: '菲律賓美軍游擊隊 北呂宋第15步兵團 排', minTier: 1 },
+      { type: 'au_commando_45', name: '澳洲第2/9 突擊中隊 排', minTier: 1 },
+      { type: 'au_commando_45', name: '澳洲第2/12 突擊中隊 排', minTier: 3 },
     ],
     lst: [
       { type: 'au_matilda', name: '澳洲第2/9裝甲團 瑪蒂達戰車排' },
-      { type: 'au_matilda', name: '澳洲第2/9裝甲團 瑪蒂達噴火戰車排' },
       { type: 'cw_infantry_ww2', name: '澳洲第9師 第2/17營 步兵排' },
+      { type: 'au_matilda_frog', name: '澳洲第2/9裝甲團 瑪蒂達「青蛙」噴火戰車排', minTier: 1 },
+      { type: 'cw_25pdr', name: '澳洲第9師 第2/12野戰團 25磅砲連', minTier: 1 },
       { type: 'cw_infantry_ww2', name: '澳洲第9師 第2/13營 步兵排' },
+      { type: 'au_matilda', name: '澳洲第2/9裝甲團 瑪蒂達戰車排 (第2連)', minTier: 2 },
     ],
   },
 };
 
-const BASE_ROSTER: Partial<Record<Era, { base: string; units: CargoPlan[] }>> = {
+const BASE_ROSTER: Partial<Record<Era, { base: string; forward: string; units: CargoPlan[] }>> = {
   era3: {
     base: '南韓陸軍第1師 / 大英國協第1師 聯合指揮所 [ROK 1st Div · 1st Commonwealth Div]',
+    forward: '聯合國軍前進集結點 [UN Forward Assembly Area]',
     units: [
       { type: 'rok_infantry_50', name: '南韓第1師 第11團 步兵排' },
       { type: 'cw_infantry_50', name: '格洛斯特團第1營 步兵排' },
-      { type: 'cw_centurion', name: '第8皇家愛爾蘭驃騎兵 百夫長戰車排' },
+      { type: 'tr_infantry_50', name: '土耳其旅 第241團 步兵排' },
       { type: 'rok_infantry_50', name: '南韓第1師 第12團 步兵排' },
-      { type: 'cw_infantry_50', name: '皇家澳洲團第3營 步兵排' },
+      { type: 'cw_25pdr', name: '皇家騎砲兵第45野戰團 25磅砲連', minTier: 1 },
+      { type: 'rok_m36', name: '南韓陸軍 第1師 M36 驅逐戰車排', minTier: 1 },
+      { type: 'cw_infantry_50', name: '皇家澳洲團第3營 步兵排', minTier: 1 },
+      { type: 'cw_centurion', name: '第8皇家愛爾蘭驃騎兵 百夫長戰車排', minTier: 2 },
+      { type: 'tr_infantry_50', name: '土耳其旅 第241團 刺刀突擊排', minTier: 2 },
+      { type: 'cw_centurion', name: '第5皇家坦克團 百夫長戰車排', minTier: 3 },
     ],
   },
   era4: {
     base: '自由世界軍援部隊前進基地 [ARVN 1st Div · ROK 2nd Marine Bde · 1 ATF]',
+    forward: '自由世界部隊火力支援基地 [Fire Support Base]',
     units: [
       { type: 'arvn_ranger_65', name: '越南共和國陸軍 第37遊騎兵營 排' },
       { type: 'rok_marine_65', name: '南韓海軍陸戰隊 青龍部隊 排' },
       { type: 'au_rar_65', name: '皇家澳洲團第6營 步兵排' },
-      { type: 'arvn_m41', name: '越南共和國陸軍 第1裝騎團 M41 戰車排' },
-      { type: 'arvn_ranger_65', name: '越南共和國陸軍 第21遊騎兵營 排' },
+      { type: 'rok_tiger_65', name: '南韓首都師 猛虎部隊 第1團 排' },
+      { type: 'arvn_m113_acav', name: '越南共和國陸軍 第1裝騎團 M113「綠龍」排', minTier: 1 },
+      { type: 'nz_l5_pack', name: '紐西蘭皇家砲兵 第161砲兵連 L5 山砲排', minTier: 1 },
+      { type: 'arvn_m41', name: '越南共和國陸軍 第1裝騎團 M41 戰車排', minTier: 1 },
+      { type: 'au_centurion_68', name: '澳洲第1裝甲團 C中隊 百夫長戰車排', minTier: 2 },
+      { type: 'rok_tiger_65', name: '南韓首都師 猛虎部隊 機甲團 排', minTier: 2 },
+      { type: 'au_centurion_68', name: '澳洲第1裝甲團 B中隊 百夫長戰車排', minTier: 3 },
     ],
   },
   era5: {
     base: '西德第1軍 / 英國萊茵軍團 前進指揮所 [I. Korps · I (BR) Corps]',
+    forward: '北約前進集結區 [NATO Forward Assembly Area]',
     units: [
       { type: 'frg_infantry_83', name: '西德第1裝甲擲彈兵旅 擲彈兵排' },
       { type: 'frg_marder', name: '西德第1裝甲擲彈兵旅 黃鼠狼排' },
-      { type: 'frg_leopard2', name: '西德第3裝甲師 豹2戰車排' },
+      { type: 'uk_milan_team', name: '皇家綠夾克團第1營 MILAN 反戰車排' },
       { type: 'uk_warrior', name: '英國第7裝甲旅 武士步兵戰車排' },
-      { type: 'uk_challenger1', name: '英國皇家蘇格蘭龍騎兵 挑戰者戰車排' },
+      { type: 'frg_gepard', name: '西德第1裝甲師 獵豹防空砲排', minTier: 1 },
+      { type: 'frg_leopard2', name: '西德第3裝甲師 豹2戰車排', minTier: 1 },
+      { type: 'frg_m109g', name: '西德第1砲兵團 M109G 自走砲連', minTier: 2 },
+      { type: 'uk_challenger1', name: '皇家驃騎兵 挑戰者戰車排', minTier: 2 },
+      { type: 'frg_leopard2', name: '西德第21裝甲旅 豹2戰車排', minTier: 3 },
+      { type: 'uk_challenger1', name: '第14/20國王驃騎兵 挑戰者戰車排', minTier: 3 },
     ],
   },
 };
@@ -134,8 +167,9 @@ const FIELD_WORK_NAME: Record<Era, string> = {
 
 export class AlliedOps {
   private landingTimer = 150 + Math.random() * 90;
-  private group: LandingGroup | null = null;
+  private groups: LandingGroup[] = [];
   private baseId: string | null = null;
+  private forwardId: string | null = null;
   private baseTimer = 40;
   private rosterIdx = 0;
   private aiTimer = 0;
@@ -181,10 +215,9 @@ export class AlliedOps {
   // ════ Eras 1–2: beach landing groups ════
 
   private updateLandings(dt: number): void {
-    if (this.group) {
-      this.updateGroup(this.group, dt);
-      return;
-    }
+    for (const g of [...this.groups]) this.updateGroup(g, dt);
+    // Later stages run more than one beach group at a time
+    if (this.groups.length >= this.host.escalation().landingGroups) return;
     this.landingTimer -= dt;
     if (this.landingTimer > 0) return;
     this.landingTimer = (300 + Math.random() * 180) * this.host.escalation().landingMul;
@@ -265,7 +298,8 @@ export class AlliedOps {
     }
 
     // Cargo, checked against the LST's historical hold
-    const plans = useLst ? cargoDef.lst : cargoDef.lcvp;
+    const tier = h.escalation().tier;
+    const plans = atTier(useLst ? cargoDef.lst : cargoDef.lcvp, tier);
     const cargo: GroundUnit[] = [];
     const hold = useLst ? shipHold(transports[0]) : undefined;
     for (const p of plans) {
@@ -274,9 +308,11 @@ export class AlliedOps {
     }
     const lstLoad = cargo.length;
     // Each additional landing craft lands one more rifle platoon
-    const rifle = cargoDef.lcvp[0];
-    for (let i = transports.length - (useLst ? 1 : 3); i > 0 && rifle; i--) {
-      cargo.push(createGroundUnit(`allied-g-${ts}-${cargo.length}`, rifle.type, rifle.name, 'allied', h.era, { ...land }));
+    const extras = atTier(cargoDef.lcvp, tier);
+    let extraIdx = 0;
+    for (let i = transports.length - (useLst ? 1 : 3); i > 0 && extras.length; i--) {
+      const plan = extras[extraIdx++ % extras.length];
+      cargo.push(createGroundUnit(`allied-g-${ts}-${cargo.length}`, plan.type, plan.name, 'allied', h.era, { ...land }));
     }
 
     const offshore = h.toWater(transports[0], { x: vertex.x + out.x * 110, y: vertex.y + out.y * 110 });
@@ -301,8 +337,8 @@ export class AlliedOps {
     } else {
       cargo.forEach((u, i) => (cargoByShip[transports[i % transports.length].id] ??= []).push(u));
     }
-    this.group = { id: `lg-${ts}`, escortId: escort?.id, transportIds: transports.map((t) => t.id), cargo, cargoByShip, landed: 0, island, offshore, land, home, phase: 'transit', age: 0, progress: {} };
-    h.banner(`⚓【盟軍搶灘支隊出航】${cargoDef.title}：${escort ? escort.name + ' 護航，' : ''}${useLst ? '戰車登陸艦' : 'LCVP 登陸艇 ×3'} 載運 ${cargo.length} 個排駛向「${island.name.split(' (')[0]}」！`);
+    this.groups.push({ id: `lg-${ts}`, escortId: escort?.id, transportIds: transports.map((t) => t.id), cargo, cargoByShip, landed: 0, island, offshore, land, home, phase: 'transit', age: 0, progress: {} });
+    h.banner(`⚓【盟軍搶灘支隊出航】${cargoDef.title}：${escort ? escort.name + ' 護航，' : ''}${useLst ? `戰車登陸艦${transports.length > 1 ? ` + LCVP ×${transports.length - 1}` : ''}` : `LCVP 登陸艇 ×${transports.length}`} 載運 ${cargo.length} 個排駛向「${island.name.split(' (')[0]}」！`);
   }
 
   private updateGroup(g: LandingGroup, dt: number): void {
@@ -346,7 +382,7 @@ export class AlliedOps {
         if (idx >= 0) h.alliedShips.splice(idx, 1);
       }
     }
-    if (ships.every((s) => !h.alliedShips.includes(s))) this.group = null;
+    if (ships.every((s) => !h.alliedShips.includes(s))) this.drop(g);
   }
 
   /** Ramp down: this craft's troops and tanks go ashore on the nearest stretch of beach. */
@@ -384,7 +420,11 @@ export class AlliedOps {
       const back = this.host.toWater(s, g.home);
       s.order = { type: 'move', targetPos: back, waypoints: this.host.route(s, back), activeWaypointIndex: 0 };
     }
-    if (ships.length === 0) this.group = null;
+    if (ships.length === 0) this.drop(g);
+  }
+
+  private drop(g: LandingGroup): void {
+    this.groups = this.groups.filter((x) => x !== g);
   }
 
   // ════ Eras 3–5: allied mainland base ════
@@ -449,12 +489,22 @@ export class AlliedOps {
     if (!roster) return;
     const alive = h.groundUnits.filter((u) => u.side === 'allied' && !u.isDestroyed).length;
     if (alive >= esc.maxUnits) return;
-    const plan = roster.units[this.rosterIdx++ % roster.units.length];
-    const a = Math.random() * Math.PI * 2;
-    const u = createGroundUnit(`allied-base-u-${++this.serial}`, plan.type, plan.name, 'allied', h.era, { x: base.pos.x + Math.cos(a) * 70, y: base.pos.y + Math.sin(a) * 70 });
-    u.isSupplied = true;
-    h.groundUnits.push(u);
-    h.log(`🪖【盟軍部隊出發】「${plan.name}」自 ${roster.base.split(' [')[0]} 開出，向前線推進。`);
+    const plans = atTier(roster.units, esc.tier);
+    // From the full-scale stage on, a forward assembly point behind the captured line shortens the march
+    const forward = esc.tier >= 2 ? this.ensureForward(roster.forward) : undefined;
+    const from = forward && !forward.isDestroyed ? forward : base;
+    const names: string[] = [];
+    for (let k = 0; k < esc.echelon && alive + k < esc.maxUnits; k++) {
+      const plan = plans[this.rosterIdx++ % plans.length];
+      const a = Math.random() * Math.PI * 2;
+      const u = createGroundUnit(`allied-base-u-${++this.serial}`, plan.type, plan.name, 'allied', h.era, { x: from.pos.x + Math.cos(a) * 80, y: from.pos.y + Math.sin(a) * 80 });
+      u.isSupplied = true;
+      h.groundUnits.push(u);
+      names.push(plan.name);
+    }
+    const src = (from === base ? roster.base : roster.forward).split(' [')[0];
+    if (names.length > 1) h.log(`🪖【盟軍梯隊投入】${names.length} 個單位自 ${src} 開出：${names.join('、')}。`);
+    else if (names.length) h.log(`🪖【盟軍部隊出發】「${names[0]}」自 ${src} 開出，向前線推進。`);
   }
 
   // ════ Field works ════
@@ -514,6 +564,42 @@ export class AlliedOps {
     h.log(`🛠️【盟軍就地構工】「${unit.name}」在${island.isMainland ? '前線' : `「${island.name.split(' (')[0]}」`}構築${work.name}，鞏固已奪取的陣地。`);
   }
 
+  /**
+   * Forward assembly point: at the captured mainland stronghold furthest from the allied base
+   * (the most advanced ground held), set up once and reused.
+   */
+  private ensureForward(name: string): Installation | undefined {
+    const h = this.host;
+    if (this.forwardId) {
+      for (const isl of h.islands) {
+        const f = isl.installations.find((i) => i.id === this.forwardId);
+        if (f) return f;
+      }
+      return undefined;
+    }
+    const base = this.findBase();
+    const mainland = h.islands.find((i) => i.isMainland);
+    if (!base || !mainland) return undefined;
+    const held = (mainland.strongholds ?? []).filter((sh) => sh.isCaptured);
+    if (held.length === 0) return undefined;
+    held.sort((p, q) => dist(q.cpPos, base.pos) - dist(p.cpPos, base.pos));
+    for (const sh of held) {
+      for (let k = 0; k < 12; k++) {
+        const a = (k / 12) * Math.PI * 2;
+        const p = { x: sh.cpPos.x + Math.cos(a) * 180, y: sh.cpPos.y + Math.sin(a) * 180 };
+        if (!isPointInPolygon(p, mainland.points) || !h.goodGround(p)) continue;
+        if (mainland.installations.some((i) => !i.isDestroyed && dist(i.pos, p) < 120)) continue;
+        const fwd = makeInstallation({ id: `allied-forward-${h.era}`, type: 'command_post', name: name, side: 'allied', pos: p, health: 2600, armor: 0.45 });
+        mainland.installations.push(fwd);
+        this.forwardId = fwd.id;
+        h.islandsChanged();
+        h.banner(`🏳️【盟軍前進集結點開設】${name.split(' [')[0]} 已在「${sh.name.split(' [')[0]}」後方開設，盟軍部隊將直接自前線投入！`);
+        return fwd;
+      }
+    }
+    return undefined;
+  }
+
   // ════ Allied ground AI ════
 
   /** Idle allied units advance on the nearest enemy unit or position within reach. */
@@ -526,17 +612,45 @@ export class AlliedOps {
       ? h.groundUnits.filter((u) => u.side === 'allied' && !u.isDestroyed && u.order.type === 'idle' && dist(u.pos, base.pos) < 600)
       : [];
     const holdAtBase = atBase.length > 0 && atBase.length < 3;
+    const tier = h.escalation().tier;
+    // Captured strongholds with no friendly troops near them: one allied infantry unit holds each,
+    // so the player's forces are free to push on
+    const garrisonNeeded: Vector2D[] = [];
+    if (tier >= 1) {
+      const friendly = h.groundUnits.filter((u) => u.side !== 'enemy' && !u.isDestroyed && !u.embarkedInShipId);
+      for (const isl of h.islands) {
+        for (const sh of isl.strongholds ?? []) {
+          if (sh.isCaptured && !friendly.some((u) => dist(u.pos, sh.cpPos) < 450)) garrisonNeeded.push(sh.cpPos);
+        }
+      }
+    }
     for (const u of h.groundUnits) {
       if (u.side !== 'allied' || u.isDestroyed || u.embarkedInShipId) continue;
       u.isSupplied = true; // own logistics
       if (u.order.type !== 'idle') continue;
       if (holdAtBase && atBase.includes(u)) continue;
+      // Rifle units peel off to garrison an unheld stronghold on their own landmass
+      if (garrisonNeeded.length && groundSilhouetteClass(u.type) === 'infantry') {
+        const isl = h.islands.find((i) => isPointInPolygon(u.pos, i.points));
+        const gi = garrisonNeeded.findIndex((p) => isl && isPointInPolygon(p, isl.points) && dist(p, u.pos) < 4000);
+        if (gi >= 0) {
+          const post = garrisonNeeded.splice(gi, 1)[0];
+          const route = h.groundRoute(u, post);
+          if (route && route.length) {
+            u.order = { type: 'move', targetPos: { ...route[route.length - 1] }, waypoints: route, activeWaypointIndex: 0, routed: true };
+            u.holdPost = { ...post };
+            continue;
+          }
+        }
+      }
+      // Garrisons stay on their post
+      if (u.holdPost && dist(u.pos, u.holdPost) < 500) continue;
       // Candidate objectives: enemy units within 3.2 km, then enemy positions on this landmass,
       // nearest first, taking the first one reachable over land
       const cands: { pos: Vector2D; d: number }[] = [];
       for (const e of enemies) {
         const d = dist(u.pos, e.pos);
-        if (d < 3200) cands.push({ pos: e.pos, d });
+        if (d < (tier >= 4 ? 9000 : tier >= 3 ? 5000 : 3200)) cands.push({ pos: e.pos, d });
       }
       {
         for (const isl of h.islands) {

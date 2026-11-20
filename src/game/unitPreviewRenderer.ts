@@ -463,7 +463,7 @@ interface TowedSpec {
   match: RegExp;
   /** split = two trails in a V (M101, M114, M198, Type 91); star3 = three-legged base (ZU-23);
    *  cross4 = four outriggers (KS-19). */
-  carriage: 'split' | 'star3' | 'cross4';
+  carriage: 'split' | 'star3' | 'cross4' | 'box';
   trailLen: number;
   /** Wheel half-track and wheel size. */
   track: number;
@@ -487,6 +487,10 @@ const TOWED_SPECS: TowedSpec[] = [
   { match: /field_artillery/, carriage: 'split', trailLen: 12, track: 5.5, wheel: 2.8, spokedWheels: true, shield: 5.5, gunLen: 11, gunW: 1.7 },
   // KS-19 100mm AA gun: cruciform firing platform, long tube with muzzle brake
   { match: /ks19/, carriage: 'cross4', trailLen: 11, track: 0, wheel: 0, shield: 4, gunLen: 18, gunW: 1.8, muzzle: 'single' },
+  // QF 25-pounder: single box trail on its round firing platform, shield, double-baffle brake
+  { match: /25pdr/, carriage: 'box', trailLen: 13, track: 5, wheel: 2.8, shield: 5, gunLen: 10, gunW: 1.8, muzzle: 'double' },
+  // L5 105mm pack howitzer: light split trail, short tube with multi-baffle brake, no shield
+  { match: /l5_pack/, carriage: 'split', trailLen: 10, track: 4.2, wheel: 2.2, gunLen: 8, gunW: 1.5, muzzle: 'double' },
   // M3 37mm anti-tank gun: light split trail, small shield
   { match: /37mm_at/, carriage: 'split', trailLen: 10, track: 4.5, wheel: 2.2, shield: 4.5, gunLen: 10, gunW: 1.1 },
   // ZU-23-2: light three-legged mount, twin 23mm
@@ -499,7 +503,13 @@ function drawTowedGun(ctx: CanvasRenderingContext2D, sp: TowedSpec, pal: Vehicle
   ctx.strokeStyle = pal.hullStroke;
   ctx.lineWidth = 1.8;
   ctx.beginPath();
-  if (sp.carriage === 'split') {
+  if (sp.carriage === 'box') {
+    // Single box trail to the spade; the gun sits on its round traversing platform
+    ctx.moveTo(0, -1.1);
+    ctx.lineTo(-sp.trailLen, -0.7);
+    ctx.moveTo(0, 1.1);
+    ctx.lineTo(-sp.trailLen, 0.7);
+  } else if (sp.carriage === 'split') {
     for (const side of [-1, 1]) {
       ctx.moveTo(0, side * 1.2);
       ctx.lineTo(-sp.trailLen, side * sp.trailLen * 0.42);
@@ -514,7 +524,14 @@ function drawTowedGun(ctx: CanvasRenderingContext2D, sp: TowedSpec, pal: Vehicle
   ctx.stroke();
   // Spades / outrigger pads
   ctx.fillStyle = '#455A64';
-  if (sp.carriage === 'split') {
+  if (sp.carriage === 'box') {
+    ctx.fillRect(-sp.trailLen - 1.5, -1.6, 2, 3.2);
+    ctx.strokeStyle = 'rgba(120, 144, 156, 0.7)';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.arc(0, 0, sp.track + 1.2, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (sp.carriage === 'split') {
     for (const side of [-1, 1]) ctx.fillRect(-sp.trailLen - 1.5, side * sp.trailLen * 0.42 - 1.2, 2, 2.4);
   } else {
     const legs = sp.carriage === 'star3' ? [Math.PI, Math.PI / 3, -Math.PI / 3] : [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4];
@@ -620,6 +637,21 @@ const EXPLICIT_SILHOUETTE_CLASS: Record<string, GroundSilhouetteClass> = {
   frg_leopard2: 'tank',
   uk_challenger1: 'tank',
   uk_warrior: 'carrier',
+  nz_infantry_43: 'infantry',
+  fj_commando_43: 'infantry',
+  cw_25pdr: 'towed',
+  au_commando_45: 'infantry',
+  ph_guerrilla_45: 'infantry',
+  au_matilda_frog: 'tank',
+  tr_infantry_50: 'infantry',
+  rok_m36: 'tank',
+  rok_tiger_65: 'infantry',
+  au_centurion_68: 'tank',
+  arvn_m113_acav: 'carrier',
+  nz_l5_pack: 'towed',
+  frg_gepard: 'air_defense',
+  frg_m109g: 'spg',
+  uk_milan_team: 'atgm',
 };
 
 const silhouetteClassCache = new Map<string, GroundSilhouetteClass>();

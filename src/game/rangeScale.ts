@@ -147,6 +147,21 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   frg_leopard2: 3.0, // Rh 120
   uk_challenger1: 3.0, // L11 120mm
   uk_warrior: 1.5, // L21 RARDEN 30mm
+  nz_infantry_43: 0.5, // SMLE / Bren
+  fj_commando_43: 0.45, // Owen / SMLE, jungle scouts
+  cw_25pdr: 12.25, // QF 25-pounder, 12.25 km
+  au_commando_45: 0.45, // Owen / Bren
+  ph_guerrilla_45: 0.4, // Garand / Springfield / BAR
+  au_matilda_frog: 0.15, // flame gun ~80 m
+  tr_infantry_50: 0.46, // M1 Garand / BAR
+  rok_m36: 1.8, // 90mm M3
+  rok_tiger_65: 0.5, // M1 / M16 / M60
+  au_centurion_68: 2.0, // 20pdr
+  arvn_m113_acav: 1.5, // M2 .50 cal
+  nz_l5_pack: 10.6, // L5 pack howitzer
+  frg_gepard: 3.5, // twin 35mm KDA, 3.5 km
+  frg_m109g: 18.5, // M109G with Rheinmetall tube
+  uk_milan_team: 1.95, // MILAN
 };
 
 export function getGroundUnitRange(type: GroundUnitType): number {
