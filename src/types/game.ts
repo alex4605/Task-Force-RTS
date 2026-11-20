@@ -1533,6 +1533,8 @@ export interface Aircraft {
   maxAmmo?: number;
   gunAmmo?: number;
   maxGunAmmo?: number;
+  /** Gun ammunition set from the historical battery (aircraftArmament.ts). */
+  gunsInitialised?: boolean;
   flightName?: string;
   flightCallsign?: string;
   flightNumber?: number;
@@ -1799,6 +1801,10 @@ export interface Projectile {
   attackerName?: string;
   sourceModel?: AircraftModel;
   bombType?: AircraftPayloadType;
+  /** Warhead class deciding effect per target type (aircraftArmament.ts). */
+  warhead?: 'he' | 'ap' | 'heat' | 'cluster' | 'incendiary' | 'gun';
+  /** Fraction of a gun round's or rocket's damage that gets through tank armour. */
+  vsArmour?: number;
   targetEntityName?: string;
   isNapalm?: boolean;
   isTinyTim?: boolean;

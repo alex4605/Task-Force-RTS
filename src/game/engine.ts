@@ -40,6 +40,7 @@ import { getNavalGunPerformance, getNavalLauncherRange } from './navalGuns';
 import { getAfbModelsForEra, getCarrierModelsForEra, getCatalogRole } from './airWingCatalog';
 import { AIR_WEAPON_RANGE, gameRangeFromKm, getInstallationRange } from './rangeScale';
 import { getShipAshmFit, getShipSamSystem } from './navalMissileSalvos';
+import { applyHistoricalGuns, bombSpec, bombsPerRelease, burstBullets, getGunBattery, rocketKind, rocketsPerSalvo, ROCKETS, roundsPerBurst, warheadVsGround, warheadVsInstallation, warheadVsShip } from './aircraftArmament';
 import { GroundWreck, leavesWreck, WRECK_LIFETIME } from './render/unitDetails';
 import { AHEAD_THROWERS, hasAswWeapon, layerFactorForAircraft, layerFactorForShipSonar, layerFactorForSonobuoy, updateThermoclineDepth, STANDOFF_ASW, aircraftDetectionRange, applyHistoricalAswFit, svttLabel, depthChargePattern, enemyAswWeapon, isDieselBoat, isSurfacedBoat, shipSonar, sonarDeadZone, sonarDetectionRange, sonobuoySensitivity, updateDieselBattery } from './asw';
 import { barrierStation, isStriker, selectAirTarget } from './airMissions';
@@ -54,7 +55,6 @@ const TAIL_GUNNER_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>(['
 /** BLUFOR / allied fighters that engage with air-to-air missiles. */
 const FRIENDLY_MISSILE_FIGHTER_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>(['f14a', 'f15a', 'f16a', 'fa18a', 'f4e', 'f4b', 'f4j', 'f8', 'tornado_adv', 'f4f_phantom', 'mirage2000', 'mirage3', 'hunter_fga9']);
 /** Aircraft armed with a rotary / high-rate internal cannon. */
-const ROTARY_CANNON_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>(['f14a', 'f15a', 'f16a', 'fa18a', 'su27', 'mig29a', 'f4e', 'f105', 'a7', 'ah1', 'f8', 'mig21']);
 /** Attack / support aircraft able to strafe ground targets at low level. */
 const GROUND_STRAFING_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>(['ah1', 'ov10', 'a4', 'a6a', 'a7', 'f105', 'ad1', 'a20', 'a26', 'su7', 'il10', 'p47']);
 
@@ -2814,6 +2814,7 @@ export class GameEngine {
 
     for (let i = this.aircraft.length - 1; i >= 0; i--) {
       const plane = this.aircraft[i];
+      if (!plane.gunsInitialised) this.initialiseAircraftArmament(plane);
 
       if (this.updateShotDownAircraft(dt, i, plane)) continue;
 
@@ -3656,7 +3657,7 @@ export class GameEngine {
     } else if (plane.payloadType === 'hvar_rockets') {
       // ════ HVAR 5吋航空火箭彈 (HVAR Rockets Salvo): 520m 遠程連環齊射 ════
       if (d < 520) {
-        this.fireRockets(plane, targetPos, 8);
+        this.fireRockets(plane, targetPos, rocketsPerSalvo(plane.maxAmmo ?? 8, 'hvar_rockets'));
         plane.hasPayload = false;
         plane.order = { type: 'rtb' };
         plane.state = 'returning';
@@ -3789,7 +3790,7 @@ export class GameEngine {
       }
     } else if (plane.payloadType === 'ffar_rockets_pod') {
       if (d < 520) {
-        this.fireRockets(plane, targetPos, 16);
+        this.fireRockets(plane, targetPos, rocketsPerSalvo(plane.maxAmmo ?? 16, 'ffar_rockets_pod'));
         plane.hasPayload = false;
         plane.order = { type: 'rtb' };
         plane.state = 'returning';
@@ -4723,8 +4724,14 @@ export class GameEngine {
   }
 
   // Combat Actions
+  /**
+   * The airframe's own gun battery (aircraftArmament.ts): each group of guns sends tracers of its
+   * calibre, with that calibre's damage, reach and armour penetration; a burst uses the rounds
+   * those guns fire in ~0.3 s. Aircraft without fixed guns (F-4B/J, A-6, F-111...) cannot strafe.
+   */
   private fireAircraftGuns(attacker: Aircraft, targetPos: Vector2D) {
-    if ((attacker.gunAmmo ?? 1) <= 0) {
+    const battery = getGunBattery(attacker.model);
+    if (!battery || (attacker.gunAmmo ?? 0) <= 0) {
       if (!attacker.hasPayload) {
         attacker.order = { type: 'rtb' };
         attacker.state = 'returning';
@@ -4732,72 +4739,77 @@ export class GameEngine {
       return;
     }
 
-    attacker.gunAmmo = Math.max(0, (attacker.gunAmmo ?? 1440) - 30);
+    attacker.gunAmmo = Math.max(0, (attacker.gunAmmo ?? 0) - roundsPerBurst(battery));
     if (attacker.payloadType === 'clean_guns') {
       attacker.ammoRemaining = attacker.gunAmmo;
     }
 
-    const isA10 = attacker.model === 'a10a';
-    const isModernVulcan = ROTARY_CANNON_MODELS.has(attacker.model);
-    const isF86 = attacker.model === 'f86';
-    const isMig15 = attacker.model === 'mig15';
-
-    const burstCount = isA10 ? 12 : isModernVulcan ? 8 : isF86 ? 6 : isMig15 ? 2 : 4;
-    const bulletSpeed = isA10 ? 880 : isModernVulcan ? 740 : isF86 ? 640 : isMig15 ? 520 : 540;
-    const bulletDmg = isA10
-      ? 85 // GAU-8/A 30mm Depleted Uranium Armor-Piercing Incendiary
-      : isModernVulcan
-      ? 38
-      : isF86
-      ? 26
-      : isMig15
-      ? 48
-      : attacker.model === 'f8f' || attacker.model === 'sb2c'
-      ? 24
-      : 16;
-
-    // Muzzle flashes: nose cannon on jets, a flash at each wing battery on piston fighters
-    const noseGun = isA10 || isModernVulcan || isMig15;
-    const flashSize = isA10 ? 9 : noseGun ? 6 : 4;
-    const stations = noseGun ? [0] : [7, -7];
+    const groups = burstBullets(battery);
+    const heavy = groups.some((gr) => gr.cal === '30AP');
+    const rotary = groups.some((gr) => gr.rotary);
+    const flashSize = heavy ? 9 : battery.nose ? 6 : 4;
+    const stations = battery.nose ? [0] : [7, -7];
     for (const offset of stations) {
-      const fx = attacker.pos.x + Math.cos(attacker.heading) * (noseGun ? 9 : 3) + Math.sin(attacker.heading) * offset;
-      const fy = attacker.pos.y + Math.sin(attacker.heading) * (noseGun ? 9 : 3) - Math.cos(attacker.heading) * offset;
+      const fx = attacker.pos.x + Math.cos(attacker.heading) * (battery.nose ? 9 : 3) + Math.sin(attacker.heading) * offset;
+      const fy = attacker.pos.y + Math.sin(attacker.heading) * (battery.nose ? 9 : 3) - Math.cos(attacker.heading) * offset;
       this.spawnMuzzleFlash(fx, fy, attacker.heading, flashSize, false);
     }
 
-    for (let b = 0; b < burstCount; b++) {
-      const spread = (Math.random() - 0.5) * (isA10 ? 0.012 : isModernVulcan ? 0.016 : isF86 ? 0.015 : isMig15 ? 0.05 : 0.045);
-      const bAngle = attacker.heading + spread;
-      const wingOffset = isA10 || isModernVulcan || isMig15 ? 0 : (b % 2 === 0 ? 1 : -1) * (5 + Math.floor(b / 2) * 3);
-      const startX = attacker.pos.x + Math.sin(attacker.heading) * wingOffset;
-      const startY = attacker.pos.y - Math.cos(attacker.heading) * wingOffset;
-
-      this.projectiles.push({
-        id: `bullet-${Date.now()}-${b}-${Math.random()}`,
-        type: 'bullet',
-        side: attacker.side,
-        pos: { x: startX, y: startY },
-        vel: { x: Math.cos(bAngle) * bulletSpeed, y: Math.sin(bAngle) * bulletSpeed },
-        originPos: { x: startX, y: startY },
-        targetPos: { ...targetPos },
-        flightProgress: 0,
-        maxDistance: isA10 ? 650 : isModernVulcan ? 520 : isF86 ? 420 : 320,
-        distanceTraveled: 0,
-        damage: bulletDmg,
-        blastRadius: isA10 ? 18 : isModernVulcan ? 12 : isMig15 ? 12 : 8,
-        speed: bulletSpeed,
-        heading: bAngle,
-        isDead: false,
-        trail: [],
-        attackerName: attacker.name,
-        isBeamTracer: isA10 || isModernVulcan || isF86,
-      });
+    let b = 0;
+    for (const gr of groups) {
+      // Wing guns harmonised at ~300 m spread their cone; nose guns and Gatlings stay tight
+      const cone = gr.rotary ? 0.014 : battery.nose ? 0.02 : 0.045;
+      const speed = gr.cal === '30AP' ? 880 : gr.rotary ? 740 : gr.cal === '7.7' || gr.cal === '7.62' ? 520 : 600;
+      for (let k = 0; k < gr.tracers; k++, b++) {
+        const bAngle = attacker.heading + (Math.random() - 0.5) * cone;
+        const wingOffset = battery.nose ? 0 : (b % 2 === 0 ? 1 : -1) * (5 + Math.floor(k / 2) * 3);
+        const startX = attacker.pos.x + Math.sin(attacker.heading) * wingOffset;
+        const startY = attacker.pos.y - Math.cos(attacker.heading) * wingOffset;
+        this.projectiles.push({
+          id: `bullet-${Date.now()}-${b}-${Math.random()}`,
+          type: 'bullet',
+          side: attacker.side,
+          pos: { x: startX, y: startY },
+          vel: { x: Math.cos(bAngle) * speed, y: Math.sin(bAngle) * speed },
+          originPos: { x: startX, y: startY },
+          targetPos: { ...targetPos },
+          flightProgress: 0,
+          maxDistance: gr.range,
+          distanceTraveled: 0,
+          damage: gr.damage,
+          blastRadius: gr.cal === '30AP' ? 18 : gr.cal === '7.7' || gr.cal === '7.62' || gr.cal === '12.7' ? 8 : 12,
+          speed,
+          heading: bAngle,
+          isDead: false,
+          trail: [],
+          attackerName: `${attacker.name} (${battery.label})`,
+          isBeamTracer: rotary || heavy,
+          warhead: 'gun',
+          vsArmour: gr.vsArmour,
+        });
+      }
     }
+  }
+
+  /**
+   * First update of an aircraft: gun ammunition from its historical battery and, for enemy strike
+   * aircraft launched without a named store, the ordnance their type historically carried.
+   */
+  private initialiseAircraftArmament(plane: Aircraft): void {
+    if (plane.side === 'enemy' && plane.hasPayload && !plane.payloadType && (plane.role === 'dive_bomber' || plane.role === 'attacker')) {
+      if (plane.model === 'il10' || plane.model === 'su7' || plane.model === 'mig17' || plane.model === 'su25' || plane.model === 'mig23') {
+        plane.payloadType = 'mixed_bombs_rockets'; // RS-82 / S-5 / S-8 rockets, then FAB bombs
+      } else if (plane.model === 'mi24') {
+        plane.payloadType = 'ffar_rockets_pod'; // UB-32 pods: S-5, S-8 from 1984
+        plane.ammoRemaining = plane.maxAmmo = 16;
+      }
+    }
+    applyHistoricalGuns(plane);
   }
 
   private fireRockets(plane: Aircraft, targetPos: Vector2D, count: number = 8) {
     soundEngine.playRocketWhoosh();
+    const rocket = ROCKETS[rocketKind(plane.model, this.era)];
     const rocketSpeed = 580;
     const baseAngle = Math.atan2(targetPos.y - plane.pos.y, targetPos.x - plane.pos.x);
 
@@ -4818,13 +4830,15 @@ export class GameEngine {
         flightProgress: 0,
         maxDistance: 580,
         distanceTraveled: 0,
-        damage: 230, // 8 x 230 = 1840 salvo damage!
-        blastRadius: 26,
+        damage: rocket.damage,
+        blastRadius: rocket.blast,
         speed: rocketSpeed,
         heading: angleSpread,
         isDead: false,
         trail: [],
-        attackerName: `${plane.name} (HVAR火箭)`,
+        attackerName: `${plane.name} (${rocket.label})`,
+        warhead: 'he',
+        vsArmour: rocket.vsArmour,
         sourceModel: plane.model,
       });
     }
@@ -4873,6 +4887,7 @@ export class GameEngine {
         speed: rocketSpeed,
         heading: angle,
         isDead: false,
+        warhead: 'ap',
         trail: [],
         isTinyTim: true,
         attackerName,
@@ -4926,6 +4941,7 @@ export class GameEngine {
         speed: 260,
         heading: plane.heading,
         isDead: false,
+        warhead: 'incendiary',
         trail: [],
         isNapalm: true,
         tumbleAngle: 0,
@@ -5427,62 +5443,37 @@ export class GameEngine {
       return;
     }
 
-    if (pType === 'bombs_dual_500') {
-      // Dual 500lb bombs along flight path with slight stagger
-      for (let b = -1; b <= 1; b += 2) {
-        const lateralX = Math.sin(plane.heading) * (b * 12) + (Math.random() - 0.5) * 14;
-        const lateralY = -Math.cos(plane.heading) * (b * 12) + (Math.random() - 0.5) * 14;
-        const bTarget = { x: actualTarget.x + lateralX, y: actualTarget.y + lateralY };
-        const bDist = Math.max(1, dist(plane.pos, bTarget));
-        this.projectiles.push({
-          id: `bomb-${Date.now()}-${b}-${Math.random()}`,
-          type: 'bomb',
-          side: plane.side,
-          pos: { x: plane.pos.x + lateralX, y: plane.pos.y + lateralY },
-          vel: { x: 0, y: 0 },
-          originPos: { x: plane.pos.x + lateralX, y: plane.pos.y + lateralY },
-          targetPos: bTarget,
-          flightProgress: 0,
-          maxDistance: bDist,
-          distanceTraveled: 0,
-          damage: 750, // 2 x 750 = 1500 damage!
-          blastRadius: 48,
-          speed: 340,
-          heading: plane.heading,
-          isDead: false,
-          trail: [],
-          attackerName,
-          sourceModel: plane.model,
-          bombType: 'bombs_dual_500',
-        });
-      }
-    } else {
-      const isSuperHeavy = pType === 'bomb_1600';
-      const isLight = pType === 'bomb_500';
-      const dmg = isSuperHeavy ? 2400 : isLight ? 850 : 1650;
-      const blast = isSuperHeavy ? 72 : isLight ? 45 : 58;
-      const bDist = Math.max(1, dist(plane.pos, actualTarget));
-
+    // One release: the airframe's bomb(s) of this loadout, e.g. an F4U-4 drops both 1,000 lb bombs
+    // and a Val its single 250 kg bomb (aircraftArmament.ts)
+    const spec = bombSpec(plane.model, pType);
+    const count = pType === 'bombs_dual_500' ? 2 : bombsPerRelease(pType, plane.maxAmmo ?? 1);
+    for (let k = 0; k < count; k++) {
+      const lateral = count === 1 ? 0 : (k - (count - 1) / 2) * 24;
+      const lateralX = Math.sin(plane.heading) * lateral + (count === 1 ? 0 : (Math.random() - 0.5) * 14);
+      const lateralY = -Math.cos(plane.heading) * lateral + (count === 1 ? 0 : (Math.random() - 0.5) * 14);
+      const bTarget = { x: actualTarget.x + lateralX, y: actualTarget.y + lateralY };
+      const origin = { x: plane.pos.x + lateralX, y: plane.pos.y + lateralY };
       this.projectiles.push({
-        id: `bomb-${Date.now()}-${Math.random()}`,
+        id: `bomb-${Date.now()}-${k}-${Math.random()}`,
         type: 'bomb',
         side: plane.side,
-        pos: { ...plane.pos },
+        pos: { ...origin },
         vel: { x: 0, y: 0 },
-        originPos: { ...plane.pos },
-        targetPos: actualTarget,
+        originPos: { ...origin },
+        targetPos: bTarget,
         flightProgress: 0,
-        maxDistance: bDist,
+        maxDistance: Math.max(1, dist(origin, bTarget)),
         distanceTraveled: 0,
-        damage: dmg,
-        blastRadius: blast,
+        damage: spec.damage,
+        blastRadius: spec.blast,
         speed: 340,
         heading: plane.heading,
         isDead: false,
         trail: [],
-        attackerName,
+        attackerName: `${attackerName} ${spec.label}`,
         sourceModel: plane.model,
         bombType: pType,
+        warhead: spec.armourPiercing ? 'ap' : 'he',
       });
     }
 
@@ -8828,6 +8819,7 @@ export class GameEngine {
         speed,
         heading: mHeading,
         isDead: false,
+        warhead: 'ap',
         trail: [],
         attackerName,
         targetEntityId: tShipId,
@@ -8993,6 +8985,7 @@ export class GameEngine {
       speed,
       heading,
       isDead: false,
+      warhead: 'heat',
       trail: [],
       attackerName,
     });
@@ -9141,6 +9134,7 @@ export class GameEngine {
       speed,
       heading,
       isDead: false,
+      warhead: 'heat',
       trail: [],
       attackerName,
     });
@@ -14045,6 +14039,7 @@ export class GameEngine {
       speed,
       heading: angle,
       isDead: false,
+      warhead: 'he',
       trail: [],
       attackerName: `${plane.name} (AGM-12 鬥牛犬超音速空地飛彈)`,
       ashmVariant: 'agm12_bullpup',
@@ -14103,7 +14098,8 @@ export class GameEngine {
 
   private dropSnakeyeBombs(plane: Aircraft, targetPos: Vector2D) {
     soundEngine.playTorpedoLaunch();
-    const count = 4;
+    const spec = bombSpec(plane.model, 'bombs_snakeye_retarded');
+    const count = Math.max(2, Math.min(12, plane.maxAmmo ?? 4)); // Mk 82 Snakeye on MERs / TERs
     for (let i = 0; i < count; i++) {
       const offsetSide = (i % 2 === 0 ? 1 : -1) * (8 + i * 2);
       const startX = plane.pos.x + Math.sin(plane.heading) * offsetSide;
@@ -14125,11 +14121,12 @@ export class GameEngine {
         flightProgress: 0,
         maxDistance: bDist,
         distanceTraveled: 0,
-        damage: 650,
+        damage: spec.damage,
         blastRadius: 36,
         speed: 240,
         heading: plane.heading,
         isDead: false,
+        warhead: 'he',
         trail: [],
         attackerName: `${plane.name} (Mk 82 蛇眼減速炸彈)`,
         bombType: 'bomb_500',
@@ -14168,6 +14165,7 @@ export class GameEngine {
       speed,
       heading: angle,
       isDead: false,
+      warhead: 'ap',
       trail: [],
       attackerName: `${plane.name} (GBU-10 鋪路雷射導引重彈)`,
       bombType: 'bomb_2000',
@@ -14212,6 +14210,7 @@ export class GameEngine {
         speed: 260,
         heading: plane.heading,
         isDead: false,
+        warhead: 'cluster',
         trail: [],
         attackerName: `${plane.name} (CBU-24 集束子母彈)`,
         bombType: 'bomb_500',
@@ -14275,7 +14274,10 @@ export class GameEngine {
 
   private dropMERIronBombStick(plane: Aircraft, targetPos: Vector2D) {
     soundEngine.playTorpedoLaunch();
-    const count = 18;
+    const spec = bombSpec(plane.model, 'mer_iron_bombs');
+    // Mk 82s on multiple ejector racks: A-6 up to 22, F-111 24, A-7 / A-10 12, F-105 16, B-52 54
+    const MER_COUNT: Partial<Record<AircraftModel, number>> = { a6a: 22, a6e: 22, f111: 24, a7: 12, a10a: 12, f105: 16, b52: 54 };
+    const count = Math.min(30, MER_COUNT[plane.model] ?? 12);
     for (let i = 0; i < count; i++) {
       const stepForward = (i - count / 2) * 22;
       const bTarget = {
@@ -14295,11 +14297,12 @@ export class GameEngine {
         flightProgress: 0,
         maxDistance: bDist,
         distanceTraveled: 0,
-        damage: 360,
+        damage: spec.damage,
         blastRadius: 38,
         speed: 280,
         heading: plane.heading,
         isDead: false,
+        warhead: 'he',
         trail: [],
         attackerName: `${plane.name} (MER 18聯裝 500lb 連續航彈走廊)`,
         bombType: 'bomb_500',
@@ -16804,7 +16807,9 @@ export class GameEngine {
           const currentOrg = u.organization ?? 100;
           const orgDmgScale = currentOrg < 50 ? 1.0 + 0.5 * (1.0 - currentOrg / 50) : 1.0;
           const urbanCoverMod = u.isInUrbanCover ? 0.50 : 1.0;
-          const dmg = Math.round(proj.damage * orgDmgScale * (1 - (u.armor || 0.2) * 0.35) * urbanCoverMod);
+          // Machine-gun rounds bounce off tanks; 30 mm GAU-8 depleted uranium goes through
+          const armourMod = (u.armor || 0.2) >= 0.55 ? proj.vsArmour ?? 0.1 : 1 - (u.armor || 0.2) * 0.35;
+          const dmg = Math.round(proj.damage * orgDmgScale * armourMod * urbanCoverMod);
           u.health = Math.max(0, u.health - dmg);
           u.strength = Math.max(0, Math.round((u.health / u.maxHealth) * 100));
           u.organization = Math.max(0, currentOrg - (u.isInUrbanCover ? 2 : 4));
@@ -16838,6 +16843,39 @@ export class GameEngine {
               text: `💥【步火交鋒突破】「${u.name}」在密集火力壓制下建制被徹底擊潰消滅！`,
             });
           }
+          break;
+        }
+      }
+    }
+
+    // Strafing: cannon and machine guns rake a ship's AA crews and topsides or a gun pit
+    if (!proj.isDead && proj.warhead === 'gun') {
+      for (const ship of [...this.playerShips, ...this.alliedShips, ...this.enemyShips]) {
+        if (ship.isSunk || !this.isHostile(proj.side, ship.side)) continue;
+        if (this.isSubmarine(ship) && !isSurfacedBoat(ship, this.era)) continue;
+        if (distToShipHull(proj.pos, ship) < ship.width * 0.6) {
+          const topside = Math.round(proj.damage * Math.max(0.05, 1 - Math.min(0.9, ship.armor || 0) * 1.1) * 0.6);
+          ship.weaponControlHealth = Math.max(0, (ship.weaponControlHealth ?? ship.health) - topside);
+          ship.health = Math.max(1, ship.health - Math.round(topside * 0.25));
+          proj.isDead = true;
+          break;
+        }
+      }
+    }
+    if (!proj.isDead && proj.warhead === 'gun') {
+      for (const isl of this.islands) {
+        const inst = isl.installations.find((i) => !i.isDestroyed && this.isHostile(proj.side, i.side) && dist(proj.pos, i.pos) < 18);
+        if (inst) {
+          const armor = inst.armor ?? 0.45;
+          inst.health -= Math.round(proj.damage * warheadVsInstallation('gun', armor >= 0.6) * (1 - armor * 0.5));
+          if (inst.health <= 0) {
+            if (inst.side === 'enemy') this.destroyInstallation(inst);
+            else {
+              inst.isDestroyed = true;
+              this.casualties.playerInstallationsLost++;
+            }
+          }
+          proj.isDead = true;
           break;
         }
       }
@@ -17152,7 +17190,7 @@ export class GameEngine {
 
         const critMultiplier = isCrit ? 1.45 : 1.0;
         const dmgMultiplier = Math.max(0.1, 1 - effectiveArmor) * critMultiplier;
-        const actualDmg = Math.round(proj.damage * dmgMultiplier);
+        const actualDmg = Math.round(proj.damage * dmgMultiplier * warheadVsShip(proj.warhead));
 
         // 確保雙重血條數值正確初始化
         if (ship.weaponControlHealth === undefined) ship.weaponControlHealth = ship.health;
@@ -17515,7 +17553,7 @@ export class GameEngine {
             if (isDirectPenetration) {
               // 直擊貫穿掩體: 專用穿甲航彈發揮穿透力，但加固工事仍提供防禦
               const effectiveArmor = isApBomb ? armorFactor * 0.4 : armorFactor * 0.8;
-              const actualDmg = Math.round(proj.damage * (1 - effectiveArmor));
+              const actualDmg = Math.round(proj.damage * (1 - effectiveArmor) * warheadVsInstallation(proj.warhead, armorFactor >= 0.6));
               inst.health -= actualDmg;
 
               soundEngine.playExplosion(true);
@@ -17537,7 +17575,8 @@ export class GameEngine {
               });
             } else {
               // 史實近失/沙袋土堤吸收衝擊 (二戰空襲不一定成功秒殺): 航彈落入土堤周圍
-              const actualDmg = Math.round(proj.damage * 0.22); // 大幅減免，僅承受震盪與破片
+              // 大幅減免，僅承受震盪與破片；集束子母彈對雷達、飛彈陣地等軟目標仍有效
+              const actualDmg = Math.round(proj.damage * 0.22 * warheadVsInstallation(proj.warhead, armorFactor >= 0.6));
               inst.health -= actualDmg;
               // 衝擊波暫時壓制設施運作 (冷卻延遲 3.5秒)
               inst.cooldown = Math.max(inst.cooldown, 3.5);
@@ -17578,7 +17617,7 @@ export class GameEngine {
           } else {
             // 火箭彈或艦砲砲擊: 計算裝甲減傷
             const armorFactor = inst.armor !== undefined ? inst.armor : 0.45;
-            const actualDmg = Math.round(proj.damage * (1 - armorFactor * 0.7));
+            const actualDmg = Math.round(proj.damage * (1 - armorFactor * 0.7) * warheadVsInstallation(proj.warhead, armorFactor >= 0.6));
             inst.health -= actualDmg;
 
             this.addCombatLog({
@@ -17637,7 +17676,9 @@ export class GameEngine {
           ? (proj.type === 'bomb' || proj.type === 'rocket' ? 0.30 : 0.50)
           : 1.0;
         const isBunkerBusterMod = proj.isBunkerBuster ? 1.7 : 1.0;
-        const physicalDmg = Math.round(proj.damage * (1 - unitArmor * (proj.isBunkerBuster ? 0.1 : 0.4)) * coverReduction * orgDmgScale * urbanCoverMod * isBunkerBusterMod);
+        const armoured = unitArmor >= 0.55;
+        const warheadMod = warheadVsGround(proj.warhead, armoured, proj.vsArmour);
+        const physicalDmg = Math.round(proj.damage * (1 - unitArmor * (proj.isBunkerBuster ? 0.1 : 0.4)) * coverReduction * orgDmgScale * urbanCoverMod * isBunkerBusterMod * warheadMod);
         unit.health = Math.max(0, unit.health - physicalDmg);
         unit.strength = Math.max(0, Math.round((unit.health / unit.maxHealth) * 100));
 

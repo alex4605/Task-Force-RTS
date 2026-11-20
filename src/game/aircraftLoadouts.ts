@@ -1,5 +1,6 @@
 import { AircraftModel, AircraftPayloadType, AircraftRole, Era } from '../types/game';
 import { getCarrierModelsForEra } from './airWingCatalog';
+import { getGunRounds } from './aircraftArmament';
 
 /**
  * Historical loadouts of every player-flyable airframe: the stores each type actually carried in
@@ -111,7 +112,7 @@ const LOADOUTS: Partial<Record<AircraftModel, readonly Store[]>> = {
   f4u4: [s('clean_guns'), s('hvar_rockets', 8), s('napalm_canister', 2), s('bomb_1000', 2)],
   af_guardian: [s('asw_torpedo', 2), s('depth_bombs', 4)], // AF-2S hunter-killer
   ad3w: [s('scout_fuel')],
-  ho3s1: [s('clean_guns')],
+  ho3s1: [s('scout_fuel')], // unarmed plane-guard / rescue helicopter
   f86: [s('clean_guns'), s('hvar_rockets', 8), s('bomb_1000', 2), s('napalm_canister', 2)], // F-86F fighter-bomber
   ac47: [s('clean_guns')], // three GAU-2 7.62 mm miniguns, 21,000 rounds
   f100: [s('bombs_snakeye_retarded', 4), s('blu27_napalm', 4), s('cbu_cluster_bombs', 4), s('ffar_rockets_pod', 8), s('clean_guns')],
@@ -135,7 +136,7 @@ const LOADOUTS: Partial<Record<AircraftModel, readonly Store[]>> = {
   ov10: [s('ffar_rockets_pod', 8), s('blu27_napalm', 2), s('scout_fuel'), s('clean_guns')], // FAC marking rockets, four M60s
   uh1: [s('helo_assault_troops'), s('clean_guns')],
   ah1: [s('ffar_rockets_pod', 16), s('clean_guns')], // AH-1G: 2.75" pods, minigun / 40 mm turret
-  uh2: [s('clean_guns')],
+  uh2: [s('scout_fuel')], // unarmed utility / plane-guard helicopter
   sh2: [s('asw_acoustic_torpedo', 2)], // SH-2F: two Mk 46
   s2: [s('asw_acoustic_torpedo', 2), s('depth_bombs', 4), s('scout_fuel')], // S-2E: Mk 44 torpedoes in the bay
   e1: [s('scout_fuel')],
@@ -194,7 +195,11 @@ const LOADOUTS: Partial<Record<AircraftModel, readonly Store[]>> = {
 };
 
 function storesFor(model: AircraftModel, era: Era): Store[] {
-  return (LOADOUTS[model] ?? [s('clean_guns')]).filter((st) => !st.eras || st.eras.includes(era));
+  const hasGuns = getGunRounds(model) > 0;
+  const stores = (LOADOUTS[model] ?? [s(hasGuns ? 'clean_guns' : 'scout_fuel')]).filter(
+    (st) => (!st.eras || st.eras.includes(era)) && (st.payload !== 'clean_guns' || hasGuns)
+  );
+  return stores.length > 0 ? stores : [s('scout_fuel')];
 }
 
 /** Stores the airframe carried in this era, its default first. */
