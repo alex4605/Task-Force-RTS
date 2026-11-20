@@ -3,6 +3,7 @@ import { Aircraft, Island, Ship, Sonobuoy, Vector2D } from '../../types/game';
 import { CameraViewportState } from '../GameCanvas';
 import type { RadarCoverage } from '../../game/engine';
 import { drawCoverageOnMap } from './drawCoverage';
+import { isHiddenRiverBoat } from '../../game/naval/riverine';
 
 interface MiniRadarProps {
   title: string;
@@ -101,7 +102,7 @@ export const MiniRadar: React.FC<MiniRadarProps> = ({
 
     // Hostile Ships
     for (const ship of enemyShips) {
-      if (ship.isSunk) continue;
+      if (ship.isSunk || isHiddenRiverBoat(ship)) continue;
       ctx.fillStyle = '#EF5350';
       ctx.beginPath();
       ctx.arc(ship.pos.x * scale, ship.pos.y * scale, 2.5, 0, Math.PI * 2);

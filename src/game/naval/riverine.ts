@@ -189,18 +189,42 @@ export function planRiverRoute(map: TerrainMap, from: Vector2D, to: Vector2D, fr
 }
 
 /**
- * Patrol stations for enemy river craft: river reaches that pass `accept`, spread at least
- * `spacing` apart, walking the graph from the most inland reach outward.
+ * Patrol stations for enemy river craft: reaches that pass `accept`, at least `spacing` apart,
+ * placed in pairs on the same connected river system (so boats can reinforce each other along
+ * the channel), largest systems first, inland reaches first within each.
  */
-export function riverPatrolStations(map: TerrainMap, accept: (p: Vector2D) => boolean, count: number, spacing = 1400): Vector2D[] {
+export function riverPatrolStations(map: TerrainMap, accept: (p: Vector2D) => boolean, count: number, spacing = 1200): Vector2D[] {
   const g = graphOf(map);
+  // Connected river systems
+  const comp = new Int32Array(g.nodes.length).fill(-1);
+  const systems: number[][] = [];
+  for (let i = 0; i < g.nodes.length; i++) {
+    if (comp[i] >= 0) continue;
+    const members: number[] = [];
+    const stack = [i];
+    comp[i] = systems.length;
+    while (stack.length) {
+      const u = stack.pop()!;
+      members.push(u);
+      for (const [v] of g.edges[u]) if (comp[v] < 0) { comp[v] = systems.length; stack.push(v); }
+    }
+    systems.push(members);
+  }
+  systems.sort((a, b) => b.length - a.length);
   const picks: Vector2D[] = [];
-  const order = g.nodes.map((p, i) => ({ p, i })).sort((a, b) => b.p.x - a.p.x);
-  for (const { p } of order) {
-    if (picks.length >= count) break;
-    if (!accept(p)) continue;
-    if (picks.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < spacing)) continue;
-    picks.push({ ...p });
+  const perSystem = 2;
+  for (let round = 0; round < 3 && picks.length < count; round++) {
+    for (const sys of systems) {
+      if (picks.length >= count) break;
+      let taken = 0;
+      for (const i of [...sys].sort((x, y) => g.nodes[y].x - g.nodes[x].x)) {
+        if (taken >= perSystem || picks.length >= count) break;
+        const p = g.nodes[i];
+        if (!accept(p) || picks.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < spacing)) continue;
+        picks.push({ ...p });
+        taken++;
+      }
+    }
   }
   return picks;
 }
@@ -213,4 +237,9 @@ export function riverPointNear(map: TerrainMap, p: Vector2D, minR: number, maxR:
     return d >= minR && d <= maxR;
   });
   return cands.length ? { ...cands[Math.floor(rand() * cands.length)] } : null;
+}
+
+/** An enemy river boat the player cannot currently see (hidden under the bank's canopy). */
+export function isHiddenRiverBoat(ship: Ship): boolean {
+  return ship.side === 'enemy' && ship.type === 'river_gunboat' && !ship.isSunk && (ship.riverSpotted ?? 0) <= 0 && (ship.riverReveal ?? 0) <= 0;
 }

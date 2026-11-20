@@ -312,6 +312,62 @@ export class GameEngine {
     });
   }
 
+  /** Alarms raised by enemy river boats (sightings, attacks); answered by boats nearby. */
+  private riverAlerts: { pos: Vector2D; time: number; source: string }[] = [];
+
+  private raiseRiverAlert(pos: Vector2D, from: Ship): void {
+    const last = this.riverAlerts.find((a) => a.source === from.id);
+    if (last && this.gameTime - last.time < 5) return;
+    this.riverAlerts = this.riverAlerts.filter((a) => this.gameTime - a.time < 30 && a.source !== from.id);
+    this.riverAlerts.push({ pos: { ...pos }, time: this.gameTime, source: from.id });
+    const answering = this.enemyShips.filter((s) => !s.isSunk && s.type === 'river_gunboat' && s.id !== from.id && dist(s.pos, pos) < 4500).length;
+    if (answering > 0 && this.isRiverBoatSpotted(from)) {
+      this.addCombatLog({
+        category: 'naval',
+        sourceSide: 'enemy',
+        sourceName: from.name,
+        targetName: '我方河川艇',
+        actionType: 'recon_spotted',
+        text: `⚠️【河川伏擊警報】敵河川艇「${from.name}」發出警報，附近 ${answering} 艘敵艇正沿河道集結反擊！`,
+      });
+    }
+  }
+
+  /** Whether the player side currently sees an enemy river boat. */
+  public isRiverBoatSpotted(boat: Ship): boolean {
+    return (boat.riverSpotted ?? 0) > 0 || (boat.riverReveal ?? 0) > 0;
+  }
+
+  /**
+   * Player-side sighting of enemy river boats (every 0.4 s with the air picture). Bank cover
+   * shortens the sighting range: jungle and mangrove most, forest and towns less; from the air
+   * the canopy hides even more. A boat stays in sight for 4 s after the last sighting.
+   */
+  private updateRiverBoatSighting(step: number): void {
+    const map = this.terrain;
+    const boats = this.enemyShips.filter((s) => !s.isSunk && s.type === 'river_gunboat');
+    if (boats.length === 0) return;
+    const ground: Vector2D[] = [
+      ...[...this.playerShips, ...this.alliedShips].filter((s) => !s.isSunk && !this.isSubmarine(s)).map((s) => s.pos),
+      ...this.groundUnits.filter((u) => u.side !== 'enemy' && !u.isDestroyed && !u.embarkedInShipId).map((u) => u.pos),
+      ...this.islands.flatMap((i) => i.installations).filter((i) => (i.side === 'player' || i.side === 'allied') && !i.isDestroyed && !i.isCivilian).map((i) => i.pos),
+    ];
+    const air = this.aircraft.filter((a) => a.side !== 'enemy' && a.state !== 'shot_down').map((a) => a.pos);
+    const visual = gameRangeFromKm(8);
+    for (const b of boats) {
+      // The densest cover on the banks around the boat
+      let cover = 1;
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        cover = Math.min(cover, concealment(map, { x: b.pos.x + Math.cos(a) * 60, y: b.pos.y + Math.sin(a) * 60 }));
+      }
+      const groundRange = Math.max(200, visual * cover);
+      const airRange = Math.max(150, visual * cover * cover);
+      const seen = ground.some((p) => dist(p, b.pos) < groundRange) || air.some((p) => dist(p, b.pos) < airRange);
+      b.riverSpotted = seen ? 4 : Math.max(0, (b.riverSpotted ?? 0) - step);
+    }
+  }
+
   /**
    * Enemy river craft: patrol up and down their reach, and run down the player's river boats
    * that come within reach along the channel. Bank targets are engaged by updateShipCombat.
@@ -319,9 +375,14 @@ export class GameEngine {
   private updateRiverGunboatAI(ship: Ship, dt: number): void {
     const map = this.terrain;
     ship.riverReplan = Math.max(0, (ship.riverReplan ?? 0) - dt);
+    ship.riverReveal = Math.max(0, (ship.riverReveal ?? 0) - dt);
     const prey = [...this.playerShips, ...this.alliedShips]
       .filter((s) => !s.isSunk && isRiverine(s) && inRiverChannel(map, s.pos) && dist(s.pos, ship.pos) < 1800)
       .sort((a, b) => dist(a.pos, ship.pos) - dist(b.pos, ship.pos))[0];
+    // Raise the alarm on the river net: on sighting the enemy, or on coming under fire
+    const hit = ship.riverLastHealth !== undefined && ship.health < ship.riverLastHealth - 1;
+    ship.riverLastHealth = ship.health;
+    if (prey || hit) this.raiseRiverAlert(prey ? prey.pos : ship.pos, ship);
     const plan = (to: Vector2D) => {
       const route = planRiverRoute(map, ship.pos, to, true);
       if (!route || route.channel.length === 0) return;
@@ -335,6 +396,18 @@ export class GameEngine {
       } else if (dist(prey.pos, ship.pos) <= 500) {
         ship.order = { type: 'idle' };
         ship.targetSpeed = 0;
+      }
+      return;
+    }
+    // Answer a recent alarm from another boat: converge on it and counter-attack
+    const alert = this.riverAlerts
+      .filter((a) => a.source !== ship.id && this.gameTime - a.time < 30 && dist(a.pos, ship.pos) < 4500 && dist(a.pos, ship.pos) > 450)
+      .sort((a, b) => dist(a.pos, ship.pos) - dist(b.pos, ship.pos))[0];
+    if (alert) {
+      if (ship.riverReplan <= 0) {
+        plan(alert.pos);
+        ship.riverReplan = 5;
+        ship.targetSpeed = ship.maxSpeed;
       }
       return;
     }
@@ -3149,6 +3222,7 @@ export class GameEngine {
     if (this.airPictureTimer > 0) return;
     const step = 0.4;
     this.airPictureTimer = step;
+    this.updateRiverBoatSighting(step);
     const map = this.terrain;
     const friendly = (side: ShipSide) => side === 'player' || side === 'allied';
 
@@ -6676,6 +6750,8 @@ export class GameEngine {
   }
 
   private fireTurretSalvo(ship: Ship, turret: Turret, targetPos: Vector2D) {
+    // A river boat that opens fire gives its hide away
+    if (ship.type === 'river_gunboat') ship.riverReveal = 6;
     const isHeavy = turret.damage > 100;
     soundEngine.playGunSalvo(isHeavy);
 
@@ -16528,6 +16604,8 @@ export class GameEngine {
 
   /** Ships guns can engage: surface ships, and WWII boats caught on the surface that this side can see. */
   private isGunTarget(s: Ship, shooterSide: Ship['side']): boolean {
+    // Enemy river craft hidden under the bank's canopy cannot be laid on
+    if (s.type === 'river_gunboat' && s.side === 'enemy' && shooterSide !== 'enemy') return this.isRiverBoatSpotted(s);
     if (!this.isSubmarine(s)) return true;
     if (!isSurfacedBoat(s, this.era)) return false;
     return shooterSide === 'enemy' ? Boolean(s.isSpottedByEnemy) : Boolean(s.isSpotted);

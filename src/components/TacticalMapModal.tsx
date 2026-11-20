@@ -3,6 +3,7 @@ import { Island, Ship, Aircraft, GroundUnit, Era, Sonobuoy, Vector2D } from '../
 import { CameraViewportState } from './GameCanvas';
 import type { RadarCoverage } from '../game/engine';
 import { drawCoverageOnMap } from './hud/drawCoverage';
+import { isHiddenRiverBoat } from '../game/naval/riverine';
 import { X, Radio } from 'lucide-react';
 
 
@@ -320,7 +321,7 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
 
     // Draw Enemy Ships (Submarines obey Fog of War until ASW sonar contact or firing reveal)
     for (const ship of enemyShips) {
-      if (ship.isSunk) continue;
+      if (ship.isSunk || isHiddenRiverBoat(ship)) continue;
       const isSub = isSubHull(ship);
       if (isSub && !ship.isSpotted) continue;
 

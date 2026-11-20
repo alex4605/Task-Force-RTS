@@ -1,3 +1,4 @@
+import { isHiddenRiverBoat } from '../../naval/riverine';
 import { drawFunnelSmoke } from '../unitDetails';
 import { Ship, Vector2D } from '../../../types/game';
 import { RenderContext, Camera, isWorldCircleVisible } from '../context';
@@ -23,6 +24,7 @@ export function drawShips(rc: RenderContext, ships: Ship[], camera: Camera, sele
 
   for (const ship of ships) {
     const isSub = isSubmarineShip(ship);
+    if (isHiddenRiverBoat(ship)) continue; // under the canopy of the river bank
     if (ship.side === 'enemy' && isSub && !ship.isSunk && !ship.isSpotted) {
       if (ship.datumPos) drawDatum(rc, ship);
       continue; // Undetected enemy submarine stays hidden under Fog of War

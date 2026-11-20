@@ -320,6 +320,12 @@ export interface Ship {
   /** River craft: the reach it patrols, and seconds until it re-plans its patrol or chase. */
   riverHome?: Vector2D;
   riverReplan?: number;
+  /** Seconds the player still has an enemy river boat in sight (canopy hides it otherwise). */
+  riverSpotted?: number;
+  /** Seconds a river boat stays revealed after firing (muzzle flash, tracer, noise). */
+  riverReveal?: number;
+  /** Health at the last AI tick, to notice being fired on. */
+  riverLastHealth?: number;
   /** Player already told this ship was stopped by shoal water. */
   shoalWarned?: boolean;
   isSnorkeling?: boolean;
