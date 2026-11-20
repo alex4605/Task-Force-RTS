@@ -17,7 +17,7 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
     if (unit.isDestroyed || unit.embarkedInShipId) continue;
 
     const isSelected = selectedUnitIds.includes(unit.id);
-    const isPlayer = unit.side === 'player';
+    const isPlayer = unit.side !== 'enemy'; // allied formations use the friendly palette
 
     // Waypoint path if moving
     if (isSelected && unit.order.targetPos && unit.order.type === 'move') {

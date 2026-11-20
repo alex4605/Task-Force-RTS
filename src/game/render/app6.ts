@@ -378,8 +378,45 @@ export function app6Extents(a: Affiliation): { top: number; bottom: number } {
 
 const has = (t: string, ...keys: string[]) => keys.some((k) => t.includes(k));
 
+/** Symbols for types whose names do not carry the usual keywords. */
+const EXPLICIT_FUNCTION: Record<string, App6Function> = {
+  usmc_raider_42: 'infantry',
+  usmc_37mm_at: 'anti_armour',
+  us_army_rifle_45: 'infantry',
+  usmc_m4a3r3_flame: 'armour',
+  us_m24_chaffee: 'armour',
+  us_m16_quad50: 'air_defence_gun',
+  us_m113_acav: 'armoured_recon',
+  us_m107_175: 'field_artillery',
+  us_hmmwv_tow: 'anti_armour',
+  us_avenger: 'air_defence_missile',
+  cw_infantry_ww2: 'infantry',
+  au_matilda: 'armour',
+  rok_infantry_50: 'infantry',
+  cw_infantry_50: 'infantry',
+  cw_centurion: 'armour',
+  rok_marine_65: 'infantry',
+  arvn_ranger_65: 'infantry',
+  au_rar_65: 'infantry',
+  arvn_m41: 'armour',
+  frg_infantry_83: 'mech_infantry',
+  frg_marder: 'mech_infantry',
+  frg_leopard2: 'armour',
+  uk_challenger1: 'armour',
+  uk_warrior: 'mech_infantry',
+};
+
+const EXPLICIT_MOBILITY: Record<string, Mobility> = {
+  usmc_37mm_at: 'towed',
+  us_m16_quad50: 'wheeled_tracked',
+  us_m107_175: 'tracked',
+  us_hmmwv_tow: 'wheeled',
+  us_avenger: 'wheeled',
+};
+
 export function app6Function(type: string): App6Function {
   const t = type.toLowerCase();
+  if (EXPLICIT_FUNCTION[t]) return EXPLICIT_FUNCTION[t];
   if (has(t, 'scud', 'atacms', 'ssm', 'ballistic')) return 'ssm';
   if (has(t, 'mlrs', 'm270', 'grad', 'uragan', 'calliope')) return 'rocket_artillery';
   if (has(t, 'chaparral', 'sa6', 'sa8', 'sa9', 'sa11', 'sa15', 'strela', 'kub', 'buk', 'lav_ad', 'stinger') || /(^|_)(sam|tor|osa)(_|$)/.test(t)) return 'air_defence_missile';
@@ -399,6 +436,7 @@ export function app6Function(type: string): App6Function {
 
 export function app6Mobility(type: string, fn: App6Function): Mobility {
   const t = type.toLowerCase();
+  if (EXPLICIT_MOBILITY[t]) return EXPLICIT_MOBILITY[t];
   if (has(t, 'lvt', 'aav', 'pt76', 'sa8', 'osa')) return 'amphibious';
   if (fn === 'armour' || fn === 'mech_infantry' || fn === 'armoured_recon' || fn === 'anti_armour_armoured') {
     return has(t, 'lav', 'btr') && !has(t, 'btr_zd') ? 'wheeled' : 'none';

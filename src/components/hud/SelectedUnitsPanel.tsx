@@ -326,8 +326,10 @@ export const SelectedUnitsPanel: React.FC<SelectedUnitsPanelProps> = ({
                 <div className="pt-1 border-t border-[#1E3A5F]/40 flex justify-between items-center gap-1">
                   <span className="text-[9.5px] text-[#A7FFEB]">
                     {u.embarkedUnitIds && u.embarkedUnitIds.length > 0
-                      ? (`載運部隊: ${u.embarkedUnitIds.length}/${u.cargoCapacity ?? 2}`)
-                      : (`空載 (容量: ${u.cargoCapacity ?? 2})`)}
+                      ? u.holdNote ?? `載運部隊: ${u.embarkedUnitIds.length}/${u.cargoCapacity ?? 2}`
+                      : u.type === 'lst'
+                      ? `空載 (${u.era === 'era4' || u.era === 'era5' ? '約 15 輛 M4 當量 + 400 人' : '約 20 輛 M4 + 163 人'})`
+                      : `空載 (容量: ${u.cargoCapacity ?? 2})`}
                   </span>
                   <button
                     type="button"

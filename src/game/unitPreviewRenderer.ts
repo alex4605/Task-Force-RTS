@@ -2,6 +2,7 @@ import { AircraftPayloadType } from '../types/game';
 import { TANK_PLANS, drawTankPlan } from './render/groundPlan';
 import { SUPPORT_PLANS, drawRocketLauncherPlan, drawSupportPlan } from './render/groundPlanSupport';
 import { drawAtgmTeam, drawEngineerTeam, drawInfantryTeam, drawMortarSection } from './render/groundInfantry';
+import { app6Function, app6Mobility, drawApp6 } from './render/app6';
 
 export type UnitPreviewKind = 'ship' | 'aircraft' | 'ground' | 'installation';
 
@@ -486,6 +487,8 @@ const TOWED_SPECS: TowedSpec[] = [
   { match: /field_artillery/, carriage: 'split', trailLen: 12, track: 5.5, wheel: 2.8, spokedWheels: true, shield: 5.5, gunLen: 11, gunW: 1.7 },
   // KS-19 100mm AA gun: cruciform firing platform, long tube with muzzle brake
   { match: /ks19/, carriage: 'cross4', trailLen: 11, track: 0, wheel: 0, shield: 4, gunLen: 18, gunW: 1.8, muzzle: 'single' },
+  // M3 37mm anti-tank gun: light split trail, small shield
+  { match: /37mm_at/, carriage: 'split', trailLen: 10, track: 4.5, wheel: 2.2, shield: 4.5, gunLen: 10, gunW: 1.1 },
   // ZU-23-2: light three-legged mount, twin 23mm
   { match: /zu23/, carriage: 'star3', trailLen: 9, track: 0, wheel: 0, gunLen: 13, gunW: 1, barrels: 2 },
 ];
@@ -591,8 +594,50 @@ export type GroundSilhouetteClass =
   | 'infantry';
 
 /** Classifies a ground unit (or installation equipment) type by the silhouette it is drawn as. */
+/** Families of types whose names do not carry the usual keywords. */
+const EXPLICIT_SILHOUETTE_CLASS: Record<string, GroundSilhouetteClass> = {
+  usmc_raider_42: 'infantry',
+  usmc_37mm_at: 'towed',
+  us_army_rifle_45: 'infantry',
+  usmc_m4a3r3_flame: 'tank',
+  us_m24_chaffee: 'tank',
+  us_m16_quad50: 'air_defense',
+  us_m113_acav: 'carrier',
+  us_m107_175: 'spg',
+  us_hmmwv_tow: 'carrier',
+  us_avenger: 'air_defense',
+  cw_infantry_ww2: 'infantry',
+  au_matilda: 'tank',
+  rok_infantry_50: 'infantry',
+  cw_infantry_50: 'infantry',
+  cw_centurion: 'tank',
+  rok_marine_65: 'infantry',
+  arvn_ranger_65: 'infantry',
+  au_rar_65: 'infantry',
+  arvn_m41: 'tank',
+  frg_infantry_83: 'infantry',
+  frg_marder: 'carrier',
+  frg_leopard2: 'tank',
+  uk_challenger1: 'tank',
+  uk_warrior: 'carrier',
+};
+
+const silhouetteClassCache = new Map<string, GroundSilhouetteClass>();
+
+/** Family of a ground unit type (memoised: called for every unit several times a frame). */
 export function groundSilhouetteClass(unitType: string): GroundSilhouetteClass {
+  let c = silhouetteClassCache.get(unitType);
+  if (!c) {
+    c = classifyGroundSilhouette(unitType);
+    silhouetteClassCache.set(unitType, c);
+  }
+  return c;
+}
+
+function classifyGroundSilhouette(unitType: string): GroundSilhouetteClass {
   const t = unitType.toLowerCase();
+  const explicit = EXPLICIT_SILHOUETTE_CLASS[t];
+  if (explicit) return explicit;
   const isRocketTel =
     t.includes('atacms') ||
     t.includes('mlrs') ||
@@ -744,7 +789,7 @@ export function drawGroundSilhouette(
 
   const kind = groundSilhouetteClass(t);
 
-  if ((kind === 'tank' || kind === 'spg' || kind === 'air_defense') && SUPPORT_PLANS.some((p) => p.match.test(t))) {
+  if ((kind === 'tank' || kind === 'spg' || kind === 'air_defense' || kind === 'carrier') && SUPPORT_PLANS.some((p) => p.match.test(t))) {
     // Self-propelled guns, tank destroyers and air-defence vehicles from real dimensions
     drawSupportPlan(ctx, SUPPORT_PLANS.find((p) => p.match.test(t))!, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
   } else if (kind === 'rocket' && drawRocketLauncherPlan(ctx, t, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor })) {
@@ -2116,58 +2161,13 @@ function drawGroundPreview(ctx: CanvasRenderingContext2D, w: number, h: number, 
 
   drawGroundSilhouetteAt(ctx, t, cx, cy, scale);
 
-  // Mini NATO tactical glyph in top-left corner so player maps card -> battlefield symbol effortlessly
-  const boxX = 6;
-  const boxY = 6;
-  const boxW = 16;
-  const boxH = 10;
-  ctx.fillStyle = 'rgba(21, 101, 192, 0.65)';
-  ctx.strokeStyle = '#42A5F5';
-  ctx.lineWidth = 1.1;
-  ctx.fillRect(boxX, boxY, boxW, boxH);
-  ctx.strokeRect(boxX, boxY, boxW, boxH);
-
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.fillStyle = '#FFFFFF';
-  ctx.lineWidth = 1.1;
-  const mx = boxX + boxW / 2;
-  const my = boxY + boxH / 2;
-
-  if (t.includes('tank') || t.includes('abrams') || t.includes('m60') || t.includes('m48') || t.includes('armor') || t.includes('ontos') || t.includes('t72') || t.includes('t80')) {
-    ctx.beginPath();
-    ctx.ellipse(mx, my, 5, 2.5, 0, 0, Math.PI * 2);
-    ctx.stroke();
-  } else if (t.includes('spg') || t.includes('paladin') || t.includes('m109') || t.includes('priest') || t.includes('m44') || t.includes('2s')) {
-    ctx.beginPath();
-    ctx.ellipse(mx, my, 5, 2.5, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(mx, my, 1.5, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (t.includes('artillery') || t.includes('m198') || t.includes('mlrs') || t.includes('atacms') || t.includes('calliope') || t.includes('grad') || t.includes('scud')) {
-    ctx.beginPath();
-    ctx.arc(mx, my, 2, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (t.includes('sam') || t.includes('chaparral') || t.includes('lav_ad') || t.includes('vads') || t.includes('shilka') || t.includes('tunguska')) {
-    ctx.beginPath();
-    ctx.arc(mx, my + 2, 4, Math.PI, 0);
-    ctx.stroke();
-  } else if (t.includes('lvt') || t.includes('aav') || t.includes('lav') || t.includes('bradley') || t.includes('m113') || t.includes('bmp') || t.includes('mech')) {
-    ctx.beginPath();
-    ctx.ellipse(mx, my, 5, 2.5, 0, 0, Math.PI * 2);
-    ctx.moveTo(mx - 3, my - 2);
-    ctx.lineTo(mx + 3, my + 2);
-    ctx.moveTo(mx + 3, my - 2);
-    ctx.lineTo(mx - 3, my + 2);
-    ctx.stroke();
-  } else {
-    ctx.beginPath();
-    ctx.moveTo(mx - 4.5, my - 2.5);
-    ctx.lineTo(mx + 4.5, my + 2.5);
-    ctx.moveTo(mx + 4.5, my - 2.5);
-    ctx.lineTo(mx - 4.5, my + 2.5);
-    ctx.stroke();
-  }
+  // The unit's APP-6 symbol in the corner, exactly as it appears on the battlefield
+  const fn = app6Function(t);
+  ctx.save();
+  ctx.translate(15, 16);
+  ctx.scale(0.72, 0.72);
+  drawApp6(ctx, { affiliation: 'friend', fn, echelon: 'platoon', mobility: app6Mobility(t, fn) });
+  ctx.restore();
 }
 
 function drawGroundSilhouetteAt(

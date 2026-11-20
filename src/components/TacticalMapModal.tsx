@@ -121,7 +121,7 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
         const ix = inst.pos.x * scale;
         const iy = inst.pos.y * scale;
 
-        const isPlayer = inst.side === 'player' || island.isFriendlyBase;
+        const isPlayer = inst.side === 'player' || inst.side === 'allied' || island.isFriendlyBase;
         const boxFill = isPlayer ? 'rgba(33, 150, 243, 0.65)' : 'rgba(239, 83, 80, 0.6)';
         const boxStroke = isPlayer ? '#42A5F5' : '#FF5252';
 

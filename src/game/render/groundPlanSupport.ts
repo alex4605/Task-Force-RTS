@@ -66,9 +66,28 @@ export interface SupportPlan {
   /** M50 Ontos: six recoilless rifles on the small turret. */
   recoilless?: boolean;
   amphib?: boolean;
+  /** Half-track: steerable front wheels and a short track run at the rear. */
+  halftrack?: boolean;
+  /** Shielded pintle machine guns on the hull (M113 ACAV): position (m) and facing. */
+  pintles?: { x: number; y: number; dir: number }[];
 }
 
 export const SUPPORT_PLANS: SupportPlan[] = [
+  // ── Additional US and allied vehicles ──
+  // M16 MGMC: half-track with the M45 quad .50 mount in the open rear body
+  { match: /quad50/, L: 6.5, W: 2.2, track: 0.3, halftrack: true, nose: 'flat', noseLen: 0.3, engine: { len: 1.2, at: 'front' }, cab: { len: 1.3 }, mount: { x: -1.3, len: 1.7, wid: 1.7, kind: 'open', shape: 'dome' }, guns: [{ y: -0.5, len: 2.2, bore: 13 }, { y: -0.25, len: 2.2, bore: 13 }, { y: 0.25, len: 2.2, bore: 13 }, { y: 0.5, len: 2.2, bore: 13 }] },
+  // M113 ACAV: commander's .50 behind a shield and two shielded M60s on the roof
+  { match: /acav/, L: 4.86, W: 2.69, track: 0.38, nose: 'flat', noseLen: 0.4, engine: { len: 1.2, at: 'front_right' }, mount: { x: 0.3, y: -0.4, len: 1.0, wid: 1.0, kind: 'turret', shape: 'dome' }, guns: [{ y: 0, len: 1.9, bore: 13 }], pintles: [{ x: -1.2, y: -1.0, dir: -1.2 }, { x: -1.2, y: 1.0, dir: 1.2 }] },
+  // M107: open 175mm gun on the hull rear, very long tube, recoil spade
+  { match: /m107/, L: 5.72, W: 3.15, track: 0.46, nose: 'glacis', noseLen: 0.7, engine: { len: 1.6, at: 'front' }, mount: { x: -1.5, len: 2.0, wid: 2.3, kind: 'open', shape: 'box' }, guns: [{ y: 0, len: 10.2, bore: 175, evac: 0.3 }], spades: true },
+  // M966 HMMWV with the TOW launcher on the roof ring
+  { match: /hmmwv_tow/, L: 4.57, W: 2.16, track: 0, axles: 2, nose: 'flat', noseLen: 0.3, engine: { len: 1.4, at: 'front' }, mount: { x: -0.6, len: 0.8, wid: 0.8, kind: 'turret', shape: 'dome' }, missiles: { count: 1, len: 1.7, groups: [0], gap: 0, x: -0.3, canister: true } },
+  // M1097 Avenger: Stinger pods either side of the gyro-stabilised turret
+  { match: /avenger/, L: 4.95, W: 2.16, track: 0, axles: 2, nose: 'flat', noseLen: 0.3, engine: { len: 1.4, at: 'front' }, mount: { x: -1.0, len: 1.0, wid: 0.9, kind: 'turret', shape: 'dome' }, missiles: { count: 4, len: 1.6, groups: [-0.75, 0.75], gap: 0.16, x: -1.0, canister: true }, guns: [{ y: 0.42, len: 1.4, bore: 13 }] },
+  // Marder 1A3: small two-man turret with the 20mm Rh 202 and a MILAN launcher on its side
+  { match: /marder/, L: 6.88, W: 3.24, track: 0.45, nose: 'glacis', noseLen: 0.9, engine: { len: 1.6, at: 'front_right' }, mount: { x: 0.3, len: 1.8, wid: 1.5, kind: 'turret', shape: 'box' }, guns: [{ y: 0, len: 2.6, bore: 20 }], missiles: { count: 1, len: 1.2, groups: [0.95], gap: 0, x: 0.3, canister: true } },
+  // FV510 Warrior: turret with the 30mm RARDEN, rear troop doors
+  { match: /warrior/, L: 6.34, W: 3.03, track: 0.5, nose: 'glacis', noseLen: 0.9, engine: { len: 1.5, at: 'front_right' }, mount: { x: 0.1, len: 2.2, wid: 2.0, kind: 'turret', shape: 'box' }, guns: [{ y: 0, len: 3.0, bore: 30 }] },
   // ── Self-propelled artillery ──
   // M7 Priest: open box on the M3/M4 chassis, 105mm offset right, the "pulpit" at right front
   { match: /priest/, L: 6.02, W: 2.87, track: 0.42, nose: 'round', noseLen: 0.8, engine: { len: 1.6, at: 'rear' }, mount: { x: 0.2, len: 2.9, wid: 2.5, kind: 'open' }, guns: [{ y: 0.3, len: 3.4, bore: 105 }], pulpit: { x: 1.4, y: 0.95 } },
@@ -171,7 +190,19 @@ function drawSupportBody(ctx: CanvasRenderingContext2D, p: SupportPlan, pal: Pla
   const wheeled = p.track === 0;
   const hw = wheeled ? ow * 0.9 : ow - tw * 2 + tw * 0.5;
 
-  if (wheeled) drawWheels(ctx, hl, ow, p.axles ?? 2, pal);
+  if (p.halftrack) {
+    // Front wheels under the bonnet, track run under the rear body
+    ctx.save();
+    ctx.translate(-hl * 0.18, 0);
+    drawTracks(ctx, hl * 0.55, ow, tw, pal);
+    ctx.restore();
+    ctx.fillStyle = pal.trackColor;
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.roundRect(hl * 0.3, s < 0 ? -ow / 2 : ow / 2 - m(0.32), m(0.95), m(0.32), m(0.15));
+      ctx.fill();
+    }
+  } else if (wheeled) drawWheels(ctx, hl, ow, p.axles ?? 2, pal);
   else drawTracks(ctx, hl, ow, tw, pal);
 
   // Hull
@@ -342,6 +373,20 @@ function drawSupportBody(ctx: CanvasRenderingContext2D, p: SupportPlan, pal: Pla
       ctx.fill();
       ctx.stroke();
     }
+  }
+
+  for (const pt of p.pintles ?? []) {
+    // Gun shield and machine gun on a roof pintle
+    ctx.save();
+    ctx.translate(m(pt.x), m(pt.y));
+    ctx.rotate(pt.dir);
+    ctx.strokeStyle = '#90A4AE';
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.arc(0, 0, m(0.45), -0.9, 0.9);
+    ctx.stroke();
+    drawGunTube(ctx, 0, m(1.1), 0, 12, pal);
+    ctx.restore();
   }
 
   if (p.pulpit) {

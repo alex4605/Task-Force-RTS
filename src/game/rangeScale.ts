@@ -121,6 +121,32 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   opfor_sa11_buk: 35,
   opfor_sa15_tor: 12,
   opfor_btr_zd: 2.0, // ZU-23-2
+  // Additional US formations
+  usmc_raider_42: 0.4, // Thompson / BAR / Johnson LMG
+  usmc_37mm_at: 1.0, // M3 37mm
+  us_army_rifle_45: 0.5,
+  usmc_m4a3r3_flame: 0.15, // flame gun
+  us_m24_chaffee: 1.3, // M6 75mm
+  us_m16_quad50: 1.2, // M45 quad .50, effective AA
+  us_m113_acav: 1.5, // M2 .50 cal
+  us_m107_175: 32.7, // M113 175mm
+  us_hmmwv_tow: 3.75, // TOW-2
+  us_avenger: 4.8, // Stinger
+  // Allied formations
+  cw_infantry_ww2: 0.5, // Lee-Enfield / Bren
+  au_matilda: 1.0, // 2pdr / 3in CS howitzer
+  rok_infantry_50: 0.46,
+  cw_infantry_50: 0.5,
+  cw_centurion: 2.0, // 20pdr
+  rok_marine_65: 0.5,
+  arvn_ranger_65: 0.5,
+  au_rar_65: 0.55, // L1A1 SLR / M60
+  arvn_m41: 1.5, // M32 76mm
+  frg_infantry_83: 0.6, // G3 / MG3 / Panzerfaust
+  frg_marder: 2.0, // MILAN
+  frg_leopard2: 3.0, // Rh 120
+  uk_challenger1: 3.0, // L11 120mm
+  uk_warrior: 1.5, // L21 RARDEN 30mm
 };
 
 export function getGroundUnitRange(type: GroundUnitType): number {

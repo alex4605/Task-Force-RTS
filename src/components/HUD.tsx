@@ -32,6 +32,7 @@ import { getCatalogRole } from '../game/airWingCatalog';
 import { MiniRadar } from './hud/MiniRadar';
 import { ActiveArmamentTrayState, ArmamentTrayModal } from './hud/ArmamentTrayModal';
 import { SelectedUnitsPanel } from './hud/SelectedUnitsPanel';
+import { BUILDER_LABEL, BUILDER_RADIUS, builderRequirement } from '../game/construction';
 import { UnitPreviewCanvas } from './hud/UnitPreviewCanvas';
 import {
   ShieldAlert,
@@ -1421,7 +1422,7 @@ export const HUD: React.FC<HUDProps> = ({
                   bottomDeckTab === 'engineer_construction' ? 'bg-amber-600 text-white shadow' : 'text-amber-300 hover:text-white'
                 }`}
               >
-                🏗️ 工兵建造
+                🏗️ 設施構工
               </button>
             </div>
             <span
@@ -1494,7 +1495,7 @@ export const HUD: React.FC<HUDProps> = ({
                   }`}
                 >
                   <Hammer className="w-4 h-4 text-amber-300" />
-                  <span>🏗️ 工兵急造</span>
+                  <span>🏗️ 設施構工</span>
                 </button>
 
                 {/* Focus Battalion CP button if active */}
@@ -2127,8 +2128,8 @@ export const HUD: React.FC<HUDProps> = ({
           )}
 
           {/* ══════════════════════════════════════════════════════════
-              TAB 3: 工兵急造戰地工程部 (Engineer Construction Only)
-              按工兵群時專屬打開，僅提供 6 項指定急造工事
+              TAB 3: 設施構工 (Facility construction)
+              野戰工事需步兵在場，工程設施需工兵在場（見 construction.ts）
               ══════════════════════════════════════════════════════════ */}
           {bottomDeckTab === 'engineer_construction' && (
             <div className="flex flex-col gap-2">
@@ -2187,7 +2188,7 @@ export const HUD: React.FC<HUDProps> = ({
               <div className="bg-[#051322] border border-amber-500/30 rounded-lg p-1.5 flex items-center justify-between gap-1.5 flex-wrap text-xs font-mono">
                 <span className="text-[10px] text-amber-300 font-bold flex items-center gap-1 shrink-0">
                   <Zap className="w-3.5 h-3.5 text-amber-400" />
-                  <span>{(era === 'era4' ? '冷戰工事快捷建造:' : '戰地工事快捷建造:')}</span>
+                  <span>{'設施構工快捷:'}</span>
                 </span>
 
                 <div className="flex items-center gap-1.5 overflow-x-auto max-w-full py-0.5">
@@ -2298,6 +2299,16 @@ export const HUD: React.FC<HUDProps> = ({
                             <span className="px-1 py-0.2 bg-amber-950/80 text-amber-300 border border-amber-600/50 rounded text-[8.5px] font-bold truncate">
                               {item.badge}
                             </span>
+                            <span
+                              className={`px-1 py-0.2 rounded text-[8.5px] font-bold shrink-0 border ${
+                                builderRequirement(item.typeTag) === 'engineer'
+                                  ? 'bg-orange-950/80 text-orange-300 border-orange-500/60'
+                                  : 'bg-emerald-950/80 text-emerald-300 border-emerald-600/50'
+                              }`}
+                              title={`${BUILDER_LABEL[builderRequirement(item.typeTag)]}：工地 ${BUILDER_RADIUS}m 內須有${builderRequirement(item.typeTag) === 'engineer' ? '工兵' : '步兵或工兵'}`}
+                            >
+                              {builderRequirement(item.typeTag) === 'engineer' ? '🛠 工兵' : '🪖 步兵'}
+                            </span>
                           </div>
                           <div className="text-[8.5px] text-[#80DEEA] mt-1 bg-[#040C16] px-1 py-0.5 rounded border border-[#1E3A5F]/50 truncate">
                             {item.statsDesc}
@@ -2342,7 +2353,7 @@ export const HUD: React.FC<HUDProps> = ({
                                   ? 'bg-[#0B1E34] hover:bg-[#153252] text-amber-300 border border-amber-500/50'
                                   : 'bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed'
                               }`}
-                              title="快捷在工兵身旁或目標島建造"
+                              title={`快捷構工：${BUILDER_LABEL[builderRequirement(item.typeTag)]}（${BUILDER_RADIUS}m 內），在選定部隊旁或目標島上構築`}
                             >
                               <span>快捷建造</span>
                             </button>
@@ -2424,7 +2435,7 @@ export const HUD: React.FC<HUDProps> = ({
                         <div className="relative mt-1">
                           <UnitPreviewCanvas
                             kind={previewKind}
-                            unitKey={item.typeTag || item.id}
+                            unitKey={item.unitType || item.typeTag || item.id}
                             width={148}
                             height={46}
                           />
