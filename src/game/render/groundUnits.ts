@@ -25,6 +25,9 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
       ctx.moveTo(unit.pos.x, unit.pos.y);
+      // The terrain route (roads, bridges, around obstacles) when one was planned
+      const wps = unit.order.waypoints;
+      for (let k = unit.order.activeWaypointIndex ?? 0; wps && k < wps.length; k++) ctx.lineTo(wps[k].x, wps[k].y);
       ctx.lineTo(unit.order.targetPos.x, unit.order.targetPos.y);
       ctx.stroke();
       ctx.setLineDash([]);

@@ -58,10 +58,8 @@ const ROAD_SPEED: [number, number] = [1.15, 1.35];
 const AIR_CONCEALMENT: Partial<Record<TerrainType, number>> = { 6: 0.8, 7: 0.7, 8: 0.75, 9: 0.9 };
 
 export interface UrbanBlock {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
+  /** Footprint corners in world coordinates (a rotated rectangle). */
+  pts: Vector2D[];
   /** 0..1 roof tone. */
   tone: number;
 }
@@ -70,11 +68,10 @@ export interface UrbanDistrict {
   name: string;
   center: Vector2D;
   radius: number;
-  angle: number;
   kind: 'city' | 'town' | 'settlement' | 'camp';
   blocks: UrbanBlock[];
-  /** Main streets through the district (local frame: rotated by `angle`). */
-  avenues: { from: Vector2D; to: Vector2D }[];
+  /** Street segments in world coordinates. */
+  streets: { from: Vector2D; to: Vector2D; width: number }[];
 }
 
 export interface TerrainLine {
@@ -101,6 +98,8 @@ export class TerrainMap {
   readonly road: Uint8Array;
   /** Distance to the nearest river (capped at 700), for flood-plain farming. */
   readonly riverNear: Float32Array;
+  /** 1 on a river too deep and wide to ford (vehicles need a bridge). */
+  readonly deepRiver: Uint8Array;
   readonly rivers: TerrainLine[] = [];
   readonly roads: TerrainLine[] = [];
   readonly bridges: { pos: Vector2D; angle: number }[] = [];
@@ -117,6 +116,7 @@ export class TerrainMap {
     this.elev = new Float32Array(this.cols * this.rows);
     this.road = new Uint8Array(this.cols * this.rows);
     this.riverNear = new Float32Array(this.cols * this.rows).fill(Infinity);
+    this.deepRiver = new Uint8Array(this.cols * this.rows);
   }
 
   private idx(x: number, y: number): number {
@@ -144,6 +144,9 @@ export class TerrainMap {
   /** Ground speed multiplier for a unit at this point. */
   moveFactor(x: number, y: number, vehicle: boolean): number {
     if (this.onRoad(x, y)) return ROAD_SPEED[vehicle ? 1 : 0];
+    const i = this.idx(x, y);
+    // Wide rivers and canals: infantry swims or uses boats slowly, vehicles need a bridge
+    if (i >= 0 && this.deepRiver[i]) return vehicle ? 0 : 0.2;
     const t = this.at(x, y);
     if (t === TERRAIN.water || t === TERRAIN.lagoon) return 1; // amphibians: handled by the engine
     return MOVE[t][vehicle ? 1 : 0];
@@ -387,10 +390,37 @@ export class TerrainMap {
     for (const isl of islands) {
       for (const rv of isl.rivers ?? []) {
         const pts = rv.straight ? rv.points : meander(rv.points, 240, 200, s + rv.points.length * 31);
+        // Tributaries and distributaries: snap an end onto the (meandered) river it joins
+        for (const end of [0, pts.length - 1]) {
+          let best: Vector2D | null = null;
+          let bestD = 450;
+          for (const other of this.rivers) {
+            for (const q of other.points) {
+              const d = Math.hypot(q.x - pts[end].x, q.y - pts[end].y);
+              if (d < bestD) {
+                bestD = d;
+                best = q;
+              }
+            }
+          }
+          if (best) {
+            // Pull the last few points along so the confluence stays smooth
+            const dx = best.x - pts[end].x;
+            const dy = best.y - pts[end].y;
+            for (let k = 0; k < Math.min(8, pts.length); k++) {
+              const j = end === 0 ? k : pts.length - 1 - k;
+              const w = 1 - k / 8;
+              pts[j] = { x: pts[j].x + dx * w, y: pts[j].y + dy * w };
+            }
+          }
+        }
         const width = rv.width || 14;
         this.rivers.push({ points: pts, width, kind: rv.straight ? 'canal' : 'river', name: rv.name });
+        const deep = width >= 26 || rv.straight;
         this.stampLine(pts, width * 0.5 + CELL * 0.5, (i) => {
-          if (isLand(i)) this.type[i] = TERRAIN.river;
+          if (!isLand(i)) return;
+          this.type[i] = TERRAIN.river;
+          if (deep) this.deepRiver[i] = 1;
         });
         // Valley floor: the river cuts the ground down gently, and marks its flood plain
         const depth = era === 'era5' ? 0.25 : 0.6; // shallow valleys on the plain
@@ -418,7 +448,7 @@ export class TerrainMap {
         const r = inst.civilianZoneRadius ?? 0;
         if (r <= 0) continue;
         const kind = inst.type === 'city' ? 'city' : inst.type === 'town' ? 'town' : inst.type === 'refugee_camp' ? 'camp' : 'settlement';
-        this.districts.push(buildDistrict(inst.name, inst.pos, r, kind, s + Math.round(inst.pos.x + inst.pos.y)));
+        this.districts.push(this.buildDistrict(inst.name, inst.pos, r, kind, s + Math.round(inst.pos.x + inst.pos.y)));
       }
     }
 
@@ -531,17 +561,19 @@ export class TerrainMap {
       }
     }
 
-    // Towns override everything but water
+    // Towns: the ground under the buildings becomes built-up area, so the urban zone has the
+    // same ragged outline as the town itself (core, lobes, houses strung along roads)
     for (const dist of this.districts) {
       if (dist.kind === 'camp') continue;
-      this.stampDisc(dist.center.x, dist.center.y, dist.radius * 1.3, (i, d, x, y) => {
-        if (!isLand(i)) return;
-        const edge = dist.radius * (0.6 + 0.75 * fbm(x / 110, y / 110, s + 43, 3));
-        if (d < edge) {
-          this.type[i] = TERRAIN.urban;
-          this.elev[i] = Math.min(this.elev[i], 0.4);
+      for (const b of dist.blocks) {
+        for (const p of [...b.pts, centroid(b.pts)]) {
+          const i = this.idx(p.x, p.y);
+          if (i >= 0 && isLand(i) && this.type[i] !== TERRAIN.river) {
+            this.type[i] = TERRAIN.urban;
+            this.elev[i] = Math.min(this.elev[i], 0.45);
+          }
         }
-      });
+      }
     }
 
     // Road cells (after classification so roads survive towns and forests)
@@ -562,6 +594,127 @@ export class TerrainMap {
     }
     this.version++;
     return this;
+  }
+
+  /**
+   * A built-up area grown the way towns grow: an old core, one to three newer quarters each
+   * laid out on its own street grid, and houses strung out along the roads leading in
+   * (ribbon development). Nothing is built in rivers, lakes or on steep mountain slopes.
+   */
+  private buildDistrict(name: string, center: Vector2D, radius: number, kind: UrbanDistrict['kind'], seed: number): UrbanDistrict {
+    const rand = rng(seed);
+    const blocks: UrbanBlock[] = [];
+    const streets: UrbanDistrict['streets'] = [];
+    const taken = new Set<string>();
+    const buildable = (x: number, y: number) => {
+      const t = this.at(x, y);
+      return t !== TERRAIN.water && t !== TERRAIN.lagoon && t !== TERRAIN.lake && t !== TERRAIN.river && this.elevationAt(x, y) < 0.62;
+    };
+    const claim = (x: number, y: number) => {
+      const key = `${Math.round(x / 18)},${Math.round(y / 18)}`;
+      if (taken.has(key)) return false;
+      taken.add(key);
+      return true;
+    };
+
+    if (kind === 'camp') {
+      // Tent lines in a rough rectangle
+      const ang = rand() * Math.PI;
+      for (let gy = -radius * 0.7; gy <= radius * 0.7; gy += 22) {
+        for (let gx = -radius * 0.8; gx <= radius * 0.8; gx += 16) {
+          const x = center.x + gx * Math.cos(ang) - gy * Math.sin(ang);
+          const y = center.y + gx * Math.sin(ang) + gy * Math.cos(ang);
+          if (Math.hypot(gx, gy) > radius * (0.75 + 0.3 * rand()) || !buildable(x, y)) continue;
+          blocks.push({ pts: rect(x, y, 11, 7, ang), tone: 0.9 });
+        }
+      }
+      return { name, center, radius, kind, blocks, streets };
+    }
+
+    const block = kind === 'city' ? 34 : kind === 'town' ? 30 : 26;
+    const street = kind === 'city' ? 9 : 7;
+    const baseAngle = rand() * Math.PI;
+    const lobes: { c: Vector2D; r: number; angle: number; core: boolean }[] = [{ c: center, r: radius * 0.6, angle: baseAngle, core: true }];
+    const extra = kind === 'city' ? 3 : kind === 'town' ? 2 : 1;
+    for (let k = 0; k < extra; k++) {
+      const dir = rand() * Math.PI * 2;
+      const off = radius * (0.35 + 0.45 * rand());
+      lobes.push({
+        c: { x: center.x + Math.cos(dir) * off, y: center.y + Math.sin(dir) * off },
+        r: radius * (0.28 + 0.25 * rand()),
+        angle: baseAngle + (rand() - 0.5) * 1.1,
+        core: false,
+      });
+    }
+
+    for (const lobe of lobes) {
+      const ca = Math.cos(lobe.angle);
+      const sa = Math.sin(lobe.angle);
+      const n = Math.ceil((lobe.r * 1.4) / block);
+      for (let gy = -n; gy <= n; gy++) {
+        for (let gx = -n; gx <= n; gx++) {
+          const lx = gx * block;
+          const ly = gy * block;
+          const x = lobe.c.x + lx * ca - ly * sa;
+          const y = lobe.c.y + lx * sa + ly * ca;
+          const d = Math.hypot(lx, ly);
+          const edge = lobe.r * (0.65 + 0.7 * fbm(x / 110, y / 110, seed, 3));
+          if (d > edge || !buildable(x, y) || !claim(x, y)) continue;
+          const fromCentre = Math.hypot(x - center.x, y - center.y) / radius;
+          const density = (kind === 'city' ? 1.3 : kind === 'town' ? 1.0 : 0.7) - fromCentre * 0.45 - (d / edge) * 0.2;
+          if (rand() > density) continue;
+          const inner = block - street;
+          if (lobe.core && kind === 'city' && d < edge * 0.45) {
+            blocks.push({ pts: rect(x, y, inner, inner, lobe.angle), tone: 0.55 + rand() * 0.4 });
+          } else {
+            const parts = 1 + Math.floor(rand() * 3);
+            for (let k = 0; k < parts; k++) {
+              const w = inner * (0.35 + rand() * 0.35);
+              const h = inner * (0.35 + rand() * 0.35);
+              const u = (rand() - 0.5) * (inner - w);
+              const v = (rand() - 0.5) * (inner - h);
+              blocks.push({ pts: rect(x + u * ca - v * sa, y + u * sa + v * ca, w, h, lobe.angle), tone: 0.3 + rand() * 0.6 });
+            }
+          }
+        }
+      }
+      // Two main streets through each quarter
+      for (const [ux, uy] of [[ca, sa], [-sa, ca]]) {
+        const len = lobe.r * (lobe.core ? 1.1 : 0.8);
+        streets.push({ from: { x: lobe.c.x - ux * len, y: lobe.c.y - uy * len }, to: { x: lobe.c.x + ux * len, y: lobe.c.y + uy * len }, width: lobe.core ? 6 : 4 });
+      }
+    }
+
+    // Ribbon development: houses along the roads leading out of town
+    for (const rd of this.roads) {
+      if (rd.kind === 'rail') continue;
+      for (let k = 0; k < rd.points.length - 1; k++) {
+        const a = rd.points[k];
+        const b = rd.points[k + 1];
+        const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+        if (segLen < 1) continue;
+        const ang = Math.atan2(b.y - a.y, b.x - a.x);
+        const nx = -Math.sin(ang);
+        const ny = Math.cos(ang);
+        for (let t = 0; t < segLen; t += 22) {
+          const px = a.x + ((b.x - a.x) * t) / segLen;
+          const py = a.y + ((b.y - a.y) * t) / segLen;
+          const fromCentre = Math.hypot(px - center.x, py - center.y) / radius;
+          if (fromCentre < 0.5 || fromCentre > 1.9) continue;
+          for (const side of [-1, 1]) {
+            if (rand() > (1.9 - fromCentre) * (kind === 'settlement' ? 0.45 : 0.6)) continue;
+            const w = 10 + rand() * 8;
+            const h = 8 + rand() * 6;
+            const off = (rd.width / 2 + 5 + h / 2) * side;
+            const hx = px + nx * off;
+            const hy = py + ny * off;
+            if (!buildable(hx, hy) || !claim(hx, hy)) continue;
+            blocks.push({ pts: rect(hx, hy, w, h, ang), tone: 0.35 + rand() * 0.5 });
+          }
+        }
+      }
+    }
+    return { name, center, radius, kind, blocks, streets };
   }
 
   /** Distance (cells, capped) from each masked cell to the edge of the mask. */
@@ -660,48 +813,19 @@ function polylineIntersections(a: Vector2D[], b: Vector2D[]): { pos: Vector2D; a
   return out;
 }
 
-/**
- * A built-up area: a street grid at a seeded angle, blocks thinning toward a ragged edge, a
- * dense core for cities, scattered houses along lanes for villages, tent rows for camps.
- */
-function buildDistrict(name: string, center: Vector2D, radius: number, kind: UrbanDistrict['kind'], seed: number): UrbanDistrict {
-  const rand = rng(seed);
-  const angle = rand() * Math.PI;
-  const block = kind === 'city' ? 34 : kind === 'town' ? 30 : 26;
-  const street = kind === 'city' ? 9 : 7;
-  const blocks: UrbanBlock[] = [];
-  const n = Math.ceil((radius * 1.2) / block);
-  for (let gy = -n; gy <= n; gy++) {
-    for (let gx = -n; gx <= n; gx++) {
-      const lx = gx * block;
-      const ly = gy * block;
-      const d = Math.hypot(lx, ly);
-      const edge = radius * (0.7 + 0.45 * fbm((lx + center.x) / 160, (ly + center.y) / 160, seed, 3));
-      if (d > edge) continue;
-      const density = kind === 'city' ? 1 - (d / edge) * 0.55 : kind === 'town' ? 0.85 - (d / edge) * 0.5 : kind === 'camp' ? 0.7 : 0.55 - (d / edge) * 0.3;
-      if (rand() > density) continue;
-      const inner = block - street;
-      if (kind === 'city' && d < edge * 0.45) {
-        // Downtown: one big block footprint
-        blocks.push({ x: lx - inner / 2, y: ly - inner / 2, w: inner, h: inner, tone: 0.55 + rand() * 0.4 });
-      } else if (kind === 'camp') {
-        for (let k = 0; k < 3; k++) blocks.push({ x: lx - inner / 2 + k * (inner / 3), y: ly - 4, w: inner / 3 - 2, h: 8, tone: 0.9 });
-      } else {
-        // Split into 2-4 houses / buildings
-        const parts = 1 + Math.floor(rand() * 3);
-        for (let k = 0; k < parts; k++) {
-          const w = inner * (0.35 + rand() * 0.35);
-          const h = inner * (0.35 + rand() * 0.35);
-          blocks.push({ x: lx - inner / 2 + rand() * (inner - w), y: ly - inner / 2 + rand() * (inner - h), w, h, tone: 0.3 + rand() * 0.6 });
-        }
-      }
-    }
-  }
-  const avenues = kind === 'camp' ? [] : [
-    { from: { x: -radius, y: 0 }, to: { x: radius, y: 0 } },
-    { from: { x: 0, y: -radius }, to: { x: 0, y: radius } },
-  ];
-  return { name, center, radius, angle, kind, blocks, avenues };
+function centroid(pts: Vector2D[]): Vector2D {
+  return { x: pts.reduce((a, p) => a + p.x, 0) / pts.length, y: pts.reduce((a, p) => a + p.y, 0) / pts.length };
+}
+
+function rect(cx: number, cy: number, w: number, h: number, angle: number): Vector2D[] {
+  const c = Math.cos(angle);
+  const sn = Math.sin(angle);
+  return [
+    [-w / 2, -h / 2],
+    [w / 2, -h / 2],
+    [w / 2, h / 2],
+    [-w / 2, h / 2],
+  ].map(([u, v]) => ({ x: cx + u * c - v * sn, y: cy + u * sn + v * c }));
 }
 
 // ── Cache: one map per generated sector ─────────────────────────────────────────────────────

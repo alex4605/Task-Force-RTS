@@ -42,6 +42,7 @@ import { AIR_WEAPON_RANGE, gameRangeFromKm, getInstallationRange } from './range
 import { getShipAshmFit, getShipSamSystem } from './navalMissileSalvos';
 import { applyHistoricalGuns, bombSpec, bombsPerRelease, burstBullets, getGunBattery, rocketKind, rocketsPerSalvo, ROCKETS, roundsPerBurst, warheadVsGround, warheadVsInstallation, warheadVsShip } from './aircraftArmament';
 import { getTerrainMap, TerrainMap } from './terrain/terrainMap';
+import { canEngageGround, concealment, findGroundPath } from './terrain/combat';
 import { groundSilhouetteClass } from './unitPreviewRenderer';
 import { GroundWreck, leavesWreck, WRECK_LIFETIME } from './render/unitDetails';
 import { AHEAD_THROWERS, hasAswWeapon, layerFactorForAircraft, layerFactorForShipSonar, layerFactorForSonobuoy, updateThermoclineDepth, STANDOFF_ASW, aircraftDetectionRange, applyHistoricalAswFit, svttLabel, depthChargePattern, enemyAswWeapon, isDieselBoat, isSurfacedBoat, shipSonar, sonarDeadZone, sonarDetectionRange, sonobuoySensitivity, updateDieselBattery } from './asw';
@@ -156,6 +157,22 @@ export class GameEngine {
   /** Classified terrain of the current sector (built on first use, shared with the renderer). */
   public get terrain(): TerrainMap {
     return getTerrainMap(this.islands, this.worldSize, this.era);
+  }
+
+  /** Artillery, mortars and rockets fire indirect: no line of sight needed, only a spotter's view. */
+  private isIndirectFire(unit: GroundUnit): boolean {
+    return Boolean(unit.isArtillery || unit.isSPG || unit.isMLRS || unit.isNuclearTEL) || /artillery|howitzer|mortar|mlrs|grad|uragan|scud|atacms|calliope|m198|2s1/.test(unit.type);
+  }
+
+  /** Terrain-aware engagement check (line of sight, high ground, concealment): terrain/combat.ts. */
+  private canEngageGroundAt(from: Vector2D, range: number, to: Vector2D, indirect: boolean): boolean {
+    return canEngageGround(this.terrain, from, range, to, indirect);
+  }
+
+  /** On-foot units (infantry, AT teams, mortars) versus vehicles, for terrain movement. */
+  private isFootUnit(unit: GroundUnit): boolean {
+    const kind = groundSilhouetteClass(unit.type);
+    return kind === 'infantry' || kind === 'atgm' || kind === 'mortar';
   }
   public aircraft: Aircraft[] = [];
   public projectiles: Projectile[] = [];
@@ -986,6 +1003,16 @@ export class GameEngine {
         ...order,
         targetPos,
       };
+
+      // Route over land by terrain cost: roads, bridges, around lakes, swamps and mountains
+      if (order.type === 'move' && targetPos && !unit.embarkedInShipId) {
+        const amphibious = unit.isAmphibious || unit.type.startsWith('usmc_lvt') || unit.type === 'usmc_aav7a1';
+        const path = amphibious ? null : findGroundPath(this.terrain, unit.pos, targetPos, !this.isFootUnit(unit));
+        if (path && path.length > 1) {
+          unit.order.waypoints = path;
+          unit.order.activeWaypointIndex = 0;
+        }
+      }
 
       if (order.type === 'move' && targetPos) {
         unit.heading = Math.atan2(targetPos.y - unit.pos.y, targetPos.x - unit.pos.x);
@@ -7314,7 +7341,7 @@ export class GameEngine {
 
             const groundTarget = !shipTarget
               ? this.groundUnits
-                  .filter((u) => !u.isDestroyed && !u.embarkedInShipId && this.isHostile(inst.side, u.side) && dist(inst.pos, u.pos) <= inst.range)
+                  .filter((u) => !u.isDestroyed && !u.embarkedInShipId && this.isHostile(inst.side, u.side) && this.canEngageGroundAt(inst.pos, inst.range, u.pos, inst.type === 'towed_artillery'))
                   .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0]
               : undefined;
 
@@ -7389,7 +7416,7 @@ export class GameEngine {
           )
           .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
         const groundTarget = !shipTarget
-          ? this.groundUnits.find((u) => u.side === 'player' && !u.isDestroyed && !u.embarkedInShipId && dist(inst.pos, u.pos) <= inst.range)
+          ? this.groundUnits.find((u) => u.side === 'player' && !u.isDestroyed && !u.embarkedInShipId && this.canEngageGroundAt(inst.pos, inst.range, u.pos, inst.type === 'towed_artillery'))
           : null;
         const targetPos = shipTarget ? shipTarget.pos : groundTarget ? groundTarget.pos : null;
 
@@ -7794,9 +7821,15 @@ export class GameEngine {
 
       // RTS Navigation (混亂壓制狀態下速度減緩 60%)
       if (unit.order.type === 'move' && unit.order.targetPos) {
-        const dx = unit.order.targetPos.x - unit.pos.x;
-        const dy = unit.order.targetPos.y - unit.pos.y;
-        const d = Math.hypot(dx, dy);
+        // Follow the terrain route's waypoints, then the final target
+        const wps = unit.order.waypoints;
+        let wi = unit.order.activeWaypointIndex ?? 0;
+        while (wps && wi < wps.length - 1 && dist(unit.pos, wps[wi]) < 40) wi++;
+        if (wps) unit.order.activeWaypointIndex = wi;
+        const steerTo = wps && wi < wps.length ? wps[wi] : unit.order.targetPos;
+        const dx = steerTo.x - unit.pos.x;
+        const dy = steerTo.y - unit.pos.y;
+        const d = Math.hypot(unit.order.targetPos.x - unit.pos.x, unit.order.targetPos.y - unit.pos.y);
 
         if (d < 25) {
           unit.order = { type: 'idle' };
@@ -7812,9 +7845,11 @@ export class GameEngine {
             moveSpeed *= (1 - penalty);
           }
           // Terrain: roads speed vehicles up; paddies, jungle, marsh, mountains and fords slow them
-          const kind = groundSilhouetteClass(unit.type);
-          const onFoot = kind === 'infantry' || kind === 'atgm' || kind === 'mortar';
-          moveSpeed *= this.terrain.moveFactor(unit.pos.x, unit.pos.y, !onFoot);
+          const onFoot = this.isFootUnit(unit);
+          const amphib = unit.isAmphibious || unit.type.startsWith('usmc_lvt') || unit.type === 'usmc_aav7a1';
+          const terrainMod = this.terrain.moveFactor(unit.pos.x, unit.pos.y, !onFoot);
+          // Amphibians swim rivers; everyone else crawls (never fully stuck, so a unit can back out)
+          moveSpeed *= amphib && this.terrain.at(unit.pos.x, unit.pos.y) === 14 ? 0.5 : Math.max(0.08, terrainMod);
           unit.speed = moveSpeed;
 
           // ══════════════════════════════════════════════════════════
@@ -7884,8 +7919,13 @@ export class GameEngine {
       }
     }
 
+    const indirectFire = this.isIndirectFire(unit);
     const targetGround = this.groundUnits.find(
-      (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && dist(unit.pos, u.pos) <= (unit.isBanzaiCharging ? 1200 : unit.range)
+      (u) =>
+        this.isHostile(unit.side, u.side) &&
+        !u.isDestroyed &&
+        !u.embarkedInShipId &&
+        (unit.isBanzaiCharging ? dist(unit.pos, u.pos) <= 1200 : this.canEngageGroundAt(unit.pos, unit.range, u.pos, indirectFire))
     );
 
     // 局部反突擊判定: 若同一島嶼或1600m內有美軍或盟軍登陸部隊，敵機動部隊主動逼近
@@ -7950,7 +7990,7 @@ export class GameEngine {
             targetGround.isDestroyed = true;
           }
         }
-      } else if (dist(unit.pos, targetGround.pos) <= unit.range && unit.cooldown <= 0) {
+      } else if (unit.cooldown <= 0 && this.canEngageGroundAt(unit.pos, unit.range, targetGround.pos, indirectFire)) {
         soundEngine.playGunSalvo(false);
         const d = dist(unit.pos, targetGround.pos);
         const isArty = unit.isArtillery || unit.isSPG || unit.type.includes('artillery') || unit.type === 'opfor_2s1';
@@ -8156,8 +8196,9 @@ export class GameEngine {
     let targetPos: Vector2D | null = null;
     let targetUnit: GroundUnit | null = null;
 
+    const indirectFire = this.isIndirectFire(unit);
     const enemyGround = this.groundUnits.find(
-      (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && dist(unit.pos, u.pos) <= unit.range
+      (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && this.canEngageGroundAt(unit.pos, unit.range, u.pos, indirectFire)
     );
     if (enemyGround) {
       targetPos = enemyGround.pos;
@@ -8166,7 +8207,7 @@ export class GameEngine {
       // Find enemy installation on current island (友軍地面部隊絕不攻擊我方或盟軍建造之陣地設施)
       for (const isl of this.islands) {
         for (const inst of isl.installations) {
-          if (!inst.isDestroyed && this.isHostile(unit.side, inst.side) && dist(unit.pos, inst.pos) <= unit.range) {
+          if (!inst.isDestroyed && this.isHostile(unit.side, inst.side) && this.canEngageGroundAt(unit.pos, unit.range, inst.pos, indirectFire)) {
             targetPos = inst.pos;
             break;
           }
@@ -18289,8 +18330,13 @@ export class GameEngine {
     const searchRadius = 2600;
 
     // 1. 活體敵方地面部隊 (未在登陸艇內，且與本機敵對)
+    // Pilots spot troops under jungle canopy, in woods or among buildings only from close by
     const validGround = this.groundUnits.filter(
-      (u) => this.isHostile(plane.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && dist(plane.pos, u.pos) <= searchRadius
+      (u) =>
+        this.isHostile(plane.side, u.side) &&
+        !u.isDestroyed &&
+        !u.embarkedInShipId &&
+        dist(plane.pos, u.pos) <= Math.max(700, searchRadius * concealment(this.terrain, u.pos))
     );
 
     // 2. 活體敵方防禦工事 (排除平民定居點，且與本機敵對)

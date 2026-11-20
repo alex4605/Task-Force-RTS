@@ -371,38 +371,40 @@ export function drawTerrainOverlays(rc: RenderContext, map: TerrainMap, camera: 
     ctx.restore();
   }
 
-  // Built-up areas: street blocks (the raster shows a grey patch when zoomed far out)
+  // Built-up areas: streets and buildings (the raster shows the built-up ground far out)
   if (zoom >= 0.18) {
     for (const d of map.districts) {
-      if (!isWorldCircleVisible(rc, d.center.x, d.center.y, d.radius * 1.3, camera)) continue;
-      ctx.save();
-      ctx.translate(d.center.x, d.center.y);
-      ctx.rotate(d.angle);
-      if (d.kind !== 'camp') {
-        ctx.strokeStyle = 'rgba(200, 196, 180, 0.55)';
-        ctx.lineWidth = d.kind === 'city' ? 6 : 4;
-        for (const av of d.avenues) {
-          ctx.beginPath();
-          ctx.moveTo(av.from.x * 0.85, av.from.y * 0.85);
-          ctx.lineTo(av.to.x * 0.85, av.to.y * 0.85);
-          ctx.stroke();
-        }
+      if (!isWorldCircleVisible(rc, d.center.x, d.center.y, d.radius * 2, camera)) continue;
+      ctx.strokeStyle = 'rgba(200, 196, 180, 0.5)';
+      for (const st of d.streets) {
+        ctx.lineWidth = st.width;
+        ctx.beginPath();
+        ctx.moveTo(st.from.x, st.from.y);
+        ctx.lineTo(st.to.x, st.to.y);
+        ctx.stroke();
       }
+      const shadows = zoom >= 0.5 && d.kind !== 'camp';
       for (const b of d.blocks) {
-        if (d.kind === 'camp') {
-          ctx.fillStyle = 'rgba(240, 230, 190, 0.8)';
-        } else {
+        const p = b.pts;
+        if (shadows) {
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+          ctx.beginPath();
+          ctx.moveTo(p[0].x + 2, p[0].y + 2);
+          for (let k = 1; k < 4; k++) ctx.lineTo(p[k].x + 2, p[k].y + 2);
+          ctx.closePath();
+          ctx.fill();
+        }
+        if (d.kind === 'camp') ctx.fillStyle = 'rgba(240, 230, 190, 0.8)';
+        else {
           const v = Math.round(70 + b.tone * 70);
           ctx.fillStyle = `rgb(${v}, ${v - 4}, ${v - 12})`;
         }
-        ctx.fillRect(b.x, b.y, b.w, b.h);
+        ctx.beginPath();
+        ctx.moveTo(p[0].x, p[0].y);
+        for (let k = 1; k < 4; k++) ctx.lineTo(p[k].x, p[k].y);
+        ctx.closePath();
+        ctx.fill();
       }
-      // Roof shadow edge for depth at close zoom
-      if (zoom >= 0.5 && d.kind !== 'camp') {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-        for (const b of d.blocks) ctx.fillRect(b.x + b.w, b.y + 2, 2, b.h);
-      }
-      ctx.restore();
     }
   }
 
