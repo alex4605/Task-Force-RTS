@@ -1,6 +1,17 @@
 // Web Audio API Procedural Sound Engine for WWII Naval Battles
 class SoundEngine {
   private ctx: AudioContext | null = null;
+  /** Last start time (ms) per sound, so a big salvo plays one voice instead of dozens. */
+  private lastPlayed = new Map<string, number>();
+
+  /** Voice limiter: at most one start of a given sound per `gapMs`. */
+  private allow(sound: string, gapMs: number): boolean {
+    const now = performance.now();
+    const last = this.lastPlayed.get(sound) ?? -Infinity;
+    if (now - last < gapMs) return false;
+    this.lastPlayed.set(sound, now);
+    return true;
+  }
   private isMuted: boolean = false;
   private masterGain: GainNode | null = null;
 
@@ -32,6 +43,7 @@ class SoundEngine {
   // Heavy naval gun artillery salvo (16-inch / 8-inch battery)
   public playGunSalvo(isHeavy = true) {
     if (this.isMuted) return;
+    if (!this.allow('playGunSalvo', 70)) return;
     this.init();
     if (!this.ctx || !this.masterGain) return;
 
@@ -84,6 +96,7 @@ class SoundEngine {
   // Anti-Aircraft Flak fire (Bofors 40mm / Oerlikon 20mm bursts)
   public playFlakBurst() {
     if (this.isMuted) return;
+    if (!this.allow('playFlakBurst', 60)) return;
     this.init();
     if (!this.ctx || !this.masterGain) return;
 
@@ -108,6 +121,7 @@ class SoundEngine {
   // Dive Bomber Siren / Whistle (Ju-87 / SBD Dauntless wind dive sound)
   public playDiveBomberWhistle() {
     if (this.isMuted) return;
+    if (!this.allow('playDiveBomberWhistle', 600)) return;
     this.init();
     if (!this.ctx || !this.masterGain) return;
 
@@ -136,6 +150,7 @@ class SoundEngine {
   // Bomb drop / artillery impact explosion
   public playExplosion(isLarge = false) {
     if (this.isMuted) return;
+    if (!this.allow('playExplosion', 80)) return;
     this.init();
     if (!this.ctx || !this.masterGain) return;
 
@@ -172,6 +187,7 @@ class SoundEngine {
   // Torpedo launch splash / water eject
   public playTorpedoLaunch() {
     if (this.isMuted) return;
+    if (!this.allow('playTorpedoLaunch', 150)) return;
     this.init();
     if (!this.ctx || !this.masterGain) return;
 
@@ -195,6 +211,7 @@ class SoundEngine {
   // Sonar Ping (WWII ASDIC / Sonar detection)
   public playSonarPing() {
     if (this.isMuted) return;
+    if (!this.allow('playSonarPing', 400)) return;
     this.init();
     if (!this.ctx || !this.masterGain) return;
 
@@ -217,6 +234,7 @@ class SoundEngine {
   // Klaxon / General Quarters siren (Battle stations alarm)
   public playKlaxon() {
     if (this.isMuted) return;
+    if (!this.allow('playKlaxon', 1500)) return;
     this.init();
     if (!this.ctx || !this.masterGain) return;
 
@@ -243,6 +261,7 @@ class SoundEngine {
   // Airplane propeller hum
   public playPlaneSortie() {
     if (this.isMuted) return;
+    if (!this.allow('playPlaneSortie', 300)) return;
     this.init();
     if (!this.ctx || !this.masterGain) return;
 
@@ -267,6 +286,7 @@ class SoundEngine {
   // HVAR Rocket whoosh sound
   public playRocketWhoosh() {
     if (this.isMuted) return;
+    if (!this.allow('playRocketWhoosh', 60)) return;
     this.init();
     if (!this.ctx || !this.masterGain) return;
 
@@ -304,6 +324,7 @@ class SoundEngine {
   // Water splash from near misses / torpedo water entry
   public playWaterSplash() {
     if (this.isMuted) return;
+    if (!this.allow('playWaterSplash', 80)) return;
     this.init();
     if (!this.ctx || !this.masterGain) return;
 
@@ -340,6 +361,7 @@ class SoundEngine {
   // Urgent Kamikaze Air Raid Siren (Oscillating two-tone alarm)
   public playKamikazeSiren() {
     if (this.isMuted) return;
+    if (!this.allow('playKamikazeSiren', 1500)) return;
     this.init();
     if (!this.ctx || !this.masterGain) return;
 
@@ -371,6 +393,7 @@ class SoundEngine {
   // Rocket Motor Hiss / Ignition (Ohka Rocket Booster)
   public playRocketIgnition() {
     if (this.isMuted) return;
+    if (!this.allow('playRocketIgnition', 100)) return;
     this.init();
     if (!this.ctx || !this.masterGain) return;
 
@@ -409,6 +432,7 @@ class SoundEngine {
   // Machine gun burst (Aircraft dogfight guns & defensive tail gunners)
   public playGunBurst() {
     if (this.isMuted) return;
+    if (!this.allow('playGunBurst', 60)) return;
     this.init();
     if (!this.ctx || !this.masterGain) return;
 

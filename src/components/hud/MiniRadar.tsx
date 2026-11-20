@@ -71,7 +71,7 @@ export const MiniRadar: React.FC<MiniRadarProps> = ({
         if (inst.isDestroyed) continue;
         const ix = inst.pos.x * scale;
         const iy = inst.pos.y * scale;
-        const isFriendly = inst.side === 'player';
+        const isFriendly = inst.side === 'player' || inst.side === 'allied';
         const isNeutral = inst.side === 'neutral';
         const col = isFriendly ? '#00E5FF' : isNeutral ? '#F59E0B' : '#EF4444';
 

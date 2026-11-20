@@ -1834,7 +1834,7 @@ export function createGroundUnit(
   id: string,
   type: GroundUnitType,
   name: string,
-  side: 'player' | 'enemy',
+  side: 'player' | 'enemy' | 'allied',
   era: Era,
   pos: Vector2D
 ): GroundUnit {
@@ -1941,7 +1941,7 @@ export function createLST(id: string, name: string, pos: Vector2D, era: Era): Sh
     maxHealth: 1950,
     armor: 0.30,
     detectionRange: 2200,
-    cargoCapacity: 4,
+    cargoCapacity: 8,
     embarkedUnitIds: [],
     turrets: [
       createTurret(28, 0, '40mm Bofors Twin DP (艦艏雙聯高射砲)', 850, 1.2, 2, -Math.PI / 4, 160),
@@ -1952,7 +1952,7 @@ export function createLST(id: string, name: string, pos: Vector2D, era: Era): Sh
     detailedArmaments: [
       { name: '40mm 博福斯雙聯裝高射砲', count: '4門 (2座雙聯裝)', type: 'aa', desc: '防空與岸防壓制' },
       { name: '20mm 厄利孔高平快砲', count: '4門', type: 'aa', desc: '近迫防空' },
-      { name: '車輛與裝甲裝載甲板', count: '可容納4個戰車/步兵排', type: 'main', desc: '雙開蚌式艏門' },
+      { name: '戰車甲板與兵員艙', count: '約 20 輛 M4 戰車 + 163 名官兵', type: 'main', desc: '雙開蚌式艏門 · 坦克甲板可容 4 個薛曼戰車排與 4 個步兵排' },
     ],
     flakCooldown: 0,
     flakRange: 750,
@@ -2000,7 +2000,7 @@ export function createNewportLST(id: string, name: string, pos: Vector2D, era: E
       { name: '112英呎大型鋁合金艏跳板 (Twin Bow Horns)', count: '雙伸出門架', type: 'main', desc: '以 20 節高速直接向淺灘或珊瑚礁延伸搶灘登陸' },
       { name: 'Mk 33 3吋/50倍徑雙聯全自動防空高射艦砲', count: isEra5 ? '1座 雙聯裝' : '2座 雙聯裝', type: 'secondary', desc: '雷達射控速射高平兩用砲 (50發/分)' },
       ...(isEra5 ? [{ name: 'Mk 15 方陣 (Phalanx) 20mm 近迫武器系統', count: '1座 6管火神', type: 'aa' as const, desc: '防禦反艦飛彈' }] : []),
-      { name: '重裝甲車輛與主戰坦克甲板', count: '可容納30輛戰車或500名陸戰隊', type: 'main', desc: '貫通式車輛甲板與艉門登陸' },
+      { name: '車輛甲板與兵員艙', count: '約 500 噸車輛（約 15 輛 M4 當量）+ 400 名官兵', type: 'main', desc: '貫通式車輛甲板與艉門 · 兩棲車可自艉門泛水' },
     ],
     flakCooldown: 0,
     flakRange: 950,

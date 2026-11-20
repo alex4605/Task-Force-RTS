@@ -1,6 +1,12 @@
+import { withGroundRequisitions } from './groundRequisition';
 import { RequisitionItem, Era } from '../types/game';
 
+/** Reinforcement menu for an era, with every ground entry tagged with the unit it raises. */
 export function getRequisitionCatalog(era: Era): RequisitionItem[] {
+  return withGroundRequisitions(buildRequisitionCatalog(era), era);
+}
+
+function buildRequisitionCatalog(era: Era): RequisitionItem[] {
   // ══════════════════════════════════════════════════
   // 時代五 (1973-1991) 冷戰終局與大洋航艦神盾決戰
   // ══════════════════════════════════════════════════
@@ -1288,7 +1294,7 @@ export function getRequisitionCatalog(era: Era): RequisitionItem[] {
       era,
       badge: '登陸突擊',
       desc: '大型戰車登陸艦，滿載陸戰隊突擊步槍排與戰車排直接駛向島嶼灘頭實施搶灘破障！',
-      statsDesc: 'HP: 2400 | 運載力: 3個連級戰鬥單位 | 搶灘卸載',
+      statsDesc: 'HP: 2400 | 運載: 約 20 輛 M4 + 163 人 | 搶灘卸載',
       typeTag: 'lst',
     },
     {

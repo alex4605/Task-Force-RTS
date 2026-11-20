@@ -98,7 +98,32 @@ export const GROUND_UNIT_STATS: Record<GroundUnitType, GroundUnitStats> = {
   opfor_sa8_osa: { health: 3000, armor: 0.50, speed: 6.0, damage: 540, reloadTime: 3.2, isAmphibious: true },
   opfor_sa11_buk: { health: 3600, armor: 0.58, speed: 5.4, damage: 740, reloadTime: 3.0 },
   opfor_sa15_tor: { health: 3500, armor: 0.58, speed: 5.6, damage: 620, reloadTime: 2.2 },
-  opfor_btr_zd: { health: 2500, armor: 0.46, speed: 6.1, damage: 240, reloadTime: 0.5, isAmphibious: true },
+  opfor_btr_zd: { health: 2500, armor: 0.46, speed: 6.1, damage: 240, reloadTime: 0.5, isAmphibious: true },  // Additional US formations
+  usmc_raider_42: { health: 1650, armor: 0.3, speed: 4.4, damage: 88, reloadTime: 1.0 },
+  usmc_37mm_at: { health: 1500, armor: 0.3, speed: 2.6, damage: 260, reloadTime: 2.2 },
+  us_army_rifle_45: { health: 1850, armor: 0.35, speed: 4.0, damage: 85, reloadTime: 1.1 },
+  usmc_m4a3r3_flame: { health: 3000, armor: 0.66, speed: 4.6, damage: 430, reloadTime: 2.6 },
+  us_m24_chaffee: { health: 2400, armor: 0.5, speed: 6.0, damage: 260, reloadTime: 2.2 },
+  us_m16_quad50: { health: 2200, armor: 0.35, speed: 5.6, damage: 150, reloadTime: 0.4 },
+  us_m113_acav: { health: 2900, armor: 0.6, speed: 5.8, damage: 210, reloadTime: 0.7, isAmphibious: true },
+  us_m107_175: { health: 3000, armor: 0.45, speed: 5.0, damage: 540, reloadTime: 4.5 },
+  us_hmmwv_tow: { health: 1800, armor: 0.25, speed: 7.5, damage: 600, reloadTime: 3.0 },
+  us_avenger: { health: 1800, armor: 0.25, speed: 7.5, damage: 380, reloadTime: 2.0 },
+  // Allied formations
+  cw_infantry_ww2: { health: 1800, armor: 0.35, speed: 4.0, damage: 86, reloadTime: 1.1 },
+  au_matilda: { health: 3200, armor: 0.78, speed: 3.0, damage: 240, reloadTime: 2.4 },
+  rok_infantry_50: { health: 2000, armor: 0.36, speed: 4.3, damage: 100, reloadTime: 1.0 },
+  cw_infantry_50: { health: 2100, armor: 0.38, speed: 4.2, damage: 105, reloadTime: 1.0 },
+  cw_centurion: { health: 3900, armor: 0.78, speed: 4.8, damage: 430, reloadTime: 2.2 },
+  rok_marine_65: { health: 2200, armor: 0.4, speed: 4.6, damage: 120, reloadTime: 0.9 },
+  arvn_ranger_65: { health: 2050, armor: 0.38, speed: 4.8, damage: 110, reloadTime: 0.9 },
+  au_rar_65: { health: 2200, armor: 0.4, speed: 4.6, damage: 125, reloadTime: 0.9 },
+  arvn_m41: { health: 2700, armor: 0.55, speed: 6.2, damage: 300, reloadTime: 2.2 },
+  frg_infantry_83: { health: 2300, armor: 0.42, speed: 4.8, damage: 140, reloadTime: 0.85 },
+  frg_marder: { health: 3200, armor: 0.62, speed: 6.2, damage: 330, reloadTime: 1.1 },
+  frg_leopard2: { health: 5200, armor: 0.86, speed: 7.0, damage: 850, reloadTime: 2.0 },
+  uk_challenger1: { health: 5300, armor: 0.88, speed: 5.6, damage: 820, reloadTime: 2.1 },
+  uk_warrior: { health: 3300, armor: 0.64, speed: 6.4, damage: 320, reloadTime: 1.2 },
 };
 
 /** Indirect-fire units: towed and self-propelled guns, rocket artillery and ballistic missiles. */
@@ -108,6 +133,7 @@ export const ARTILLERY_UNIT_TYPES: ReadonlySet<GroundUnitType> = new Set<GroundU
   'us_m44_spg',
   'us_m109_spg',
   'us_m109a6_paladin',
+  'us_m107_175',
   'usmc_howitzer_155',
   'usmc_artillery_105',
   'us_m198_155',
@@ -128,6 +154,7 @@ export const ARTILLERY_UNIT_TYPES: ReadonlySet<GroundUnitType> = new Set<GroundU
 
 /** Self-propelled guns (counter-battery capable). */
 export const SPG_UNIT_TYPES: ReadonlySet<GroundUnitType> = new Set<GroundUnitType>([
+  'us_m107_175',
   'us_m7_priest',
   'us_m44_spg',
   'us_m109_spg',
@@ -155,6 +182,10 @@ export const NUCLEAR_TEL_UNIT_TYPES: ReadonlySet<GroundUnitType> = new Set<Groun
 
 /** Units fielded as a battery (artillery, rocket and air-defence); the rest are platoons unless listed as companies. */
 export const BATTERY_ECHELON_TYPES: ReadonlySet<GroundUnitType> = new Set<GroundUnitType>([
+  'us_m107_175',
+  'us_m16_quad50',
+  'us_avenger',
+  'usmc_37mm_at',
   'us_m4_calliope',
   'us_m7_priest',
   'us_m44_spg',

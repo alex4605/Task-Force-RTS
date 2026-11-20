@@ -7,7 +7,7 @@
 import type { PlanPalette } from './groundPlan';
 
 export type InfantryWeapon = 'rifle' | 'long_rifle' | 'smg' | 'bar' | 'lmg' | 'type96' | 'rpg' | 'bazooka' | 'at4' | 'm79' | 'flame' | 'satchel' | 'radio' | 'knee_mortar' | 'detector' | 'none';
-type Helmet = 'm1' | 'm1_cover' | 'ija' | 'soviet' | 'pasgt' | 'pith';
+type Helmet = 'm1' | 'm1_cover' | 'ija' | 'soviet' | 'pasgt' | 'pith' | 'slouch' | 'brodie';
 
 interface Kit {
   uniform: string;
@@ -26,6 +26,14 @@ const KITS = {
   ija: { uniform: '#8C7D4E', helmet: 'ija', helmetColour: '#7B6F45', pack: 'ruck' },
   soviet: { uniform: '#6B6A43', helmet: 'soviet', helmetColour: '#4C5A2E', pack: 'veshmeshok' },
   nva: { uniform: '#56603F', helmet: 'pith', helmetColour: '#7E8A5A', pack: 'ruck' },
+  // Australians in jungle green with the slouch hat; Commonwealth battledress with the Brodie helmet
+  au_ww2: { uniform: '#4F5A3A', helmet: 'slouch', helmetColour: '#7A6A48', pack: 'haversack' },
+  cw_korea: { uniform: '#6B6A48', helmet: 'brodie', helmetColour: '#5A5A3C', pack: 'haversack' },
+  rok_marine: { uniform: '#5E6B3E', camo: '#2F3A22', helmet: 'm1_cover', helmetColour: '#56663A', pack: 'alice' },
+  arvn_ranger: { uniform: '#556140', camo: '#26261A', helmet: 'm1_cover', helmetColour: '#4E5E36', pack: 'alice' },
+  au_vietnam: { uniform: '#4C5638', helmet: 'slouch', helmetColour: '#6A6646', pack: 'alice' },
+  // Bundeswehr 1983: olive "Moleskin" (Flecktarn only from 1990), M1-pattern steel helmet
+  frg_83: { uniform: '#5E6142', helmet: 'm1', helmetColour: '#4E5236', pack: 'alice' },
 } satisfies Record<string, Kit>;
 
 interface Member {
@@ -50,6 +58,22 @@ const WEDGE4 = (a: InfantryWeapon, b: InfantryWeapon, c: InfantryWeapon, d: Infa
 ];
 
 const TEAMS: TeamSpec[] = [
+  // Marine Raiders: Thompsons, BAR, Johnson LMG
+  { match: /raider/, kit: KITS.usmc_ww2, men: WEDGE4('smg', 'bar', 'smg', 'lmg') },
+  // US Army 1945 (Okinawa): Garand, BAR, bazooka
+  { match: /us_army_rifle_45/, kit: KITS.us_korea, men: WEDGE4('rifle', 'bar', 'bazooka', 'rifle') },
+  // Australian infantry: Owen gun, Bren (top magazine), Lee-Enfields
+  { match: /cw_infantry_ww2/, kit: KITS.au_ww2, men: WEDGE4('smg', 'type96', 'long_rifle', 'long_rifle') },
+  // ROK Army 1950 in US kit
+  { match: /rok_infantry/, kit: KITS.us_korea, men: WEDGE4('rifle', 'bar', 'rifle', 'rifle') },
+  // Commonwealth Division: Lee-Enfield, Bren, Sten
+  { match: /cw_infantry_50/, kit: KITS.cw_korea, men: WEDGE4('long_rifle', 'type96', 'smg', 'long_rifle') },
+  { match: /rok_marine/, kit: KITS.rok_marine, men: WEDGE4('rifle', 'lmg', 'm79', 'rifle') },
+  { match: /arvn_ranger/, kit: KITS.arvn_ranger, men: WEDGE4('rifle', 'lmg', 'm79', 'radio') },
+  // 1 ATF: L1A1 SLR, M60, Owen
+  { match: /au_rar/, kit: KITS.au_vietnam, men: WEDGE4('long_rifle', 'lmg', 'smg', 'long_rifle') },
+  // Panzergrenadiere: G3, MG3, Panzerfaust
+  { match: /frg_infantry/, kit: KITS.frg_83, men: WEDGE4('rifle', 'lmg', 'at4', 'rifle') },
   // USMC fireteam: leader, BAR man, two riflemen (1945 brings an M2 flamethrower)
   { match: /usmc_rifle_42/, kit: KITS.usmc_ww2, men: WEDGE4('rifle', 'bar', 'rifle', 'rifle') },
   { match: /usmc_rifle_45/, kit: KITS.usmc_ww2, men: WEDGE4('rifle', 'bar', 'flame', 'bazooka') },
@@ -235,6 +259,34 @@ function drawHelmet(ctx: CanvasRenderingContext2D, kit: Kit, x: number) {
       ctx.stroke();
       ctx.beginPath();
       ctx.ellipse(x + 0.75, 0, 0.35, 0.7, 0, -Math.PI / 2, Math.PI / 2);
+      ctx.fill();
+      break;
+    case 'slouch':
+      // Slouch hat: broad brim, left side pinned up, puggaree band
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.ellipse(x, 0.15, 1.35, 1.25, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+      ctx.beginPath();
+      ctx.ellipse(x, -0.9, 1.0, 0.35, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#8D7B55';
+      ctx.beginPath();
+      ctx.arc(x, 0, 0.75, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    case 'brodie':
+      // Mk II Brodie helmet: shallow bowl with a wide flat brim
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.arc(x, 0, 1.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.beginPath();
+      ctx.arc(x, 0, 0.75, 0, Math.PI * 2);
       ctx.fill();
       break;
     case 'ija':

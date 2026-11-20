@@ -57,6 +57,20 @@ export const K = 3.3;
 export const WIDEN = 1.12;
 
 export const TANK_PLANS: TankPlan[] = [
+  // M4A3R3 "Zippo": Sherman with the flame gun in place of the 75mm (short, fat tube)
+  { match: /m4a3r3/, L: 5.84, W: 2.62, track: 0.42, nose: 'round', noseLen: 0.8, turret: { x: 0.2, len: 2.3, wid: 2.0, shape: 'cast', bustle: 0.35 }, gun: { bore: 110, len: 2.2 }, cupola: { x: -0.45, y: 0.45, r: 0.35 }, loaderHatch: true, engineDeck: 2.0, driver: -1 },
+  // M24 Chaffee: low hull, small turret, lightweight 75mm M6
+  { match: /chaffee/, L: 5.56, W: 2.95, track: 0.41, nose: 'glacis', noseLen: 0.8, turret: { x: 0.1, len: 2.3, wid: 2.0, shape: 'cast', bustle: 0.3 }, gun: { bore: 75, len: 3.3 }, cupola: { x: -0.45, y: 0.5, r: 0.35 }, loaderHatch: true, engineDeck: 1.9, driver: -1 },
+  // Matilda II: armoured skirts over the tracks, small cast turret, 2pdr
+  { match: /matilda/, L: 5.61, W: 2.59, track: 0.35, nose: 'flat', noseLen: 0.5, turret: { x: 0.3, len: 1.9, wid: 1.7, shape: 'cast', bustle: 0.25 }, gun: { bore: 40, len: 2.3 }, cupola: { x: -0.35, y: 0.35, r: 0.3 }, engineDeck: 1.8, skirts: true, driver: 0 },
+  // Centurion Mk 3: long hull with side plates, big cast turret with stowage, 20pdr with fume extractor
+  { match: /centurion/, L: 7.6, W: 3.38, track: 0.61, nose: 'glacis', noseLen: 1.0, turret: { x: 0, len: 3.3, wid: 3.0, shape: 'cast', bustle: 0.6 }, gun: { bore: 84, len: 5.4, evac: 0.6 }, cupola: { x: -0.6, y: 0.7, r: 0.45 }, loaderHatch: true, engineDeck: 2.6, skirts: true, driver: 1 },
+  // M41A3 Walker Bulldog: wedge turret with a long bustle, 76mm with T-shaped muzzle brake
+  { match: /arvn_m41/, L: 5.82, W: 3.2, track: 0.53, nose: 'glacis', noseLen: 0.9, turret: { x: -0.1, len: 2.9, wid: 2.4, shape: 'cast', bustle: 0.7 }, gun: { bore: 76, len: 4.1, evac: 0.72, brake: 'tee' }, cupola: { x: -0.6, y: 0.6, r: 0.4 }, loaderHatch: true, engineDeck: 2.2, driver: -1 },
+  // Leopard 2A4: flat-faced angular turret, Rh 120 smoothbore, skirts
+  { match: /leopard2/, L: 7.72, W: 3.7, track: 0.63, nose: 'glacis', noseLen: 1.1, turret: { x: -0.2, len: 4.6, wid: 3.4, shape: 'angular' }, gun: { bore: 120, len: 5.6, evac: 0.5 }, cupola: { x: -0.5, y: 0.8, r: 0.45 }, loaderHatch: true, engineDeck: 2.6, skirts: true, driver: 1 },
+  // Challenger 1: Chobham turret, L11 rifled 120mm with fume extractor and thermal sleeve
+  { match: /challenger/, L: 8.33, W: 3.52, track: 0.6, nose: 'glacis', noseLen: 1.3, turret: { x: -0.6, len: 4.4, wid: 3.3, shape: 'angular' }, gun: { bore: 120, len: 5.8, evac: 0.55 }, cupola: { x: -0.6, y: 0.75, r: 0.45 }, loaderHatch: true, engineDeck: 2.8, skirts: true, driver: 0 },
   // M3 Stuart: narrow riveted hull, small welded turret, 37mm
   { match: /armor_m3$/, L: 4.53, W: 2.24, track: 0.3, nose: 'flat', noseLen: 0.5, turret: { x: 0.3, len: 1.5, wid: 1.4, shape: 'box' }, gun: { bore: 37, len: 2.2 }, cupola: { x: -0.3, y: -0.3, r: 0.3 }, engineDeck: 1.5, driver: -1 },
   // M4 Sherman: rounded cast transmission cover, cast turret with bustle, 75mm

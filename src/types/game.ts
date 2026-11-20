@@ -102,6 +102,32 @@ export type GroundUnitType =
   | 'us_m270_mlrs'        // 時代五 M270 多管火箭系統 (Steel Rain 鋼鐵之雨 · M39 集束子母彈廣域飽和)
   | 'us_m270_atacms'      // 時代五 MGM-140 ATACMS 陸軍戰術彈道飛彈車 (M57 單一高爆碉堡剋星 · 6500m 點穴要塞)
   | 'us_atacms_nuclear'   // 時代五 MGM-140/Lance 戰術核彈頭 SSM 發射車 (W70 戰術熱核彈頭 · 巨型極限破壞)
+  // 美軍各時代增補編裝 (Additional US formations)
+  | 'usmc_raider_42'      // 時代一 陸戰隊突擊營 (Marine Raiders: 湯普森 / BAR / 詹森輕機槍)
+  | 'usmc_37mm_at'        // 時代一 M3 37mm 反戰車砲班
+  | 'us_army_rifle_45'    // 時代二 美陸軍步兵排 (沖繩 · 第7/77/96步兵師)
+  | 'usmc_m4a3r3_flame'   // 時代二 M4A3R3「打火機」噴火戰車排 (硫磺島 / 沖繩)
+  | 'us_m24_chaffee'      // 時代三 M24 霞飛輕戰車排 (1950 年首批抵韓)
+  | 'us_m16_quad50'       // 時代三 M16 四聯裝 .50 半履帶防空車「絞肉機」
+  | 'us_m113_acav'        // 時代四 M113 ACAV 裝甲騎兵突擊車 (三挺機槍與防盾)
+  | 'us_m107_175'         // 時代四 M107 175mm 自走加農砲 (32 km)
+  | 'us_hmmwv_tow'        // 時代五 M966 悍馬 TOW 反戰車飛彈車
+  | 'us_avenger'          // 時代五 M1097 復仇者 刺針防空車 (1990 起)
+  // 盟軍地面部隊 (Allied ground forces, AI-controlled)
+  | 'cw_infantry_ww2'     // 時代一/二 澳洲第2帝國軍步兵排 (歐文衝鋒槍 / 布倫機槍)
+  | 'au_matilda'          // 時代一/二 澳軍瑪蒂達 II 步兵戰車 (新幾內亞 / 婆羅洲)
+  | 'rok_infantry_50'     // 時代三 南韓陸軍步兵排
+  | 'cw_infantry_50'      // 時代三 大英國協第1師步兵排 (格洛斯特團 / 布倫機槍)
+  | 'cw_centurion'        // 時代三 百夫長 Mk 3 戰車排 (第8皇家愛爾蘭驃騎兵)
+  | 'rok_marine_65'       // 時代四 南韓海軍陸戰隊青龍部隊排
+  | 'arvn_ranger_65'      // 時代四 越南共和國陸軍遊騎兵排
+  | 'au_rar_65'           // 時代四 澳洲皇家步兵團排 (第1特遣隊 · L1A1 SLR)
+  | 'arvn_m41'            // 時代四 越南共和國陸軍 M41A3 華克猛犬輕戰車排
+  | 'frg_infantry_83'     // 時代五 西德聯邦國防軍裝甲擲彈兵排 (G3 / MG3)
+  | 'frg_marder'          // 時代五 黃鼠狼 1A3 步兵戰車 (20mm + 米蘭飛彈)
+  | 'frg_leopard2'        // 時代五 豹 2A4 主力戰車 (120mm Rh)
+  | 'uk_challenger1'      // 時代五 英國挑戰者 1 主力戰車 (120mm L11)
+  | 'uk_warrior'          // 時代五 英國武士步兵戰車 (30mm 拉登砲)
   // OPFOR 歷史各時代守軍
   | 'opfor_infantry_42'  // 時代一 日軍海軍特別陸戰隊步槍排 (SNLF)
   | 'opfor_infantry_45'  // 時代二 日軍要塞守備步兵排 / 萬歲突擊排 (Late-war IJA)
@@ -347,6 +373,10 @@ export interface Ship {
     maxPerType: Record<string, number>;
   };
   embarkedUnitIds?: string[];
+  /** Allied ships on a scripted task (beach landing) steer by AlliedOps, not the surface-action AI. */
+  alliedTask?: 'landing';
+  /** Tank landing ships: deck space and berths in use, for the selection panel. */
+  holdNote?: string;
   cargoCapacity?: number;
   rocketCooldown?: number;
   isTokyoExpress?: boolean;
@@ -2046,6 +2076,8 @@ export interface RequisitionItem {
   statsDesc: string;
   typeTag: string; // e.g. ShipType, AircraftModel, GroundUnitType, InstallationType
   requiresIsland?: boolean;
+  /** Ground entries: the unit this requisition raises (drives the menu card artwork). */
+  unitType?: GroundUnitType;
 }
 
 export interface ResourceState {

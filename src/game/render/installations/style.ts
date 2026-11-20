@@ -10,7 +10,7 @@ export interface InstallationStyle {
 }
 
 export function getInstallationStyle(inst: Installation, island?: Island): InstallationStyle {
-  const isPlayer = inst.side === 'player' || island?.isFriendlyBase === true || inst.id.includes('friendly');
+  const isPlayer = inst.side === 'player' || inst.side === 'allied' || island?.isFriendlyBase === true || inst.id.includes('friendly');
   return {
     isPlayer,
     color: isPlayer ? '#4FC3F7' : '#EF5350',

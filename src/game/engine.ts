@@ -1,4 +1,8 @@
 import { ImpactEffect, ImpactSurface, impactFor, MAX_IMPACTS } from './impacts';
+import { resolveGroundRequisition } from './groundRequisition';
+import { AlliedHost, AlliedOps } from './allied/alliedOps';
+import { fitsInHold, formatHold, holdUsed, shipHold } from './naval/lift';
+import { BuilderRequirement, BUILDER_RADIUS, builderRequirement, isEngineerType } from './construction';
 import {
   Ship,
   Aircraft,
@@ -36,7 +40,7 @@ import {
   AshmFlightProfile,
   FleetUpgrades,
 } from '../types/game';
-import { getAlliedSagFleet } from './alliedSagFleets';
+import { AlliedSagShipDef, getAlliedSagFleet } from './alliedSagFleets';
 import { getNavalGunPerformance, getNavalLauncherRange } from './navalGuns';
 import { getAfbModelsForEra, getCarrierModelsForEra, getCatalogRole } from './airWingCatalog';
 import { AIR_WEAPON_RANGE, gameRangeFromKm, getInstallationRange } from './rangeScale';
@@ -169,14 +173,23 @@ export class GameEngine {
   public friendlyBase: Island | null = null;
   public playerShips: Ship[] = [];
   public alliedShips: Ship[] = [];
+  /** Allied landing groups, mainland base and allied ground AI. */
+  private alliedOps: AlliedOps = this.makeAlliedOps();
   public enemyShips: Ship[] = [];
   public groundUnits: GroundUnit[] = [];
   /** Burnt-out vehicles left where ground units were destroyed (render only). */
   public groundWrecks: GroundWreck[] = [];
 
   /** Classified terrain of the current sector (built on first use, shared with the renderer). */
+  private terrainCache: { islands: Island[]; worldSize: number; era: Era; map: TerrainMap } | null = null;
+
+  /** Terrain of the current sector (memoised on the island set, size and era it was built from). */
   public get terrain(): TerrainMap {
-    return getTerrainMap(this.islands, this.worldSize, this.era);
+    const c = this.terrainCache;
+    if (c && c.islands === this.islands && c.worldSize === this.worldSize && c.era === this.era) return c.map;
+    const map = getTerrainMap(this.islands, this.worldSize, this.era);
+    this.terrainCache = { islands: this.islands, worldSize: this.worldSize, era: this.era, map };
+    return map;
   }
 
   /** Terrain routes planned per tick (A* calls), so a whole wave spawning at once spreads out. */
@@ -238,6 +251,11 @@ export class GameEngine {
 
   /** Terrain-aware engagement check (line of sight, high ground, concealment): terrain/combat.ts. */
   private canEngageGroundAt(from: Vector2D, range: number, to: Vector2D, indirect: boolean): boolean {
+    // Cheap reject first: terrain can extend reach by at most 25% (high ground)
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const maxReach = range * 1.25;
+    if (dx * dx + dy * dy > maxReach * maxReach) return false;
     return canEngageGround(this.terrain, from, range, to, indirect);
   }
 
@@ -853,6 +871,7 @@ export class GameEngine {
     this.friendlyBase = generated.friendlyBase;
     this.playerShips = generated.playerShips;
     this.alliedShips = [];
+    this.alliedOps = this.makeAlliedOps();
     this.enemyShips = generated.enemyShips;
     this.groundUnits = generated.groundUnits;
     this.sectorIntel = generated.briefing;
@@ -2344,6 +2363,7 @@ export class GameEngine {
     }
 
     // 跨時代盟軍水面打擊群支援 (Allied Surface Action Group - SAG Autonomous Patrol & Strike)
+    this.alliedOps.update(effectiveDt);
     this.alliedSagTimer -= effectiveDt;
     if (this.alliedSagTimer <= 0) {
       this.spawnAlliedSAG();
@@ -2446,7 +2466,7 @@ export class GameEngine {
 
       // 盟軍自主航行 (在轉向結算前計算以套用島嶼閃避與分離操舵)
       if (ship.side === 'allied' && !ship.isSunk) {
-        this.updateAlliedShipAI(ship, dt);
+        if (!this.alliedOps.steer(ship)) this.updateAlliedShipAI(ship, dt);
         const avoidance = this.calculateNavalSteeringAvoidance(ship, ship.targetHeading, 1500);
         ship.targetHeading = avoidance.targetHeading;
         ship.targetSpeed = Math.min(ship.targetSpeed, ship.maxSpeed * avoidance.speedScale);
@@ -8236,7 +8256,10 @@ export class GameEngine {
         (isl) => isPointInPolygon(unit.pos, isl.points) || dist(unit.pos, isl.center) < isl.radius + 35
       );
       const supplyInfo = currentIsland ? islandSupplyMap.get(currentIsland.id) : null;
-      const isSupplied = unit.side === 'player'
+      // Allied formations run their own logistics
+      const isSupplied = unit.side === 'allied'
+        ? true
+        : unit.side === 'player'
         ? (supplyInfo ? supplyInfo.playerSupplied : false)
         : (supplyInfo ? supplyInfo.enemySupplied : true);
       unit.isSupplied = isSupplied;
@@ -8292,6 +8315,11 @@ export class GameEngine {
               actionType: 'recon_spotted',
               text: `🏳️【全體繳械投降！】敵「${unit.name}」在猛烈火力與斷援包圍下士氣崩潰（組織度歸零），升起白旗舉手投降！我軍收押俘虜並接管陣地，獲得 +${cpReward} CP！`,
             });
+            unit.isDestroyed = true;
+            this.groundUnits.splice(i, 1);
+            continue;
+          } else if (unit.side === 'allied') {
+            this.addCombatLog({ category: 'naval', sourceSide: 'allied', sourceName: '盟軍司令部', targetName: unit.name, actionType: 'recon_spotted', text: `🏳️【盟軍部隊被俘】「${unit.name}」遭包圍後組織瓦解，被迫繳械。` });
             unit.isDestroyed = true;
             this.groundUnits.splice(i, 1);
             continue;
@@ -8772,10 +8800,11 @@ export class GameEngine {
       const isAtacms = unit.type === 'us_m270_atacms';
       const isCalliope = unit.type === 'us_m4_calliope';
       const isMlrs = unit.type === 'us_m270_mlrs';
-      const isAtgm = unit.type === 'us_dragon_atgm' || unit.type === 'us_m2_bradley';
+      const silClass = groundSilhouetteClass(unit.type);
+      const isAtgm = unit.type === 'us_dragon_atgm' || unit.type === 'us_m2_bradley' || unit.type === 'us_hmmwv_tow' || unit.type === 'frg_marder';
       const isArty = unit.isArtillery || unit.isSPG || unit.type.includes('artillery') || unit.type.includes('howitzer') || unit.type === 'us_m198_155';
-      const isTank = unit.type.includes('armor') || unit.type.includes('tank') || unit.type === 'us_m1ip_abrams' || unit.type === 'us_m60a1_rise' || unit.type === 'us_m551_sheridan' || unit.type === 'us_m26_pershing' || unit.type === 'us_m1a1_abrams';
-      const isShell = isTank || isArty || unit.type === 'usmc_lvt_45' || unit.type === 'usmc_lvtp5a1' || unit.type === 'usmc_aav7a1' || unit.type === 'usmc_lav25';
+      const isTank = silClass === 'tank' || unit.type.includes('armor');
+      const isShell = isTank || isArty || unit.type === 'usmc_lvt_45' || unit.type === 'usmc_lvtp5a1' || unit.type === 'usmc_aav7a1' || unit.type === 'usmc_lav25' || unit.type === 'uk_warrior' || unit.type === 'usmc_37mm_at';
 
       if (isNuclearAtacms) {
         this.fireNuclearSSMMissile(unit, targetPos, targetUnit ?? undefined);
@@ -8797,7 +8826,8 @@ export class GameEngine {
         // 🚀 BGM-71 TOW 反戰車飛彈 (M2 Bradley) 或 M47 龍式反戰車飛彈
         soundEngine.playRocketWhoosh();
         const atgmSpeed = 440;
-        const atgmName = unit.type === 'us_m2_bradley' ? 'BGM-71 TOW 重型反戰車飛彈' : 'M47 龍式反戰車飛彈';
+        const atgmName =
+          unit.type === 'us_m2_bradley' || unit.type === 'us_hmmwv_tow' ? 'BGM-71 TOW 重型反戰車飛彈' : unit.type === 'frg_marder' ? 'MILAN 反戰車飛彈' : 'M47 龍式反戰車飛彈';
         this.projectiles.push({
           id: `atgm-${Date.now()}-${Math.random()}`,
           type: 'missile_arm',
@@ -9253,6 +9283,7 @@ export class GameEngine {
         unit.isSupplied = true;
       });
       transport.embarkedUnitIds = [];
+      transport.holdNote = undefined;
 
       const islName = nearestIsland?.name || '目標灘頭';
       this.addCombatLog({
@@ -9282,12 +9313,28 @@ export class GameEngine {
         return;
       }
 
-      const toEmbark = nearbyUnits.slice(0, capacity);
+      // Tank landing ships load by deck space and troop berths; other craft by platoon count
+      const hold = shipHold(transport);
+      let toEmbark: GroundUnit[];
+      if (hold) {
+        nearbyUnits.sort((a, b) => dist(a.pos, transport.pos) - dist(b.pos, transport.pos));
+        toEmbark = [];
+        for (const u of nearbyUnits) {
+          if (fitsInHold(hold, holdUsed(toEmbark.map((x) => x.type)), u.type)) toEmbark.push(u);
+        }
+        if (toEmbark.length === 0) {
+          this.addBannerAlert(`⚠️「${transport.name}」艙位不足：附近部隊單一單位即超過車輛甲板或兵員艙容量。`, 'player', 'alert', 4.0);
+          return;
+        }
+      } else {
+        toEmbark = nearbyUnits.slice(0, capacity);
+      }
       toEmbark.forEach((u) => {
         u.embarkedInShipId = transport.id;
         u.pos = { ...transport.pos };
       });
       transport.embarkedUnitIds = toEmbark.map((u) => u.id);
+      transport.holdNote = hold ? formatHold(hold, holdUsed(toEmbark.map((x) => x.type))) : undefined;
       soundEngine.playPlaneSortie();
 
       this.addCombatLog({
@@ -9296,7 +9343,7 @@ export class GameEngine {
         sourceName: transport.name,
         targetName: '陸戰隊編隊',
         actionType: 'recon_spotted',
-        text: `⚓【裝載登艦完畢】「${transport.name}」成功裝載 ${toEmbark.length} 個部隊（裝載量: ${toEmbark.length}/${capacity}）！準備航向目標群島！`,
+        text: `⚓【裝載登艦完畢】「${transport.name}」成功裝載 ${toEmbark.length} 個部隊（${hold ? formatHold(hold, holdUsed(toEmbark.map((x) => x.type))) : `裝載量: ${toEmbark.length}/${capacity}`}）！準備航向目標群島！`,
       });
     }
   }
@@ -10070,15 +10117,38 @@ export class GameEngine {
       // Garrisons placed by the player join the shared historical range scale
       const ok = this.purchaseGroundRequisition(item, targetIslandId, customPos, fleetPos);
       this.applyHistoricalInstallationRanges();
+      if (!ok) this.refundRequisition(item, freeSandbox);
       return ok;
     } else if (item.category === 'installations') {
       // Garrisons placed by the player join the shared historical range scale
       const ok = this.purchaseInstallationRequisition(item, targetIslandId, customPos, freeSandbox);
       this.applyHistoricalInstallationRanges();
+      if (!ok) this.refundRequisition(item, freeSandbox);
       return ok;
     }
 
     return false;
+  }
+
+  /** A purchase that could not be carried out costs nothing. */
+  private refundRequisition(item: RequisitionItem, freeSandbox: boolean): void {
+    if (freeSandbox) return;
+    this.resourcePoints += item.cost;
+    this.totalCpSpent -= item.cost;
+  }
+
+  /** A friendly unit able to build `need` works within the builder radius of a site. */
+  private findBuilderNear(pos: Vector2D, need: BuilderRequirement): GroundUnit | undefined {
+    return this.groundUnits.find((u) => this.canBuild(u, need) && dist(u.pos, pos) <= BUILDER_RADIUS);
+  }
+
+  private findBuilderOnIsland(island: Island, need: BuilderRequirement): GroundUnit | undefined {
+    return this.groundUnits.find((u) => this.canBuild(u, need) && isPointInPolygon(u.pos, island.points));
+  }
+
+  private canBuild(u: GroundUnit, need: BuilderRequirement): boolean {
+    if (u.side !== 'player' || u.isDestroyed || u.embarkedInShipId) return false;
+    return isEngineerType(u.type) || (need === 'infantry' && this.isFootUnit(u));
   }
 
   private purchaseInstallationRequisition(item: RequisitionItem, targetIslandId: string | undefined, customPos: Vector2D | undefined, freeSandbox: boolean): boolean {
@@ -10130,6 +10200,26 @@ export class GameEngine {
         y: targetIsland.center.y + Math.sin(offsetAngle) * (targetIsland.radius * rFactor),
       };
       instAngle = offsetAngle;
+    }
+
+    // 設施構工: the right troops must be on site (sandbox builds skip the check)
+    if (!freeSandbox) {
+      const need = builderRequirement(item.typeTag);
+      let builder = this.findBuilderNear(instPos, need);
+      if (!builder && !customPos && !isMaritimeFacility) {
+        // Quick build without a site: build beside a qualifying unit on the island instead
+        builder = this.findBuilderOnIsland(targetIsland, need);
+        if (builder) {
+          const a = Math.random() * Math.PI * 2;
+          instPos = { x: builder.pos.x + Math.cos(a) * 70, y: builder.pos.y + Math.sin(a) * 70 };
+          instAngle = a;
+        }
+      }
+      if (!builder) {
+        const who = need === 'engineer' ? '工兵（Seabees 戰鬥工兵排）' : '步兵或工兵';
+        this.addBannerAlert(`🏗️【設施構工受阻】「${item.name}」須有${who}在工地 ${BUILDER_RADIUS}m 內才能構工！`, 'player', 'alert', 5.0);
+        return false;
+      }
     }
 
     const instId = `inst-built-${Date.now()}`;
@@ -10458,108 +10548,8 @@ export class GameEngine {
     }
 
     const gId = `usmc-req-${Date.now()}`;
-    let gUnit: GroundUnit | null = null;
-    if (item.typeTag === 'infantry') {
-      gUnit = createGroundUnit(
-        gId,
-        this.era === 'era1' ? 'usmc_rifle_42' : this.era === 'era2' ? 'usmc_rifle_45' : this.era === 'era3' ? 'usmc_korea_rifle' : 'usmc_air_assault_65',
-        this.era === 'era1' ? 'USMC 陸戰步兵排 (1942)' : this.era === 'era2' ? 'USMC 陸戰突擊步兵排 (1945)' : this.era === 'era3' ? 'USMC 陸戰突擊步兵排 (1950)' : 'USMC 空中突擊/直升機機降排 (1965)',
-        'player',
-        this.era,
-        spawnPos
-      );
-    } else if (item.typeTag === 'army_rifle_65') {
-      gUnit = createGroundUnit(gId, 'us_army_rifle_platoon_65', '美軍 1965 年型前線常規步槍排', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'm113_mech') {
-      gUnit = createGroundUnit(gId, 'us_army_m113_mech', 'M113 裝甲運兵機械化步兵排', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'chaparral_sam') {
-      gUnit = createGroundUnit(gId, 'us_army_chaparral_sam', 'MIM-72 榭樹野戰履帶防空飛彈排', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'air_assault') {
-      gUnit = createGroundUnit(gId, 'usmc_air_assault_65', 'USMC 空中突擊/直升機機降突擊排 (1965)', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'armor_m48') {
-      gUnit = createGroundUnit(gId, 'usmc_armor_m48', 'USMC M48A3 巴頓主力戰車排', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'm551_sheridan') {
-      gUnit = createGroundUnit(gId, 'us_m551_sheridan', 'US Army M551 謝里登裝甲騎兵排', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'ontos_m50') {
-      gUnit = createGroundUnit(gId, 'usmc_ontos_m50', 'USMC M50 昂圖斯六聯無後座力砲戰車', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'artillery') {
-      gUnit = createGroundUnit(
-        gId,
-        this.era === 'era3' || this.era === 'era4' ? 'usmc_howitzer_155' : 'usmc_artillery_105',
-        this.era === 'era3' || this.era === 'era4' ? 'USMC M114 155mm 重榴彈砲排' : 'USMC M2A1 105mm 砲兵支援排',
-        'player',
-        this.era,
-        spawnPos
-      );
-    } else if (item.typeTag === 'tank') {
-      gUnit = createGroundUnit(
-        gId,
-        this.era === 'era1' ? 'usmc_armor_m3' : this.era === 'era2' ? 'usmc_armor_m4' : this.era === 'era3' ? 'usmc_patton_m46' : 'usmc_armor_m48',
-        this.era === 'era1' ? 'USMC M3 斯圖亞特戰車排' : this.era === 'era2' ? 'USMC M4A2 薛曼中戰車排' : this.era === 'era3' ? 'USMC M46 巴頓主力戰車排' : 'USMC M48A3 巴頓中戰車排',
-        'player',
-        this.era,
-        spawnPos
-      );
-    } else if (item.typeTag === 'lvt') {
-      gUnit = createGroundUnit(
-        gId,
-        this.era === 'era1' ? 'usmc_lvt_42' : 'usmc_lvt_45',
-        this.era === 'era1'
-          ? 'USMC LVT-1 水牛兩棲機步排'
-          : this.era === 'era2'
-          ? 'USMC LVT-4 水牛兩棲突擊排'
-          : 'USMC LVT-P5 兩棲重裝步戰排',
-        'player',
-        this.era,
-        spawnPos
-      );
-    } else if (item.typeTag === 'engineer') {
-      gUnit = createGroundUnit(gId, 'usmc_engineer', 'USN Seabees 戰鬥工兵排', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'usmc_lvtp5a1') {
-      gUnit = createGroundUnit(gId, 'usmc_lvtp5a1', 'USMC LVTP-5A1 兩棲重裝登陸裝甲車', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'army_rifle_83') {
-      gUnit = createGroundUnit(gId, 'us_army_rifle_83', '美陸軍步槍班 (1983)', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'usmc_rifle_83') {
-      gUnit = createGroundUnit(gId, 'usmc_rifle_83', '陸戰步槍班 (1983)', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'dragon_atgm') {
-      gUnit = createGroundUnit(gId, 'us_dragon_atgm', 'M47 巨龍反戰車飛彈班', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'usmc_aav7a1') {
-      gUnit = createGroundUnit(gId, 'usmc_aav7a1', 'AAV-7A1 兩棲突擊載具', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'usmc_lav25') {
-      gUnit = createGroundUnit(gId, 'usmc_lav25', 'LAV-25 輪型裝甲偵搜車', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'm60a1_rise') {
-      gUnit = createGroundUnit(gId, 'us_m60a1_rise', 'M60A1 RISE (PASSIVE) ERA 戰車', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'm1ip_abrams') {
-      gUnit = createGroundUnit(gId, 'us_m1ip_abrams', 'M1IP 艾布蘭主戰戰車', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'm198_155') {
-      gUnit = createGroundUnit(gId, 'us_m198_155', 'M198 155mm 牽引榴彈砲排', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'lav_ad') {
-      gUnit = createGroundUnit(gId, 'usmc_lav_ad', 'LAV-AD 25mm防空裝甲車', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'm163_vads') {
-      gUnit = createGroundUnit(gId, 'us_m163_vads', 'M163 火神 20mm 防空裝甲車', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'm2_bradley') {
-      gUnit = createGroundUnit(gId, 'us_m2_bradley', 'M2 布雷德利裝甲機步戰車 (TOW-2飛彈+25mm鏈砲)', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'us_m270_mlrs') {
-      gUnit = createGroundUnit(gId, 'us_m270_mlrs', 'M270 MLRS 多管火箭系統 (12x M39鋼鐵之雨)', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'us_m270_atacms') {
-      gUnit = createGroundUnit(gId, 'us_m270_atacms', 'MGM-140 ATACMS 戰術飛彈車 (M57碉堡剋星)', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'us_m4_calliope') {
-      gUnit = createGroundUnit(gId, 'us_m4_calliope', 'M4A3 薛曼「管風琴」60聯裝火箭車', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'us_m7_priest') {
-      gUnit = createGroundUnit(gId, 'us_m7_priest', 'M7 牧師 105mm 自走榴彈砲 (反砲兵急速射擊)', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'us_m26_pershing') {
-      gUnit = createGroundUnit(gId, 'us_m26_pershing', 'US Army M26 潘興重戰車排', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'us_m1a1_abrams') {
-      gUnit = createGroundUnit(gId, 'us_m1a1_abrams', 'M1A1 艾布蘭主力戰車排', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'us_m44_spg') {
-      gUnit = createGroundUnit(gId, 'us_m44_spg', 'M44 155mm 自走榴彈砲 (反砲兵急速射擊)', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'us_m109_spg') {
-      gUnit = createGroundUnit(gId, 'us_m109_spg', 'M109 155mm 自走榴彈砲 (長程反砲兵壓制)', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'us_m109a6_paladin') {
-      gUnit = createGroundUnit(gId, 'us_m109a6_paladin', 'M109A6 帕拉丁 155mm 數位自走砲', 'player', this.era, spawnPos);
-    } else if (item.typeTag === 'us_atacms_nuclear') {
-      gUnit = createGroundUnit(gId, 'us_atacms_nuclear', 'MGM-140B 核武裝 ATACMS 戰術飛彈車 (W70/W85熱核彈頭)', 'player', this.era, spawnPos);
-    }
+    const target = resolveGroundRequisition(item.typeTag, this.era);
+    const gUnit: GroundUnit | null = target ? createGroundUnit(gId, target.type, target.name, 'player', this.era, spawnPos) : null;
 
     if (gUnit) {
       this.groundUnits.push(gUnit);
@@ -11375,11 +11365,22 @@ export class GameEngine {
     for (const gUnit of this.groundUnits) {
       if (gUnit.isDestroyed || gUnit.cooldown > 0) continue;
 
-      if (gUnit.side !== 'enemy' && (gUnit.type === 'usmc_lav_ad' || gUnit.type === 'us_m163_vads')) {
+      if (gUnit.side !== 'enemy' && (gUnit.type === 'usmc_lav_ad' || gUnit.type === 'us_m163_vads' || gUnit.type === 'us_avenger')) {
         const targetPlane = this.aircraft.find((a) => this.isHostile(gUnit.side, a.side) && a.state !== 'shot_down' && dist(gUnit.pos, a.pos) <= 2000);
         if (targetPlane) {
           this.fireChaparralSAM(gUnit, targetPlane);
-          gUnit.cooldown = gUnit.type === 'usmc_lav_ad' ? 3.5 : 4.0;
+          gUnit.cooldown = gUnit.type === 'usmc_lav_ad' ? 3.5 : gUnit.type === 'us_avenger' ? 3.0 : 4.0;
+        }
+      } else if (gUnit.side !== 'enemy' && (gUnit.type === 'usmc_duster_m42' || gUnit.type === 'us_m16_quad50')) {
+        // Gun air defence: twin 40mm Bofors (Duster) and the quad .50 "meat chopper"
+        const reach = gUnit.type === 'usmc_duster_m42' ? 1400 : 1000;
+        const targetPlane = this.aircraft.find(
+          (a) => this.isHostile(gUnit.side, a.side) && a.state !== 'shot_down' && dist(gUnit.pos, a.pos) <= reach && this.aaCanSee(gUnit.pos, a)
+        );
+        if (targetPlane) {
+          gUnit.heading = Math.atan2(targetPlane.pos.y - gUnit.pos.y, targetPlane.pos.x - gUnit.pos.x);
+          this.fireFlakBurst(gUnit.pos, targetPlane, gUnit.side);
+          gUnit.cooldown = gUnit.type === 'usmc_duster_m42' ? 1.3 : 0.9;
         }
       } else if (
         gUnit.side === 'enemy' &&
@@ -15876,87 +15877,8 @@ export class GameEngine {
     // 生成水面打擊群艦艇
     sagShipsDef.forEach((def, idx) => {
       const shipY = centerY + (idx - Math.floor(sagShipsDef.length / 2)) * 130;
-      const ship: Ship = {
-        id: `allied-sag-${ts}-${idx}`,
-        name: def.name,
-        codeName: def.codeName,
-        type: def.type,
-        side: 'allied',
-        era: this.era,
-        armor: def.type === 'battleship' ? 0.48 : def.type === 'cruiser' ? 0.34 : def.type === 'ddg' || def.type === 'ddg_kidd' ? 0.24 : 0.18,
-        detectionRange: 3600,
-        wakePoints: [],
-        isAlliedSAG: true,
-        alliedSAGName: sagTitle,
-        pos: { x: spawnX, y: shipY },
-        vel: { x: 0, y: 0 },
-        heading: 0,
-        targetHeading: 0,
-        speed: def.speed * 0.75,
-        targetSpeed: def.speed,
-        maxSpeed: def.speed,
-        turnRate: 0.8,
-        length: def.length,
-        width: def.width,
-        health: def.maxHealth,
-        maxHealth: def.maxHealth,
-        hullCrewHealth: def.maxHealth,
-        maxHullCrewHealth: def.maxHealth,
-        weaponControlHealth: def.maxHealth,
-        maxWeaponControlHealth: def.maxHealth,
-        isSunk: false,
-        sinkProgress: 0,
-        turrets: def.turrets.map((t) => {
-          const gun = getNavalGunPerformance(t.caliber);
-          const reload = gun?.reloadTime ?? t.reloadTime ?? t.maxCooldown ?? 4.0;
-          return {
-          relX: t.relX ?? t.pos?.x ?? 0,
-          relY: t.relY ?? t.pos?.y ?? 0,
-          pos: t.pos,
-          caliber: t.caliber,
-          range: gun?.range ?? getNavalLauncherRange(t.caliber) ?? t.range,
-          cooldown: t.cooldown,
-          reloadTime: reload,
-          maxCooldown: gun ? reload : t.maxCooldown ?? t.reloadTime ?? 4.0,
-          barrelCount: t.barrelCount ?? 2,
-          angle: t.angle,
-          arcMin: -Math.PI * 0.85,
-          arcMax: Math.PI * 0.85,
-          damage: gun?.damage ?? t.damage,
-          id: t.id,
-          };
-        }),
-        flakRange: def.flakRange,
-        flakCooldown: 0,
-        hasHarpoon: def.hasHarpoon,
-        ashmType: def.ashmType,
-        hasCIWS: def.hasCIWS,
-        hasASROC: def.hasASROC,
-        hasModernNavalGunAA: def.hasModernNavalGunAA,
-        hasSAM: def.hasSAM,
-        samRange: def.samRange,
-        samModel: def.samModel,
-        samCooldown: 0,
-        readySAMs: def.hasSAM ? 32 : 0,
-        maxSAMs: def.hasSAM ? 32 : 0,
-        torpedoCooldown: def.torpedoCooldown,
-        // Commonwealth / allied escorts all carried depth-charge rails and throwers
-        hasDepthCharges: def.type === 'destroyer' || def.type === 'ffg' || def.type === 'ddg',
-        depthChargeCooldown: 0,
-        sonarRange:
-          def.hasASROC || def.type === 'destroyer'
-            ? this.era === 'era5'
-              ? 2000
-              : this.era === 'era4'
-              ? 1650
-              : 1050
-            : 0,
-        order: {
-          type: 'move',
-          targetPos: { x: this.worldSize - 600, y: shipY },
-        },
-      };
-      applyHistoricalAswFit(ship);
+      const ship = this.buildAlliedShip(def, { x: spawnX, y: shipY }, sagTitle, `allied-sag-${ts}-${idx}`);
+      ship.order = { type: 'move', targetPos: { x: this.worldSize - 600, y: shipY } };
       if (this.navGrid) {
         ship.pos = this.navGrid.projectToWalkableWater(ship.pos, requiredDepth(ship));
         ship.order.waypoints = this.navGrid.findPath(ship.pos, { x: this.worldSize - 600, y: shipY }, requiredDepth(ship));
@@ -15980,6 +15902,144 @@ export class GameEngine {
       actionType: 'recon_spotted',
       text: `⚓【盟軍打擊群編隊進駐】「${sagTitle}」共 ${sagShipsDef.length} 艘主力戰艦駛入作戰海域，全艦雷達開機，自主巡航協同防空與反艦獵殺！`,
     });
+  }
+
+
+  /** Bridge between the allied operations controller and the engine. */
+  private makeAlliedOps(): AlliedOps {
+    const self = this;
+    const host: AlliedHost = {
+      get era() {
+        return self.era;
+      },
+      get worldSize() {
+        return self.worldSize;
+      },
+      get islands() {
+        return self.islands;
+      },
+      get groundUnits() {
+        return self.groundUnits;
+      },
+      get alliedShips() {
+        return self.alliedShips;
+      },
+      makeEscort: (pos) => {
+        const { title, ships } = getAlliedSagFleet(self.era);
+        const def = ships.find((d) => d.type === 'destroyer' || d.type === 'ffg') ?? ships[ships.length - 1];
+        if (!def) return null;
+        const escort = self.buildAlliedShip(def, pos, title, `allied-escort-${Date.now()}`);
+        escort.pos = self.navGrid ? self.navGrid.projectToWalkableWater(escort.pos, requiredDepth(escort)) : escort.pos;
+        return escort;
+      },
+      route: (ship, to) => (self.navGrid ? self.navGrid.findPath(ship.pos, to, requiredDepth(ship)) : undefined),
+      toWater: (ship, p) => (self.navGrid ? self.navGrid.projectToWalkableWater(p, requiredDepth(ship)) : p),
+      goodGround: (p) => {
+        const t = self.terrain.at(p.x, p.y);
+        return t !== 0 && t !== 1 && t !== 11 && t !== 12 && t !== 13 && t !== 14 && t !== 16;
+      },
+      isHostileToAllied: (side) => side === 'enemy',
+      groundRoute: (unit, to) => {
+        const vehicle = !self.isFootUnit(unit);
+        const direct = findGroundPath(self.terrain, unit.pos, to, vehicle);
+        if (direct) return direct;
+        // Start cell impassable (a river bank, a building): try from a few steps away
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2;
+          const from = { x: unit.pos.x + Math.cos(a) * 130, y: unit.pos.y + Math.sin(a) * 130 };
+          const r = findGroundPath(self.terrain, from, to, vehicle);
+          if (r) return [from, ...r];
+        }
+        return null;
+      },
+      banner: (text) => self.addBannerAlert(text, 'player', 'capture', 6.0),
+      log: (text) =>
+        self.addCombatLog({ category: 'naval', sourceSide: 'allied', sourceName: '盟軍司令部', targetName: '盟軍作戰', actionType: 'recon_spotted', text }),
+    };
+    return new AlliedOps(host);
+  }
+
+  /** An allied warship from the era's allied fleet list, ready to join `alliedShips`. */
+  private buildAlliedShip(def: AlliedSagShipDef, pos: Vector2D, sagTitle: string, id: string): Ship {
+    const ship: Ship = {
+      id,
+      name: def.name,
+      codeName: def.codeName,
+      type: def.type,
+      side: 'allied',
+      era: this.era,
+      armor: def.type === 'battleship' ? 0.48 : def.type === 'cruiser' ? 0.34 : def.type === 'ddg' || def.type === 'ddg_kidd' ? 0.24 : 0.18,
+      detectionRange: 3600,
+      wakePoints: [],
+      isAlliedSAG: true,
+      alliedSAGName: sagTitle,
+      pos: { ...pos },
+      vel: { x: 0, y: 0 },
+      heading: 0,
+      targetHeading: 0,
+      speed: def.speed * 0.75,
+      targetSpeed: def.speed,
+      maxSpeed: def.speed,
+      turnRate: 0.8,
+      length: def.length,
+      width: def.width,
+      health: def.maxHealth,
+      maxHealth: def.maxHealth,
+      hullCrewHealth: def.maxHealth,
+      maxHullCrewHealth: def.maxHealth,
+      weaponControlHealth: def.maxHealth,
+      maxWeaponControlHealth: def.maxHealth,
+      isSunk: false,
+      sinkProgress: 0,
+      turrets: def.turrets.map((t) => {
+        const gun = getNavalGunPerformance(t.caliber);
+        const reload = gun?.reloadTime ?? t.reloadTime ?? t.maxCooldown ?? 4.0;
+        return {
+        relX: t.relX ?? t.pos?.x ?? 0,
+        relY: t.relY ?? t.pos?.y ?? 0,
+        pos: t.pos,
+        caliber: t.caliber,
+        range: gun?.range ?? getNavalLauncherRange(t.caliber) ?? t.range,
+        cooldown: t.cooldown,
+        reloadTime: reload,
+        maxCooldown: gun ? reload : t.maxCooldown ?? t.reloadTime ?? 4.0,
+        barrelCount: t.barrelCount ?? 2,
+        angle: t.angle,
+        arcMin: -Math.PI * 0.85,
+        arcMax: Math.PI * 0.85,
+        damage: gun?.damage ?? t.damage,
+        id: t.id,
+        };
+      }),
+      flakRange: def.flakRange,
+      flakCooldown: 0,
+      hasHarpoon: def.hasHarpoon,
+      ashmType: def.ashmType,
+      hasCIWS: def.hasCIWS,
+      hasASROC: def.hasASROC,
+      hasModernNavalGunAA: def.hasModernNavalGunAA,
+      hasSAM: def.hasSAM,
+      samRange: def.samRange,
+      samModel: def.samModel,
+      samCooldown: 0,
+      readySAMs: def.hasSAM ? 32 : 0,
+      maxSAMs: def.hasSAM ? 32 : 0,
+      torpedoCooldown: def.torpedoCooldown,
+      // Commonwealth / allied escorts all carried depth-charge rails and throwers
+      hasDepthCharges: def.type === 'destroyer' || def.type === 'ffg' || def.type === 'ddg',
+      depthChargeCooldown: 0,
+      sonarRange:
+        def.hasASROC || def.type === 'destroyer'
+          ? this.era === 'era5'
+            ? 2000
+            : this.era === 'era4'
+            ? 1650
+            : 1050
+          : 0,
+      order: { type: 'idle' },
+    };
+    applyHistoricalAswFit(ship);
+    return ship;
   }
 
   // ══════════════════════════════════════════════════════════
@@ -18796,7 +18856,9 @@ export class GameEngine {
       'opfor_zsu57_2', 'opfor_sa6_kub', 'opfor_sa9_strela1', 'opfor_sa8_osa', 'opfor_sa11_buk', 'opfor_sa15_tor', 'opfor_btr_zd',
       'opfor_tunguska', 'opfor_strela10', 'opfor_t72b', 'opfor_t80b', 'opfor_bmp2',
       'usmc_armor_m3', 'usmc_armor_m4', 'usmc_patton_m46', 'us_army_armor_korea',
-      'usmc_duster_m42', 'usmc_armor_m48', 'usmc_ontos_m50', 'us_m551_sheridan', 'us_m26_pershing', 'us_m1a1_abrams', 'us_army_m113_mech', 'us_army_chaparral_sam'
+      'usmc_duster_m42', 'usmc_armor_m48', 'usmc_ontos_m50', 'us_m551_sheridan', 'us_m26_pershing', 'us_m1a1_abrams', 'us_army_m113_mech', 'us_army_chaparral_sam',
+      'usmc_m4a3r3_flame', 'us_m24_chaffee', 'us_m16_quad50', 'us_m113_acav', 'us_avenger', 'au_matilda', 'cw_centurion', 'arvn_m41',
+      'frg_marder', 'frg_leopard2', 'uk_challenger1', 'uk_warrior'
     ];
     const armorUnits = validGround.filter((u) => armorTypes.includes(u.type));
     if (armorUnits.length > 0) {
