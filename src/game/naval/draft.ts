@@ -43,6 +43,7 @@ export const SHIP_DRAFT_M: Record<ShipType, number> = {
   komar_ptg: 1.3,
   osa: 2.0,
   pbr: 0.6, // fibreglass river boat with water jets
+  river_gunboat: 0.9, // armed motor junk; Project 1204 Shmel draws 0.8 m
   lcvp: 0.9,
   lcm8: 1.5,
   lcac: 0,

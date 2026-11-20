@@ -53,7 +53,8 @@ export type ShipType =
   | 'ssgn_oscar'   // Project 949A 奧斯卡級 (Oscar II) 巡弋飛彈核潛艦 (24x P-700 Granit);
   | 'cg_slava'     // Project 1164 Atlant (斯拉瓦級飛彈巡洋艦 · 16 枚 P-500 玄武岩 · S-300F)
   | 'lha_tarawa'   // USS Tarawa (LHA-1) 塔拉瓦級兩棲突擊艦
-  | 'pbr';         // Patrol Boat, River Mk II (越戰褐水海軍河川巡邏艇)
+  | 'pbr'          // Patrol Boat, River Mk II (越戰褐水海軍河川巡邏艇)
+  | 'river_gunboat'; // 敵方河川艇: 武裝機帆船 (時代三/四) / Project 1204 Shmel 河川砲艇 (時代五)
 
 export type GroundUnitType =
   | 'usmc_rifle_42'      // 時代一 1942 USMC 陸戰隊步槍排 (春田M1903 / 早期M1加蘭德)
@@ -316,6 +317,9 @@ export interface Ship {
   repathCooldown?: number;
   battery?: number; // 柴電潛艦電池電量 (0-1)：水下高速航行急速耗電，呼吸管航行充電
   rbuCooldown?: number; // 敵艦反潛火箭 / 深水炸彈再裝填
+  /** River craft: the reach it patrols, and seconds until it re-plans its patrol or chase. */
+  riverHome?: Vector2D;
+  riverReplan?: number;
   /** Player already told this ship was stopped by shoal water. */
   shoalWarned?: boolean;
   isSnorkeling?: boolean;

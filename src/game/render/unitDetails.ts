@@ -13,7 +13,7 @@ const WIND: Vector2D = { x: 7, y: -4 };
 
 // ── Ships ─────────────────────────────────────────────────────────────────────────────────────
 const NO_FUNNEL = new Set<Ship['type']>([
-  'submarine', 'lcvp', 'lcm8', 'lcac', 'pbr', 'patrol_boat', 'osa', 'komar_ptg', 'lsm_r',
+  'submarine', 'lcvp', 'lcm8', 'lcac', 'pbr', 'river_gunboat', 'patrol_boat', 'osa', 'komar_ptg', 'lsm_r',
 ]);
 
 /**

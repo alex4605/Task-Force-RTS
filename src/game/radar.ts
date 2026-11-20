@@ -52,7 +52,7 @@ export function radarHorizonKm(h1: number, h2: number): number {
 /** Warship air-search radar range (km) by era and side; small craft and submarines carry none. */
 export function shipRadarKm(ship: Ship, era: Era): number {
   const t = ship.type;
-  if (/^(lcvp|lcm8|lcac|pbr|patrol_boat|osa|komar_ptg|submarine|foxtrot|ssn_la|ssgn_oscar)$/.test(t)) return 0;
+  if (/^(lcvp|lcm8|lcac|pbr|river_gunboat|patrol_boat|osa|komar_ptg|submarine|foxtrot|ssn_la|ssgn_oscar)$/.test(t)) return 0;
   const enemy = ship.side === 'enemy';
   if (era === 'era1') return enemy ? 0 : 100; // SC / SK and Type 281; IJN fleet had no air search radar in 1942
   if (era === 'era2') return enemy ? 55 : 150; // Type 21 / Type 13 vs SK / SK-2

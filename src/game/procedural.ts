@@ -3355,7 +3355,7 @@ export function createTarawaLHA(id: string, name: string, pos: Vector2D): Ship {
  * Patrol Boat, River (PBR) Mk II of Task Force 116 "Game Warden": a 31-foot fibreglass boat on
  * twin water-jets, a twin .50 calibre tub forward and a single .50 aft, crew of four.
  */
-export function createPBR(id: string, name: string, pos: Vector2D): Ship {
+export function createPBR(id: string, name: string, pos: Vector2D, era: Era = 'era4'): Ship {
   const heading = -Math.PI / 4;
   return createShip({
     id,
@@ -3363,7 +3363,7 @@ export function createPBR(id: string, name: string, pos: Vector2D): Ship {
     codeName: 'River Rat',
     type: 'pbr',
     side: 'player',
-    era: 'era4',
+    era,
     pos: { ...pos },
     heading,
     speed: 14,
@@ -3384,6 +3384,54 @@ export function createPBR(id: string, name: string, pos: Vector2D): Ship {
     ],
     flakCooldown: 0,
     flakRange: 420,
+  });
+}
+
+/**
+ * Enemy river craft. Era 5: Project 1204 Shmel river gunboat (76 mm D-56T in a PT-76 turret,
+ * twin 25 mm, 24 kt). Eras 3-4: an armed motor junk (DShK 12.7 mm, a 37 mm or recoilless gun,
+ * 8-9 kt) of the kind the KPA and the Vietnamese used on rivers and in the delta.
+ */
+export function createRiverGunboat(id: string, name: string, pos: Vector2D, era: Era): Ship {
+  const shmel = era === 'era5';
+  const heading = Math.PI;
+  return createShip({
+    id,
+    name,
+    codeName: shmel ? 'Shmel' : 'River Junk',
+    type: 'river_gunboat',
+    side: 'enemy',
+    era,
+    pos: { ...pos },
+    heading,
+    speed: 0,
+    maxSpeed: shmel ? 24 : 9,
+    length: shmel ? 28 : 20,
+    width: shmel ? 4.6 : 6.2,
+    health: shmel ? 620 : 300,
+    maxHealth: shmel ? 620 : 300,
+    armor: shmel ? 0.2 : 0.02,
+    detectionRange: 1400,
+    turrets: shmel
+      ? [
+          createTurret(6, 0, '76mm D-56T (PT-76 砲塔)', 900, 2.6, 1, heading, 260),
+          createTurret(-9, 0, '25mm 2M-3M 雙聯機砲', 650, 0.5, 2, heading, 45),
+        ]
+      : [
+          createTurret(8, 0, '12.7mm DShK 重機槍', 600, 0.3, 1, heading, 26),
+          createTurret(-4, 0, era === 'era4' ? '57mm B-10 無後座力砲' : '37mm M1939 機砲', 700, 2.2, 1, heading, 120),
+        ],
+    detailedArmaments: shmel
+      ? [
+          { name: '76mm D-56T 戰車砲 (PT-76 砲塔)', count: '1座', type: 'main', desc: '河川火力支援' },
+          { name: '25mm 2M-3M 雙聯裝 / 14.5mm KPVT', count: '艇艉', type: 'secondary', desc: '防空與近距' },
+        ]
+      : [
+          { name: '12.7mm DShK 重機槍', count: '艇艏', type: 'main', desc: '河岸伏擊與攔截' },
+          { name: era === 'era4' ? '57mm B-10 無後座力砲' : '37mm 機砲', count: '1門', type: 'secondary', desc: '近距火力' },
+        ],
+    flakCooldown: 0,
+    flakRange: 380,
   });
 }
 
@@ -7523,7 +7571,10 @@ function addPlayerTaskForce(era: Era, cvPos: Vector2D, initialHeading: number, p
       createLosAngelesSSN('player-ssn1', 'USS Los Angeles (SSN-688)', { x: cvPos.x + 420, y: cvPos.y + 40 }),
       createAustinLPD('player-lpd1', 'USS Austin (LPD-4)', { x: cvPos.x - 360, y: cvPos.y - 100 }),
       createLCAC('player-lcac1', 'LCAC-01 Air Cushion Craft', { x: cvPos.x - 380, y: cvPos.y - 60 }),
-      createTarawaLHA('player-lha1', 'USS Tarawa (LHA-1)', { x: cvPos.x - 520, y: cvPos.y - 200 })
+      createTarawaLHA('player-lha1', 'USS Tarawa (LHA-1)', { x: cvPos.x - 520, y: cvPos.y - 200 }),
+      // Special Boat Unit 26's PBR Mk IIs (still in service through 1989)
+      createPBR('player-pbr1', 'PBR Mk II (Special Boat Unit 26)', { x: cvPos.x - 440, y: cvPos.y - 300 }, 'era5'),
+      createPBR('player-pbr2', 'PBR Mk II (Special Boat Unit 26 · 2)', { x: cvPos.x - 470, y: cvPos.y - 260 }, 'era5')
     );
   }
 }

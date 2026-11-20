@@ -429,7 +429,10 @@ export class TerrainMap {
           // Only river ends near the sea
           let sea = -1;
           for (let k = 1; k <= 12; k++) {
-            if (this.at(tip.x + ux * k * 40, tip.y + uy * k * 40) === TERRAIN.water) { sea = k; break; }
+            const qx = tip.x + ux * k * 40;
+            const qy = tip.y + uy * k * 40;
+            if (qx < 0 || qy < 0 || qx >= this.worldSize || qy >= this.worldSize) break; // the map edge is not the sea
+            if (this.at(qx, qy) === TERRAIN.water) { sea = k; break; }
           }
           if (sea < 0) continue;
           const ext: Vector2D[] = [];

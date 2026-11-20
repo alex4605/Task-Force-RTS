@@ -44,7 +44,7 @@ import { applyHistoricalGuns, bombSpec, bombsPerRelease, burstBullets, getGunBat
 import { getTerrainMap, TERRAIN, TERRAIN_NAMES, TerrainMap } from './terrain/terrainMap';
 const TERRAIN_WATER = TERRAIN.water;
 import { requiredDepth, SUBMERGED_MIN_DEPTH_M } from './naval/draft';
-import { inRiverChannel, isRiverine, nearestRiverPoint, planRiverRoute } from './naval/riverine';
+import { inRiverChannel, isRiverine, nearestRiverPoint, planRiverRoute, riverPatrolStations, riverPointNear } from './naval/riverine';
 import { aircraftSensor, highCoverageRadius, installationRadarKm, lowCoveragePolygon, RadarSensor, sensorDetects, shipRadarKm, TRACK_MEMORY_S, visualDetects } from './radar';
 import { hasLineOfSight as hasLineOfSightAt } from './terrain/combat';
 import { canEngageGround, canSeeAircraft, coastalReach, concealment, findGroundPath, reverseSlopeFactor } from './terrain/combat';
@@ -119,6 +119,7 @@ import {
   createSovietVictor3SSN,
   makeInstallation,
   createKiloSS,
+  createRiverGunboat,
 } from './procedural';
 import { NavalNavigationGrid, computeShipSeparationSteering } from './navigation';
 import { soundEngine } from './audio';
@@ -283,6 +284,66 @@ export class GameEngine {
       return { waypoints, targetPos: target };
     }
     return { waypoints, targetPos: waypoints[waypoints.length - 1] };
+  }
+
+  /**
+   * Enemy river craft on the inland reaches (eras 3-5): KPA armed junks on the Korean rivers,
+   * Vietnamese armed junks in the Tonkin delta, Project 1204 Shmel gunboats on the Elbe and
+   * Weser. Stationed away from friendly troops, spread along the rivers.
+   */
+  private spawnEnemyRiverPatrols(): void {
+    if (this.era !== 'era3' && this.era !== 'era4' && this.era !== 'era5') return;
+    const map = this.terrain;
+    const friendlyNear = (p: Vector2D) =>
+      this.groundUnits.some((u) => u.side !== 'enemy' && dist(u.pos, p) < 1200) ||
+      this.islands.some((isl) => isl.installations.some((i) => (i.side === 'player' || i.side === 'allied') && !i.isCivilian && dist(i.pos, p) < 900));
+    const count = this.era === 'era4' ? 4 : 3;
+    const stations = riverPatrolStations(map, (p) => p.x > 6600 && p.x < this.worldSize - 300 && p.y > 300 && p.y < this.worldSize - 300 && !friendlyNear(p), count);
+    const names =
+      this.era === 'era5'
+        ? ['Project 1204 Shmel (BK-12)', 'Project 1204 Shmel (BK-16)', 'Project 1204 Shmel (BK-31)']
+        : this.era === 'era4'
+        ? ['越南人民海軍 武裝機帆船 (T-11)', '越南人民海軍 武裝機帆船 (T-14)', '游擊隊 武裝舢舨 (Delta-3)', '游擊隊 武裝舢舨 (Delta-7)']
+        : ['朝鮮人民軍 武裝機帆船 (江-21)', '朝鮮人民軍 武裝機帆船 (江-24)', '朝鮮人民軍 武裝機帆船 (江-27)'];
+    stations.forEach((pos, k) => {
+      const boat = createRiverGunboat(`enemy-river-${k}-${Date.now()}`, names[k % names.length], pos, this.era);
+      boat.riverHome = { ...pos };
+      this.enemyShips.push(boat);
+    });
+  }
+
+  /**
+   * Enemy river craft: patrol up and down their reach, and run down the player's river boats
+   * that come within reach along the channel. Bank targets are engaged by updateShipCombat.
+   */
+  private updateRiverGunboatAI(ship: Ship, dt: number): void {
+    const map = this.terrain;
+    ship.riverReplan = Math.max(0, (ship.riverReplan ?? 0) - dt);
+    const prey = [...this.playerShips, ...this.alliedShips]
+      .filter((s) => !s.isSunk && isRiverine(s) && inRiverChannel(map, s.pos) && dist(s.pos, ship.pos) < 1800)
+      .sort((a, b) => dist(a.pos, ship.pos) - dist(b.pos, ship.pos))[0];
+    const plan = (to: Vector2D) => {
+      const route = planRiverRoute(map, ship.pos, to, true);
+      if (!route || route.channel.length === 0) return;
+      ship.order = { type: 'move', targetPos: route.channel[route.channel.length - 1], waypoints: route.channel, activeWaypointIndex: 0, riverine: true };
+    };
+    if (prey) {
+      // Close to gun range and hold there
+      if (dist(prey.pos, ship.pos) > 500 && ship.riverReplan <= 0) {
+        plan(prey.pos);
+        ship.riverReplan = 4;
+      } else if (dist(prey.pos, ship.pos) <= 500) {
+        ship.order = { type: 'idle' };
+        ship.targetSpeed = 0;
+      }
+      return;
+    }
+    if (ship.order.type !== 'move' && ship.riverReplan <= 0) {
+      const home = ship.riverHome ?? ship.pos;
+      const leg = riverPointNear(map, home, 300, 1600, Math.random);
+      if (leg) plan(leg);
+      ship.riverReplan = 6 + Math.random() * 8;
+    }
   }
 
   /** Terrain masking of low fliers from an air-defence site or ship (terrain/combat.ts). */
@@ -757,6 +818,7 @@ export class GameEngine {
         if (need > 0 && d > 0 && d < need) ship.pos = this.navGrid.projectToWalkableWater(ship.pos, need);
       }
     }
+    this.spawnEnemyRiverPatrols();
 
     // 確保初始潛艦進入水下靜默隱蔽 (Fog of War Stealth Defaults)
     for (const s of [...this.playerShips, ...this.enemyShips]) {
@@ -2296,7 +2358,10 @@ export class GameEngine {
       }
 
       // Enemy AI with Dynamic Island Perimeter Avoidance
-      if (ship.side === 'enemy') {
+      if (ship.side === 'enemy' && ship.type === 'river_gunboat') {
+        // River craft: own patrol AI; steering comes from the channel waypoints above
+        this.updateRiverGunboatAI(ship, dt);
+      } else if (ship.side === 'enemy') {
         this.updateEnemyShipAI(ship, dt);
         const avoidance = this.calculateNavalSteeringAvoidance(ship, ship.targetHeading, 1500);
         ship.targetHeading = avoidance.targetHeading;

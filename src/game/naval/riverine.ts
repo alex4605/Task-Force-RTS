@@ -10,7 +10,7 @@ import { TERRAIN, TerrainMap } from '../terrain/terrainMap';
 
 /** Ship types that can work rivers (draught under ~1.6 m, built or adapted for it). */
 export function isRiverine(ship: Ship): boolean {
-  return ship.type === 'pbr' || ship.type === 'lcm8' || ship.type === 'lcvp';
+  return ship.type === 'pbr' || ship.type === 'lcm8' || ship.type === 'lcvp' || ship.type === 'river_gunboat';
 }
 
 /** Depth of a river channel (m) from its width. */
@@ -53,8 +53,10 @@ function graphOf(map: TerrainMap): RiverGraph {
   const nearSea = (p: Vector2D) => {
     for (let r = 0; r <= 160; r += 40) {
       for (let k = 0; k < 8; k++) {
-        const t = map.at(p.x + Math.cos((k * Math.PI) / 4) * r, p.y + Math.sin((k * Math.PI) / 4) * r);
-        if (t === TERRAIN.water) return true;
+        const qx = p.x + Math.cos((k * Math.PI) / 4) * r;
+        const qy = p.y + Math.sin((k * Math.PI) / 4) * r;
+        if (qx < 0 || qy < 0 || qx >= map.worldSize || qy >= map.worldSize) continue; // off the map is not the sea
+        if (map.at(qx, qy) === TERRAIN.water) return true;
       }
     }
     return false;
@@ -184,4 +186,31 @@ export function planRiverRoute(map: TerrainMap, from: Vector2D, to: Vector2D, fr
   }
   if (bestMouth < 0 || !isFinite(dist[bestMouth])) return null;
   return { mouth: g.nodes[bestMouth], channel: walk(prev, bestMouth).map((k) => g.nodes[k]) };
+}
+
+/**
+ * Patrol stations for enemy river craft: river reaches that pass `accept`, spread at least
+ * `spacing` apart, walking the graph from the most inland reach outward.
+ */
+export function riverPatrolStations(map: TerrainMap, accept: (p: Vector2D) => boolean, count: number, spacing = 1400): Vector2D[] {
+  const g = graphOf(map);
+  const picks: Vector2D[] = [];
+  const order = g.nodes.map((p, i) => ({ p, i })).sort((a, b) => b.p.x - a.p.x);
+  for (const { p } of order) {
+    if (picks.length >= count) break;
+    if (!accept(p)) continue;
+    if (picks.some((q) => Math.hypot(q.x - p.x, q.y - p.y) < spacing)) continue;
+    picks.push({ ...p });
+  }
+  return picks;
+}
+
+/** A river reach between `minR` and `maxR` from `p` (for patrol legs), or null. */
+export function riverPointNear(map: TerrainMap, p: Vector2D, minR: number, maxR: number, rand: () => number): Vector2D | null {
+  const g = graphOf(map);
+  const cands = g.nodes.filter((q) => {
+    const d = Math.hypot(q.x - p.x, q.y - p.y);
+    return d >= minR && d <= maxR;
+  });
+  return cands.length ? { ...cands[Math.floor(rand() * cands.length)] } : null;
 }
