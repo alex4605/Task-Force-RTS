@@ -289,6 +289,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       renderer.drawOcean(cameraRef.current, engine.worldSize, flagship ? flagship.pos : undefined);
       renderer.drawIslands(engine.islands, cameraRef.current, engine.worldSize);
       renderer.drawStrongholds(engine.islands, cameraRef.current);
+      renderer.drawImpactScars(engine.impacts, cameraRef.current);
       if (engine.showRadarCoverage) renderer.drawRadarCoverage(engine.getRadarCoverage(), cameraRef.current);
       renderer.drawSonobuoys(engine.sonobuoys, cameraRef.current);
       renderer.drawShips(
@@ -300,6 +301,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       renderer.drawGroundUnits(engine.groundUnits, cameraRef.current, engine.selectedUnitIds);
       renderer.drawAircraft(engine.aircraft, cameraRef.current, engine.selectedUnitIds);
       renderer.drawProjectiles(engine.projectiles, cameraRef.current);
+      renderer.drawImpacts(engine.impacts, cameraRef.current);
       renderer.drawParticles(engine.particles, cameraRef.current);
       // Draw Downed Pilot SAR Life Rafts
       renderer.drawLifeRafts(engine.lifeRafts, cameraRef.current);

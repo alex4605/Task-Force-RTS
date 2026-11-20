@@ -1,3 +1,4 @@
+import { ImpactEffect, ImpactSurface, impactFor, MAX_IMPACTS } from './impacts';
 import {
   Ship,
   Aircraft,
@@ -443,6 +444,8 @@ export class GameEngine {
   public aircraft: Aircraft[] = [];
   public projectiles: Projectile[] = [];
   public particles: Particle[] = [];
+  /** Detonation effects by weapon and surface (see impacts.ts). */
+  public impacts: ImpactEffect[] = [];
 
   // ══════════════════════════════════════════════════════════
   // 戰區資源點數 (Command Points) 與 後勤採購系統
@@ -17419,6 +17422,7 @@ export class GameEngine {
 
           // 遭受槍砲直射火力打擊產生火力壓制 (若為M61火神光束則壓制更劇烈)
           u.suppression = Math.min(100, (u.suppression || 0) + (proj.isBeamTracer ? 20 : 12));
+          this.spawnImpact(proj, 'land');
           u.suppressionTimer = 5.0;
           u.isSuppressed = u.suppression >= 30;
           u.isPinned = u.suppression >= 75;
@@ -17717,7 +17721,6 @@ export class GameEngine {
     const isTorpedo = proj.type === 'torpedo';
     const onIsland = this.islands.some((isl) => isPointInPolygon(proj.pos, isl.points));
 
-    this.applyBombImpact(proj, isBomb, isTorpedo, onIsland);
     const allShips = [...this.playerShips, ...this.enemyShips, ...this.alliedShips];
     const candidateShips = directHitShip
       ? (this.isHostile(proj.side, directHitShip.side) ? [directHitShip] : [])
@@ -18039,21 +18042,8 @@ export class GameEngine {
       }
     }
 
-    // Complete miss in open water: spawn massive water geyser
-    if (!anyHit && isBomb) {
-      this.particles.push({
-        id: `geyser-${Date.now()}`,
-        x: proj.pos.x,
-        y: proj.pos.y,
-        vx: 0,
-        vy: 0,
-        life: 0.85,
-        maxLife: 0.85,
-        radius: 34,
-        color: '#E0F7FA',
-        type: 'geyser',
-      });
-    }
+    // Detonation effect by weapon type and what it burst on (water column, fireball, crater…)
+    this.spawnImpact(proj, anyHit ? 'ship' : onIsland ? 'land' : 'sea');
 
     this.applyBlastToGroundUnits(proj);
 
@@ -18344,118 +18334,16 @@ export class GameEngine {
     }
   }
 
-  private applyBombImpact(proj: Projectile, isBomb: boolean, isTorpedo: boolean, onIsland: boolean): void {
-    if (isBomb) {
-      // 1. Initial High-Intensity Shockwave Ring
-      this.particles.push({
-        id: `bomb-shock-${Date.now()}`,
-        x: proj.pos.x,
-        y: proj.pos.y,
-        vx: 0,
-        vy: 0,
-        life: 0.65,
-        maxLife: 0.65,
-        radius: proj.blastRadius * 1.5,
-        color: '#FF6D00',
-        type: 'shockwave',
-        shape: 'ring',
-      });
-
-      // 2. High-heat rolling fireball core (烈焰向外翻滾膨脹)
-      for (let f = 0; f < 4; f++) {
-        const fAng = (f * Math.PI) / 2 + Math.random() * 0.5;
-        const fSpd = 14 + Math.random() * 22;
-        this.particles.push({
-          id: `bomb-fire-${Date.now()}-${f}`,
-          x: proj.pos.x + (Math.random() - 0.5) * 8,
-          y: proj.pos.y + (Math.random() - 0.5) * 8,
-          vx: Math.cos(fAng) * fSpd,
-          vy: Math.sin(fAng) * fSpd,
-          life: 0.55 + Math.random() * 0.3,
-          maxLife: 0.85,
-          radius: 14 + Math.random() * 12,
-          color: f % 2 === 0 ? '#FF3D00' : '#FFD54F',
-          type: 'fire',
-        });
-      }
-
-      // 3. Billowing dark explosion smoke clouds (滾滾灰黑濃煙)
-      for (let s = 0; s < 3; s++) {
-        this.particles.push({
-          id: `bomb-smoke-${Date.now()}-${s}`,
-          x: proj.pos.x + (Math.random() - 0.5) * 16,
-          y: proj.pos.y + (Math.random() - 0.5) * 16,
-          vx: (Math.random() - 0.5) * 8,
-          vy: -10 - Math.random() * 16,
-          life: 1.6 + Math.random() * 0.8,
-          maxLife: 2.4,
-          radius: 16 + Math.random() * 14,
-          color: 'rgba(22, 26, 32, 0.85)',
-          type: 'smoke',
-        });
-      }
-
-      if (onIsland) {
-        // 地面炸彈：噴濺碎石與土石破片
-        for (let d = 0; d < 6; d++) {
-          const ang = Math.random() * Math.PI * 2;
-          const spd = 40 + Math.random() * 70;
-          this.particles.push({
-            id: `bomb-dirt-${Date.now()}-${d}`,
-            x: proj.pos.x,
-            y: proj.pos.y,
-            vx: Math.cos(ang) * spd,
-            vy: Math.sin(ang) * spd,
-            life: 0.7,
-            maxLife: 0.7,
-            radius: 8 + Math.random() * 8,
-            color: '#8D6E63',
-            type: 'smoke',
-          });
-        }
-      } else {
-        // 海面炸彈：巨型沖天水柱與環形浮沫
-        this.particles.push({
-          id: `bomb-geyser-${Date.now()}`,
-          x: proj.pos.x,
-          y: proj.pos.y,
-          vx: 0,
-          vy: 0,
-          life: 1.1,
-          maxLife: 1.1,
-          radius: Math.max(36, proj.blastRadius * 0.95),
-          color: '#E0F7FA',
-          type: 'geyser',
-        });
-        this.particles.push({
-          id: `bomb-splash-foam-${Date.now()}`,
-          x: proj.pos.x,
-          y: proj.pos.y,
-          vx: 0,
-          vy: 0,
-          life: 1.4,
-          maxLife: 1.4,
-          radius: Math.max(30, proj.blastRadius * 0.8),
-          color: 'rgba(255, 255, 255, 0.75)',
-          type: 'splash',
-          shape: 'ring',
-        });
-      }
-    } else {
-      this.particles.push({
-        id: `shock-${Date.now()}`,
-        x: proj.pos.x,
-        y: proj.pos.y,
-        vx: 0,
-        vy: 0,
-        life: 0.5,
-        maxLife: 0.5,
-        radius: proj.blastRadius * 1.35,
-        color: isTorpedo ? '#80DEEA' : '#FFA726',
-        type: 'shockwave',
-        shape: 'ring',
-      });
+  /** Record the detonation effect for this projectile on the surface it burst over. */
+  private spawnImpact(proj: Projectile, surface: ImpactSurface): void {
+    const e = impactFor(proj, surface, this.era);
+    if (!e) return;
+    if (this.impacts.length >= MAX_IMPACTS) {
+      // Drop the oldest short-lived effect (keep craters if possible)
+      const k = this.impacts.findIndex((x) => x.life <= 10);
+      this.impacts.splice(k >= 0 ? k : 0, 1);
     }
+    this.impacts.push(e);
   }
 
   // ══════════════════════════════════════════════════════════
@@ -18956,6 +18844,11 @@ export class GameEngine {
   }
 
   private updateParticles(dt: number) {
+    for (let i = this.impacts.length - 1; i >= 0; i--) {
+      const e = this.impacts[i];
+      e.age += dt;
+      if (e.age >= e.life) this.impacts.splice(i, 1);
+    }
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life -= dt;

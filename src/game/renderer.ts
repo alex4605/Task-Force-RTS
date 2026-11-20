@@ -8,6 +8,8 @@ import * as islandsRender from './render/islands';
 import * as oceanRender from './render/ocean';
 import * as overlaysRender from './render/overlays';
 import * as particlesRender from './render/particles';
+import { drawImpacts, drawImpactScars } from './render/impacts';
+import type { ImpactEffect } from './impacts';
 import * as projectilesRender from './render/projectiles';
 import * as shipsRender from './render/ships';
 
@@ -66,6 +68,15 @@ export class VectorRenderer {
   // Draw Projectiles with Authentic WWII Tracers, Ballistic Arcs & Cavitation Wakes
   public drawProjectiles(projectiles: Projectile[], camera: Camera) {
     projectilesRender.drawProjectiles(this.rc, projectiles, camera);
+  }
+
+  /** Craters and scorch marks (under units) and the blasts themselves (over units). */
+  public drawImpactScars(impacts: ImpactEffect[], camera: Camera) {
+    drawImpactScars(this.rc, impacts, camera);
+  }
+
+  public drawImpacts(impacts: ImpactEffect[], camera: Camera) {
+    drawImpacts(this.rc, impacts, camera);
   }
 
   // Draw Particles including WWII Water Geysers & Authentic Flak Detonations

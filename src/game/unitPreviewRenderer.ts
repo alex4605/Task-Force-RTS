@@ -1,5 +1,6 @@
 import { AircraftPayloadType } from '../types/game';
 import { TANK_PLANS, drawTankPlan } from './render/groundPlan';
+import { SUPPORT_PLANS, drawSupportPlan } from './render/groundPlanSupport';
 
 export type UnitPreviewKind = 'ship' | 'aircraft' | 'ground' | 'installation';
 
@@ -933,7 +934,10 @@ export function drawGroundSilhouette(
 
   const kind = groundSilhouetteClass(t);
 
-  if (kind === 'rocket') {
+  if ((kind === 'tank' || kind === 'spg' || kind === 'air_defense') && SUPPORT_PLANS.some((p) => p.match.test(t))) {
+    // Self-propelled guns, tank destroyers and air-defence vehicles from real dimensions
+    drawSupportPlan(ctx, SUPPORT_PLANS.find((p) => p.match.test(t))!, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
+  } else if (kind === 'rocket') {
     const isNuke = t.includes('nuclear');
     const isAtacms = t.includes('atacms');
     const isScud = t.includes('scud');

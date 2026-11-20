@@ -14,8 +14,8 @@ export interface PlanPalette {
   barrelColor: string;
 }
 
-type Nose = 'glacis' | 'round' | 'pike' | 'boat' | 'flat';
-type TurretShape = 'cast' | 'egg' | 'dome' | 'pan' | 'hex' | 'box' | 'needle' | 'angular' | 'cone';
+export type Nose = 'glacis' | 'round' | 'pike' | 'boat' | 'flat';
+export type TurretShape = 'cast' | 'egg' | 'dome' | 'pan' | 'hex' | 'box' | 'needle' | 'angular' | 'cone';
 
 export interface TankPlan {
   match: RegExp;
@@ -53,8 +53,8 @@ export interface TankPlan {
 }
 
 /** Units per metre along the hull, and the extra width given for legibility on the map. */
-const K = 3.3;
-const WIDEN = 1.12;
+export const K = 3.3;
+export const WIDEN = 1.12;
 
 export const TANK_PLANS: TankPlan[] = [
   // M3 Stuart: narrow riveted hull, small welded turret, 37mm
@@ -95,7 +95,7 @@ export const TANK_PLANS: TankPlan[] = [
   { match: /t80/, L: 7.0, W: 3.6, track: 0.58, nose: 'glacis', noseLen: 1.2, turret: { x: 0.2, len: 3.1, wid: 2.95, shape: 'dome' }, gun: { bore: 125, len: 6.4, evac: 0.42 }, cupola: { x: -0.5, y: 0.7, r: 0.45 }, loaderHatch: true, engineDeck: 2.8, fenderTanks: 3, skirts: true, era: true, driver: 0 },
 ];
 
-function hullPath(ctx: CanvasRenderingContext2D, hl: number, hw: number, nose: Nose, nl: number) {
+export function hullPath(ctx: CanvasRenderingContext2D, hl: number, hw: number, nose: Nose, nl: number) {
   const f = hl / 2;
   const r = -hl / 2;
   ctx.beginPath();
@@ -134,7 +134,7 @@ function hullPath(ctx: CanvasRenderingContext2D, hl: number, hw: number, nose: N
   ctx.closePath();
 }
 
-function turretPath(ctx: CanvasRenderingContext2D, shape: TurretShape, tl: number, tw: number, bustle: number) {
+export function turretPath(ctx: CanvasRenderingContext2D, shape: TurretShape, tl: number, tw: number, bustle: number) {
   const a = tl / 2;
   const b = tw / 2;
   ctx.beginPath();
@@ -228,25 +228,7 @@ function drawTankPlanBody(ctx: CanvasRenderingContext2D, p: TankPlan, pal: PlanP
   const hw = ow - tw * 2 + tw * 0.5; // the upper hull / fenders overhang the inner part of the tracks
   const m = (v: number) => v * K;
 
-  // Track runs with link ticks, idler and sprocket ends rounded
-  ctx.fillStyle = pal.trackColor;
-  for (const s of [-1, 1]) {
-    const y0 = s < 0 ? -ow / 2 : ow / 2 - tw;
-    ctx.beginPath();
-    ctx.roundRect(-hl / 2 - 0.4, y0, hl + 0.8, tw, Math.min(tw / 2, 1.2));
-    ctx.fill();
-  }
-  ctx.strokeStyle = 'rgba(176, 190, 197, 0.35)';
-  ctx.lineWidth = 0.45;
-  ctx.beginPath();
-  const pitch = Math.max(1.1, m(0.3));
-  for (let x = -hl / 2 + pitch / 2; x < hl / 2; x += pitch) {
-    ctx.moveTo(x, -ow / 2);
-    ctx.lineTo(x, -ow / 2 + tw);
-    ctx.moveTo(x, ow / 2 - tw);
-    ctx.lineTo(x, ow / 2);
-  }
-  ctx.stroke();
+  drawTracks(ctx, hl, ow, tw, pal);
 
   // Side skirts (Abrams armour skirts, T-72 rubber flaps) cover the top run
   if (p.skirts) {
@@ -390,35 +372,66 @@ function drawTankPlanBody(ctx: CanvasRenderingContext2D, p: TankPlan, pal: PlanP
   // Gun: mantlet, tube, evacuator, muzzle device
   const gw = 0.55 + p.gun.bore * 0.011;
   const g0 = tl / 2 - m(0.1);
-  const g1 = m(p.gun.len);
   ctx.fillStyle = pal.hullHighlight;
   ctx.fillRect(g0 - m(0.25), -gw * 1.4, m(0.45), gw * 2.8);
+  drawGunTube(ctx, g0, m(p.gun.len), 0, p.gun.bore, pal, p.gun.brake, p.gun.evac);
+  ctx.restore();
+}
+
+/** Track runs with link ticks on both sides of a hull of length hl and overall width ow. */
+export function drawTracks(ctx: CanvasRenderingContext2D, hl: number, ow: number, tw: number, pal: PlanPalette): void {
+  const m = (v: number) => v * K;
+  ctx.fillStyle = pal.trackColor;
+  for (const s of [-1, 1]) {
+    const y0 = s < 0 ? -ow / 2 : ow / 2 - tw;
+    ctx.beginPath();
+    ctx.roundRect(-hl / 2 - 0.4, y0, hl + 0.8, tw, Math.min(tw / 2, 1.2));
+    ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(176, 190, 197, 0.35)';
+  ctx.lineWidth = 0.45;
+  ctx.beginPath();
+  const pitch = Math.max(1.1, m(0.3));
+  for (let x = -hl / 2 + pitch / 2; x < hl / 2; x += pitch) {
+    ctx.moveTo(x, -ow / 2);
+    ctx.lineTo(x, -ow / 2 + tw);
+    ctx.moveTo(x, ow / 2 - tw);
+    ctx.lineTo(x, ow / 2);
+  }
+  ctx.stroke();
+
+}
+
+/** A gun tube from g0 to g1 along x at lateral offset y, with bore evacuator and muzzle device. */
+export function drawGunTube(ctx: CanvasRenderingContext2D, g0: number, g1: number, y: number, bore: number, pal: PlanPalette, brake?: 'single' | 'double' | 'slotted' | 'tee', evac?: number): void {
+  const m = (v: number) => v * K;
+  // Light automatic cannon stay thin so twin and quad mounts read as separate barrels
+  const gw = bore < 60 ? 0.35 + bore * 0.008 : 0.55 + bore * 0.011;
   ctx.strokeStyle = pal.barrelColor;
   ctx.lineWidth = gw;
   ctx.lineCap = 'butt';
   ctx.beginPath();
-  ctx.moveTo(g0, 0);
-  ctx.lineTo(g1, 0);
+  ctx.moveTo(g0, y);
+  ctx.lineTo(g1, y);
   ctx.stroke();
   ctx.fillStyle = pal.barrelColor;
-  if (p.gun.evac !== undefined) {
-    const ex = g0 + (g1 - g0) * p.gun.evac;
-    ctx.fillRect(ex - m(0.25), -gw * 0.85, m(0.5), gw * 1.7);
+  if (evac !== undefined) {
+    const ex = g0 + (g1 - g0) * evac;
+    ctx.fillRect(ex - m(0.25), y - gw * 0.85, m(0.5), gw * 1.7);
   }
-  switch (p.gun.brake) {
+  switch (brake) {
     case 'single':
-      ctx.fillRect(g1 - m(0.3), -gw * 0.95, m(0.3), gw * 1.9);
+      ctx.fillRect(g1 - m(0.3), y - gw * 0.95, m(0.3), gw * 1.9);
       break;
     case 'double':
-      ctx.fillRect(g1 - m(0.22), -gw * 1.05, m(0.22), gw * 2.1);
-      ctx.fillRect(g1 - m(0.55), -gw * 1.05, m(0.22), gw * 2.1);
+      ctx.fillRect(g1 - m(0.22), y - gw * 1.05, m(0.22), gw * 2.1);
+      ctx.fillRect(g1 - m(0.55), y - gw * 1.05, m(0.22), gw * 2.1);
       break;
     case 'slotted':
-      ctx.fillRect(g1 - m(0.45), -gw * 0.9, m(0.45), gw * 1.8);
+      ctx.fillRect(g1 - m(0.45), y - gw * 0.9, m(0.45), gw * 1.8);
       break;
     case 'tee':
-      ctx.fillRect(g1 - m(0.18), -gw * 1.25, m(0.18), gw * 2.5);
+      ctx.fillRect(g1 - m(0.18), y - gw * 1.25, m(0.18), gw * 2.5);
       break;
   }
-  ctx.restore();
 }
