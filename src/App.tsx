@@ -73,6 +73,7 @@ export default function App() {
   const [isArmamentOpen, setIsArmamentOpen] = useState<boolean>(false);
   const [isBattleLogOpen, setIsBattleLogOpen] = useState<boolean>(false);
   const [isMapOpen, setIsMapOpen] = useState<boolean>(false);
+  const [radarLayerOn, setRadarLayerOn] = useState<boolean>(false);
   const [isDockyardOpen, setIsDockyardOpen] = useState<boolean>(false);
   const [isGameOverOpen, setIsGameOverOpen] = useState<boolean>(false);
   const [isVictory, setIsVictory] = useState<boolean>(false);
@@ -383,11 +384,18 @@ export default function App() {
   };
 
   const flagship = engine.getFlagship();
+  const radarCoverage = radarLayerOn ? engine.getRadarCoverage() : undefined;
 
   const selectedUnits: (Ship | Aircraft | GroundUnit)[] = [
     ...playerShips.filter((s) => selectedUnitIds.includes(s.id)),
     ...aircraft.filter((a) => selectedUnitIds.includes(a.id)),
-    ...groundUnits.filter((u) => selectedUnitIds.includes(u.id) && u.side === 'player' && !u.isDestroyed),
+    ...groundUnits
+      .filter((u) => selectedUnitIds.includes(u.id) && u.side === 'player' && !u.isDestroyed)
+      .map((u) => {
+        // Keep the terrain readout current even while the game is paused
+        if (!u.embarkedInShipId) engine.refreshGroundTerrainInfo(u);
+        return u;
+      }),
   ];
 
   return (
@@ -398,6 +406,7 @@ export default function App() {
         onSelectUnits={(ids) => setSelectedUnitIds(ids)}
         onToggleMap={() => setIsMapOpen((prev) => !prev)}
         onTogglePause={handleTogglePause}
+        onRadarLayerChange={setRadarLayerOn}
         onCycleSpeed={handleCycleSpeed}
         externalCameraTarget={externalCameraTarget}
         onClearCameraTarget={() => setExternalCameraTarget(null)}
@@ -479,6 +488,12 @@ export default function App() {
         score={score}
         onOpenBriefing={() => setIsBriefingOpen(true)}
         onOpenMap={() => setIsMapOpen(true)}
+        radarLayerOn={radarLayerOn}
+        radarCoverage={radarCoverage}
+        onToggleRadarLayer={() => {
+          engine.showRadarCoverage = !engine.showRadarCoverage;
+          setRadarLayerOn(engine.showRadarCoverage);
+        }}
         onOpenDockyard={() => setIsDockyardOpen(true)}
         onOpenAirPrep={() => setIsAirPrepOpen(true)}
         onOpenArmament={() => setIsArmamentOpen(true)}
@@ -624,6 +639,7 @@ export default function App() {
         }}
         sectorName={intel?.sectorName || 'Coral Atoll'}
         era={engine.era}
+        radarCoverage={radarCoverage}
       />
 
       {/* Pearl Harbor Dockyard & Era Modernization */}

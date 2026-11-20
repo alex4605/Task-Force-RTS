@@ -20,7 +20,7 @@ import {
   Sonobuoy,
 } from '../types/game';
 import { getRequisitionCatalog } from '../game/requisition';
-import { BattleAlertBanner } from '../game/engine';
+import { BattleAlertBanner, RadarCoverage } from '../game/engine';
 import {
   DEFAULT_AFB_FORMATION_COUNTS,
   DEFAULT_CARRIER_FORMATION_COUNTS,
@@ -79,6 +79,8 @@ interface HUDProps {
   score: GameScore;
   onOpenBriefing: () => void;
   onOpenMap: () => void;
+  radarLayerOn?: boolean;
+  onToggleRadarLayer?: () => void;
   onOpenDockyard: () => void;
   onOpenAirPrep: () => void;
   onOpenArmament: () => void;
@@ -92,6 +94,7 @@ interface HUDProps {
   onSelectPayload?: (role: AircraftRole, payload: AircraftPayloadType) => void;
   onMiniMapClick: (worldPos: Vector2D) => void;
   cameraViewport?: CameraViewportState | null;
+  radarCoverage?: RadarCoverage[];
   isMuted: boolean;
   onToggleMute: () => void;
   // AFB and Convoy Reinforcements
@@ -240,6 +243,8 @@ export const HUD: React.FC<HUDProps> = ({
   score,
   onOpenBriefing,
   onOpenMap,
+  radarLayerOn,
+  onToggleRadarLayer,
   onOpenDockyard,
   onOpenAirPrep,
   onOpenArmament,
@@ -253,6 +258,7 @@ export const HUD: React.FC<HUDProps> = ({
   onSelectPayload,
   onMiniMapClick,
   cameraViewport = null,
+  radarCoverage,
   isMuted,
   onToggleMute,
   airbasePlanes = {},
@@ -719,6 +725,17 @@ export const HUD: React.FC<HUDProps> = ({
           </button>
 
           <button
+            onClick={onToggleRadarLayer}
+            className={`flex items-center gap-1.5 px-3 py-1 border rounded text-xs font-mono transition-colors ${
+              radarLayerOn ? 'bg-cyan-900/60 border-cyan-400 text-cyan-100' : 'bg-[#0B1E34] hover:bg-[#153252] border-[#1E3A5F] text-[#E0F7FA]'
+            }`}
+            title="顯示我方雷達與已知敵方雷達的覆蓋範圍：實線填色為低空 (~300m) 覆蓋含地形遮蔽，虛線圈為高空偵測距離"
+          >
+            <Radio className="w-3.5 h-3.5 text-[#80DEEA]" />
+            <span>雷達覆蓋 (R)</span>
+          </button>
+
+          <button
             onClick={onOpenMap}
             className="flex items-center gap-1.5 px-3 py-1 bg-[#0B1E34] hover:bg-[#153252] border border-[#1E3A5F] rounded text-xs font-mono text-[#E0F7FA] transition-colors"
             title="開啟全戰區大比例海圖與情報疊層"
@@ -1031,6 +1048,7 @@ export const HUD: React.FC<HUDProps> = ({
             worldSize={worldSize}
             cameraViewport={cameraViewport}
             onMiniMapClick={onMiniMapClick}
+            radarCoverage={radarCoverage}
           />
 
           {/* Right Panel Tab Switcher */}

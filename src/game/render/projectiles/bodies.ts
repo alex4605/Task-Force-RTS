@@ -1,213 +1,10 @@
 // Per-type projectile artwork, drawn in world space (camera transform already applied).
 import { Projectile, ProjectileType } from '../../../types/game';
 import { RenderContext, Camera } from '../context';
+import { drawBullet, drawClusterDispenser, drawConventionalBomb, drawDepthCharge, drawRocket, drawShell, drawSmokeTrail, trailOf } from './ordnance';
 
 /** Draws the type-specific body of one projectile in its local frame. */
 export type ProjectileDrawer = (rc: RenderContext, proj: Projectile, camera: Camera, projectiles: Projectile[]) => void;
-
-function drawShell(rc: RenderContext, proj: Projectile, _camera: Camera, _projectiles: Projectile[]): void {
-  const ctx = rc.ctx;
-
-  // High-Angle Ballistic Naval Artillery Trajectory
-  const maxAlt = proj.blastRadius > 25 ? 65 : 45;
-  const alt = Math.sin(proj.flightProgress * Math.PI) * maxAlt;
-
-  // 1. Water surface ballistic shadow (tracks directly underneath shell)
-  const shadowAlpha = 0.45 * (1 - alt / maxAlt * 0.5);
-  ctx.fillStyle = `rgba(3, 8, 16, ${shadowAlpha})`;
-  ctx.beginPath();
-  ctx.ellipse(proj.pos.x, proj.pos.y, 3.5, 2, proj.heading, 0, Math.PI * 2);
-  ctx.fill();
-
-  // 2. Trailing propellant smoke wisp
-  if (proj.flightProgress > 0.1) {
-    ctx.strokeStyle = 'rgba(255, 171, 0, 0.35)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(proj.pos.x - proj.vel.x * 0.03, (proj.pos.y - proj.vel.y * 0.03) - alt * 0.95);
-    ctx.lineTo(proj.pos.x, proj.pos.y - alt);
-    ctx.stroke();
-  }
-
-  // 3. Incandescent artillery shell body in mid-air
-  const isPl = proj.side === 'player';
-  // Outer radiant fireball glow
-  ctx.fillStyle = isPl ? 'rgba(255, 193, 7, 0.45)' : 'rgba(255, 87, 34, 0.45)';
-  ctx.beginPath();
-  ctx.arc(proj.pos.x, proj.pos.y - alt, proj.blastRadius > 25 ? 5.5 : 4, 0, Math.PI * 2);
-  ctx.fill();
-
-  // White-hot core
-  ctx.fillStyle = isPl ? '#FFF9C4' : '#FFCCBC';
-  ctx.strokeStyle = isPl ? '#FF8F00' : '#D84315';
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.arc(proj.pos.x, proj.pos.y - alt, proj.blastRadius > 25 ? 3.5 : 2.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-}
-
-function drawRocket(rc: RenderContext, proj: Projectile, _camera: Camera, _projectiles: Projectile[]): void {
-  const ctx = rc.ctx;
-
-  const cosH = Math.cos(proj.heading);
-  const sinH = Math.sin(proj.heading);
-
-  if (proj.isTinyTim) {
-    // ════ 11.75" Tiny Tim Heavy Standoff Rocket ════
-    // Giant billowing dense rocket exhaust smoke
-    ctx.strokeStyle = 'rgba(238, 238, 238, 0.75)';
-    ctx.lineWidth = 5.0;
-    ctx.beginPath();
-    ctx.moveTo(proj.pos.x - cosH * 50, proj.pos.y - sinH * 50);
-    ctx.lineTo(proj.pos.x - cosH * 16, proj.pos.y - sinH * 16);
-    ctx.stroke();
-
-    // Roaring booster exhaust flame
-    const flamePulse = (Math.sin(rc.time * 28) + 1) * 0.5;
-    ctx.strokeStyle = '#FF3D00';
-    ctx.lineWidth = 6.0;
-    ctx.beginPath();
-    ctx.moveTo(proj.pos.x - cosH * (22 + flamePulse * 8), proj.pos.y - sinH * (22 + flamePulse * 8));
-    ctx.lineTo(proj.pos.x, proj.pos.y);
-    ctx.stroke();
-
-    ctx.strokeStyle = '#FFEB3B';
-    ctx.lineWidth = 3.2;
-    ctx.beginPath();
-    ctx.moveTo(proj.pos.x - cosH * 14, proj.pos.y - sinH * 14);
-    ctx.lineTo(proj.pos.x, proj.pos.y);
-    ctx.stroke();
-
-    // Heavy cylindrical steel rocket body & cruciform fins
-    ctx.save();
-    ctx.translate(proj.pos.x, proj.pos.y);
-    ctx.rotate(proj.heading);
-    ctx.fillStyle = '#37474F';
-    ctx.fillRect(-12, -2.5, 14, 5);
-    // Dark steel armor piercing ogive head
-    ctx.fillStyle = '#78909C';
-    ctx.beginPath();
-    ctx.ellipse(3, 0, 4.5, 2.5, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Large cruciform tail stabilizer fins
-    ctx.fillStyle = '#263238';
-    ctx.fillRect(-12, -4.5, 3.5, 9);
-    ctx.restore();
-  } else {
-    // Standard HVAR 5" High-Velocity Rocket with Fiery Propellant Exhaust & Smoke
-    ctx.strokeStyle = 'rgba(224, 224, 224, 0.5)';
-    ctx.lineWidth = 2.8;
-    ctx.beginPath();
-    ctx.moveTo(proj.pos.x - cosH * 28, proj.pos.y - sinH * 28);
-    ctx.lineTo(proj.pos.x - cosH * 10, proj.pos.y - sinH * 10);
-    ctx.stroke();
-
-    // Fiery exhaust nozzle flame
-    const flamePulse = (Math.sin(rc.time * 24) + 1) * 0.5;
-    ctx.strokeStyle = '#FF3D00';
-    ctx.lineWidth = 3.5;
-    ctx.beginPath();
-    ctx.moveTo(proj.pos.x - cosH * (12 + flamePulse * 4), proj.pos.y - sinH * (12 + flamePulse * 4));
-    ctx.lineTo(proj.pos.x, proj.pos.y);
-    ctx.stroke();
-
-    // Inner incandescent flame core
-    ctx.strokeStyle = '#FFEE58';
-    ctx.lineWidth = 1.8;
-    ctx.beginPath();
-    ctx.moveTo(proj.pos.x - cosH * 8, proj.pos.y - sinH * 8);
-    ctx.lineTo(proj.pos.x, proj.pos.y);
-    ctx.stroke();
-
-    // Rocket nose tip
-    ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.arc(proj.pos.x, proj.pos.y, 2, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-function drawBullet(rc: RenderContext, proj: Projectile, _camera: Camera, _projectiles: Projectile[]): void {
-  const ctx = rc.ctx;
-
-  const isPl = proj.side === 'player';
-
-  if (proj.isBeamTracer) {
-    // ════ 連續射擊火神光束 (M61A1 Vulcan / GSh-23 連續雷射狀高亮光束彈幕) ════
-    const beamScale = 0.22; // continuous elongated stream
-    const bTailX = proj.pos.x - proj.vel.x * beamScale;
-    const bTailY = proj.pos.y - proj.vel.y * beamScale;
-
-    ctx.save();
-    // 1. 寬幅高亮電離輝光 (Wide Ionization Bloom)
-    ctx.strokeStyle = isPl ? 'rgba(255, 235, 59, 0.45)' : 'rgba(255, 61, 0, 0.45)';
-    ctx.lineWidth = 6.0;
-    ctx.beginPath();
-    ctx.moveTo(bTailX, bTailY);
-    ctx.lineTo(proj.pos.x, proj.pos.y);
-    ctx.stroke();
-
-    // 2. 飽和核心光束 (Saturated Core Tracer)
-    ctx.strokeStyle = isPl ? '#FFD54F' : '#FF5252';
-    ctx.lineWidth = 3.2;
-    ctx.beginPath();
-    ctx.moveTo(bTailX, bTailY);
-    ctx.lineTo(proj.pos.x, proj.pos.y);
-    ctx.stroke();
-
-    // 3. 耀眼白熱光芯 (Blinding White-Hot Core)
-    ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.moveTo(bTailX * 0.35 + proj.pos.x * 0.65, bTailY * 0.35 + proj.pos.y * 0.65);
-    ctx.lineTo(proj.pos.x, proj.pos.y);
-    ctx.stroke();
-
-    ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.arc(proj.pos.x, proj.pos.y, 2.0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    return;
-  }
-
-  // High-Luminous Machine Gun & Autocannon Glowing Tracer Fire (密集群射曳光彈)
-  const trailScale = 0.055;
-  const tailX = proj.pos.x - proj.vel.x * trailScale;
-  const tailY = proj.pos.y - proj.vel.y * trailScale;
-
-  ctx.save();
-  // 1. Radiant luminous glow bloom
-  ctx.strokeStyle = isPl ? 'rgba(255, 224, 130, 0.65)' : 'rgba(255, 23, 68, 0.75)';
-  ctx.lineWidth = 4.2;
-  ctx.beginPath();
-  ctx.moveTo(tailX, tailY);
-  ctx.lineTo(proj.pos.x, proj.pos.y);
-  ctx.stroke();
-
-  // 2. High-intensity saturated tracer core
-  ctx.strokeStyle = isPl ? '#FFD54F' : '#FF1744';
-  ctx.lineWidth = 2.4;
-  ctx.beginPath();
-  ctx.moveTo(tailX * 0.35 + proj.pos.x * 0.65, tailY * 0.35 + proj.pos.y * 0.65);
-  ctx.lineTo(proj.pos.x, proj.pos.y);
-  ctx.stroke();
-
-  // 3. White-hot needle point tip
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  ctx.moveTo(tailX * 0.15 + proj.pos.x * 0.85, tailY * 0.15 + proj.pos.y * 0.85);
-  ctx.lineTo(proj.pos.x, proj.pos.y);
-  ctx.stroke();
-
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.arc(proj.pos.x, proj.pos.y, 1.6, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
 
 function drawTorpedo(rc: RenderContext, proj: Projectile, _camera: Camera, _projectiles: Projectile[]): void {
   const ctx = rc.ctx;
@@ -497,40 +294,17 @@ function drawBomb(rc: RenderContext, proj: Projectile, _camera: Camera, _project
     ctx.beginPath();
     ctx.arc(0, -9, 2.0, 0, Math.PI * 2);
     ctx.fill();
+  } else if (proj.bombType === 'cbu_cluster_bombs' || proj.warhead === 'cluster') {
+    // CBU / Rockeye dispenser opening into a bomblet cloud
+    ctx.rotate(-Math.PI / 2);
+    drawClusterDispenser(ctx, proj, alt);
   } else {
-    const isHeavy = proj.bombType === 'bomb_1600' || proj.bombType === 'bomb_2000' || proj.bombType === 'bomb_1600_ap';
-    const bW = isHeavy ? 4.2 : 3.0;
-    const bH = isHeavy ? 8.5 : 6.0;
-
-    // Olive drab / yellow bomb casing
-    ctx.fillStyle = isHeavy ? '#546E7A' : '#FFE082';
-    ctx.strokeStyle = isHeavy ? '#263238' : '#FFA000';
-    ctx.lineWidth = 1.3;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, bW, bH, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-
-    // Tail guidance box fins
-    ctx.strokeStyle = isHeavy ? '#FF3D00' : '#E65100';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(-bW * 1.2, bH * 0.7);
-    ctx.lineTo(bW * 1.2, bH * 0.7);
-    ctx.moveTo(0, bH * 0.3);
-    ctx.lineTo(0, bH * 1.05);
-    ctx.stroke();
+    // General-purpose bombs by era and nation (AN-M64 / Mk 82 / Type 98 / FAB), sized by weight
+    ctx.rotate(-Math.PI / 2);
+    drawConventionalBomb(ctx, proj, rc.era);
   }
 
   ctx.restore();
-}
-
-function drawDepthCharge(rc: RenderContext, proj: Projectile, _camera: Camera, _projectiles: Projectile[]): void {
-  const ctx = rc.ctx;
-
-  ctx.strokeStyle = '#80DEEA';
-  ctx.lineWidth = 1.8;
-  ctx.strokeRect(proj.pos.x - 3.5, proj.pos.y - 3.5, 7, 7);
 }
 
 function drawHedgehog(rc: RenderContext, proj: Projectile, _camera: Camera, _projectiles: Projectile[]): void {
@@ -1275,20 +1049,32 @@ function drawMissileSsm(rc: RenderContext, proj: Projectile, _camera: Camera, _p
   ctx.restore();
 }
 
+/** Curved exhaust smoke along the missile's recent flight path, under the body artwork. */
+function withSmoke(draw: ProjectileDrawer, width: number, alpha: number): ProjectileDrawer {
+  return (rc, proj, camera, projectiles) => {
+    if (!(proj.isASROC && (proj.asrocStage === 'parachute' || proj.asrocStage === 'water_homing'))) {
+      drawSmokeTrail(rc.ctx, trailOf(proj, 22, 9), proj.pos, width, alpha);
+    }
+    draw(rc, proj, camera, projectiles);
+  };
+}
+
 export const PROJECTILE_DRAWERS: Partial<Record<ProjectileType, ProjectileDrawer>> = {
-  shell: drawShell,
-  rocket: drawRocket,
-  bullet: drawBullet,
+  shell: (rc, p) => drawShell(rc, p),
+  rocket: (rc, p) => drawRocket(rc, p),
+  bullet: (rc, p) => drawBullet(rc, p),
   torpedo: drawTorpedo,
   bomb: drawBomb,
-  depth_charge: drawDepthCharge,
+  depth_charge: (rc, p) => drawDepthCharge(rc, p),
   hedgehog: drawHedgehog,
-  missile_aam: drawMissileAam,
-  missile_sam: drawMissileSam,
-  missile_ashm: drawMissileAshm,
-  missile_arm: drawMissileArm,
-  missile_cruise: drawMissileCruise,
-  slbm_trident: drawSlbmTrident,
-  slbm_r39: drawSlbmTrident,
-  missile_ssm: drawMissileSsm,
+  missile_aam: withSmoke(drawMissileAam, 1.4, 0.4),
+  missile_sam: withSmoke(drawMissileSam, 2.2, 0.5),
+  missile_ashm: withSmoke(drawMissileAshm, 1.2, 0.22),
+  missile_arm: withSmoke(drawMissileArm, 1.4, 0.4),
+  missile_cruise: withSmoke(drawMissileCruise, 0.8, 0.1),
+  slbm_trident: withSmoke(drawSlbmTrident, 3, 0.55),
+  slbm_r39: withSmoke(drawSlbmTrident, 3, 0.55),
+  missile_ssm: withSmoke(drawMissileSsm, 3, 0.55),
+  // Was missing: nuclear-tipped tactical ballistic missiles were invisible in flight
+  missile_nuclear_ssm: withSmoke(drawMissileSsm, 3, 0.55),
 };

@@ -246,6 +246,30 @@ export const SelectedUnitsPanel: React.FC<SelectedUnitsPanelProps> = ({
                     </div>
                   )}
 
+                  {u.terrainInfo && !u.embarkedInShipId && (
+                    <div className="text-[8.5px] px-1 py-0.5 bg-[#0B1A12] border border-emerald-800/50 rounded font-mono space-y-0.5">
+                      <div className="flex justify-between text-emerald-300">
+                        <span>
+                          ⛰️ 地形: <b>{u.terrainInfo.onRoad ? `道路 (${u.terrainInfo.name})` : u.terrainInfo.name}</b>
+                          {u.terrainInfo.deepRiver && !u.terrainInfo.onRoad ? ' · 深河需橋' : ''}
+                        </span>
+                        <span className="text-slate-300">海拔 {u.terrainInfo.elevationM}m</span>
+                      </div>
+                      <div className="flex justify-between text-slate-300 tabular-nums">
+                        <span className={u.terrainInfo.move < 0.7 ? 'text-amber-300' : u.terrainInfo.move > 1 ? 'text-emerald-300' : ''}>
+                          移速 ×{u.terrainInfo.move.toFixed(2)}
+                        </span>
+                        <span className={u.terrainInfo.concealment < 1 ? 'text-emerald-300' : ''}>
+                          被發現距離 ×{u.terrainInfo.concealment.toFixed(2)}
+                        </span>
+                        <span className={u.terrainInfo.airDamage < 1 ? 'text-emerald-300' : ''}>
+                          空襲傷害 ×{u.terrainInfo.airDamage.toFixed(2)}
+                        </span>
+                      </div>
+                      {u.isInUrbanCover && <div className="text-cyan-300">🏛️ 城市掩體: 空襲減傷70% · 直射掩護50%</div>}
+                    </div>
+                  )}
+
                   <div className="flex justify-between items-center text-[9px]">
                     {u.isSupplied ? (
                       <span className="text-emerald-400 font-bold">

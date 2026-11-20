@@ -53,7 +53,8 @@ export type ShipType =
   | 'ssgn_oscar'   // Project 949A 奧斯卡級 (Oscar II) 巡弋飛彈核潛艦 (24x P-700 Granit);
   | 'cg_slava'     // Project 1164 Atlant (斯拉瓦級飛彈巡洋艦 · 16 枚 P-500 玄武岩 · S-300F)
   | 'lha_tarawa'   // USS Tarawa (LHA-1) 塔拉瓦級兩棲突擊艦
-  | 'pbr';         // Patrol Boat, River Mk II (越戰褐水海軍河川巡邏艇)
+  | 'pbr'          // Patrol Boat, River Mk II (越戰褐水海軍河川巡邏艇)
+  | 'river_gunboat'; // 敵方河川艇: 武裝機帆船 (時代三/四) / Project 1204 Shmel 河川砲艇 (時代五)
 
 export type GroundUnitType =
   | 'usmc_rifle_42'      // 時代一 1942 USMC 陸戰隊步槍排 (春田M1903 / 早期M1加蘭德)
@@ -145,6 +146,22 @@ export type GroundUnitType =
   | 'opfor_sa15_tor'       // 時代五 9K330 道爾 (SA-15 Gauntlet) 垂直發射野戰防空/反飛彈戰車 (攔截戰機與來襲飛彈)
   | 'opfor_btr_zd';        // 時代五 BTR-ZD「喀嚓」空降兵履帶雙管 23mm + SA-7 防空自走砲
 
+export interface GroundTerrainInfo {
+  /** Terrain name, e.g. 叢林 / 水稻田 / 市街. */
+  name: string;
+  /** Height above sea level (m). */
+  elevationM: number;
+  onRoad: boolean;
+  /** Speed multiplier for this unit here. */
+  move: number;
+  /** Spotting-range multiplier: how close an enemy must be to see it. */
+  concealment: number;
+  /** Multiplier on damage from air attack (canopy). */
+  airDamage: number;
+  /** Deep river: vehicles need a bridge. */
+  deepRiver: boolean;
+}
+
 export interface GroundUnit {
   id: string;
   type: GroundUnitType;
@@ -197,6 +214,15 @@ export interface GroundUnit {
   counterBatteryTarget?: Vector2D;
   isNuclearTEL?: boolean;
   isMLRS?: boolean;
+  /** What the ground under the unit does to it (refreshed every tick; shown in the unit panel). */
+  terrainInfo?: GroundTerrainInfo;
+  /** Terrain route for AI movement that is not a standing order (chases, charges). */
+  route?: Vector2D[];
+  routeIdx?: number;
+  routeGoal?: Vector2D;
+  routeAge?: number;
+  /** Seconds spent crawling (river, swamp) on a straight-line fallback; triggers a re-plan. */
+  routeStuck?: number;
 }
 
 export type ShipSide = 'player' | 'enemy' | 'neutral' | 'allied';
@@ -229,6 +255,10 @@ export interface UnitOrder {
   activeWaypointIndex?: number;
   pendingUnload?: boolean;
   pendingSonobuoyPos?: Vector2D;
+  /** A terrain route has been planned for this order (ground units). */
+  routed?: boolean;
+  /** Riverine craft following a river channel (naval/riverine.ts). */
+  riverine?: boolean;
 }
 
 export interface ShipArmamentSpec {
@@ -266,7 +296,8 @@ export interface Ship {
   hasTorpedoes?: boolean;
   hasDepthCharges?: boolean;
   depthChargeCooldown?: number;
-  hasHedgehog?: boolean;
+  hasHedgehog?: boolean; // 前拋式反潛武器 (刺蝟砲 / Squid / Limbo / Bofors 375mm)
+  aheadThrower?: 'hedgehog' | 'squid' | 'limbo' | 'bofors375' | 'rbu';
   hedgehogCooldown?: number;
   isFlagship?: boolean;
   isSunk: boolean;
@@ -284,6 +315,28 @@ export interface Ship {
   enemySpottedTimer?: number;
   subVariant?: 'uboat' | 'ijn_sub' | 'whiskey' | 'zulu' | 'foxtrot' | 'victor3' | 'akula' | 'oscar2' | 'ssn_la' | 'kilo';
   repathCooldown?: number;
+  battery?: number; // 柴電潛艦電池電量 (0-1)：水下高速航行急速耗電，呼吸管航行充電
+  rbuCooldown?: number; // 敵艦反潛火箭 / 深水炸彈再裝填
+  /** River craft: the reach it patrols, and seconds until it re-plans its patrol or chase. */
+  riverHome?: Vector2D;
+  riverReplan?: number;
+  /** Seconds the player still has an enemy river boat in sight (canopy hides it otherwise). */
+  riverSpotted?: number;
+  /** Seconds a river boat stays revealed after firing (muzzle flash, tracer, noise). */
+  riverReveal?: number;
+  /** Health at the last AI tick, to notice being fired on. */
+  riverLastHealth?: number;
+  /** Player already told this ship was stopped by shoal water. */
+  shoalWarned?: boolean;
+  isSnorkeling?: boolean;
+  diveTimer?: number; // 緊急下潛剩餘秒數：仍浮在水面、可被砲火與航彈攻擊
+  belowLayer?: boolean; // 潛艦潛入溫躍層下方：水面艦艦殼聲納大幅失效
+  layerTimer?: number;
+  aswHunting?: boolean; // 護航艦自動減速反潛搜索中
+  evadeTimer?: number; // 潛艦規避機動剩餘秒數
+  evadeHeading?: number;
+  datumPos?: Vector2D; // 最後已知位置 (Datum)：失去接觸後的搜索中心
+  datumAge?: number; // 呼吸管航行 / 上浮充電中：噪音大增且可被雷達發現
   navAvoidSide?: number; // 繞行陸地時記住的轉向側 (+1 右 / -1 左)，避免左右抖動
   navCheckPos?: Vector2D; // 進度檢查點：一段時間未前進即判定受困並重新規劃航線
   navCheckTimer?: number;
@@ -326,6 +379,8 @@ export interface Ship {
   maxASROC?: number;
   readyASROC?: number;
   hasSVTT?: boolean;
+  hasVLASROC?: boolean; // Mk 41 垂直發射 ASROC (1993 起服役)
+  standoffAswWeapon?: 'ASROC' | 'Ikara' | 'Malafon' | 'VL-ASROC';
   svttCooldown?: number;
   hasChaffLauncher?: boolean; // 艦載 RBOC 金屬箔條干擾迫擊砲發射器
   chaffCooldown?: number;
@@ -1519,6 +1574,8 @@ export interface Aircraft {
   maxAmmo?: number;
   gunAmmo?: number;
   maxGunAmmo?: number;
+  /** Gun ammunition set from the historical battery (aircraftArmament.ts). */
+  gunsInitialised?: boolean;
   flightName?: string;
   flightCallsign?: string;
   flightNumber?: number;
@@ -1546,10 +1603,15 @@ export interface Aircraft {
   nation?: AircraftNation; // 機徽覆寫：同一機型由不同國家操作時 (如日本航空自衛隊 F-15J)
   homeBaseId?: string; // 母基地：返航降落的機場 (Installation id) 或航艦 (Ship id)
   ferryTo?: string; // 轉場目的地 (機場或航艦 id)：抵達後降落並計入該基地庫存
+  sonobuoyDropTimer?: number; // 反潛巡邏自動布放聲納浮標計時
   airMission?: AirMission; // 戰術任務：CAP / BARCAP / 戰鬥掃蕩 / 護航 / 打擊編隊
   packageId?: string; // 所屬打擊編隊 (護航機與打擊機共用)
   missionTimer?: number; // 掃蕩滯空剩餘時間
   interceptTargetId?: string; // 目前鎖定的攔截目標 (避免每格切換)
+  /** Seconds the player side's air picture still holds this aircraft (radar / visual track). */
+  trackedByPlayer?: number;
+  /** Seconds the enemy side's air picture still holds this aircraft. */
+  trackedByEnemy?: number;
   isWinchester?: boolean;
   // 半主動雷達導引機頭照射狀態 (SARH Nose Radar Illumination)
   sarhIlluminatingTargetId?: string;
@@ -1699,6 +1761,11 @@ export interface LagoonWater {
   channelBreaches?: { angle: number; width: number }[];
 }
 
+export interface TerrainZone {
+  kind: 'delta' | 'karst' | 'heath' | 'upland' | 'plateau' | 'tidal_flat' | 'plantation';
+  points: Vector2D[];
+}
+
 export interface Island {
   id: string;
   name: string;
@@ -1716,9 +1783,14 @@ export interface Island {
   forestBelts?: ForestBelt[];
   mountainRidges?: MountainRidge[];
   jungles?: { x: number; y: number; radius: number; density: number }[];
-  roads?: { points: Vector2D[]; type: 'road' | 'trail' }[];
+  roads?: { points: Vector2D[]; type: 'road' | 'trail' | 'highway' | 'rail' }[];
   hills?: { x: number; y: number; radius: number }[];
-  rivers?: { points: Vector2D[]; width: number }[];
+  /** `straight` keeps a canal ruler-straight (no meander); `name` labels it on the map. */
+  rivers?: { points: Vector2D[]; width: number; straight?: boolean; name?: string }[];
+  /** Inland lakes and reservoirs (impassable to ground units). */
+  lakes?: { id: string; name?: string; points: Vector2D[] }[];
+  /** Regions with a distinct land form: river delta, karst towers, heath, uplands, tidal flats ... */
+  terrainZones?: TerrainZone[];
 }
 
 export type ProjectileType =
@@ -1784,11 +1856,17 @@ export interface Projectile {
   attackerName?: string;
   sourceModel?: AircraftModel;
   bombType?: AircraftPayloadType;
+  /** Warhead class deciding effect per target type (aircraftArmament.ts). */
+  warhead?: 'he' | 'ap' | 'heat' | 'cluster' | 'incendiary' | 'gun';
+  /** Fraction of a gun round's or rocket's damage that gets through tank armour. */
+  vsArmour?: number;
   targetEntityName?: string;
   isNapalm?: boolean;
   isTinyTim?: boolean;
   isAcousticHoming?: boolean;
   isHedgehog?: boolean;
+  /** Squid / Limbo / Bofors / RBU rounds sink to a set depth instead of needing a contact hit. */
+  isDepthFused?: boolean;
   arcAltitude?: number;
   tumbleAngle?: number;
   isBeamTracer?: boolean; // 仿 M61 火神砲 / GSh-23 連續高亮光束彈幕

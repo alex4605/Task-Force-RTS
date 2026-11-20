@@ -3,15 +3,19 @@ import { RenderContext } from './render/context';
 import * as aircraftRender from './render/aircraft';
 import * as effectsRender from './render/effects';
 import * as groundUnitsRender from './render/groundUnits';
+import { drawGroundWrecks, GroundWreck } from './render/unitDetails';
 import * as islandsRender from './render/islands';
 import * as oceanRender from './render/ocean';
 import * as overlaysRender from './render/overlays';
 import * as particlesRender from './render/particles';
+import { drawImpacts, drawImpactScars } from './render/impacts';
+import type { ImpactEffect } from './impacts';
 import * as projectilesRender from './render/projectiles';
 import * as shipsRender from './render/ships';
 
 export type { Camera, OrderMarker } from './render/context';
 import type { Camera, OrderMarker } from './render/context';
+import type { RadarCoverage } from './engine';
 
 /**
  * Canvas renderer for the tactical map. Holds the shared RenderContext and delegates
@@ -43,8 +47,12 @@ export class VectorRenderer {
   }
 
   // Draw Islands
-  public drawIslands(islands: Island[], camera: Camera) {
-    islandsRender.drawIslands(this.rc, islands, camera);
+  public drawRadarCoverage(coverage: RadarCoverage[], camera: Camera) {
+    overlaysRender.drawRadarCoverage(this.rc, coverage, camera);
+  }
+
+  public drawIslands(islands: Island[], camera: Camera, worldSize = 14000) {
+    islandsRender.drawIslands(this.rc, islands, camera, worldSize);
   }
 
   // Draw Ships with RTS Selection Indicators & Submarine Fog of War
@@ -62,6 +70,15 @@ export class VectorRenderer {
     projectilesRender.drawProjectiles(this.rc, projectiles, camera);
   }
 
+  /** Craters and scorch marks (under units) and the blasts themselves (over units). */
+  public drawImpactScars(impacts: ImpactEffect[], camera: Camera) {
+    drawImpactScars(this.rc, impacts, camera);
+  }
+
+  public drawImpacts(impacts: ImpactEffect[], camera: Camera) {
+    drawImpacts(this.rc, impacts, camera);
+  }
+
   // Draw Particles including WWII Water Geysers & Authentic Flak Detonations
   public drawParticles(particles: Particle[], camera: Camera) {
     particlesRender.drawParticles(this.rc, particles, camera);
@@ -73,6 +90,10 @@ export class VectorRenderer {
   }
 
   // Draw Ground Units (USMC Infantry, LVT Amphibious, Armor, and OPFOR Ambush squads)
+  public drawGroundWrecks(wrecks: GroundWreck[], camera: Camera) {
+    drawGroundWrecks(this.rc, wrecks, camera);
+  }
+
   public drawGroundUnits(groundUnits: GroundUnit[], camera: Camera, selectedUnitIds: string[]) {
     groundUnitsRender.drawGroundUnits(this.rc, groundUnits, camera, selectedUnitIds);
   }

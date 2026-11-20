@@ -2,6 +2,8 @@ import { GroundUnit } from '../../types/game';
 import { drawGroundSilhouette, GROUND_SILHOUETTE_SCALE, groundSilhouetteClass } from '../unitPreviewRenderer';
 import { RenderContext, Camera } from './context';
 import { drawUnitSelectionRing } from './ships';
+import { drawGroundDust } from './unitDetails';
+import { Affiliation, app6Function, app6Mobility, drawApp6, Echelon } from './app6';
 
 // Draw Ground Units (USMC Infantry, LVT Amphibious, Armor, and OPFOR Ambush squads)
 export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], camera: Camera, selectedUnitIds: string[]) {
@@ -24,6 +26,9 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
       ctx.moveTo(unit.pos.x, unit.pos.y);
+      // The terrain route (roads, bridges, around obstacles) when one was planned
+      const wps = unit.order.waypoints;
+      for (let k = unit.order.activeWaypointIndex ?? 0; wps && k < wps.length; k++) ctx.lineTo(wps[k].x, wps[k].y);
       ctx.lineTo(unit.order.targetPos.x, unit.order.targetPos.y);
       ctx.stroke();
       ctx.setLineDash([]);
@@ -48,16 +53,12 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
     const scale = GROUND_SILHOUETTE_SCALE[groundSilhouetteClass(unit.type)];
     ctx.ellipse(-1, 1.5, 12.5 * scale, 7.9 * scale, 0, 0, Math.PI * 2);
     ctx.fill();
+    drawGroundDust(rc, unit, scale);
     drawGroundSilhouette(ctx, unit.type, isPlayer, scale);
     ctx.restore();
 
     // 1. NATO APP-6 Tactical Frame (藍色長方形 友軍 vs 紅色菱形 敵軍)
-    const isHostile = !isPlayer;
     const midY = -20;
-    const boxW = 25;
-    const boxH = 14;
-    const frameColor = isPlayer ? '#42A5F5' : '#FF5252';
-    const frameFill = isPlayer ? 'rgba(13, 71, 161, 0.72)' : 'rgba(183, 28, 28, 0.72)';
 
     // If unit is in Banzai Charge, render pulsating flaming spikes around the frame
     if (unit.isBanzaiCharging) {
@@ -75,204 +76,14 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
       ctx.stroke();
     }
 
-    ctx.fillStyle = frameFill;
-    ctx.strokeStyle = frameColor;
-    ctx.lineWidth = 2;
-
-    if (isHostile) {
-      // NATO APP-6 敵軍菱形邊框 (Hostile Diamond Frame)
-      ctx.beginPath();
-      ctx.moveTo(0, midY - 10);
-      ctx.lineTo(12, midY);
-      ctx.lineTo(0, midY + 10);
-      ctx.lineTo(-12, midY);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-    } else {
-      // NATO APP-6 友軍長方形邊框 (Friendly Rectangle Frame)
-      ctx.fillRect(-boxW / 2, midY - boxH / 2, boxW, boxH);
-      ctx.strokeRect(-boxW / 2, midY - boxH / 2, boxW, boxH);
-    }
-
-    // 2. NATO APP-6 Echelon Level (框頂編制符號: 排 ••• / 連 | / 營 ||)
-    const topY = isHostile ? midY - 13 : midY - boxH / 2 - 3;
-    ctx.fillStyle = '#FFFFFF';
-    ctx.strokeStyle = '#FFFFFF';
-
-    const echelon = unit.echelon || (unit.type.includes('bn') || unit.type.includes('tank_bn') ? 'battalion' : unit.type.includes('company') ? 'company' : 'platoon');
-    if (echelon === 'battalion') {
-      // 營級 (Battalion / Regiment): 雙垂直線 "||"
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.moveTo(-3, topY - 5);
-      ctx.lineTo(-3, topY);
-      ctx.moveTo(3, topY - 5);
-      ctx.lineTo(3, topY);
-      ctx.stroke();
-    } else if (echelon === 'company' || echelon === 'battery') {
-      // 連/砲兵連級 (Company / Battery): 單垂直線 "|"
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.moveTo(0, topY - 5);
-      ctx.lineTo(0, topY);
-      ctx.stroke();
-    } else {
-      // 排級 (Platoon): 三實心圓點 "•••"
-      ctx.beginPath();
-      ctx.arc(-5, topY - 2.5, 1.6, 0, Math.PI * 2);
-      ctx.arc(0, topY - 2.5, 1.6, 0, Math.PI * 2);
-      ctx.arc(5, topY - 2.5, 1.6, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // 3. NATO APP-6 兵種符號 (Inside Frame Function Symbol)
-    ctx.strokeStyle = '#FFFFFF';
-    ctx.lineWidth = 1.8;
-
-    if (unit.type.includes('scud') || unit.type.includes('ssm') || unit.type.includes('ballistic') || unit.type.includes('atacms')) {
-      // 戰術地對地/彈道飛彈 (Tactical SSM / SCUD / ATACMS): 向上衝天飛彈箭頭與助推器
-      ctx.beginPath();
-      ctx.moveTo(0, midY - 7);
-      ctx.lineTo(-3, midY - 3);
-      ctx.lineTo(-1.5, midY - 3);
-      ctx.lineTo(-1.5, midY + 5);
-      ctx.lineTo(-4, midY + 7);
-      ctx.moveTo(0, midY - 7);
-      ctx.lineTo(3, midY - 3);
-      ctx.lineTo(1.5, midY - 3);
-      ctx.lineTo(1.5, midY + 5);
-      ctx.lineTo(4, midY + 7);
-      ctx.stroke();
-    } else if (unit.type.includes('mlrs') || unit.type.includes('grad') || unit.type.includes('uragan') || unit.type.includes('calliope')) {
-      // 多管火箭砲兵 (Multiple Launch Rocket System / MLRS / Calliope): 砲兵核心圓點 + 雙向齊射傾斜火箭箭頭
-      ctx.fillStyle = '#FFFFFF';
-      ctx.beginPath();
-      ctx.arc(0, midY, 2.6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(-7, midY + 4);
-      ctx.lineTo(-2.5, midY - 4);
-      ctx.lineTo(-5, midY - 4);
-      ctx.moveTo(7, midY + 4);
-      ctx.lineTo(2.5, midY - 4);
-      ctx.lineTo(5, midY - 4);
-      ctx.stroke();
-    } else if (unit.type.includes('atgm') || unit.type.includes('tow') || unit.type.includes('anti_tank')) {
-      // 反戰車飛彈 / 拖式 (Anti-Tank / ATGM): 倒 V 形尖頂飛彈射擊符號
-      ctx.beginPath();
-      ctx.moveTo(-7, midY + 4);
-      ctx.lineTo(0, midY - 5);
-      ctx.lineTo(7, midY + 4);
-      ctx.stroke();
-      // Horizontal cross arrow
-      ctx.beginPath();
-      ctx.moveTo(0, midY - 5);
-      ctx.lineTo(0, midY + 4);
-      ctx.stroke();
-    } else if (unit.type.includes('lvt') || unit.type.includes('mech') || unit.type.includes('bradley') || unit.type.includes('bmp') || unit.type.includes('m113')) {
-      // 機械化步兵/兩棲 (Mechanized Infantry): 履帶橢圓內嵌步兵交叉 "X"
-      ctx.beginPath();
-      ctx.ellipse(0, midY, isHostile ? 8 : 9.5, isHostile ? 4 : 5, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(-4.5, midY - 2.5);
-      ctx.lineTo(4.5, midY + 2.5);
-      ctx.moveTo(4.5, midY - 2.5);
-      ctx.lineTo(-4.5, midY + 2.5);
-      ctx.stroke();
-    } else if (unit.type.includes('armor') || unit.type.includes('tank') || unit.type.includes('abrams') || unit.type.includes('t72') || unit.type.includes('t62') || unit.type.includes('t55') || unit.type.includes('m60') || unit.type.includes('patton') || unit.type.includes('t34')) {
-      // 裝甲主力戰車 (Main Battle Tank / Armor): 裝甲履帶橢圓 "⬭"
-      ctx.beginPath();
-      ctx.ellipse(0, midY, isHostile ? 7.5 : 9, isHostile ? 3.8 : 4.5, 0, 0, Math.PI * 2);
-      ctx.stroke();
-    } else if (
-      unit.type.includes('chaparral') ||
-      unit.type.includes('sam') ||
-      unit.type.includes('sa6') ||
-      unit.type.includes('sa8') ||
-      unit.type.includes('sa9') ||
-      unit.type.includes('sa11') ||
-      unit.type.includes('sa15') ||
-      unit.type.includes('strela')
-    ) {
-      // 野戰防空飛彈 (Mobile SAM Air Defense): 穹門防空頂 + 向上飛彈發射箭頭
-      ctx.beginPath();
-      ctx.arc(0, midY + 4, 6, Math.PI, 0);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, midY + 4);
-      ctx.lineTo(0, midY - 6);
-      ctx.lineTo(-2.5, midY - 3);
-      ctx.moveTo(0, midY - 6);
-      ctx.lineTo(2.5, midY - 3);
-      ctx.stroke();
-    } else if (
-      unit.type.includes('flak') ||
-      unit.type.includes('aa') ||
-      unit.type.includes('shilka') ||
-      unit.type.includes('zsu') ||
-      unit.type.includes('btr_zd') ||
-      unit.type.includes('tunguska')
-    ) {
-      // 防空高射砲 (Air Defense / Flak / SPAAG): 圓頂穹頂穹門 "⌒"
-      ctx.beginPath();
-      ctx.arc(0, midY + 3, 5, Math.PI, 0);
-      ctx.stroke();
-    } else if (unit.type.includes('mortar')) {
-      // 迫擊砲 (Mortar): 倒 V 形迫砲帶圓彈 "▲."
-      ctx.beginPath();
-      ctx.moveTo(-5, midY + 4);
-      ctx.lineTo(0, midY - 2);
-      ctx.lineTo(5, midY + 4);
-      ctx.stroke();
-      ctx.fillStyle = '#FFFFFF';
-      ctx.beginPath();
-      ctx.arc(0, midY + 1.5, 1.8, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (unit.isSPG || unit.type.includes('spg') || unit.type.includes('paladin') || unit.type.includes('priest') || unit.type.includes('hummel') || unit.type.includes('m109') || unit.type.includes('2s1') || unit.type.includes('2s3') || unit.type.includes('2s19') || unit.type.includes('su100')) {
-      // 自走砲 (Self-Propelled Gun / SPG): 裝甲履帶橢圓 "⬭" + 中央實心砲彈圓點 "●"
-      ctx.beginPath();
-      ctx.ellipse(0, midY, isHostile ? 7.5 : 9, isHostile ? 3.8 : 4.5, 0, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.fillStyle = '#FFFFFF';
-      ctx.beginPath();
-      ctx.arc(0, midY, 2.5, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (unit.type.includes('artillery') || unit.type.includes('howitzer')) {
-      // 野戰牽引重砲兵 (Towed Field Artillery): 中央實心砲彈圓點 "●"
-      ctx.fillStyle = '#FFFFFF';
-      ctx.beginPath();
-      ctx.arc(0, midY, 3.4, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (unit.type.includes('rifle') || unit.type.includes('ambush') || unit.type.includes('patrol') || unit.type.includes('infantry') || unit.type.includes('marine')) {
-      // 輕步兵 (Infantry): 對角交叉線 "X"
-      const xOffset = isHostile ? 7 : 10;
-      const yOffset = isHostile ? 5.5 : 6;
-      ctx.beginPath();
-      ctx.moveTo(-xOffset, midY - yOffset);
-      ctx.lineTo(xOffset, midY + yOffset);
-      ctx.moveTo(xOffset, midY - yOffset);
-      ctx.lineTo(-xOffset, midY + yOffset);
-      ctx.stroke();
-    } else if (unit.type === 'usmc_engineer') {
-      // 戰鬥工兵 (Combat Engineer): 工兵工程橫樑拱門 "E"
-      ctx.beginPath();
-      ctx.moveTo(-6, midY + 4);
-      ctx.lineTo(-6, midY - 3);
-      ctx.lineTo(6, midY - 3);
-      ctx.lineTo(6, midY + 4);
-      ctx.moveTo(-6, midY - 3);
-      ctx.lineTo(0, midY + 2);
-      ctx.lineTo(6, midY - 3);
-      ctx.stroke();
-    } else {
-      // 偵察部隊 (Recon): 單斜線 "/"
-      ctx.beginPath();
-      ctx.moveTo(-5, midY + 4);
-      ctx.lineTo(5, midY - 4);
-      ctx.stroke();
-    }
+    // NATO APP-6 symbol: affiliation frame, function icon, echelon above, mobility below
+    const affiliation: Affiliation = unit.side === 'enemy' ? 'hostile' : unit.side === 'neutral' ? 'neutral' : 'friend';
+    const fn = app6Function(unit.type);
+    const echelon: Echelon = (unit.echelon as Echelon | undefined) ?? (unit.type.includes('bn') ? 'battalion' : unit.type.includes('company') ? 'company' : 'platoon');
+    ctx.save();
+    ctx.translate(0, midY);
+    drawApp6(ctx, { affiliation, fn, echelon, mobility: app6Mobility(unit.type, fn), dim: !!unit.isPinned });
+    ctx.restore();
 
     // 5. 陸軍雙參數系統 (Dual Parameters): 組織度 (ORG 綠/黃/紅) 與 建制度 (STR 藍/橙)
     const orgPct = Math.max(0, Math.min(1, (unit.organization ?? 100) / 100));

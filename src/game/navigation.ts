@@ -24,6 +24,12 @@ export class NavalNavigationGrid {
   public readonly rows: number;
   private readonly grid: Uint8Array;
   private readonly islands: Island[];
+  /** Shallowest water (m) found in each cell; Infinity until a depth model is attached. */
+  private readonly minDepth: Float32Array;
+  /** 1 where part of the cell is land (a beach or rocks): only beaching craft may enter. */
+  private readonly touchesLand: Uint8Array;
+  /** Depth the current query's ship needs (its draft plus keel clearance); 0 = ignore depth. */
+  private needDepth = 0;
 
   constructor(worldSize: number, islands: Island[], cellSize: number = 110) {
     this.worldSize = worldSize;
@@ -31,6 +37,8 @@ export class NavalNavigationGrid {
     this.cols = Math.max(10, Math.ceil(worldSize / cellSize));
     this.rows = Math.max(10, Math.ceil(worldSize / cellSize));
     this.grid = new Uint8Array(this.cols * this.rows);
+    this.minDepth = new Float32Array(this.cols * this.rows).fill(Infinity);
+    this.touchesLand = new Uint8Array(this.cols * this.rows);
     this.islands = islands;
     this.bakeTerrain();
   }
@@ -94,6 +102,50 @@ export class NavalNavigationGrid {
     }
   }
 
+  /** Attaches bathymetry: samples the depth function over each cell and keeps the shallowest. */
+  public setDepthModel(depthAt: (x: number, y: number) => number): void {
+    for (let gy = 0; gy < this.rows; gy++) {
+      for (let gx = 0; gx < this.cols; gx++) {
+        let min = Infinity;
+        let land = 0;
+        for (let sy = 0; sy < 3; sy++) {
+          for (let sx = 0; sx < 3; sx++) {
+            const d = depthAt(gx * this.cellSize + (sx + 0.5) * (this.cellSize / 3), gy * this.cellSize + (sy + 0.5) * (this.cellSize / 3));
+            if (d <= 0) land = 1;
+            else if (d < min) min = d;
+          }
+        }
+        this.minDepth[gy * this.cols + gx] = min;
+        this.touchesLand[gy * this.cols + gx] = land;
+      }
+    }
+  }
+
+  /** Shallowest water in the cell holding `pos` (m). */
+  public depthAt(pos: Vector2D): number {
+    const { gx, gy } = this.worldToCell(pos);
+    return this.minDepth[gy * this.cols + gx];
+  }
+
+  /** Runs a query for a ship needing `depth` metres of water (0 = depth ignored). */
+  public withDepth<T>(depth: number, fn: () => T): T {
+    const prev = this.needDepth;
+    this.needDepth = depth;
+    try {
+      return fn();
+    } finally {
+      this.needDepth = prev;
+    }
+  }
+
+  /** Land, or too shallow for the current query's ship. */
+  private blocked(idx: number): boolean {
+    if (this.grid[idx] === CELL_LAND) return true;
+    if (this.needDepth <= 0) return false;
+    // Beaching craft (LCVP, LCM, LST trimmed for the beach) may close the shore; deeper hulls may not
+    return this.minDepth[idx] < this.needDepth || (this.needDepth >= 3 && this.touchesLand[idx] === 1);
+  }
+
   public worldToCell(pos: Vector2D): { gx: number; gy: number } {
     const gx = Math.max(0, Math.min(this.cols - 1, Math.floor(pos.x / this.cellSize)));
     const gy = Math.max(0, Math.min(this.rows - 1, Math.floor(pos.y / this.cellSize)));
@@ -109,7 +161,7 @@ export class NavalNavigationGrid {
 
   public isWalkableCell(gx: number, gy: number): boolean {
     if (gx < 0 || gx >= this.cols || gy < 0 || gy >= this.rows) return false;
-    return this.grid[gy * this.cols + gx] !== CELL_LAND;
+    return !this.blocked(gy * this.cols + gx);
   }
 
   /**
@@ -147,13 +199,18 @@ export class NavalNavigationGrid {
     return null;
   }
 
-  public projectToWalkableWater(pos: Vector2D): Vector2D {
+  /** Nearest navigable water for a ship needing `needDepth` metres (0 = any water). */
+  public projectToWalkableWater(pos: Vector2D, needDepth = 0): Vector2D {
+    return this.withDepth(needDepth, () => this.projectImpl(pos));
+  }
+
+  private projectImpl(pos: Vector2D): Vector2D {
     const clamped: Vector2D = {
       x: Math.max(80, Math.min(this.worldSize - 80, pos.x)),
       y: Math.max(80, Math.min(this.worldSize - 80, pos.y)),
     };
     const { gx, gy } = this.worldToCell(clamped);
-    if (this.grid[gy * this.cols + gx] === CELL_OPEN) {
+    if (this.grid[gy * this.cols + gx] === CELL_OPEN && !this.blocked(gy * this.cols + gx)) {
       return clamped;
     }
     const walkable = this.findNearestWalkableCell(gx, gy);
@@ -161,7 +218,11 @@ export class NavalNavigationGrid {
     return this.cellToWorld(walkable.gx, walkable.gy);
   }
 
-  public hasClearWaterLine(a: Vector2D, b: Vector2D, avoidCoastal: boolean = true): boolean {
+  public hasClearWaterLine(a: Vector2D, b: Vector2D, avoidCoastal: boolean = true, needDepth = 0): boolean {
+    return this.withDepth(needDepth, () => this.clearLineImpl(a, b, avoidCoastal));
+  }
+
+  private clearLineImpl(a: Vector2D, b: Vector2D, avoidCoastal: boolean): boolean {
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const length = Math.hypot(dx, dy);
@@ -176,7 +237,7 @@ export class NavalNavigationGrid {
       const py = a.y + dy * t;
       const { gx, gy } = this.worldToCell({ x: px, y: py });
       const val = this.grid[gy * this.cols + gx];
-      if (val === CELL_LAND) return false;
+      if (this.blocked(gy * this.cols + gx)) return false;
       if (avoidCoastal && val === CELL_COASTAL) return false;
     }
     return true;
@@ -185,7 +246,12 @@ export class NavalNavigationGrid {
   /**
    * Computes an 8-directional A* path on the sea-lane grid and smooths it via line-of-sight string-pulling.
    */
-  public findPath(rawStart: Vector2D, rawGoal: Vector2D): Vector2D[] {
+  /** A* sea lane for a ship needing `needDepth` metres of water (0 = any water). */
+  public findPath(rawStart: Vector2D, rawGoal: Vector2D, needDepth = 0): Vector2D[] {
+    return this.withDepth(needDepth, () => this.findPathImpl(rawStart, rawGoal));
+  }
+
+  private findPathImpl(rawStart: Vector2D, rawGoal: Vector2D): Vector2D[] {
     const clampedGoal: Vector2D = {
       x: Math.max(80, Math.min(this.worldSize - 80, rawGoal.x)),
       y: Math.max(80, Math.min(this.worldSize - 80, rawGoal.y)),
@@ -206,7 +272,7 @@ export class NavalNavigationGrid {
       : this.cellToWorld(goalCell.gx, goalCell.gy);
 
     // Fast path: direct clear deep-water sightline
-    if (this.hasClearWaterLine(rawStart, goalWorld, true)) {
+    if (this.clearLineImpl(rawStart, goalWorld, true)) {
       return [goalWorld];
     }
 
@@ -292,19 +358,21 @@ export class NavalNavigationGrid {
         const nIdx = ny * this.cols + nx;
         if (closed[nIdx]) continue;
         const cellType = this.grid[nIdx];
-        if (cellType === CELL_LAND) continue;
+        if (this.blocked(nIdx)) continue;
 
         // Prevent diagonal corner-cutting across land corners
         if (dir.dx !== 0 && dir.dy !== 0) {
           if (
-            this.grid[cy * this.cols + nx] === CELL_LAND ||
-            this.grid[ny * this.cols + cx] === CELL_LAND
+            this.blocked(cy * this.cols + nx) ||
+            this.blocked(ny * this.cols + cx)
           ) {
             continue;
           }
         }
 
-        const terrainWeight = cellType === CELL_COASTAL ? 3.2 : 1.0;
+        // Prefer the deep channel: water barely deep enough costs more
+        const marginal = this.needDepth > 0 && this.minDepth[nIdx] < this.needDepth * 1.6;
+        const terrainWeight = (cellType === CELL_COASTAL ? 3.2 : 1.0) * (marginal ? 1.8 : 1.0);
         const tentativeG = gScore[current] + dir.cost * terrainWeight;
         if (tentativeG < gScore[nIdx]) {
           cameFrom[nIdx] = current;
@@ -345,7 +413,7 @@ export class NavalNavigationGrid {
     while (i < rawPath.length) {
       let farthest = i;
       for (let j = rawPath.length - 1; j > i; j--) {
-        if (this.hasClearWaterLine(anchor, rawPath[j], true)) {
+        if (this.clearLineImpl(anchor, rawPath[j], true)) {
           farthest = j;
           break;
         }

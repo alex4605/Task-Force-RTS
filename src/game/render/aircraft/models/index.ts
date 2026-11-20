@@ -5,6 +5,7 @@ import { KOREA_DRAWERS } from './korea';
 import { VIETNAM_DRAWERS } from './vietnam';
 import { MODERN_DRAWERS } from './modern';
 import { ROSTER_ADDITION_DRAWERS } from './rosterAdditions';
+import { PISTON_PLANFORM_DRAWERS } from './pistonPlanform';
 
 export type { AircraftModelDrawer, AircraftDrawerTable } from './types';
 
@@ -16,4 +17,6 @@ export const AIRCRAFT_MODEL_DRAWERS: AircraftDrawerTable = {
   ...VIETNAM_DRAWERS,
   ...MODERN_DRAWERS,
   ...ROSTER_ADDITION_DRAWERS,
+  // Real planforms for single-engine piston types (override the older generic silhouettes)
+  ...PISTON_PLANFORM_DRAWERS,
 };

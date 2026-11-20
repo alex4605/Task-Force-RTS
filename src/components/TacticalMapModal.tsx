@@ -1,6 +1,9 @@
 import React, { useRef, useEffect } from 'react';
 import { Island, Ship, Aircraft, GroundUnit, Era, Sonobuoy, Vector2D } from '../types/game';
 import { CameraViewportState } from './GameCanvas';
+import type { RadarCoverage } from '../game/engine';
+import { drawCoverageOnMap } from './hud/drawCoverage';
+import { isHiddenRiverBoat } from '../game/naval/riverine';
 import { X, Radio } from 'lucide-react';
 
 
@@ -19,6 +22,8 @@ interface TacticalMapModalProps {
   onFocusWorldPos?: (pos: Vector2D) => void;
   sectorName: string;
   era?: Era;
+  /** Radar coverage layer, when switched on. */
+  radarCoverage?: RadarCoverage[];
 }
 
 export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
@@ -33,6 +38,7 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
   groundUnits = [],
   sonobuoys = [],
   cameraViewport = null,
+  radarCoverage,
   onFocusWorldPos,
   sectorName,
   era = 'era1',
@@ -315,7 +321,7 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
 
     // Draw Enemy Ships (Submarines obey Fog of War until ASW sonar contact or firing reveal)
     for (const ship of enemyShips) {
-      if (ship.isSunk) continue;
+      if (ship.isSunk || isHiddenRiverBoat(ship)) continue;
       const isSub = isSubHull(ship);
       if (isSub && !ship.isSpotted) continue;
 
@@ -442,9 +448,12 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
       );
     }
 
+    drawCoverageOnMap(ctx, radarCoverage, scale, 2);
+
     // Draw Aircraft (With Special Kamikaze / Ohka indicators)
     for (const plane of aircraft) {
       if (plane.state === 'shot_down') continue;
+      if (plane.side === 'enemy' && (plane.trackedByPlayer ?? 1) <= 0) continue; // not on our scopes
       const px = plane.pos.x * scale;
       const py = plane.pos.y * scale;
 
@@ -508,7 +517,7 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
       ctx.strokeRect(vx, vy, vw, vh);
       ctx.setLineDash([]);
     }
-  }, [isOpen, worldSize, islands, playerShips, alliedShips, enemyShips, aircraft, groundUnits, sonobuoys, cameraViewport]);
+  }, [isOpen, worldSize, islands, playerShips, alliedShips, enemyShips, aircraft, groundUnits, sonobuoys, cameraViewport, radarCoverage]);
 
   if (!isOpen) return null;
 

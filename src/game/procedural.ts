@@ -1,3 +1,5 @@
+import { applyHistoricalAswFit } from './asw';
+import { applyMainlandTemplate } from './terrain/theaters';
 import {
   Island,
   IslandStronghold,
@@ -3353,7 +3355,7 @@ export function createTarawaLHA(id: string, name: string, pos: Vector2D): Ship {
  * Patrol Boat, River (PBR) Mk II of Task Force 116 "Game Warden": a 31-foot fibreglass boat on
  * twin water-jets, a twin .50 calibre tub forward and a single .50 aft, crew of four.
  */
-export function createPBR(id: string, name: string, pos: Vector2D): Ship {
+export function createPBR(id: string, name: string, pos: Vector2D, era: Era = 'era4'): Ship {
   const heading = -Math.PI / 4;
   return createShip({
     id,
@@ -3361,7 +3363,7 @@ export function createPBR(id: string, name: string, pos: Vector2D): Ship {
     codeName: 'River Rat',
     type: 'pbr',
     side: 'player',
-    era: 'era4',
+    era,
     pos: { ...pos },
     heading,
     speed: 14,
@@ -3382,6 +3384,54 @@ export function createPBR(id: string, name: string, pos: Vector2D): Ship {
     ],
     flakCooldown: 0,
     flakRange: 420,
+  });
+}
+
+/**
+ * Enemy river craft. Era 5: Project 1204 Shmel river gunboat (76 mm D-56T in a PT-76 turret,
+ * twin 25 mm, 24 kt). Eras 3-4: an armed motor junk (DShK 12.7 mm, a 37 mm or recoilless gun,
+ * 8-9 kt) of the kind the KPA and the Vietnamese used on rivers and in the delta.
+ */
+export function createRiverGunboat(id: string, name: string, pos: Vector2D, era: Era): Ship {
+  const shmel = era === 'era5';
+  const heading = Math.PI;
+  return createShip({
+    id,
+    name,
+    codeName: shmel ? 'Shmel' : 'River Junk',
+    type: 'river_gunboat',
+    side: 'enemy',
+    era,
+    pos: { ...pos },
+    heading,
+    speed: 0,
+    maxSpeed: shmel ? 24 : 9,
+    length: shmel ? 28 : 20,
+    width: shmel ? 4.6 : 6.2,
+    health: shmel ? 620 : 300,
+    maxHealth: shmel ? 620 : 300,
+    armor: shmel ? 0.2 : 0.02,
+    detectionRange: 1400,
+    turrets: shmel
+      ? [
+          createTurret(6, 0, '76mm D-56T (PT-76 砲塔)', 900, 2.6, 1, heading, 260),
+          createTurret(-9, 0, '25mm 2M-3M 雙聯機砲', 650, 0.5, 2, heading, 45),
+        ]
+      : [
+          createTurret(8, 0, '12.7mm DShK 重機槍', 600, 0.3, 1, heading, 26),
+          createTurret(-4, 0, era === 'era4' ? '57mm B-10 無後座力砲' : '37mm M1939 機砲', 700, 2.2, 1, heading, 120),
+        ],
+    detailedArmaments: shmel
+      ? [
+          { name: '76mm D-56T 戰車砲 (PT-76 砲塔)', count: '1座', type: 'main', desc: '河川火力支援' },
+          { name: '25mm 2M-3M 雙聯裝 / 14.5mm KPVT', count: '艇艉', type: 'secondary', desc: '防空與近距' },
+        ]
+      : [
+          { name: '12.7mm DShK 重機槍', count: '艇艏', type: 'main', desc: '河岸伏擊與攔截' },
+          { name: era === 'era4' ? '57mm B-10 無後座力砲' : '37mm 機砲', count: '1門', type: 'secondary', desc: '近距火力' },
+        ],
+    flakCooldown: 0,
+    flakRange: 380,
   });
 }
 
@@ -3546,7 +3596,7 @@ export function createMonsunUBoatSS(id: string, name: string, pos: Vector2D, era
     pos: { ...pos },
     heading,
     speed: 7.5,
-    maxSpeed: era === 'era1' ? 14 : 16,
+    maxSpeed: 7, // Type IXD2 Monsun: 6.9 kt submerged on electric motors
     length: era === 'era1' ? 66 : 78,
     width: 9,
     health: era === 'era1' ? 760 : 980,
@@ -3582,7 +3632,7 @@ export function createIjnIBoatSS(id: string, name: string, pos: Vector2D, era: E
     pos: { ...pos },
     heading,
     speed: 8,
-    maxSpeed: 16,
+    maxSpeed: 8, // B1 type: 8 kt submerged
     length: 84,
     width: 10,
     health: era === 'era1' ? 880 : 1120,
@@ -3624,7 +3674,7 @@ export function createSovietWhiskeySS(
     pos: { ...pos },
     heading,
     speed: isZulu ? 9 : 8,
-    maxSpeed: isZulu ? 18 : 16,
+    maxSpeed: isZulu ? 15 : 13, // submerged: Zulu 15 kt, Whiskey 13 kt
     length: isZulu ? 86 : 76,
     width: 10,
     health: isZulu ? 1350 : 1120,
@@ -4757,7 +4807,7 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
     // ══════════════════════════════════════════════════════════
     continent.isMainland = true;
 
-    addMainlandTerrain(era, continent);
+    applyMainlandTemplate(era, continent);
 
     // ══════════════════════════════════════════════════════════
     // 友軍大陸板塊防禦設施 (Allied Continental Logistics & Defense Belt)
@@ -5037,578 +5087,6 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
           : '以方陣 CIWS 與 SM-2MR 成功攔截 10 枚以上來襲反艦巡弋飛彈，出動 LCAC 與 AAV-7A1 實施重裝搶灘',
     },
   };
-}
-
-/** Rivers, roads, hills and jungle belts of the era 3-5 mainland. */
-function addMainlandTerrain(era: Era, continent: Island): void {
-  if (era === 'era3') {
-    addKoreanTerrain(continent);
-  } else {
-    addDeltaAndPlainTerrain(continent);
-  }
-}
-
-/** Era 3: Korean rivers, mountain ridges and the coastal road net. */
-function addKoreanTerrain(continent: Island): void {
-  // ══════════════════════════════════════════════════════════
-  // 時代三 (1950-1953) 朝鮮半島原型全境地形系統 (Korean Peninsula Continental Prototype)
-  // 覆蓋全大陸 (X: 5000–14000, Y: 0–14000)
-  // 包含北段蓋馬高原與長津湖、中段鐵三角與太白山脈主脊、南段洛東江與釜山防禦圈、東麓斷崖
-  // ══════════════════════════════════════════════════════════
-
-  // 1. 全境河流網 (North Yalu/Chongchon, Central Imjin/Han, South Naktong)
-  continent.rivers = [
-    {
-      width: 22,
-      points: [
-        { x: 13600, y: 700 },
-        { x: 11400, y: 1100 },
-        { x: 9200, y: 1600 },
-        { x: 7400, y: 2100 },
-        { x: 5020, y: 2400 },
-      ],
-    },
-    {
-      width: 20,
-      points: [
-        { x: 13200, y: 5000 },
-        { x: 11000, y: 5500 },
-        { x: 8800, y: 5900 },
-        { x: 7200, y: 6200 },
-        { x: 5050, y: 6400 },
-      ],
-    },
-    {
-      width: 24,
-      points: [
-        { x: 11800, y: 8800 },
-        { x: 9800, y: 9800 },
-        { x: 8600, y: 10900 },
-        { x: 9100, y: 12200 },
-        { x: 7600, y: 13100 },
-        { x: 5200, y: 13500 },
-      ],
-    },
-  ];
-
-  // 2. 朝鮮半島戰略公路網 (京釜主軸、鐵三角橫貫線、洛東江環形補給線)
-  continent.roads = [
-    {
-      type: 'road',
-      points: [
-        { x: 11400, y: 1200 },
-        { x: 9800, y: 3200 },
-        { x: 8600, y: 5200 },
-        { x: 7900, y: 7000 },
-        { x: 8200, y: 9200 },
-        { x: 7800, y: 11400 },
-        { x: 7200, y: 13200 },
-      ],
-    },
-    {
-      type: 'road',
-      points: [
-        { x: 5400, y: 4800 },
-        { x: 7200, y: 4600 },
-        { x: 9200, y: 4400 },
-        { x: 10800, y: 4300 },
-        { x: 12800, y: 4100 },
-      ],
-    },
-    {
-      type: 'trail',
-      points: [
-        { x: 6400, y: 9400 },
-        { x: 8200, y: 10400 },
-        { x: 9600, y: 11200 },
-        { x: 8800, y: 12400 },
-        { x: 6800, y: 13000 },
-      ],
-    },
-    {
-      type: 'trail',
-      points: [
-        { x: 11600, y: 2800 },
-        { x: 12400, y: 5200 },
-        { x: 12200, y: 7600 },
-        { x: 11600, y: 9800 },
-      ],
-    },
-  ];
-
-  // 3. 全境高山與戰略高地
-  continent.hills = [
-    { x: 11200, y: 1600, radius: 115 }, // 長津湖高地
-    { x: 9600, y: 2600, radius: 100 },  // 德川北山
-    { x: 10800, y: 3100, radius: 125 }, // 要塞天險制高點
-    { x: 9800, y: 4200, radius: 95 },   // 875 高地
-    { x: 8900, y: 5200, radius: 85 },   // 55 高地
-    { x: 10400, y: 4900, radius: 105 }, // 漢堡高地
-    { x: 7400, y: 7000, radius: 90 },   // 冠岳山
-    { x: 8200, y: 6200, radius: 80 },   // 水原丘陵
-    { x: 9400, y: 8200, radius: 90 },   // 大田丘陵
-    { x: 8600, y: 9900, radius: 95 },   // 大邱外圍要隘
-    { x: 9800, y: 11200, radius: 110 }, // 智異山南麓
-    { x: 8800, y: 12600, radius: 100 }, // 馬山灘頭丘陵
-  ];
-
-  // 4. 朝鮮半島連續高寒森林與溫帶林帶 (覆蓋北中南全境)
-  continent.forestBelts = [
-    // 北段：蓋馬高原針葉落葉松高寒林帶
-    {
-      id: 'korea-forest-north',
-      density: 0.94,
-      biome: 'bamboo',
-      points: [
-        { x: 13500, y: 400 },
-        { x: 12000, y: 900 },
-        { x: 10200, y: 1600 },
-        { x: 8600, y: 2400 },
-        { x: 7200, y: 2900 },
-        { x: 5300, y: 3200 },
-        { x: 5040, y: 2200 },
-        { x: 6800, y: 1600 },
-        { x: 8800, y: 900 },
-        { x: 11200, y: 400 },
-      ],
-    },
-    // 中段：太白山脈主脊溫帶闊葉混交林長廊
-    {
-      id: 'korea-forest-central',
-      density: 0.92,
-      biome: 'rainforest',
-      points: [
-        { x: 8400, y: 3600 },
-        { x: 9200, y: 4400 },
-        { x: 10200, y: 5600 },
-        { x: 10900, y: 6800 },
-        { x: 11500, y: 7900 },
-        { x: 11800, y: 8600 },
-        { x: 11200, y: 8800 },
-        { x: 10500, y: 8100 },
-        { x: 9800, y: 6900 },
-        { x: 8900, y: 5800 },
-        { x: 8100, y: 4700 },
-        { x: 7600, y: 3800 },
-      ],
-    },
-    // 南段：洛東江河谷與南部丘陵松竹林帶
-    {
-      id: 'korea-forest-south',
-      density: 0.90,
-      biome: 'bamboo',
-      points: [
-        { x: 11400, y: 8900 },
-        { x: 10600, y: 10100 },
-        { x: 9700, y: 11400 },
-        { x: 8900, y: 12600 },
-        { x: 7800, y: 13500 },
-        { x: 5400, y: 13800 },
-        { x: 5150, y: 12800 },
-        { x: 6800, y: 12100 },
-        { x: 8200, y: 11100 },
-        { x: 9200, y: 9900 },
-        { x: 10400, y: 8900 },
-      ],
-    },
-    // 東麓：深山老林要塞隱蔽林帶 (日本海沿岸縱深)
-    {
-      id: 'korea-forest-east',
-      density: 0.95,
-      biome: 'rainforest',
-      points: [
-        { x: 12200, y: 2600 },
-        { x: 13400, y: 3400 },
-        { x: 13800, y: 5800 },
-        { x: 13700, y: 8400 },
-        { x: 13100, y: 10800 },
-        { x: 12400, y: 9800 },
-        { x: 12800, y: 7600 },
-        { x: 12900, y: 5100 },
-        { x: 12300, y: 3600 },
-      ],
-    },
-  ];
-
-  // 5. 朝鮮半島連綿山脈脊線系統 (北中南貫穿 14,000m)
-  continent.mountainRidges = [
-    // 北段：蓋馬高原與長津湖花崗岩山脈
-    {
-      id: 'korea-ridge-kaema',
-      width: 280,
-      height: 2150,
-      spine: [
-        { x: 12600, y: 600 },
-        { x: 11500, y: 1400 },
-        { x: 10400, y: 2200 },
-        { x: 9200, y: 2900 },
-        { x: 8400, y: 3600 },
-      ],
-      peaks: [
-        { pos: { x: 11500, y: 1400 }, elevation: 2150, label: '白頭山長津湖主峰 [Mount Paektu/Chosin 2150m]' },
-        { pos: { x: 10400, y: 2200 }, elevation: 1750, label: '狼林山脈天險稜線 [Nangnim Ridge 1750m]' },
-        { pos: { x: 9200, y: 2900 }, elevation: 1420, label: '妙香山要隘 [Myohyang Peak 1420m]' },
-      ],
-    },
-    // 中段：太白山脈主脊、鐵三角與傷心嶺
-    {
-      id: 'korea-ridge-taebaek',
-      width: 320,
-      height: 1567,
-      spine: [
-        { x: 8600, y: 3800 },
-        { x: 9400, y: 4800 },
-        { x: 10200, y: 5800 },
-        { x: 10800, y: 6800 },
-        { x: 11400, y: 7800 },
-        { x: 11800, y: 8600 },
-      ],
-      peaks: [
-        { pos: { x: 9400, y: 4800 }, elevation: 931, label: '傷心嶺主峰 [Heartbreak Ridge 931m]' },
-        { pos: { x: 10200, y: 5800 }, elevation: 983, label: '血嶺要塞鞍部 [Bloody Ridge 983m]' },
-        { pos: { x: 10800, y: 6800 }, elevation: 1062, label: '金化鐵三角制高點 [Iron Triangle 1062m]' },
-        { pos: { x: 11400, y: 7800 }, elevation: 1567, label: '太白山頂峰 [Taebaek Summit 1567m]' },
-      ],
-    },
-    // 南段：智異山山脈與南部洛東江天險
-    {
-      id: 'korea-ridge-jiri',
-      width: 260,
-      height: 1915,
-      spine: [
-        { x: 11600, y: 8800 },
-        { x: 10800, y: 9900 },
-        { x: 9900, y: 11200 },
-        { x: 9200, y: 12400 },
-        { x: 8500, y: 13400 },
-      ],
-      peaks: [
-        { pos: { x: 9900, y: 11200 }, elevation: 1915, label: '智異山天王峰 [Jiri Peak 1915m]' },
-        { pos: { x: 10800, y: 9900 }, elevation: 1430, label: '伽倻山懸崖要塞 [Gaya Bluff 1430m]' },
-        { pos: { x: 8800, y: 12900 }, elevation: 801, label: '釜山外圍金井山屏障 [Geumjeong Peak 801m]' },
-      ],
-    },
-    // 東麓：日本海太白東麓斷崖海防山脈
-    {
-      id: 'korea-ridge-east-coast',
-      width: 240,
-      height: 1708,
-      spine: [
-        { x: 13200, y: 2600 },
-        { x: 13500, y: 5200 },
-        { x: 13200, y: 7800 },
-        { x: 12800, y: 10500 },
-      ],
-      peaks: [
-        { pos: { x: 13500, y: 5200 }, elevation: 1708, label: '雪嶽山大青峰 [Seoraksan Peak 1708m]' },
-      ],
-    },
-  ];
-}
-
-/** Eras 4-5: delta river network, jungle belts and coastal plain roads. */
-function addDeltaAndPlainTerrain(continent: Island): void {
-  // ══════════════════════════════════════════════════════════
-  // 時代四 (1965-1973) 越南戰場原型全境地形系統 (Vietnam War Continental Prototype)
-  // 覆蓋全大陸 (X: 5000–14000, Y: 0–14000)
-  // 包含北段紅河三角洲與下龍灣喀斯特、中段非軍事區(DMZ)與長山三重冠雨林、南段湄公河九龍江水網、東部胡志明小道縱深
-  // ══════════════════════════════════════════════════════════
-
-  // 1. 全境河流網 (North Red River, Central DMZ Ben Hai, South Mekong Delta)
-  continent.rivers = [
-    {
-      width: 24,
-      points: [
-        { x: 13500, y: 1200 },
-        { x: 11400, y: 2000 },
-        { x: 9500, y: 2900 },
-        { x: 7800, y: 3600 },
-        { x: 6600, y: 4200 },
-        { x: 5040, y: 4500 },
-      ],
-    },
-    {
-      width: 20,
-      points: [
-        { x: 12800, y: 5600 },
-        { x: 10400, y: 6200 },
-        { x: 8800, y: 6600 },
-        { x: 7400, y: 6900 },
-        { x: 5080, y: 7300 },
-      ],
-    },
-    {
-      width: 28,
-      points: [
-        { x: 13200, y: 9400 },
-        { x: 11500, y: 10400 },
-        { x: 9800, y: 11200 },
-        { x: 8200, y: 12100 },
-        { x: 6800, y: 12900 },
-        { x: 5150, y: 13600 },
-      ],
-    },
-    {
-      width: 18,
-      points: [
-        { x: 9800, y: 11200 },
-        { x: 9200, y: 12600 },
-        { x: 7600, y: 13700 },
-      ],
-    },
-  ];
-
-  // 2. 越南戰略公路與胡志明小道網絡
-  continent.roads = [
-    {
-      type: 'road',
-      points: [
-        { x: 5300, y: 2400 },
-        { x: 6200, y: 4800 },
-        { x: 6800, y: 6400 },
-        { x: 7400, y: 7800 },
-        { x: 8200, y: 9800 },
-        { x: 8600, y: 11600 },
-        { x: 8200, y: 13400 },
-      ],
-    },
-    {
-      type: 'road',
-      points: [
-        { x: 6800, y: 6400 },
-        { x: 7900, y: 5500 },
-        { x: 9200, y: 4500 },
-        { x: 10600, y: 3800 },
-        { x: 11800, y: 3400 },
-      ],
-    },
-    {
-      type: 'trail',
-      points: [
-        { x: 11500, y: 2200 },
-        { x: 10800, y: 3600 },
-        { x: 9800, y: 5200 },
-        { x: 10400, y: 6800 },
-        { x: 11200, y: 8400 },
-        { x: 11800, y: 10200 },
-        { x: 10900, y: 12200 },
-      ],
-    },
-    {
-      type: 'trail',
-      points: [
-        { x: 6400, y: 9800 },
-        { x: 7600, y: 10800 },
-        { x: 8800, y: 11800 },
-        { x: 7900, y: 13100 },
-      ],
-    },
-  ];
-
-  // 3. 越南全境山嶺與制高點高地
-  continent.hills = [
-    { x: 11600, y: 1800, radius: 120 }, // 諒山北峰
-    { x: 10200, y: 2500, radius: 110 }, // 下龍石林峰
-    { x: 10800, y: 3100, radius: 125 }, // 要塞天險制高點
-    { x: 7800, y: 3700, radius: 95 },   // 巴拿山嶺
-    { x: 9800, y: 4200, radius: 95 },   // 875 高地
-    { x: 8900, y: 5200, radius: 85 },   // 55 高地
-    { x: 10400, y: 4900, radius: 105 }, // 漢堡高地 937
-    { x: 7400, y: 7000, radius: 90 },   // 大理石山
-    { x: 8200, y: 6200, radius: 80 },   // 虎嶺
-    { x: 9400, y: 8400, radius: 95 },   // 德普丘陵
-    { x: 10600, y: 10400, radius: 110 },// 波萊古高原
-    { x: 9600, y: 12200, radius: 100 }, // 象山丘陵
-  ];
-
-  // 4. 熱帶雨林與密林叢林群 (Dense Jungles - 遍布北中南全境)
-  continent.jungles = [
-    { x: 10800, y: 1800, radius: 130, density: 0.90 },
-    { x: 9600, y: 2400, radius: 140, density: 0.92 },
-    { x: 8400, y: 3200, radius: 135, density: 0.90 },
-    { x: 7600, y: 3900, radius: 125, density: 0.88 },
-    { x: 6900, y: 4800, radius: 130, density: 0.85 },
-    { x: 7300, y: 5600, radius: 120, density: 0.85 },
-    { x: 7700, y: 6700, radius: 120, density: 0.85 },
-    { x: 8100, y: 5800, radius: 140, density: 0.90 },
-    { x: 8400, y: 6500, radius: 115, density: 0.85 },
-    { x: 8700, y: 5500, radius: 135, density: 0.90 },
-    { x: 9000, y: 6300, radius: 125, density: 0.85 },
-    { x: 9300, y: 5200, radius: 140, density: 0.90 },
-    { x: 9700, y: 5900, radius: 130, density: 0.85 },
-    { x: 10000, y: 4800, radius: 145, density: 0.90 },
-    { x: 10300, y: 5600, radius: 135, density: 0.85 },
-    { x: 10600, y: 4500, radius: 125, density: 0.90 },
-    { x: 10900, y: 5200, radius: 130, density: 0.85 },
-    { x: 8900, y: 7800, radius: 130, density: 0.88 },
-    { x: 9600, y: 8400, radius: 135, density: 0.90 },
-    { x: 10400, y: 9200, radius: 140, density: 0.92 },
-    { x: 11200, y: 9900, radius: 135, density: 0.90 },
-    { x: 11800, y: 10800, radius: 130, density: 0.88 },
-    { x: 8800, y: 10200, radius: 135, density: 0.90 },
-    { x: 9500, y: 11400, radius: 140, density: 0.92 },
-    { x: 10200, y: 12200, radius: 130, density: 0.88 },
-    { x: 8900, y: 12800, radius: 135, density: 0.90 },
-    { x: 7800, y: 13200, radius: 130, density: 0.85 },
-    { x: 11500, y: 3400, radius: 135, density: 0.92 },
-    { x: 12200, y: 4500, radius: 140, density: 0.95 },
-    { x: 12600, y: 6200, radius: 140, density: 0.95 },
-    { x: 12800, y: 7800, radius: 135, density: 0.92 },
-    { x: 12400, y: 9400, radius: 130, density: 0.90 },
-  ];
-
-  // 5. 越南全境連續有機雨林帶 (北段石林竹林、中段三重冠雨林、南段紅樹林、東部小道走廊)
-  continent.forestBelts = [
-    // 北段：下龍灣喀斯特石林與北部高地原始雨林
-    {
-      id: 'vietnam-forest-north-karst',
-      density: 0.94,
-      biome: 'bamboo',
-      points: [
-        { x: 13500, y: 500 },
-        { x: 12200, y: 1100 },
-        { x: 10400, y: 1900 },
-        { x: 8800, y: 2800 },
-        { x: 7400, y: 3400 },
-        { x: 5300, y: 3900 },
-        { x: 5020, y: 3100 },
-        { x: 6800, y: 2200 },
-        { x: 8900, y: 1400 },
-        { x: 11400, y: 600 },
-      ],
-    },
-    // 中段：非軍事區(DMZ)、溪山與安南長山三重冠熱帶密林走廊
-    {
-      id: 'vietnam-forest-dmz-spine',
-      density: 0.98,
-      biome: 'rainforest',
-      points: [
-        { x: 7400, y: 4100 },
-        { x: 8200, y: 4900 },
-        { x: 8900, y: 5900 },
-        { x: 9700, y: 7100 },
-        { x: 10400, y: 8200 },
-        { x: 11200, y: 8900 },
-        { x: 10600, y: 9200 },
-        { x: 9900, y: 8500 },
-        { x: 9100, y: 7300 },
-        { x: 8300, y: 6100 },
-        { x: 7600, y: 5100 },
-        { x: 6900, y: 4400 },
-      ],
-    },
-    // 南段：湄公河與隆安紅樹林潮間沼澤水網林帶
-    {
-      id: 'vietnam-forest-mekong-mangrove',
-      density: 0.96,
-      biome: 'mangrove',
-      points: [
-        { x: 11800, y: 9200 },
-        { x: 10800, y: 10300 },
-        { x: 9800, y: 11500 },
-        { x: 8800, y: 12700 },
-        { x: 7600, y: 13600 },
-        { x: 5300, y: 13800 },
-        { x: 5100, y: 12900 },
-        { x: 6700, y: 12200 },
-        { x: 8200, y: 11200 },
-        { x: 9400, y: 10100 },
-        { x: 10600, y: 9100 },
-      ],
-    },
-    // 東部：胡志明小道深層密林偽裝縱深掩護帶
-    {
-      id: 'vietnam-forest-trail-hinterland',
-      density: 0.96,
-      biome: 'rainforest',
-      points: [
-        { x: 12200, y: 2800 },
-        { x: 13500, y: 3600 },
-        { x: 13800, y: 6200 },
-        { x: 13700, y: 8800 },
-        { x: 13200, y: 11000 },
-        { x: 12400, y: 10100 },
-        { x: 12800, y: 7800 },
-        { x: 12900, y: 5300 },
-        { x: 12400, y: 3700 },
-      ],
-    },
-  ];
-
-  // 6. 越南全境山脈脊線系統 (北中南貫穿 14,000m)
-  continent.mountainRidges = [
-    // 北段：下龍灣喀斯特石灰岩群峰與諒山邊界險隘
-    {
-      id: 'vietnam-ridge-north-karst',
-      width: 290,
-      height: 1540,
-      spine: [
-        { x: 12800, y: 800 },
-        { x: 11600, y: 1600 },
-        { x: 10200, y: 2400 },
-        { x: 8800, y: 3200 },
-        { x: 7600, y: 3800 },
-      ],
-      peaks: [
-        { pos: { x: 11600, y: 1600 }, elevation: 1540, label: '諒山隘口主峰 [Lang Son Border Peak 1540m]' },
-        { pos: { x: 10200, y: 2400 }, elevation: 1180, label: '下龍石灰岩峰林 [Ha Long Karst Citadel 1180m]' },
-        { pos: { x: 7800, y: 3600 }, elevation: 1487, label: '巴拿山峰要塞 [Ba Na Ridge 1487m]' },
-      ],
-    },
-    // 中段：安南長山山脈主脊、溪山與阿紹谷地
-    {
-      id: 'vietnam-ridge-truongson-central',
-      width: 320,
-      height: 1140,
-      spine: [
-        { x: 7400, y: 4200 },
-        { x: 8200, y: 5200 },
-        { x: 9100, y: 6200 },
-        { x: 10100, y: 7200 },
-        { x: 11200, y: 8200 },
-        { x: 12200, y: 8900 },
-      ],
-      peaks: [
-        { pos: { x: 8200, y: 5200 }, elevation: 881, label: '溪山881南峰 [Hill 881 South 881m]' },
-        { pos: { x: 9100, y: 6200 }, elevation: 937, label: '漢堡高地937頂峰 [Hamburger Hill 937m]' },
-        { pos: { x: 10100, y: 7200 }, elevation: 875, label: '875高地核心稜線 [Hill 875 - 875m]' },
-        { pos: { x: 11200, y: 8200 }, elevation: 1140, label: '要塞花崗岩主峰 [Citadel Granite Peak 1140m]' },
-      ],
-    },
-    // 南段：中部高原波萊古天險與象山山脈
-    {
-      id: 'vietnam-ridge-highlands-south',
-      width: 270,
-      height: 1250,
-      spine: [
-        { x: 12400, y: 9200 },
-        { x: 11600, y: 10400 },
-        { x: 10600, y: 11600 },
-        { x: 9800, y: 12600 },
-        { x: 8900, y: 13500 },
-      ],
-      peaks: [
-        { pos: { x: 11600, y: 10400 }, elevation: 1250, label: '初邦山天險主峰 [Chu Pong Massif 1250m]' },
-        { pos: { x: 10600, y: 11600 }, elevation: 980, label: '波萊古高原隘口 [Pleiku Plateau Pass 980m]' },
-        { pos: { x: 9800, y: 12600 }, elevation: 1080, label: '象山山脊眺望峰 [Elephant Peak 1080m]' },
-      ],
-    },
-    // 沿海：山茶半島猴山懸崖山脊
-    {
-      id: 'vietnam-ridge-sontra',
-      width: 190,
-      height: 693,
-      spine: [
-        { x: 5700, y: 8600 },
-        { x: 6300, y: 8100 },
-        { x: 7000, y: 7700 },
-        { x: 7500, y: 8200 },
-      ],
-      peaks: [
-        { pos: { x: 6450, y: 8100 }, elevation: 693, label: '山茶半島猴山頂峰 [Son Tra Peak 693m]' },
-      ],
-    },
-  ];
 }
 
 /** Allied logistics and defence belt in the south-western rear of the mainland. */
@@ -8093,7 +7571,10 @@ function addPlayerTaskForce(era: Era, cvPos: Vector2D, initialHeading: number, p
       createLosAngelesSSN('player-ssn1', 'USS Los Angeles (SSN-688)', { x: cvPos.x + 420, y: cvPos.y + 40 }),
       createAustinLPD('player-lpd1', 'USS Austin (LPD-4)', { x: cvPos.x - 360, y: cvPos.y - 100 }),
       createLCAC('player-lcac1', 'LCAC-01 Air Cushion Craft', { x: cvPos.x - 380, y: cvPos.y - 60 }),
-      createTarawaLHA('player-lha1', 'USS Tarawa (LHA-1)', { x: cvPos.x - 520, y: cvPos.y - 200 })
+      createTarawaLHA('player-lha1', 'USS Tarawa (LHA-1)', { x: cvPos.x - 520, y: cvPos.y - 200 }),
+      // Special Boat Unit 26's PBR Mk IIs (still in service through 1989)
+      createPBR('player-pbr1', 'PBR Mk II (Special Boat Unit 26)', { x: cvPos.x - 440, y: cvPos.y - 300 }, 'era5'),
+      createPBR('player-pbr2', 'PBR Mk II (Special Boat Unit 26 · 2)', { x: cvPos.x - 470, y: cvPos.y - 260 }, 'era5')
     );
   }
 }
@@ -9229,7 +8710,7 @@ function addEnemyFleetEra1(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
       pos: { x: 7200, y: 7400 },
       heading: -Math.PI / 2,
       speed: 6,
-      maxSpeed: 14,
+      maxSpeed: 8, // B1 type: 8 kt submerged
       length: 56,
       width: 9,
       health: 750,
@@ -9593,7 +9074,7 @@ function addEnemyFleetEra2(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
       pos: { x: 7400, y: 7200 },
       heading: -Math.PI / 3,
       speed: 6,
-      maxSpeed: 16,
+      maxSpeed: 6.5, // Sen-Toku: 6.5 kt submerged
       length: 70,
       width: 12,
       health: 980,
@@ -9920,7 +9401,7 @@ export function createShip(
       : 980
   );
 
-  return {
+  const ship: Ship = {
     heading: 0,
     targetHeading: partial.heading || 0,
     speed: 0,
@@ -9950,6 +9431,8 @@ export function createShip(
     ...partial,
     ...ashmLoad(partial.type, partial.hasHarpoon),
   };
+  applyHistoricalAswFit(ship);
+  return ship;
 }
 
 /** Anti-ship missiles in the launchers at sea, from the ship's historical fit (navalMissileSalvos.ts). */

@@ -1,3 +1,4 @@
+import { ImpactEffect, ImpactSurface, impactFor, MAX_IMPACTS } from './impacts';
 import {
   Ship,
   Aircraft,
@@ -38,8 +39,19 @@ import {
 import { getAlliedSagFleet } from './alliedSagFleets';
 import { getNavalGunPerformance, getNavalLauncherRange } from './navalGuns';
 import { getAfbModelsForEra, getCarrierModelsForEra, getCatalogRole } from './airWingCatalog';
-import { AIR_WEAPON_RANGE, getInstallationRange } from './rangeScale';
+import { AIR_WEAPON_RANGE, gameRangeFromKm, getInstallationRange } from './rangeScale';
 import { getShipAshmFit, getShipSamSystem } from './navalMissileSalvos';
+import { applyHistoricalGuns, bombSpec, bombsPerRelease, burstBullets, getGunBattery, rocketKind, rocketsPerSalvo, ROCKETS, roundsPerBurst, warheadVsGround, warheadVsInstallation, warheadVsShip } from './aircraftArmament';
+import { getTerrainMap, TERRAIN, TERRAIN_NAMES, TerrainMap } from './terrain/terrainMap';
+const TERRAIN_WATER = TERRAIN.water;
+import { requiredDepth, SUBMERGED_MIN_DEPTH_M } from './naval/draft';
+import { inRiverChannel, isRiverine, nearestRiverPoint, planRiverRoute, riverPatrolStations, riverPointNear } from './naval/riverine';
+import { aircraftSensor, highCoverageRadius, installationRadarKm, lowCoveragePolygon, RadarSensor, sensorDetects, shipRadarKm, TRACK_MEMORY_S, visualDetects } from './radar';
+import { hasLineOfSight as hasLineOfSightAt } from './terrain/combat';
+import { canEngageGround, canSeeAircraft, coastalReach, concealment, findGroundPath, reverseSlopeFactor } from './terrain/combat';
+import { groundSilhouetteClass } from './unitPreviewRenderer';
+import { GroundWreck, leavesWreck, WRECK_LIFETIME } from './render/unitDetails';
+import { AHEAD_THROWERS, hasAswWeapon, layerFactorForAircraft, layerFactorForShipSonar, layerFactorForSonobuoy, updateThermoclineDepth, STANDOFF_ASW, aircraftDetectionRange, applyHistoricalAswFit, svttLabel, depthChargePattern, enemyAswWeapon, isDieselBoat, isSurfacedBoat, shipSonar, sonarDeadZone, sonarDetectionRange, sonobuoySensitivity, updateDieselBattery } from './asw';
 import { barrierStation, isStriker, selectAirTarget } from './airMissions';
 import { getAircraftSpeed, isSupersonicMissile, MISSILE_SPEED, shipMapSpeed, SPECIAL_ATTACK_SPEED } from './speedScale';
 import { getAircraftBaseHealth, getAircraftBaseSpeed, getAircraftGunRounds } from './aircraftStats';
@@ -52,7 +64,6 @@ const TAIL_GUNNER_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>(['
 /** BLUFOR / allied fighters that engage with air-to-air missiles. */
 const FRIENDLY_MISSILE_FIGHTER_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>(['f14a', 'f15a', 'f16a', 'fa18a', 'f4e', 'f4b', 'f4j', 'f8', 'tornado_adv', 'f4f_phantom', 'mirage2000', 'mirage3', 'hunter_fga9']);
 /** Aircraft armed with a rotary / high-rate internal cannon. */
-const ROTARY_CANNON_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>(['f14a', 'f15a', 'f16a', 'fa18a', 'su27', 'mig29a', 'f4e', 'f105', 'a7', 'ah1', 'f8', 'mig21']);
 /** Attack / support aircraft able to strafe ground targets at low level. */
 const GROUND_STRAFING_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>(['ah1', 'ov10', 'a4', 'a6a', 'a7', 'f105', 'ad1', 'a20', 'a26', 'su7', 'il10', 'p47']);
 
@@ -109,9 +120,23 @@ import {
   createSovietVictor3SSN,
   makeInstallation,
   createKiloSS,
+  createRiverGunboat,
 } from './procedural';
 import { NavalNavigationGrid, computeShipSeparationSteering } from './navigation';
 import { soundEngine } from './audio';
+
+/** One radar's coverage for the overlay (engine.getRadarCoverage). */
+export interface RadarCoverage {
+  pos: Vector2D;
+  enemy: boolean;
+  airborne: boolean;
+  /** Low-level coverage outline (viewshed). */
+  low: Vector2D[];
+  /** High-altitude detection radius. */
+  highRadius: number;
+  rangeKm: number;
+  label: string;
+}
 
 export interface BattleAlertBanner {
   id: string;
@@ -146,9 +171,281 @@ export class GameEngine {
   public alliedShips: Ship[] = [];
   public enemyShips: Ship[] = [];
   public groundUnits: GroundUnit[] = [];
+  /** Burnt-out vehicles left where ground units were destroyed (render only). */
+  public groundWrecks: GroundWreck[] = [];
+
+  /** Classified terrain of the current sector (built on first use, shared with the renderer). */
+  public get terrain(): TerrainMap {
+    return getTerrainMap(this.islands, this.worldSize, this.era);
+  }
+
+  /** Terrain routes planned per tick (A* calls), so a whole wave spawning at once spreads out. */
+  private groundPathBudget = 4;
+
+  private isAmphibiousUnit(unit: GroundUnit): boolean {
+    return Boolean(unit.isAmphibious) || unit.type.startsWith('usmc_lvt') || unit.type === 'usmc_aav7a1';
+  }
+
+  /**
+   * Plans a terrain route toward `goal`: the waypoints, null when there is no land route (or the
+   * unit swims), undefined when this tick's planning budget is spent (try again next tick).
+   */
+  private planGroundRoute(unit: GroundUnit, goal: Vector2D): Vector2D[] | null | undefined {
+    if (this.isAmphibiousUnit(unit)) return null;
+    if (this.groundPathBudget <= 0) return undefined;
+    this.groundPathBudget--;
+    return findGroundPath(this.terrain, unit.pos, goal, !this.isFootUnit(unit));
+  }
+
+  /**
+   * AI movement toward a moving goal (counter-attacks, banzai charges) along a terrain route,
+   * re-planned when the goal moves away or the route is old; speed scaled by terrain, and never
+   * into the sea or a lake unless the unit is amphibious.
+   */
+  private moveGroundUnitToward(unit: GroundUnit, goal: Vector2D, speed: number, dt: number, scale: number): void {
+    unit.routeAge = (unit.routeAge ?? 0) + dt;
+    if (!unit.routeGoal || dist(unit.routeGoal, goal) > 250 || unit.routeAge > 8) {
+      const r = this.planGroundRoute(unit, goal);
+      if (r !== undefined) {
+        unit.route = r && r.length > 1 ? r : undefined;
+        unit.routeIdx = 0;
+        unit.routeGoal = { ...goal };
+        unit.routeAge = 0;
+      }
+    }
+    let steer = goal;
+    if (unit.route) {
+      let i = unit.routeIdx ?? 0;
+      while (i < unit.route.length - 1 && dist(unit.pos, unit.route[i]) < 40) i++;
+      unit.routeIdx = i;
+      steer = i < unit.route.length - 1 ? unit.route[i] : goal;
+    }
+    unit.heading = Math.atan2(steer.y - unit.pos.y, steer.x - unit.pos.x);
+    const amphib = this.isAmphibiousUnit(unit);
+    const factor = amphib ? 1 : Math.max(0.08, this.terrain.moveFactor(unit.pos.x, unit.pos.y, !this.isFootUnit(unit)));
+    const nx = unit.pos.x + Math.cos(unit.heading) * speed * factor * dt * scale;
+    const ny = unit.pos.y + Math.sin(unit.heading) * speed * factor * dt * scale;
+    const onLand = this.islands.some((isl) => isPointInPolygon({ x: nx, y: ny }, isl.points)) && !this.terrain.isLake(nx, ny);
+    if (!onLand && !amphib) return;
+    unit.pos.x = nx;
+    unit.pos.y = ny;
+  }
+
+  /** Artillery, mortars and rockets fire indirect: no line of sight needed, only a spotter's view. */
+  private isIndirectFire(unit: GroundUnit): boolean {
+    return Boolean(unit.isArtillery || unit.isSPG || unit.isMLRS || unit.isNuclearTEL) || /artillery|howitzer|mortar|mlrs|grad|uragan|scud|atacms|calliope|m198|2s1/.test(unit.type);
+  }
+
+  /** Terrain-aware engagement check (line of sight, high ground, concealment): terrain/combat.ts. */
+  private canEngageGroundAt(from: Vector2D, range: number, to: Vector2D, indirect: boolean): boolean {
+    return canEngageGround(this.terrain, from, range, to, indirect);
+  }
+
+  /** Updates the unit's terrain snapshot (what the ground under it does) for the unit panel. */
+  public refreshGroundTerrainInfo(unit: GroundUnit): void {
+    const m = this.terrain;
+    const { x, y } = unit.pos;
+    const ci = Math.floor(y / m.cell) * m.cols + Math.floor(x / m.cell);
+    unit.terrainInfo = {
+      name: TERRAIN_NAMES[m.at(x, y)],
+      elevationM: Math.round(m.elevationAt(x, y) * 1500),
+      onRoad: m.onRoad(x, y),
+      move: m.moveFactor(x, y, !this.isFootUnit(unit)),
+      concealment: concealment(m, unit.pos),
+      airDamage: m.airConcealment(x, y),
+      deepRiver: ci >= 0 && ci < m.deepRiver.length && m.deepRiver[ci] === 1,
+    };
+  }
+
+  /**
+   * Route for a riverine craft (PBR, LCM-8, LCVP): when the destination is on or beside a river,
+   * or the boat is already in one, sail by sea to the right river mouth and up the channel
+   * (naval/riverine.ts). Null when the order is an ordinary sea move.
+   */
+  private planRiverineOrder(ship: Ship, target: Vector2D): { waypoints: Vector2D[]; targetPos: Vector2D } | null {
+    if (!isRiverine(ship) || !this.navGrid) return null;
+    const map = this.terrain;
+    const inRiver = inRiverChannel(map, ship.pos);
+    const reach = nearestRiverPoint(map, target);
+    const targetIsSea = map.at(target.x, target.y) === TERRAIN_WATER;
+    if (!inRiver && (!reach || reach.dist > 450 || targetIsSea)) return null;
+    const route = planRiverRoute(map, ship.pos, target, inRiver);
+    if (!route || route.channel.length === 0) return null;
+    const need = requiredDepth(ship);
+    const waypoints: Vector2D[] = [];
+    if (route.mouth) {
+      const seaLeg = this.navGrid.findPath(ship.pos, this.navGrid.projectToWalkableWater(route.mouth, need), need);
+      waypoints.push(...seaLeg);
+    }
+    waypoints.push(...route.channel);
+    if (inRiver && targetIsSea) {
+      // Down to the mouth and out to the sea destination
+      const exit = route.channel[route.channel.length - 1];
+      waypoints.push(...this.navGrid.findPath(this.navGrid.projectToWalkableWater(exit, need), target, need));
+      return { waypoints, targetPos: target };
+    }
+    return { waypoints, targetPos: waypoints[waypoints.length - 1] };
+  }
+
+  /**
+   * Enemy river craft on the inland reaches (eras 3-5): KPA armed junks on the Korean rivers,
+   * Vietnamese armed junks in the Tonkin delta, Project 1204 Shmel gunboats on the Elbe and
+   * Weser. Stationed away from friendly troops, spread along the rivers.
+   */
+  private spawnEnemyRiverPatrols(): void {
+    if (this.era !== 'era3' && this.era !== 'era4' && this.era !== 'era5') return;
+    const map = this.terrain;
+    const friendlyNear = (p: Vector2D) =>
+      this.groundUnits.some((u) => u.side !== 'enemy' && dist(u.pos, p) < 1200) ||
+      this.islands.some((isl) => isl.installations.some((i) => (i.side === 'player' || i.side === 'allied') && !i.isCivilian && dist(i.pos, p) < 900));
+    const count = this.era === 'era4' ? 4 : 3;
+    const stations = riverPatrolStations(map, (p) => p.x > 6600 && p.x < this.worldSize - 300 && p.y > 300 && p.y < this.worldSize - 300 && !friendlyNear(p), count);
+    const names =
+      this.era === 'era5'
+        ? ['Project 1204 Shmel (BK-12)', 'Project 1204 Shmel (BK-16)', 'Project 1204 Shmel (BK-31)']
+        : this.era === 'era4'
+        ? ['越南人民海軍 武裝機帆船 (T-11)', '越南人民海軍 武裝機帆船 (T-14)', '游擊隊 武裝舢舨 (Delta-3)', '游擊隊 武裝舢舨 (Delta-7)']
+        : ['朝鮮人民軍 武裝機帆船 (江-21)', '朝鮮人民軍 武裝機帆船 (江-24)', '朝鮮人民軍 武裝機帆船 (江-27)'];
+    stations.forEach((pos, k) => {
+      const boat = createRiverGunboat(`enemy-river-${k}-${Date.now()}`, names[k % names.length], pos, this.era);
+      boat.riverHome = { ...pos };
+      this.enemyShips.push(boat);
+    });
+  }
+
+  /** Alarms raised by enemy river boats (sightings, attacks); answered by boats nearby. */
+  private riverAlerts: { pos: Vector2D; time: number; source: string }[] = [];
+
+  private raiseRiverAlert(pos: Vector2D, from: Ship): void {
+    const last = this.riverAlerts.find((a) => a.source === from.id);
+    if (last && this.gameTime - last.time < 5) return;
+    this.riverAlerts = this.riverAlerts.filter((a) => this.gameTime - a.time < 30 && a.source !== from.id);
+    this.riverAlerts.push({ pos: { ...pos }, time: this.gameTime, source: from.id });
+    const answering = this.enemyShips.filter((s) => !s.isSunk && s.type === 'river_gunboat' && s.id !== from.id && dist(s.pos, pos) < 4500).length;
+    if (answering > 0 && this.isRiverBoatSpotted(from)) {
+      this.addCombatLog({
+        category: 'naval',
+        sourceSide: 'enemy',
+        sourceName: from.name,
+        targetName: '我方河川艇',
+        actionType: 'recon_spotted',
+        text: `⚠️【河川伏擊警報】敵河川艇「${from.name}」發出警報，附近 ${answering} 艘敵艇正沿河道集結反擊！`,
+      });
+    }
+  }
+
+  /** Whether the player side currently sees an enemy river boat. */
+  public isRiverBoatSpotted(boat: Ship): boolean {
+    return (boat.riverSpotted ?? 0) > 0 || (boat.riverReveal ?? 0) > 0;
+  }
+
+  /**
+   * Player-side sighting of enemy river boats (every 0.4 s with the air picture). Bank cover
+   * shortens the sighting range: jungle and mangrove most, forest and towns less; from the air
+   * the canopy hides even more. A boat stays in sight for 4 s after the last sighting.
+   */
+  private updateRiverBoatSighting(step: number): void {
+    const map = this.terrain;
+    const boats = this.enemyShips.filter((s) => !s.isSunk && s.type === 'river_gunboat');
+    if (boats.length === 0) return;
+    const ground: Vector2D[] = [
+      ...[...this.playerShips, ...this.alliedShips].filter((s) => !s.isSunk && !this.isSubmarine(s)).map((s) => s.pos),
+      ...this.groundUnits.filter((u) => u.side !== 'enemy' && !u.isDestroyed && !u.embarkedInShipId).map((u) => u.pos),
+      ...this.islands.flatMap((i) => i.installations).filter((i) => (i.side === 'player' || i.side === 'allied') && !i.isDestroyed && !i.isCivilian).map((i) => i.pos),
+    ];
+    const air = this.aircraft.filter((a) => a.side !== 'enemy' && a.state !== 'shot_down').map((a) => a.pos);
+    const visual = gameRangeFromKm(8);
+    for (const b of boats) {
+      // The densest cover on the banks around the boat
+      let cover = 1;
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        cover = Math.min(cover, concealment(map, { x: b.pos.x + Math.cos(a) * 60, y: b.pos.y + Math.sin(a) * 60 }));
+      }
+      const groundRange = Math.max(200, visual * cover);
+      const airRange = Math.max(150, visual * cover * cover);
+      const seen = ground.some((p) => dist(p, b.pos) < groundRange) || air.some((p) => dist(p, b.pos) < airRange);
+      b.riverSpotted = seen ? 4 : Math.max(0, (b.riverSpotted ?? 0) - step);
+    }
+  }
+
+  /**
+   * Enemy river craft: patrol up and down their reach, and run down the player's river boats
+   * that come within reach along the channel. Bank targets are engaged by updateShipCombat.
+   */
+  private updateRiverGunboatAI(ship: Ship, dt: number): void {
+    const map = this.terrain;
+    ship.riverReplan = Math.max(0, (ship.riverReplan ?? 0) - dt);
+    ship.riverReveal = Math.max(0, (ship.riverReveal ?? 0) - dt);
+    const prey = [...this.playerShips, ...this.alliedShips]
+      .filter((s) => !s.isSunk && isRiverine(s) && inRiverChannel(map, s.pos) && dist(s.pos, ship.pos) < 1800)
+      .sort((a, b) => dist(a.pos, ship.pos) - dist(b.pos, ship.pos))[0];
+    // Raise the alarm on the river net: on sighting the enemy, or on coming under fire
+    const hit = ship.riverLastHealth !== undefined && ship.health < ship.riverLastHealth - 1;
+    ship.riverLastHealth = ship.health;
+    if (prey || hit) this.raiseRiverAlert(prey ? prey.pos : ship.pos, ship);
+    const plan = (to: Vector2D) => {
+      const route = planRiverRoute(map, ship.pos, to, true);
+      if (!route || route.channel.length === 0) return;
+      ship.order = { type: 'move', targetPos: route.channel[route.channel.length - 1], waypoints: route.channel, activeWaypointIndex: 0, riverine: true };
+    };
+    if (prey) {
+      // Close to gun range and hold there
+      if (dist(prey.pos, ship.pos) > 500 && ship.riverReplan <= 0) {
+        plan(prey.pos);
+        ship.riverReplan = 4;
+      } else if (dist(prey.pos, ship.pos) <= 500) {
+        ship.order = { type: 'idle' };
+        ship.targetSpeed = 0;
+      }
+      return;
+    }
+    // Answer a recent alarm from another boat: converge on it and counter-attack
+    const alert = this.riverAlerts
+      .filter((a) => a.source !== ship.id && this.gameTime - a.time < 30 && dist(a.pos, ship.pos) < 4500 && dist(a.pos, ship.pos) > 450)
+      .sort((a, b) => dist(a.pos, ship.pos) - dist(b.pos, ship.pos))[0];
+    if (alert) {
+      if (ship.riverReplan <= 0) {
+        plan(alert.pos);
+        ship.riverReplan = 5;
+        ship.targetSpeed = ship.maxSpeed;
+      }
+      return;
+    }
+    if (ship.order.type !== 'move' && ship.riverReplan <= 0) {
+      const home = ship.riverHome ?? ship.pos;
+      const leg = riverPointNear(map, home, 300, 1600, Math.random);
+      if (leg) plan(leg);
+      ship.riverReplan = 6 + Math.random() * 8;
+    }
+  }
+
+  /** Terrain masking of low fliers from an air-defence site or ship (terrain/combat.ts). */
+  private aaCanSee(from: Vector2D, plane: Aircraft, mast = 0.04): boolean {
+    // Fire control needs the target in the side's air picture and a clear line to it
+    return this.isAirTracked(plane) && canSeeAircraft(this.terrain, from, plane, mast);
+  }
+
+  /** Coastal battery reach against ships, longer from high ground. */
+  private coastalReach(pos: Vector2D, base: number): number {
+    return coastalReach(this.terrain, pos, base);
+  }
+
+  /** Line of fire between two points at sea: an island's high ground blocks naval guns. */
+  private seaLineClear(a: Vector2D, b: Vector2D): boolean {
+    return hasLineOfSightAt(this.terrain, a, b);
+  }
+
+  /** On-foot units (infantry, AT teams, mortars) versus vehicles, for terrain movement. */
+  private isFootUnit(unit: GroundUnit): boolean {
+    const kind = groundSilhouetteClass(unit.type);
+    return kind === 'infantry' || kind === 'atgm' || kind === 'mortar';
+  }
   public aircraft: Aircraft[] = [];
   public projectiles: Projectile[] = [];
   public particles: Particle[] = [];
+  /** Detonation effects by weapon and surface (see impacts.ts). */
+  public impacts: ImpactEffect[] = [];
 
   // ══════════════════════════════════════════════════════════
   // 戰區資源點數 (Command Points) 與 後勤採購系統
@@ -586,6 +883,18 @@ export class GameEngine {
     this.controlGroups = {};
     this.enemyBeringSeaCoordTimer = 26;
     this.navGrid = new NavalNavigationGrid(this.worldSize, this.islands, 110);
+    // Bathymetry: deep-draught ships keep out of shallows, reefs and delta flats
+    {
+      const terrain = this.terrain;
+      this.navGrid.setDepthModel((x, y) => terrain.depthAt(x, y));
+      // Ships placed by the scenario in water too shallow for them move to the nearest deep enough water
+      for (const ship of [...this.playerShips, ...this.enemyShips]) {
+        const need = requiredDepth(ship);
+        const d = terrain.depthAt(ship.pos.x, ship.pos.y);
+        if (need > 0 && d > 0 && d < need) ship.pos = this.navGrid.projectToWalkableWater(ship.pos, need);
+      }
+    }
+    this.spawnEnemyRiverPatrols();
 
     // 確保初始潛艦進入水下靜默隱蔽 (Fog of War Stealth Defaults)
     for (const s of [...this.playerShips, ...this.enemyShips]) {
@@ -901,13 +1210,18 @@ export class GameEngine {
         targetPos.x += Math.cos(offsetAngle) * offsetDist;
         targetPos.y += Math.sin(offsetAngle) * offsetDist;
       }
-      if (targetPos && this.navGrid) {
-        targetPos = this.navGrid.projectToWalkableWater(targetPos);
+      // Brown water: riverine craft ordered up a river (or already in one) take the channel
+      const river = order.type === 'move' && targetPos ? this.planRiverineOrder(ship, targetPos) : null;
+      if (!river && targetPos && this.navGrid) {
+        targetPos = this.navGrid.projectToWalkableWater(targetPos, requiredDepth(ship));
       }
 
       let waypoints: Vector2D[] | undefined = undefined;
-      if (order.type === 'move' && targetPos) {
-        waypoints = this.navGrid ? this.navGrid.findPath(ship.pos, targetPos) : [targetPos];
+      if (river) {
+        waypoints = river.waypoints;
+        targetPos = river.targetPos;
+      } else if (order.type === 'move' && targetPos) {
+        waypoints = this.navGrid ? this.navGrid.findPath(ship.pos, targetPos, requiredDepth(ship)) : [targetPos];
       }
 
       ship.order = {
@@ -915,6 +1229,7 @@ export class GameEngine {
         targetPos,
         waypoints,
         activeWaypointIndex: 0,
+        riverine: Boolean(river),
       };
 
       if (order.type === 'move' && targetPos) {
@@ -975,6 +1290,17 @@ export class GameEngine {
         ...order,
         targetPos,
       };
+
+      // Route over land by terrain cost: roads, bridges, around lakes, swamps and mountains
+      if (order.type === 'move' && targetPos && !unit.embarkedInShipId) {
+        const amphibious = unit.isAmphibious || unit.type.startsWith('usmc_lvt') || unit.type === 'usmc_aav7a1';
+        const path = amphibious ? null : findGroundPath(this.terrain, unit.pos, targetPos, !this.isFootUnit(unit));
+        unit.order.routed = true;
+        if (path && path.length > 1) {
+          unit.order.waypoints = path;
+          unit.order.activeWaypointIndex = 0;
+        }
+      }
 
       if (order.type === 'move' && targetPos) {
         unit.heading = Math.atan2(targetPos.y - unit.pos.y, targetPos.x - unit.pos.x);
@@ -1396,7 +1722,7 @@ export class GameEngine {
         buoy.pingTimer = buoy.pingInterval;
 
         // 被動水聽器間歇掃描半徑內是否有敵軍潛艦通過
-        const detectedSubs = enemySubs.filter((sub) => dist(buoy.pos, sub.pos) <= buoy.detectionRadius);
+        const detectedSubs = enemySubs.filter((sub) => dist(buoy.pos, sub.pos) <= buoy.detectionRadius * sonobuoySensitivity(sub, this.era) * layerFactorForSonobuoy(sub, this.era));
         if (detectedSubs.length > 0) {
           soundEngine.playSonarPing();
           buoy.hasActiveContact = true;
@@ -2058,8 +2384,9 @@ export class GameEngine {
       // RTS Navigation Orders with A* Waypoint Progression & Dynamic Island Perimeter Avoidance
       if (ship.order.type === 'move' && ship.order.targetPos) {
         if (ship.navStuck && this.navGrid) {
-          // No headway for several seconds: replan the sea lane from where the ship actually is
-          ship.order.waypoints = this.navGrid.findPath(ship.pos, ship.order.targetPos);
+          // No headway for several seconds: replan from where the ship actually is
+          const river = ship.order.riverine ? this.planRiverineOrder(ship, ship.order.targetPos) : null;
+          ship.order.waypoints = river ? river.waypoints : this.navGrid.findPath(ship.pos, ship.order.targetPos, requiredDepth(ship));
           ship.order.activeWaypointIndex = 0;
           ship.navStuck = false;
         }
@@ -2068,10 +2395,12 @@ export class GameEngine {
         let activeTarget = ship.order.targetPos;
 
         if (wps && wps.length > 0 && wpIdx < wps.length) {
-          activeTarget = this.advanceSeaLane(ship, wps);
+          // In a river channel the boat takes every bend: no look-ahead shortcuts, tight arrivals
+          const inChannel = Boolean(ship.order.riverine) && inRiverChannel(this.terrain, ship.pos);
+          activeTarget = ship.order.riverine ? wps[wpIdx] : this.advanceSeaLane(ship, wps);
           wpIdx = ship.order.activeWaypointIndex ?? wpIdx;
           const isFinalWp = wpIdx >= wps.length - 1;
-          const arriveDist = isFinalWp ? 45 : 95;
+          const arriveDist = isFinalWp ? 45 : inChannel ? 30 : 95;
           if (dist(ship.pos, activeTarget) < arriveDist) {
             if (!isFinalWp) {
               wpIdx += 1;
@@ -2092,14 +2421,23 @@ export class GameEngine {
           const dy = activeTarget.y - ship.pos.y;
           const d = Math.hypot(dx, dy);
           const desiredHeading = Math.atan2(dy, dx);
-          const avoidance = this.calculateNavalSteeringAvoidance(ship, desiredHeading, d);
-          ship.targetHeading = avoidance.targetHeading;
-          ship.targetSpeed = ship.maxSpeed * avoidance.speedScale;
+          if (ship.order.riverine && inRiverChannel(this.terrain, ship.pos)) {
+            // Between the banks: steer straight along the channel at river speed
+            ship.targetHeading = desiredHeading;
+            ship.targetSpeed = ship.maxSpeed * 0.75;
+          } else {
+            const avoidance = this.calculateNavalSteeringAvoidance(ship, desiredHeading, d);
+            ship.targetHeading = avoidance.targetHeading;
+            ship.targetSpeed = ship.maxSpeed * avoidance.speedScale;
+          }
         }
       }
 
       // Enemy AI with Dynamic Island Perimeter Avoidance
-      if (ship.side === 'enemy') {
+      if (ship.side === 'enemy' && ship.type === 'river_gunboat') {
+        // River craft: own patrol AI; steering comes from the channel waypoints above
+        this.updateRiverGunboatAI(ship, dt);
+      } else if (ship.side === 'enemy') {
         this.updateEnemyShipAI(ship, dt);
         const avoidance = this.calculateNavalSteeringAvoidance(ship, ship.targetHeading, 1500);
         ship.targetHeading = avoidance.targetHeading;
@@ -2112,6 +2450,11 @@ export class GameEngine {
         const avoidance = this.calculateNavalSteeringAvoidance(ship, ship.targetHeading, 1500);
         ship.targetHeading = avoidance.targetHeading;
         ship.targetSpeed = Math.min(ship.targetSpeed, ship.maxSpeed * avoidance.speedScale);
+      }
+
+      // 我方護航艦反潛：待命時自動以搜索航速獵殺接觸，航行中遇接觸則自動減速至聲納有效航速
+      if (ship.side === 'player' && !ship.isSunk && !this.isSubmarine(ship) && hasAswWeapon(ship)) {
+        this.updatePlayerEscortAsw(ship);
       }
 
       // 艦艇間防碰撞分離操舵 (Ship-to-Ship Separation Steering)
@@ -2140,6 +2483,36 @@ export class GameEngine {
         ship.heading += Math.sign(angleDiff) * turnStep;
       }
 
+      // Diesel boats: battery drain, snorkelling (surfacing before the snorkel) and a crawl when flat
+      if (this.isSubmarine(ship)) {
+        const hostileSurface = ship.side === 'enemy' ? [...this.playerShips, ...this.alliedShips] : this.enemyShips;
+        const nearestShip = hostileSurface.reduce((m, h) => (h.isSunk || this.isSubmarine(h) ? m : Math.min(m, dist(h.pos, ship.pos))), Infinity);
+        const nearestAircraft = this.aircraft.reduce(
+          (m, a) => (a.state === 'shot_down' || !this.isHostile(ship.side, a.side) ? m : Math.min(m, dist(a.pos, ship.pos))),
+          Infinity
+        );
+        const diesel = updateDieselBattery(ship, dt, this.era, nearestShip, nearestAircraft);
+        const wasBelow = ship.belowLayer;
+        updateThermoclineDepth(ship, dt, nearestShip);
+        // Too shallow to dive: the boat runs on the surface or at snorkel depth, noisy and visible
+        if (this.terrain.depthAt(ship.pos.x, ship.pos.y) < SUBMERGED_MIN_DEPTH_M) {
+          ship.isSnorkeling = true;
+          ship.belowLayer = false;
+        }
+        if (ship.belowLayer && !wasBelow && ship.side === 'enemy' && ship.isSpotted) {
+          this.addCombatLog({
+            category: 'naval',
+            sourceSide: 'enemy',
+            sourceName: ship.name,
+            targetName: '我方反潛艦',
+            actionType: 'recon_spotted',
+            text: `🌡️【潛入溫躍層】敵潛艦「${ship.name}」深潛至溫躍層下方，艦殼聲納回波急遽衰減！需拖曳陣列 / 吊放聲納 / 深設聲納浮標追蹤。`,
+          });
+        }
+        if (diesel.surfaceKt !== undefined && ship.targetSpeed > 0) ship.targetSpeed = diesel.surfaceKt;
+        if (diesel.capKt !== undefined) ship.targetSpeed = Math.min(ship.targetSpeed, diesel.capKt);
+      }
+
       // Acceleration and Full Stop Braking
       if (ship.targetSpeed === 0) {
         const brake = 16 * dt;
@@ -2165,16 +2538,49 @@ export class GameEngine {
         const mapSpeed = shipMapSpeed(ship.speed);
         ship.vel.x = Math.cos(ship.heading) * mapSpeed;
         ship.vel.y = Math.sin(ship.heading) * mapSpeed;
-        ship.pos.x += ship.vel.x * dt;
-        ship.pos.y += ship.vel.y * dt;
+        // Draught: never steam into water shallower than the hull needs (but a ship that is
+        // already in shoal water may always work its way out toward deeper water)
+        const need = requiredDepth(ship);
+        const nx = ship.pos.x + ship.vel.x * dt;
+        const ny = ship.pos.y + ship.vel.y * dt;
+        const depthNext = need > 0 ? this.terrain.depthAt(nx, ny) : Infinity;
+        const offChannel =
+          isRiverine(ship) &&
+          inRiverChannel(this.terrain, ship.pos) &&
+          depthNext <= 0 &&
+          !inRiverChannel(this.terrain, { x: nx, y: ny });
+        if (offChannel) {
+          // Riverine craft keep between the banks
+          ship.speed *= 0.6;
+          ship.navStuck = true;
+        } else if (depthNext > 0 && depthNext < need && depthNext < this.terrain.depthAt(ship.pos.x, ship.pos.y)) {
+          ship.speed *= 0.5;
+          ship.navStuck = true;
+          if (ship.side === 'player' && !ship.shoalWarned) {
+            ship.shoalWarned = true;
+            this.addCombatLog({
+              category: 'naval',
+              sourceSide: 'player',
+              sourceName: ship.name,
+              targetName: '航道',
+              actionType: 'recon_spotted',
+              text: `⚓【水深不足】「${ship.name}」吃水 ${need.toFixed(1)}m，前方水深僅 ${depthNext.toFixed(1)}m，停車改走深水航道！`,
+            });
+          }
+        } else {
+          ship.pos.x = nx;
+          ship.pos.y = ny;
+        }
         this.checkNavigationProgress(ship, dt);
       } else {
         ship.vel.x = 0;
         ship.vel.y = 0;
       }
 
-      // Island collision bounce and smooth shoreline sliding (prevent sticking/beaching)
-      for (const island of this.islands) {
+      // Island collision bounce and smooth shoreline sliding (prevent sticking/beaching);
+      // riverine craft inside a river channel are afloat, not aground
+      const afloatInRiver = isRiverine(ship) && inRiverChannel(this.terrain, ship.pos);
+      for (const island of afloatInRiver ? [] : this.islands) {
         if (isPointOnIslandLand(ship.pos, island)) {
           const pushAngle = Math.atan2(ship.pos.y - island.center.y, ship.pos.x - island.center.x);
           ship.pos.x += Math.cos(pushAngle) * 5;
@@ -2220,22 +2626,41 @@ export class GameEngine {
         }
       }
 
+      // Enemy escorts attack submarines their sensors hold: RBU rocket launchers or depth charges
+      if (ship.side === 'enemy' && !this.isSubmarine(ship)) {
+        const weapon = enemyAswWeapon(ship, this.era);
+        ship.rbuCooldown = Math.max(0, (ship.rbuCooldown || 0) - dt);
+        if (weapon && ship.rbuCooldown <= 0) {
+          const prey = [...this.playerShips, ...this.alliedShips].find(
+            (s) => this.isSubmarine(s) && !s.isSunk && s.isSpottedByEnemy && dist(ship.pos, s.pos) <= weapon.range
+          );
+          if (prey) {
+            if (weapon.kind === 'rbu') this.fireRbuSalvo(ship, prey.pos, weapon.rounds, weapon.label);
+            else this.dropDepthCharge(ship);
+            ship.rbuCooldown = weapon.cooldown;
+          }
+        }
+      }
+
       // Hedgehog ASW forward-firing mortar barrage (automatic forward cone detection 100m-290m, ±45°, requires spotted contact)
       if ((ship.side === 'player' || ship.side === 'allied') && ship.hasHedgehog && (ship.hedgehogCooldown || 0) <= 0) {
+        const thrower = AHEAD_THROWERS[ship.aheadThrower ?? 'hedgehog'];
+        // Hedgehog and Squid fire ahead along a fixed axis; Limbo and the Bofors launcher train to the beam
+        const cone = ship.aheadThrower === 'limbo' || ship.aheadThrower === 'bofors375' ? 2.6 : 0.8;
         const targetSub = this.enemyShips.find((e) => {
           if (!this.isSubmarine(e) || e.isSunk || !e.isSpotted) return false;
           const d = dist(ship.pos, e.pos);
-          if (d < 100 || d > 290) return false;
+          if (d < 100 || d > thrower.maxRange) return false;
           const ang = Math.atan2(e.pos.y - ship.pos.y, e.pos.x - ship.pos.x);
           let relAngle = ang - ship.heading;
           while (relAngle > Math.PI) relAngle -= Math.PI * 2;
           while (relAngle < -Math.PI) relAngle += Math.PI * 2;
-          return Math.abs(relAngle) <= 0.8; // Forward bow cone: ~±45°
+          return Math.abs(relAngle) <= cone;
         });
 
         if (targetSub) {
           this.fireHedgehogSalvo(ship, targetSub.pos);
-          ship.hedgehogCooldown = 12; // 12s reload
+          ship.hedgehogCooldown = thrower.reload;
         }
       }
 
@@ -2411,7 +2836,7 @@ export class GameEngine {
     const dTotal = dist(ship.pos, dest);
     if (dTotal < 520) return dest;
     if (!ship.order.waypoints || ship.order.waypoints.length === 0 || (ship.repathCooldown || 0) <= 0 || ship.navStuck) {
-      ship.order.waypoints = this.navGrid.findPath(ship.pos, dest);
+      ship.order.waypoints = this.navGrid.findPath(ship.pos, dest, requiredDepth(ship));
       ship.order.activeWaypointIndex = 0;
       ship.repathCooldown = 3.5;
       ship.navStuck = false;
@@ -2425,6 +2850,13 @@ export class GameEngine {
     const hostiles = [...this.playerShips, ...this.alliedShips].filter(
       (s) => !s.isSunk && (!this.isSubmarine(s) || Boolean(s.isSpottedByEnemy))
     );
+
+    if (this.isSubmarine(ship) && (ship.evadeTimer || 0) > 0) {
+      ship.evadeTimer = (ship.evadeTimer || 0) - _dt;
+      ship.targetHeading = ship.evadeHeading ?? ship.heading;
+      ship.targetSpeed = isDieselBoat(ship) ? 3 : ship.maxSpeed;
+      return;
+    }
 
     if (this.isSubmarine(ship)) {
       let target: Ship | undefined = hostiles.sort((a, b) => dist(ship.pos, a.pos) - dist(ship.pos, b.pos))[0];
@@ -2507,13 +2939,16 @@ export class GameEngine {
       return { targetHeading: desiredHeading, speedScale: 1.0 };
     }
 
-    // Fraction of the probe at which land is first met, or > 1 when the probe is clear
+    // Submarines also keep to water deep enough to dive in
+    const need = this.isSubmarine(ship) ? SUBMERGED_MIN_DEPTH_M : requiredDepth(ship);
+    // Fraction of the probe at which land (or water too shallow for this hull) is first met, or > 1 when clear
     const landAt = (heading: number): number => {
       const cx = Math.cos(heading);
       const cy = Math.sin(heading);
       for (const f of [0.3, 0.55, 0.8, 1]) {
         const p = { x: ship.pos.x + cx * lookahead * f, y: ship.pos.y + cy * lookahead * f };
         if (nearby.some((isl) => isPointOnIslandLand(p, isl))) return f;
+        if (need > 0 && this.terrain.depthAt(p.x, p.y) < need) return f; // shoal water
       }
       return 2;
     };
@@ -2598,15 +3033,32 @@ export class GameEngine {
       let target: Ship | Installation | null = null;
       if (ship.order.type === 'attack' && ship.order.targetId) {
         target =
-          targetShips.find((s) => s.id === ship.order.targetId && !s.isSunk && !this.isSubmarine(s)) ||
+          targetShips.find((s) => s.id === ship.order.targetId && !s.isSunk && this.isGunTarget(s, ship.side)) ||
           this.findTargetInstallation(ship.order.targetId);
       }
 
       if (!target || dist(ship.pos, target.pos) > effectiveRange) {
         target =
           targetShips
-            .filter((s) => !s.isSunk && !this.isSubmarine(s) && dist(ship.pos, s.pos) <= effectiveRange)
+            .filter((s) => !s.isSunk && this.isGunTarget(s, ship.side) && dist(ship.pos, s.pos) <= effectiveRange && this.seaLineClear(ship.pos, s.pos))
             .sort((a, b) => dist(ship.pos, a.pos) - dist(ship.pos, b.pos))[0] || null;
+      }
+
+      // Brown-water craft rake the banks: hostile troops and positions in sight of the river
+      if (!target && isRiverine(ship) && turret.cooldown <= 0 && wcsEfficiency >= 0.15) {
+        const bank =
+          this.groundUnits.find(
+            (u) => this.isHostile(ship.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && this.canEngageGroundAt(ship.pos, effectiveRange, u.pos, false)
+          )?.pos ??
+          this.islands
+            .flatMap((isl) => isl.installations)
+            .find((i) => !i.isDestroyed && !i.isCivilian && this.isHostile(ship.side, i.side) && this.canEngageGroundAt(ship.pos, effectiveRange, i.pos, false))?.pos;
+        if (bank) {
+          turret.angle = Math.atan2(bank.y - ship.pos.y, bank.x - ship.pos.x);
+          this.fireTurretSalvo(ship, turret, bank);
+          turret.cooldown = turret.reloadTime / Math.max(0.3, wcsEfficiency);
+          continue;
+        }
       }
 
       if (target) {
@@ -2644,7 +3096,7 @@ export class GameEngine {
 
     if (ship.flakCooldown <= 0 && wcsEfficiency >= 0.12) {
       const hostilePlanes = this.aircraft.filter(
-        (a) => this.isHostile(ship.side, a.side) && a.state !== 'shot_down' && dist(ship.pos, a.pos) < ship.flakRange
+        (a) => this.isHostile(ship.side, a.side) && a.state !== 'shot_down' && dist(ship.pos, a.pos) < ship.flakRange && this.aaCanSee(ship.pos, a, 0.05)
       );
 
       if (hostilePlanes.length > 0) {
@@ -2748,12 +3200,171 @@ export class GameEngine {
   }
 
   // 2. Update Aircraft with Air Warfare RTS Logic
+  private airPictureTimer = 0;
+  private raidWarningCooldown = 0;
+
+  /** Whether the side opposing this aircraft currently tracks it (radar or eyes). */
+  public isAirTracked(plane: Aircraft): boolean {
+    return ((plane.side === 'enemy' ? plane.trackedByPlayer : plane.trackedByEnemy) ?? 0) > 0;
+  }
+
+  /** Whether a given side's air picture holds this aircraft. */
+  private isAirTrackedBy(plane: Aircraft, side: ShipSide): boolean {
+    if (plane.side === side || (side !== 'enemy' && plane.side !== 'enemy')) return true;
+    return ((side === 'enemy' ? plane.trackedByEnemy : plane.trackedByPlayer) ?? 0) > 0;
+  }
+
+  /**
+   * Builds each side's air picture (radar.ts): ground and SAM radars, warships, AEW and fighter
+   * radars, and short-range eyes everywhere. Runs every 0.4 s; a lost track is held for a few
+   * seconds. Announces new enemy raids picked up beyond visual range (early warning).
+   */
+  private updateAirPicture(dt: number): void {
+    this.airPictureTimer -= dt;
+    this.raidWarningCooldown = Math.max(0, this.raidWarningCooldown - dt);
+    if (this.airPictureTimer > 0) return;
+    const step = 0.4;
+    this.airPictureTimer = step;
+    this.updateRiverBoatSighting(step);
+    const map = this.terrain;
+    const friendly = (side: ShipSide) => side === 'player' || side === 'allied';
+
+    const sensorsFor = (enemySide: boolean): { radars: RadarSensor[]; eyes: Vector2D[]; airEyes: Vector2D[] } => {
+      const radars = this.radarSensorsOf(enemySide).map((r) => r.sensor);
+      const eyes: Vector2D[] = [];
+      const airEyes: Vector2D[] = [];
+      const ships = enemySide ? this.enemyShips : [...this.playerShips, ...this.alliedShips];
+      for (const s of ships) {
+        if (!s.isSunk && (!this.isSubmarine(s) || s.isSnorkeling)) eyes.push(s.pos);
+      }
+      for (const isl of this.islands) {
+        for (const inst of isl.installations) {
+          if (inst.isDestroyed || inst.isCivilian) continue;
+          if ((inst.side === 'enemy') !== enemySide || (!enemySide && !friendly(inst.side))) continue;
+          eyes.push(inst.pos);
+        }
+      }
+      for (const u of this.groundUnits) {
+        if (u.isDestroyed || u.embarkedInShipId || (u.side === 'enemy') !== enemySide) continue;
+        eyes.push(u.pos);
+      }
+      for (const a of this.aircraft) {
+        if (a.state === 'shot_down' || (a.side === 'enemy') !== enemySide) continue;
+        airEyes.push(a.pos);
+      }
+      return { radars, eyes, airEyes };
+    };
+    const pictures = { friendly: sensorsFor(false), enemy: sensorsFor(true) };
+
+    let newRaid: Aircraft[] = [];
+    for (const a of this.aircraft) {
+      if (a.state === 'shot_down') continue;
+      const watcher = a.side === 'enemy' ? pictures.friendly : pictures.enemy;
+      const seen =
+        watcher.radars.some((r) => sensorDetects(map, r, a)) ||
+        watcher.airEyes.some((p) => visualDetects(map, p, a, true)) ||
+        watcher.eyes.some((p) => visualDetects(map, p, a, false));
+      if (a.side === 'enemy') {
+        const was = (a.trackedByPlayer ?? 0) > 0;
+        a.trackedByPlayer = seen ? TRACK_MEMORY_S : Math.max(0, (a.trackedByPlayer ?? 0) - step);
+        if (seen && !was && a.trackedByPlayer > 0) {
+          const nearestEye = Math.min(...pictures.friendly.eyes.map((p) => dist(p, a.pos)), Infinity);
+          if (nearestEye > gameRangeFromKm(12)) newRaid.push(a);
+        }
+      } else {
+        a.trackedByEnemy = seen ? TRACK_MEMORY_S : Math.max(0, (a.trackedByEnemy ?? 0) - step);
+      }
+    }
+
+    // Early warning: a new formation on the scopes, well before anyone can see it
+    if (newRaid.length > 0 && this.raidWarningCooldown <= 0) {
+      this.raidWarningCooldown = 15;
+      const ref = this.getFlagship()?.pos ?? this.friendlyBase?.center ?? { x: 7000, y: 7000 };
+      const c = newRaid.reduce((acc, p) => ({ x: acc.x + p.pos.x / newRaid.length, y: acc.y + p.pos.y / newRaid.length }), { x: 0, y: 0 });
+      const bearing = Math.round(((Math.atan2(c.x - ref.x, -(c.y - ref.y)) * 180) / Math.PI + 360) % 360);
+      const rangeU = Math.round(dist(ref, c));
+      this.addBannerAlert(`📡【雷達接觸】方位 ${String(bearing).padStart(3, '0')}° · 距艦隊 ${rangeU}m · ${newRaid.length} 架不明機進入早期預警雷達網！`, 'enemy', 'alert', 5.5);
+      this.addCombatLog({
+        category: 'air',
+        sourceSide: 'player',
+        sourceName: '早期預警雷達網',
+        targetName: '來襲機群',
+        actionType: 'recon_spotted',
+        text: `📡【早期預警】雷達於方位 ${String(bearing).padStart(3, '0')}°、距艦隊 ${rangeU}m 處捕獲 ${newRaid.length} 架敵機回波 (${[...new Set(newRaid.map((p) => p.model.toUpperCase()))].join(' / ')})，請派遣戰鬥空中巡邏攔截！`,
+      });
+    }
+  }
+
+  /**
+   * Every radar of one side: warships' air search, ground / SAM / flak / GCI radars, AEW and
+   * fighter radars. With `knownOnly`, enemy aircraft radars are listed only while tracked
+   * (what the player can know of the enemy's coverage).
+   */
+  private radarSensorsOf(enemySide: boolean, knownOnly = false): { sensor: RadarSensor; label: string }[] {
+    const map = this.terrain;
+    const out: { sensor: RadarSensor; label: string }[] = [];
+    const ships = enemySide ? this.enemyShips : [...this.playerShips, ...this.alliedShips];
+    for (const s of ships) {
+      if (s.isSunk) continue;
+      const km = shipRadarKm(s, this.era);
+      if (km > 0) out.push({ sensor: { pos: s.pos, heightM: 25 + s.length * 0.08, rangeKm: km, lookDown: false, airborne: false }, label: s.name });
+    }
+    for (const isl of this.islands) {
+      for (const inst of isl.installations) {
+        if (inst.isDestroyed || inst.isCivilian) continue;
+        const isEnemy = inst.side === 'enemy';
+        if (isEnemy !== enemySide || (!enemySide && inst.side !== 'player' && inst.side !== 'allied')) continue;
+        const km = installationRadarKm(inst, this.era);
+        if (km > 0) out.push({ sensor: { pos: inst.pos, heightM: map.elevationAt(inst.pos.x, inst.pos.y) * 1500 + 20, rangeKm: km, lookDown: false, airborne: false }, label: inst.name });
+      }
+    }
+    for (const a of this.aircraft) {
+      if (a.state === 'shot_down' || (a.side === 'enemy') !== enemySide) continue;
+      if (knownOnly && enemySide && !this.isAirTracked(a)) continue;
+      const r = aircraftSensor(a);
+      if (r) out.push({ sensor: r, label: a.name });
+    }
+    return out;
+  }
+
+  /** Radar coverage overlay (toggled with R): see getRadarCoverage. */
+  public showRadarCoverage = false;
+  private coverageCache: { at: number; data: RadarCoverage[] } = { at: -1, data: [] };
+  private coverageShapes = new Map<string, Vector2D[]>();
+
+  /**
+   * Low-level coverage polygons (terrain shadows and radar horizon against a strike at ~300 m)
+   * and high-altitude rings of the player's radars and of the enemy radars the player knows of.
+   * Recomputed at most once a second; static sites' viewsheds are cached.
+   */
+  public getRadarCoverage(): RadarCoverage[] {
+    if (this.coverageCache.at >= 0 && this.gameTime - this.coverageCache.at < 1) return this.coverageCache.data;
+    const map = this.terrain;
+    const data: RadarCoverage[] = [];
+    for (const [enemy, list] of [[false, this.radarSensorsOf(false)], [true, this.radarSensorsOf(true, true)]] as const) {
+      for (const { sensor, label } of list) {
+        const key = `${Math.round(sensor.pos.x / 60)},${Math.round(sensor.pos.y / 60)},${sensor.rangeKm},${sensor.airborne ? Math.round(sensor.heightM / 500) : 0}`;
+        let low = this.coverageShapes.get(key);
+        if (!low) {
+          low = lowCoveragePolygon(map, sensor);
+          if (this.coverageShapes.size > 600) this.coverageShapes.clear();
+          this.coverageShapes.set(key, low);
+        }
+        data.push({ pos: { ...sensor.pos }, enemy, airborne: sensor.airborne, low, highRadius: highCoverageRadius(sensor), rangeKm: sensor.rangeKm, label });
+      }
+    }
+    this.coverageCache = { at: this.gameTime, data };
+    return data;
+  }
+
   private updateAircraft(dt: number) {
     const flagship = this.getFlagship();
+    this.updateAirPicture(dt);
     this.updateAirMissions(dt);
 
     for (let i = this.aircraft.length - 1; i >= 0; i--) {
       const plane = this.aircraft[i];
+      if (!plane.gunsInitialised) this.initialiseAircraftArmament(plane);
 
       if (this.updateShotDownAircraft(dt, i, plane)) continue;
 
@@ -3302,7 +3913,7 @@ export class GameEngine {
       plane.hitAndRunStage = 'ingress';
       plane.speed = plane.maxSpeed;
       // Re-target nearest hostile aircraft or naval ship to begin next slashing pass
-      const nextTarget = this.aircraft.find((a) => this.isHostile(plane.side, a.side) && a.state !== 'shot_down');
+      const nextTarget = this.aircraft.find((a) => this.isHostile(plane.side, a.side) && a.state !== 'shot_down' && this.isAirTrackedBy(a, plane.side));
       if (nextTarget) {
         plane.order = { type: 'attack', targetPos: nextTarget.pos, targetId: nextTarget.id };
       } else {
@@ -3358,7 +3969,7 @@ export class GameEngine {
 
     let targetEntity =
       (canSeeShipTarget ? rawShipTarget : undefined) ||
-      this.aircraft.find((a) => a.id === plane.order.targetId && a.state !== 'shot_down' && this.isHostile(plane.side, a.side)) ||
+      this.aircraft.find((a) => a.id === plane.order.targetId && a.state !== 'shot_down' && this.isHostile(plane.side, a.side) && this.isAirTrackedBy(a, plane.side)) ||
       (() => {
         const inst = this.findTargetInstallation(plane.order.targetId || '');
         return inst && this.isHostile(plane.side, inst.side) ? inst : null;
@@ -3385,6 +3996,13 @@ export class GameEngine {
       plane.model === 'ka27';
 
     if (plane.order.targetId && !targetEntity) {
+      // An air target that slipped out of the air picture: search where it was last seen
+      const lostAir = this.aircraft.find((a) => a.id === plane.order.targetId && a.state !== 'shot_down');
+      if (lostAir && plane.role === 'fighter') {
+        plane.order = { type: 'patrol', patrolOrigin: { ...(plane.order.targetPos ?? plane.pos) } };
+        plane.state = 'patrolling';
+        return true;
+      }
       if (isAswPlane && plane.hasPayload) {
         plane.order = { type: 'patrol', patrolOrigin: plane.order.patrolOrigin || { ...plane.pos } };
         plane.state = 'patrolling';
@@ -3596,7 +4214,7 @@ export class GameEngine {
     } else if (plane.payloadType === 'hvar_rockets') {
       // ════ HVAR 5吋航空火箭彈 (HVAR Rockets Salvo): 520m 遠程連環齊射 ════
       if (d < 520) {
-        this.fireRockets(plane, targetPos, 8);
+        this.fireRockets(plane, targetPos, rocketsPerSalvo(plane.maxAmmo ?? 8, 'hvar_rockets'));
         plane.hasPayload = false;
         plane.order = { type: 'rtb' };
         plane.state = 'returning';
@@ -3729,7 +4347,7 @@ export class GameEngine {
       }
     } else if (plane.payloadType === 'ffar_rockets_pod') {
       if (d < 520) {
-        this.fireRockets(plane, targetPos, 16);
+        this.fireRockets(plane, targetPos, rocketsPerSalvo(plane.maxAmmo ?? 16, 'ffar_rockets_pod'));
         plane.hasPayload = false;
         plane.order = { type: 'rtb' };
         plane.state = 'returning';
@@ -3934,7 +4552,8 @@ export class GameEngine {
     // sweep hunts fighters, an escort fights only what threatens its package
     const hostile = selectAirTarget(
       plane,
-      this.aircraft.filter((a) => this.isHostile(plane.side, a.side)),
+      // Vectored only onto contacts in the side's air picture (GCI / AEW / own radar)
+      this.aircraft.filter((a) => this.isHostile(plane.side, a.side) && this.isAirTrackedBy(a, plane.side)),
       center,
       radarPerimeter,
       plane.airMission ?? 'cap'
@@ -4012,6 +4631,15 @@ export class GameEngine {
     } else {
       // 反潛機主動巡邏：定時投放聲吶浮標 / 吊放聲吶脈衝，並自動獵殺已被定位之敵方潛艦
       const aswRange = this.getAircraftAswSonarRange(plane);
+      // Player ASW aircraft on patrol lay their own buoy pattern: one buoy every ~18 s wherever
+      // no friendly buoy is already listening
+      if (aswRange > 0 && plane.side === 'player' && (plane.sonobuoyAmmo ?? 0) > 0) {
+        plane.sonobuoyDropTimer = (plane.sonobuoyDropTimer ?? 6) - dt;
+        if (plane.sonobuoyDropTimer <= 0) {
+          plane.sonobuoyDropTimer = 18;
+          if (!this.sonobuoys.some((b) => dist(b.pos, plane.pos) < 900)) this.deploySonobuoyFromAircraft(plane, { ...plane.pos });
+        }
+      }
       if (aswRange > 0) {
         plane.sonarPingCooldown = (plane.sonarPingCooldown ?? 2.5) - dt;
         if (plane.sonarPingCooldown <= 0) {
@@ -4654,8 +5282,14 @@ export class GameEngine {
   }
 
   // Combat Actions
+  /**
+   * The airframe's own gun battery (aircraftArmament.ts): each group of guns sends tracers of its
+   * calibre, with that calibre's damage, reach and armour penetration; a burst uses the rounds
+   * those guns fire in ~0.3 s. Aircraft without fixed guns (F-4B/J, A-6, F-111...) cannot strafe.
+   */
   private fireAircraftGuns(attacker: Aircraft, targetPos: Vector2D) {
-    if ((attacker.gunAmmo ?? 1) <= 0) {
+    const battery = getGunBattery(attacker.model);
+    if (!battery || (attacker.gunAmmo ?? 0) <= 0) {
       if (!attacker.hasPayload) {
         attacker.order = { type: 'rtb' };
         attacker.state = 'returning';
@@ -4663,72 +5297,77 @@ export class GameEngine {
       return;
     }
 
-    attacker.gunAmmo = Math.max(0, (attacker.gunAmmo ?? 1440) - 30);
+    attacker.gunAmmo = Math.max(0, (attacker.gunAmmo ?? 0) - roundsPerBurst(battery));
     if (attacker.payloadType === 'clean_guns') {
       attacker.ammoRemaining = attacker.gunAmmo;
     }
 
-    const isA10 = attacker.model === 'a10a';
-    const isModernVulcan = ROTARY_CANNON_MODELS.has(attacker.model);
-    const isF86 = attacker.model === 'f86';
-    const isMig15 = attacker.model === 'mig15';
-
-    const burstCount = isA10 ? 12 : isModernVulcan ? 8 : isF86 ? 6 : isMig15 ? 2 : 4;
-    const bulletSpeed = isA10 ? 880 : isModernVulcan ? 740 : isF86 ? 640 : isMig15 ? 520 : 540;
-    const bulletDmg = isA10
-      ? 85 // GAU-8/A 30mm Depleted Uranium Armor-Piercing Incendiary
-      : isModernVulcan
-      ? 38
-      : isF86
-      ? 26
-      : isMig15
-      ? 48
-      : attacker.model === 'f8f' || attacker.model === 'sb2c'
-      ? 24
-      : 16;
-
-    // Muzzle flashes: nose cannon on jets, a flash at each wing battery on piston fighters
-    const noseGun = isA10 || isModernVulcan || isMig15;
-    const flashSize = isA10 ? 9 : noseGun ? 6 : 4;
-    const stations = noseGun ? [0] : [7, -7];
+    const groups = burstBullets(battery);
+    const heavy = groups.some((gr) => gr.cal === '30AP');
+    const rotary = groups.some((gr) => gr.rotary);
+    const flashSize = heavy ? 9 : battery.nose ? 6 : 4;
+    const stations = battery.nose ? [0] : [7, -7];
     for (const offset of stations) {
-      const fx = attacker.pos.x + Math.cos(attacker.heading) * (noseGun ? 9 : 3) + Math.sin(attacker.heading) * offset;
-      const fy = attacker.pos.y + Math.sin(attacker.heading) * (noseGun ? 9 : 3) - Math.cos(attacker.heading) * offset;
+      const fx = attacker.pos.x + Math.cos(attacker.heading) * (battery.nose ? 9 : 3) + Math.sin(attacker.heading) * offset;
+      const fy = attacker.pos.y + Math.sin(attacker.heading) * (battery.nose ? 9 : 3) - Math.cos(attacker.heading) * offset;
       this.spawnMuzzleFlash(fx, fy, attacker.heading, flashSize, false);
     }
 
-    for (let b = 0; b < burstCount; b++) {
-      const spread = (Math.random() - 0.5) * (isA10 ? 0.012 : isModernVulcan ? 0.016 : isF86 ? 0.015 : isMig15 ? 0.05 : 0.045);
-      const bAngle = attacker.heading + spread;
-      const wingOffset = isA10 || isModernVulcan || isMig15 ? 0 : (b % 2 === 0 ? 1 : -1) * (5 + Math.floor(b / 2) * 3);
-      const startX = attacker.pos.x + Math.sin(attacker.heading) * wingOffset;
-      const startY = attacker.pos.y - Math.cos(attacker.heading) * wingOffset;
-
-      this.projectiles.push({
-        id: `bullet-${Date.now()}-${b}-${Math.random()}`,
-        type: 'bullet',
-        side: attacker.side,
-        pos: { x: startX, y: startY },
-        vel: { x: Math.cos(bAngle) * bulletSpeed, y: Math.sin(bAngle) * bulletSpeed },
-        originPos: { x: startX, y: startY },
-        targetPos: { ...targetPos },
-        flightProgress: 0,
-        maxDistance: isA10 ? 650 : isModernVulcan ? 520 : isF86 ? 420 : 320,
-        distanceTraveled: 0,
-        damage: bulletDmg,
-        blastRadius: isA10 ? 18 : isModernVulcan ? 12 : isMig15 ? 12 : 8,
-        speed: bulletSpeed,
-        heading: bAngle,
-        isDead: false,
-        trail: [],
-        attackerName: attacker.name,
-        isBeamTracer: isA10 || isModernVulcan || isF86,
-      });
+    let b = 0;
+    for (const gr of groups) {
+      // Wing guns harmonised at ~300 m spread their cone; nose guns and Gatlings stay tight
+      const cone = gr.rotary ? 0.014 : battery.nose ? 0.02 : 0.045;
+      const speed = gr.cal === '30AP' ? 880 : gr.rotary ? 740 : gr.cal === '7.7' || gr.cal === '7.62' ? 520 : 600;
+      for (let k = 0; k < gr.tracers; k++, b++) {
+        const bAngle = attacker.heading + (Math.random() - 0.5) * cone;
+        const wingOffset = battery.nose ? 0 : (b % 2 === 0 ? 1 : -1) * (5 + Math.floor(k / 2) * 3);
+        const startX = attacker.pos.x + Math.sin(attacker.heading) * wingOffset;
+        const startY = attacker.pos.y - Math.cos(attacker.heading) * wingOffset;
+        this.projectiles.push({
+          id: `bullet-${Date.now()}-${b}-${Math.random()}`,
+          type: 'bullet',
+          side: attacker.side,
+          pos: { x: startX, y: startY },
+          vel: { x: Math.cos(bAngle) * speed, y: Math.sin(bAngle) * speed },
+          originPos: { x: startX, y: startY },
+          targetPos: { ...targetPos },
+          flightProgress: 0,
+          maxDistance: gr.range,
+          distanceTraveled: 0,
+          damage: gr.damage,
+          blastRadius: gr.cal === '30AP' ? 18 : gr.cal === '7.7' || gr.cal === '7.62' || gr.cal === '12.7' ? 8 : 12,
+          speed,
+          heading: bAngle,
+          isDead: false,
+          trail: [],
+          attackerName: `${attacker.name} (${battery.label})`,
+          isBeamTracer: rotary || heavy,
+          warhead: 'gun',
+          vsArmour: gr.vsArmour,
+        });
+      }
     }
+  }
+
+  /**
+   * First update of an aircraft: gun ammunition from its historical battery and, for enemy strike
+   * aircraft launched without a named store, the ordnance their type historically carried.
+   */
+  private initialiseAircraftArmament(plane: Aircraft): void {
+    if (plane.side === 'enemy' && plane.hasPayload && !plane.payloadType && (plane.role === 'dive_bomber' || plane.role === 'attacker')) {
+      if (plane.model === 'il10' || plane.model === 'su7' || plane.model === 'mig17' || plane.model === 'su25' || plane.model === 'mig23') {
+        plane.payloadType = 'mixed_bombs_rockets'; // RS-82 / S-5 / S-8 rockets, then FAB bombs
+      } else if (plane.model === 'mi24') {
+        plane.payloadType = 'ffar_rockets_pod'; // UB-32 pods: S-5, S-8 from 1984
+        plane.ammoRemaining = plane.maxAmmo = 16;
+      }
+    }
+    applyHistoricalGuns(plane);
   }
 
   private fireRockets(plane: Aircraft, targetPos: Vector2D, count: number = 8) {
     soundEngine.playRocketWhoosh();
+    const rocket = ROCKETS[rocketKind(plane.model, this.era)];
     const rocketSpeed = 580;
     const baseAngle = Math.atan2(targetPos.y - plane.pos.y, targetPos.x - plane.pos.x);
 
@@ -4749,13 +5388,15 @@ export class GameEngine {
         flightProgress: 0,
         maxDistance: 580,
         distanceTraveled: 0,
-        damage: 230, // 8 x 230 = 1840 salvo damage!
-        blastRadius: 26,
+        damage: rocket.damage,
+        blastRadius: rocket.blast,
         speed: rocketSpeed,
         heading: angleSpread,
         isDead: false,
         trail: [],
-        attackerName: `${plane.name} (HVAR火箭)`,
+        attackerName: `${plane.name} (${rocket.label})`,
+        warhead: 'he',
+        vsArmour: rocket.vsArmour,
         sourceModel: plane.model,
       });
     }
@@ -4804,6 +5445,7 @@ export class GameEngine {
         speed: rocketSpeed,
         heading: angle,
         isDead: false,
+        warhead: 'ap',
         trail: [],
         isTinyTim: true,
         attackerName,
@@ -4857,6 +5499,7 @@ export class GameEngine {
         speed: 260,
         heading: plane.heading,
         isDead: false,
+        warhead: 'incendiary',
         trail: [],
         isNapalm: true,
         tumbleAngle: 0,
@@ -5358,62 +6001,37 @@ export class GameEngine {
       return;
     }
 
-    if (pType === 'bombs_dual_500') {
-      // Dual 500lb bombs along flight path with slight stagger
-      for (let b = -1; b <= 1; b += 2) {
-        const lateralX = Math.sin(plane.heading) * (b * 12) + (Math.random() - 0.5) * 14;
-        const lateralY = -Math.cos(plane.heading) * (b * 12) + (Math.random() - 0.5) * 14;
-        const bTarget = { x: actualTarget.x + lateralX, y: actualTarget.y + lateralY };
-        const bDist = Math.max(1, dist(plane.pos, bTarget));
-        this.projectiles.push({
-          id: `bomb-${Date.now()}-${b}-${Math.random()}`,
-          type: 'bomb',
-          side: plane.side,
-          pos: { x: plane.pos.x + lateralX, y: plane.pos.y + lateralY },
-          vel: { x: 0, y: 0 },
-          originPos: { x: plane.pos.x + lateralX, y: plane.pos.y + lateralY },
-          targetPos: bTarget,
-          flightProgress: 0,
-          maxDistance: bDist,
-          distanceTraveled: 0,
-          damage: 750, // 2 x 750 = 1500 damage!
-          blastRadius: 48,
-          speed: 340,
-          heading: plane.heading,
-          isDead: false,
-          trail: [],
-          attackerName,
-          sourceModel: plane.model,
-          bombType: 'bombs_dual_500',
-        });
-      }
-    } else {
-      const isSuperHeavy = pType === 'bomb_1600';
-      const isLight = pType === 'bomb_500';
-      const dmg = isSuperHeavy ? 2400 : isLight ? 850 : 1650;
-      const blast = isSuperHeavy ? 72 : isLight ? 45 : 58;
-      const bDist = Math.max(1, dist(plane.pos, actualTarget));
-
+    // One release: the airframe's bomb(s) of this loadout, e.g. an F4U-4 drops both 1,000 lb bombs
+    // and a Val its single 250 kg bomb (aircraftArmament.ts)
+    const spec = bombSpec(plane.model, pType);
+    const count = pType === 'bombs_dual_500' ? 2 : bombsPerRelease(pType, plane.maxAmmo ?? 1);
+    for (let k = 0; k < count; k++) {
+      const lateral = count === 1 ? 0 : (k - (count - 1) / 2) * 24;
+      const lateralX = Math.sin(plane.heading) * lateral + (count === 1 ? 0 : (Math.random() - 0.5) * 14);
+      const lateralY = -Math.cos(plane.heading) * lateral + (count === 1 ? 0 : (Math.random() - 0.5) * 14);
+      const bTarget = { x: actualTarget.x + lateralX, y: actualTarget.y + lateralY };
+      const origin = { x: plane.pos.x + lateralX, y: plane.pos.y + lateralY };
       this.projectiles.push({
-        id: `bomb-${Date.now()}-${Math.random()}`,
+        id: `bomb-${Date.now()}-${k}-${Math.random()}`,
         type: 'bomb',
         side: plane.side,
-        pos: { ...plane.pos },
+        pos: { ...origin },
         vel: { x: 0, y: 0 },
-        originPos: { ...plane.pos },
-        targetPos: actualTarget,
+        originPos: { ...origin },
+        targetPos: bTarget,
         flightProgress: 0,
-        maxDistance: bDist,
+        maxDistance: Math.max(1, dist(origin, bTarget)),
         distanceTraveled: 0,
-        damage: dmg,
-        blastRadius: blast,
+        damage: spec.damage,
+        blastRadius: spec.blast,
         speed: 340,
         heading: plane.heading,
         isDead: false,
         trail: [],
-        attackerName,
+        attackerName: `${attackerName} ${spec.label}`,
         sourceModel: plane.model,
         bombType: pType,
+        warhead: spec.armourPiercing ? 'ap' : 'he',
       });
     }
 
@@ -5501,105 +6119,155 @@ export class GameEngine {
     }
   }
 
+  /**
+   * A depth-charge pattern, as escorts actually laid them: charges rolled from the stern racks in
+   * a line astern and thrown abeam by the K-guns either side, forming a diamond around the boat's
+   * estimated position, with hydrostatic pistols set for different depths (staggered fuses).
+   */
   private dropDepthCharge(ship: Ship) {
     soundEngine.playTorpedoLaunch();
-    const sternX = ship.pos.x - Math.cos(ship.heading) * (ship.length * 0.45);
-    const sternY = ship.pos.y - Math.sin(ship.heading) * (ship.length * 0.45);
-
-    this.projectiles.push({
-      id: `dc-${Date.now()}`,
-      type: 'depth_charge',
-      side: ship.side,
-      pos: { x: sternX, y: sternY },
-      vel: { x: 0, y: 0 },
-      originPos: { x: sternX, y: sternY },
-      targetPos: { x: sternX, y: sternY },
-      flightProgress: 0,
-      maxDistance: 0,
-      distanceTraveled: 0,
-      damage:
-        ship.side === 'player' || ship.side === 'allied'
-          ? Math.round(500 * (1 + 0.2 * (this.fleetUpgrades.depthChargeSonarLevel - 1)))
-          : 500,
-      blastRadius: 70,
-      speed: 0,
-      heading: 0,
-      isDead: false,
-      trail: [],
-      fuseTimer: 1.5,
+    const cos = Math.cos(ship.heading);
+    const sin = Math.sin(ship.heading);
+    const sternX = ship.pos.x - cos * (ship.length * 0.45);
+    const sternY = ship.pos.y - sin * (ship.length * 0.45);
+    const count = depthChargePattern(this.era);
+    const friendly = ship.side === 'player' || ship.side === 'allied';
+    const perCharge = friendly ? Math.round(240 * (1 + 0.2 * (this.fleetUpgrades.depthChargeSonarLevel - 1))) : 240;
+    // [along-track offset astern, lateral offset]: racks lay a line, K-guns throw to each beam
+    const offsets: Array<[number, number]> = [[0, 0], [-35, 0], [-70, 0], [-20, 60], [-20, -60], [-55, 45], [-55, -45]].slice(0, count) as Array<[number, number]>;
+    offsets.forEach(([along, lateral], k) => {
+      const x = sternX + cos * along - sin * lateral;
+      const y = sternY + sin * along + cos * lateral;
+      this.projectiles.push({
+        id: `dc-${Date.now()}-${k}`,
+        type: 'depth_charge',
+        side: ship.side,
+        pos: { x, y },
+        vel: { x: 0, y: 0 },
+        originPos: { x, y },
+        targetPos: { x, y },
+        flightProgress: 0,
+        maxDistance: 0,
+        distanceTraveled: 0,
+        damage: perCharge,
+        blastRadius: 60,
+        speed: 0,
+        heading: 0,
+        isDead: false,
+        trail: [],
+        fuseTimer: 1.4 + k * 0.35,
+      });
     });
   }
 
-  private fireHedgehogSalvo(ship: Ship, targetPos: Vector2D) {
-    soundEngine.playGunSalvo(false);
-    const bowX = ship.pos.x + Math.cos(ship.heading) * (ship.length * 0.45);
-    const bowY = ship.pos.y + Math.sin(ship.heading) * (ship.length * 0.45);
+  /**
+   * Soviet ahead-throwing ASW rocket launchers (RBU-2500 / RBU-6000 / RBU-1000) and, in earlier
+   * eras, depth charges, fired by enemy ships at a submarine their sonar holds.
+   */
+  private fireRbuSalvo(ship: Ship, targetPos: Vector2D, rounds: number, label: string) {
+    soundEngine.playRocketWhoosh();
+    const bowX = ship.pos.x + Math.cos(ship.heading) * (ship.length * 0.3);
+    const bowY = ship.pos.y + Math.sin(ship.heading) * (ship.length * 0.3);
+    const angle = Math.atan2(targetPos.y - bowY, targetPos.x - bowX);
+    for (let k = 0; k < rounds; k++) {
+      // Ring pattern around the aim point, as the launcher's tubes are laid
+      const ringA = (k / rounds) * Math.PI * 2;
+      const tx = targetPos.x + Math.cos(ringA) * 45;
+      const ty = targetPos.y + Math.sin(ringA) * 45;
+      const d = dist({ x: bowX, y: bowY }, { x: tx, y: ty });
+      const speed = 220;
+      this.projectiles.push({
+        id: `rbu-${Date.now()}-${k}-${Math.floor(Math.random() * 1e6)}`,
+        type: 'hedgehog',
+        side: ship.side,
+        pos: { x: bowX, y: bowY },
+        vel: { x: ((tx - bowX) / d) * speed, y: ((ty - bowY) / d) * speed },
+        originPos: { x: bowX, y: bowY },
+        targetPos: { x: tx, y: ty },
+        flightProgress: 0,
+        maxDistance: d,
+        distanceTraveled: 0,
+        damage: 560,
+        blastRadius: 40,
+        speed,
+        heading: angle,
+        isDead: false,
+        trail: [],
+        isHedgehog: true,
+        isDepthFused: true,
+        arcAltitude: 0,
+        attackerName: `${ship.name} ${label}`,
+      });
+    }
+  }
 
+  /**
+   * Ahead-throwing ASW salvo with the ship's own weapon: Hedgehog's 24 contact-fused bombs in an
+   * ellipse, or the depth-fused patterns of Squid (two triple mortars, two layers), Limbo (a
+   * triangle of three) and the Swedish Bofors 375 mm rocket launcher (four rounds).
+   */
+  private fireHedgehogSalvo(ship: Ship, targetPos: Vector2D) {
+    const kind = ship.aheadThrower ?? 'hedgehog';
+    const spec = AHEAD_THROWERS[kind];
+    if (kind === 'bofors375') soundEngine.playRocketWhoosh();
+    else soundEngine.playGunSalvo(false);
+    const bowX = ship.pos.x + Math.cos(ship.heading) * (ship.length * (kind === 'limbo' ? -0.3 : 0.4));
+    const bowY = ship.pos.y + Math.sin(ship.heading) * (ship.length * (kind === 'limbo' ? -0.3 : 0.4));
     const launchAngle = Math.atan2(targetPos.y - bowY, targetPos.x - bowX);
 
-    // Salvo pattern: 24 projectiles arranged in a 4x6 grid, rotated along launch angle
-    const rows = 4;
-    const cols = 6;
-    const gridSpacing = 7;
+    // Pattern offsets (forward, lateral) around the aim point
+    const offsets: Array<[number, number]> = [];
+    if (kind === 'hedgehog') {
+      for (let r = 0; r < 4; r++) for (let c = 0; c < 6; c++) offsets.push([(r - 1.5) * 7, (c - 2.5) * 7]);
+    } else if (kind === 'squid') {
+      for (const layer of [-14, 14]) for (const [f, l] of [[8, 0], [-6, -12], [-6, 12]]) offsets.push([f + layer, l]);
+    } else if (kind === 'limbo') {
+      offsets.push([12, 0], [-8, -16], [-8, 16]);
+    } else {
+      offsets.push([12, -12], [12, 12], [-12, -12], [-12, 12]);
+    }
 
-    this.addBannerAlert(`🦔【刺蝟砲齊射】「${ship.name}」聲納鎖定敵潛艇！艦艏刺蝟反潛迫擊砲 24聯裝彈幕齊射！`, 'player', 'alert', 4.5);
+    const upgrade = ship.side === 'player' || ship.side === 'allied' ? 1 + 0.2 * (this.fleetUpgrades.depthChargeSonarLevel - 1) : 1;
+    this.addBannerAlert(`🦔【${spec.label}】「${ship.name}」聲納鎖定敵潛艇，${spec.rounds} 發齊射！`, 'player', 'alert', 4.5);
     this.addCombatLog({
       category: 'naval',
       sourceSide: 'player',
-      sourceName: `${ship.name} (艦艏刺蝟砲)`,
+      sourceName: `${ship.name} (${spec.label})`,
       targetName: '敵方潛艦',
       actionType: 'gun_hit',
-      text: `🦔【刺蝟砲 24聯裝超前發射】「${ship.name}」前方聲納鎖定水下威脅！艦艏拋射 24枚 刺蝟反潛迫擊砲彈形成橢圓覆蓋網！觸發式引信接觸即爆！`,
+      text: spec.depthFused
+        ? `🦔【${spec.label}】「${ship.name}」依聲納測得之深度裝定引信，${spec.rounds} 發彈落入目標上方海域，下沉至設定深度起爆！`
+        : `🦔【刺蝟砲 24聯裝超前發射】「${ship.name}」艦艏拋射 24枚 刺蝟反潛迫擊砲彈形成橢圓覆蓋網！觸發式引信接觸即爆，未命中不引爆亦不擾亂聲納！`,
     });
 
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const forwardOffset = (r - (rows - 1) / 2) * gridSpacing;
-        const lateralOffset = (c - (cols - 1) / 2) * gridSpacing;
-
-        const cellTargetX =
-          targetPos.x +
-          Math.cos(launchAngle) * forwardOffset -
-          Math.sin(launchAngle) * lateralOffset +
-          (Math.random() - 0.5) * 4;
-        const cellTargetY =
-          targetPos.y +
-          Math.sin(launchAngle) * forwardOffset +
-          Math.cos(launchAngle) * lateralOffset +
-          (Math.random() - 0.5) * 4;
-
-        const cellDist = dist({ x: bowX, y: bowY }, { x: cellTargetX, y: cellTargetY });
-        const mortarSpeed = 160;
-
-        this.projectiles.push({
-          id: `hedgehog-${Date.now()}-${r}-${c}-${Math.random()}`,
-          type: 'hedgehog',
-          side: ship.side,
-          pos: { x: bowX, y: bowY },
-          vel: {
-            x: ((cellTargetX - bowX) / cellDist) * mortarSpeed,
-            y: ((cellTargetY - bowY) / cellDist) * mortarSpeed,
-          },
-          originPos: { x: bowX, y: bowY },
-          targetPos: { x: cellTargetX, y: cellTargetY },
-          flightProgress: 0,
-          maxDistance: cellDist,
-          distanceTraveled: 0,
-          damage:
-            ship.side === 'player' || ship.side === 'allied'
-              ? Math.round(780 * (1 + 0.2 * (this.fleetUpgrades.depthChargeSonarLevel - 1)))
-              : 780,
-          blastRadius: 28,
-          speed: mortarSpeed,
-          heading: launchAngle,
-          isDead: false,
-          trail: [],
-          isHedgehog: true,
-          arcAltitude: 0,
-          attackerName: `${ship.name} 刺蝟砲`,
-        });
-      }
-    }
+    const speed = kind === 'bofors375' ? 220 : 160;
+    offsets.forEach(([fwd, lat], k) => {
+      const tx = targetPos.x + Math.cos(launchAngle) * fwd - Math.sin(launchAngle) * lat + (Math.random() - 0.5) * 4;
+      const ty = targetPos.y + Math.sin(launchAngle) * fwd + Math.cos(launchAngle) * lat + (Math.random() - 0.5) * 4;
+      const d = dist({ x: bowX, y: bowY }, { x: tx, y: ty });
+      this.projectiles.push({
+        id: `${kind}-${Date.now()}-${k}-${Math.random()}`,
+        type: 'hedgehog',
+        side: ship.side,
+        pos: { x: bowX, y: bowY },
+        vel: { x: ((tx - bowX) / d) * speed, y: ((ty - bowY) / d) * speed },
+        originPos: { x: bowX, y: bowY },
+        targetPos: { x: tx, y: ty },
+        flightProgress: 0,
+        maxDistance: d,
+        distanceTraveled: 0,
+        damage: Math.round(spec.damage * upgrade),
+        blastRadius: spec.blast,
+        speed,
+        heading: launchAngle,
+        isDead: false,
+        trail: [],
+        isHedgehog: true,
+        isDepthFused: spec.depthFused,
+        arcAltitude: 0,
+        attackerName: `${ship.name} ${spec.label}`,
+      });
+    });
   }
 
   private fireFlakBurst(origin: Vector2D, plane: Aircraft, sourceSide: ShipSide = 'player') {
@@ -6025,6 +6693,8 @@ export class GameEngine {
         speed,
         heading: spreadAngle,
         isDead: false,
+        // 1960s+ torpedoes home: Soviet 53-65K wake homers, US Mk 37 / Mk 48
+        isAcousticHoming: this.era === 'era4' || this.era === 'era5',
         trail: [],
         attackerName: shipName,
       });
@@ -6083,6 +6753,8 @@ export class GameEngine {
   }
 
   private fireTurretSalvo(ship: Ship, turret: Turret, targetPos: Vector2D) {
+    // A river boat that opens fire gives its hide away
+    if (ship.type === 'river_gunboat') ship.riverReveal = 6;
     const isHeavy = turret.damage > 100;
     soundEngine.playGunSalvo(isHeavy);
 
@@ -7138,8 +7810,9 @@ export class GameEngine {
 
     if (this.enemyDcaCooldown <= 0 && (enemyCarrier || enemyAirfield)) {
       const threatBasePos = enemyCarrier ? enemyCarrier.pos : enemyAirfield!.pos;
+      // DCA launches on what the defenders' radar (GCI) reports
       const incomingBomber = this.aircraft.find(
-        (a) => a.side === 'player' && a.state !== 'shot_down' &&
+        (a) => a.side === 'player' && a.state !== 'shot_down' && this.isAirTrackedBy(a, 'enemy') &&
           (a.role === 'dive_bomber' || a.role === 'torpedo_bomber' || a.role === 'level_bomber') &&
           dist(a.pos, threatBasePos) < 3600
       );
@@ -7151,7 +7824,7 @@ export class GameEngine {
 
     if (this.enemyScrambleCooldown <= 0 && enemyAirfield) {
       const nearPlanes = this.aircraft.find(
-        (a) => a.side === 'player' && a.state !== 'shot_down' && dist(a.pos, enemyAirfield.pos) < 2400
+        (a) => a.side === 'player' && a.state !== 'shot_down' && this.isAirTrackedBy(a, 'enemy') && dist(a.pos, enemyAirfield.pos) < 2400
       );
       if (nearPlanes) {
         this.triggerEnemyAirDoctrine('scramble');
@@ -7172,7 +7845,7 @@ export class GameEngine {
         if (inst.type === 'flak_battery') {
           // 防空高射砲陣地 (雙方皆可自動對敵機射擊)
           const targetPlane = this.aircraft.find(
-            (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= inst.range
+            (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= inst.range && this.aaCanSee(inst.pos, a)
           );
           if (targetPlane && inst.cooldown <= 0) {
             this.fireFlakBurst(inst.pos, targetPlane, inst.side);
@@ -7190,12 +7863,12 @@ export class GameEngine {
             const reloadMod = hasAmmoDepot ? 0.75 : 1.0;
 
             const shipTarget = this.enemyShips
-              .filter((s) => !s.isSunk && this.isHostile(inst.side, s.side) && (!this.isSubmarine(s) || Boolean(s.isSpotted)) && dist(inst.pos, s.pos) <= inst.range)
+              .filter((s) => !s.isSunk && this.isHostile(inst.side, s.side) && (!this.isSubmarine(s) || Boolean(s.isSpotted)) && dist(inst.pos, s.pos) <= this.coastalReach(inst.pos, inst.range))
               .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
 
             const groundTarget = !shipTarget
               ? this.groundUnits
-                  .filter((u) => !u.isDestroyed && !u.embarkedInShipId && this.isHostile(inst.side, u.side) && dist(inst.pos, u.pos) <= inst.range)
+                  .filter((u) => !u.isDestroyed && !u.embarkedInShipId && this.isHostile(inst.side, u.side) && this.canEngageGroundAt(inst.pos, inst.range, u.pos, inst.type === 'towed_artillery'))
                   .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0]
               : undefined;
 
@@ -7266,11 +7939,11 @@ export class GameEngine {
               !s.isSunk &&
               this.isHostile(inst.side, s.side) &&
               (!this.isSubmarine(s) || Boolean(s.isSpottedByEnemy)) &&
-              dist(inst.pos, s.pos) <= inst.range
+              dist(inst.pos, s.pos) <= this.coastalReach(inst.pos, inst.range)
           )
           .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
         const groundTarget = !shipTarget
-          ? this.groundUnits.find((u) => u.side === 'player' && !u.isDestroyed && !u.embarkedInShipId && dist(inst.pos, u.pos) <= inst.range)
+          ? this.groundUnits.find((u) => u.side === 'player' && !u.isDestroyed && !u.embarkedInShipId && this.canEngageGroundAt(inst.pos, inst.range, u.pos, inst.type === 'towed_artillery'))
           : null;
         const targetPos = shipTarget ? shipTarget.pos : groundTarget ? groundTarget.pos : null;
 
@@ -7513,12 +8186,21 @@ export class GameEngine {
       islandSupplyMap.set(isl.id, { playerSupplied, enemySupplied, hasHospital, hasDepot, hasMajorPort });
     }
 
+    for (const w of this.groundWrecks) w.age += dt;
+    this.groundWrecks = this.groundWrecks.filter((w) => w.age < WRECK_LIFETIME);
+
     // ══════════════════════════════════════════════════════════
     // 2. 地面部隊狀態更新、組織度/建制度計算與投降審查 (Ground Unit Logic)
     // ══════════════════════════════════════════════════════════
+    this.groundPathBudget = 4;
     for (let i = this.groundUnits.length - 1; i >= 0; i--) {
       const unit = this.groundUnits[i];
       if (unit.isDestroyed) {
+        if (!unit.embarkedInShipId && leavesWreck(unit.type)) {
+          const heading = unit.order.targetPos ? Math.atan2(unit.order.targetPos.y - unit.pos.y, unit.order.targetPos.x - unit.pos.x) : unit.side === 'player' ? 0 : Math.PI;
+          this.groundWrecks.push({ id: `wreck-${unit.id}`, type: unit.type, side: unit.side, pos: { ...unit.pos }, heading, age: 0 });
+          if (this.groundWrecks.length > 60) this.groundWrecks.shift();
+        }
         this.groundUnits.splice(i, 1);
         continue;
       }
@@ -7635,10 +8317,11 @@ export class GameEngine {
       // 城市戰地形與掩體判定 (Urban Terrain & Air Raid Cover)
       // 進入城市/城鎮/定居點掩體內: 空襲減傷70%、步火直射防禦掩護50%
       // ══════════════════════════════════════════════════════════
-      let inUrban = false;
-      for (const isl of this.islands) {
+      // Built-up area from the terrain map; refugee camps keep their marked perimeter
+      let inUrban = this.terrain.isUrban(unit.pos.x, unit.pos.y);
+      for (const isl of inUrban ? [] : this.islands) {
         for (const inst of isl.installations) {
-          if (!inst.isDestroyed && (inst.civilianZoneRadius || 0) > 0) {
+          if (!inst.isDestroyed && inst.type === 'refugee_camp' && (inst.civilianZoneRadius || 0) > 0) {
             if (dist(unit.pos, inst.pos) <= inst.civilianZoneRadius!) {
               inUrban = true;
               break;
@@ -7649,6 +8332,8 @@ export class GameEngine {
       }
       unit.isInUrbanCover = inUrban;
       unit.urbanCoverFactor = inUrban ? 0.5 : 1.0;
+
+      this.refreshGroundTerrainInfo(unit);
 
       unit.cooldown = Math.max(0, unit.cooldown - dt);
 
@@ -7666,9 +8351,26 @@ export class GameEngine {
 
       // RTS Navigation (混亂壓制狀態下速度減緩 60%)
       if (unit.order.type === 'move' && unit.order.targetPos) {
-        const dx = unit.order.targetPos.x - unit.pos.x;
-        const dy = unit.order.targetPos.y - unit.pos.y;
-        const d = Math.hypot(dx, dy);
+        // Any move order (player or AI) gets a terrain route, planned once and lazily
+        if (!unit.order.routed && !unit.embarkedInShipId) {
+          const r = this.planGroundRoute(unit, unit.order.targetPos);
+          if (r !== undefined) {
+            unit.order.routed = true;
+            if (r && r.length > 1) {
+              unit.order.waypoints = r;
+              unit.order.activeWaypointIndex = 0;
+            }
+          }
+        }
+        // Follow the terrain route's waypoints, then the final target
+        const wps = unit.order.waypoints;
+        let wi = unit.order.activeWaypointIndex ?? 0;
+        while (wps && wi < wps.length - 1 && dist(unit.pos, wps[wi]) < 40) wi++;
+        if (wps) unit.order.activeWaypointIndex = wi;
+        const steerTo = wps && wi < wps.length ? wps[wi] : unit.order.targetPos;
+        const dx = steerTo.x - unit.pos.x;
+        const dy = steerTo.y - unit.pos.y;
+        const d = Math.hypot(unit.order.targetPos.x - unit.pos.x, unit.order.targetPos.y - unit.pos.y);
 
         if (d < 25) {
           unit.order = { type: 'idle' };
@@ -7683,6 +8385,21 @@ export class GameEngine {
             const penalty = Math.min(0.80, 0.30 + ((unit.suppression ?? 0) / 100) * 0.50);
             moveSpeed *= (1 - penalty);
           }
+          // Terrain: roads speed vehicles up; paddies, jungle, marsh, mountains and fords slow them
+          const onFoot = this.isFootUnit(unit);
+          const amphib = unit.isAmphibious || unit.type.startsWith('usmc_lvt') || unit.type === 'usmc_aav7a1';
+          const terrainMod = this.terrain.moveFactor(unit.pos.x, unit.pos.y, !onFoot);
+          // Amphibians swim rivers; everyone else crawls (never fully stuck, so a unit can back out)
+          moveSpeed *= amphib && this.terrain.at(unit.pos.x, unit.pos.y) === 14 ? 0.5 : Math.max(0.08, terrainMod);
+          // Crawling through a river or swamp for a while: plan a better way round from here
+          if (!amphib && terrainMod < 0.15) {
+            unit.routeStuck = (unit.routeStuck ?? 0) + dt;
+            if (unit.routeStuck > 3) {
+              unit.routeStuck = 0;
+              unit.order.routed = false;
+              unit.order.waypoints = undefined;
+            }
+          } else unit.routeStuck = 0;
           unit.speed = moveSpeed;
 
           // ══════════════════════════════════════════════════════════
@@ -7692,7 +8409,8 @@ export class GameEngine {
           const nextX = unit.pos.x + Math.cos(unit.heading) * unit.speed * dt * 15;
           const nextY = unit.pos.y + Math.sin(unit.heading) * unit.speed * dt * 15;
           const isLVT = unit.isAmphibious || unit.type === 'usmc_lvt_42' || unit.type === 'usmc_lvt_45' || unit.type === 'usmc_lvtp5';
-          const onAnyIsland = this.islands.some((isl) => isPointInPolygon({ x: nextX, y: nextY }, isl.points));
+          // Lakes and reservoirs count as water: only amphibians cross them
+          const onAnyIsland = this.islands.some((isl) => isPointInPolygon({ x: nextX, y: nextY }, isl.points)) && !this.terrain.isLake(nextX, nextY);
 
           if (!onAnyIsland && !isLVT) {
             // 非兩棲裝備無法涉水，停駐於灘頭
@@ -7742,7 +8460,7 @@ export class GameEngine {
           ? 1550
           : 1400;
       const targetPlane = this.aircraft.find(
-        (a) => this.isHostile(unit.side, a.side) && a.state !== 'shot_down' && dist(unit.pos, a.pos) <= aaRange
+        (a) => this.isHostile(unit.side, a.side) && a.state !== 'shot_down' && dist(unit.pos, a.pos) <= aaRange && this.aaCanSee(unit.pos, a)
       );
       if (targetPlane) {
         unit.heading = Math.atan2(targetPlane.pos.y - unit.pos.y, targetPlane.pos.x - unit.pos.x);
@@ -7751,8 +8469,13 @@ export class GameEngine {
       }
     }
 
+    const indirectFire = this.isIndirectFire(unit);
     const targetGround = this.groundUnits.find(
-      (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && dist(unit.pos, u.pos) <= (unit.isBanzaiCharging ? 1200 : unit.range)
+      (u) =>
+        this.isHostile(unit.side, u.side) &&
+        !u.isDestroyed &&
+        !u.embarkedInShipId &&
+        (unit.isBanzaiCharging ? dist(unit.pos, u.pos) <= 1200 : this.canEngageGroundAt(unit.pos, unit.range, u.pos, indirectFire))
     );
 
     // 局部反突擊判定: 若同一島嶼或1600m內有美軍或盟軍登陸部隊，敵機動部隊主動逼近
@@ -7763,14 +8486,12 @@ export class GameEngine {
       : null;
 
     if (nearbyLandingForce && dist(unit.pos, nearbyLandingForce.pos) > unit.range) {
-      unit.heading = Math.atan2(nearbyLandingForce.pos.y - unit.pos.y, nearbyLandingForce.pos.x - unit.pos.x);
       let advanceSpeed = (unit.disorganized || (unit.organization ?? 100) < 20) ? unit.maxSpeed * 0.5 : unit.maxSpeed;
       if ((unit.suppression ?? 0) > 0) {
         const pen = Math.min(0.80, 0.30 + ((unit.suppression ?? 0) / 100) * 0.50);
         advanceSpeed *= (1 - pen);
       }
-      unit.pos.x += Math.cos(unit.heading) * advanceSpeed * dt * 12;
-      unit.pos.y += Math.sin(unit.heading) * advanceSpeed * dt * 12;
+      this.moveGroundUnitToward(unit, nearbyLandingForce.pos, advanceSpeed, dt, 12);
     }
 
     if (targetGround) {
@@ -7778,8 +8499,7 @@ export class GameEngine {
 
       // Banzai charge: 狂熱白刃刺刀突擊
       if (unit.isBanzaiCharging) {
-        unit.pos.x += Math.cos(unit.heading) * unit.maxSpeed * 1.6 * dt * 18;
-        unit.pos.y += Math.sin(unit.heading) * unit.maxSpeed * 1.6 * dt * 18;
+        this.moveGroundUnitToward(unit, targetGround.pos, unit.maxSpeed * 1.6, dt, 18);
 
         if (dist(unit.pos, targetGround.pos) < 60 && unit.cooldown <= 0) {
           soundEngine.playExplosion(false);
@@ -7817,7 +8537,7 @@ export class GameEngine {
             targetGround.isDestroyed = true;
           }
         }
-      } else if (dist(unit.pos, targetGround.pos) <= unit.range && unit.cooldown <= 0) {
+      } else if (unit.cooldown <= 0 && this.canEngageGroundAt(unit.pos, unit.range, targetGround.pos, indirectFire)) {
         soundEngine.playGunSalvo(false);
         const d = dist(unit.pos, targetGround.pos);
         const isArty = unit.isArtillery || unit.isSPG || unit.type.includes('artillery') || unit.type === 'opfor_2s1';
@@ -8023,8 +8743,9 @@ export class GameEngine {
     let targetPos: Vector2D | null = null;
     let targetUnit: GroundUnit | null = null;
 
+    const indirectFire = this.isIndirectFire(unit);
     const enemyGround = this.groundUnits.find(
-      (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && dist(unit.pos, u.pos) <= unit.range
+      (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && this.canEngageGroundAt(unit.pos, unit.range, u.pos, indirectFire)
     );
     if (enemyGround) {
       targetPos = enemyGround.pos;
@@ -8033,7 +8754,7 @@ export class GameEngine {
       // Find enemy installation on current island (友軍地面部隊絕不攻擊我方或盟軍建造之陣地設施)
       for (const isl of this.islands) {
         for (const inst of isl.installations) {
-          if (!inst.isDestroyed && this.isHostile(unit.side, inst.side) && dist(unit.pos, inst.pos) <= unit.range) {
+          if (!inst.isDestroyed && this.isHostile(unit.side, inst.side) && this.canEngageGroundAt(unit.pos, unit.range, inst.pos, indirectFire)) {
             targetPos = inst.pos;
             break;
           }
@@ -8699,6 +9420,7 @@ export class GameEngine {
         speed,
         heading: mHeading,
         isDead: false,
+        warhead: 'ap',
         trail: [],
         attackerName,
         targetEntityId: tShipId,
@@ -8744,7 +9466,7 @@ export class GameEngine {
     } else if (targetEntity && targetEntity.id) {
       targetId = targetEntity.id;
     } else {
-      const hostilePlanes = this.aircraft.filter((a) => this.isHostile(plane.side, a.side) && a.state !== 'shot_down');
+      const hostilePlanes = this.aircraft.filter((a) => this.isHostile(plane.side, a.side) && a.state !== 'shot_down' && this.isAirTrackedBy(a, plane.side));
       const nearest = hostilePlanes.reduce<{ p: Aircraft | null; d: number }>(
         (acc, p) => {
           const dst = dist(plane.pos, p.pos);
@@ -8864,6 +9586,7 @@ export class GameEngine {
       speed,
       heading,
       isDead: false,
+      warhead: 'heat',
       trail: [],
       attackerName,
     });
@@ -9012,6 +9735,7 @@ export class GameEngine {
       speed,
       heading,
       isDead: false,
+      warhead: 'heat',
       trail: [],
       attackerName,
     });
@@ -10238,7 +10962,7 @@ export class GameEngine {
           (a) =>
             a.side === 'enemy' &&
             a.state !== 'shot_down' &&
-            dist(ship.pos, a.pos) <= samRange
+            dist(ship.pos, a.pos) <= samRange && this.aaCanSee(ship.pos, a, 0.06)
         );
 
         if (hostileAircraft.length > 0) {
@@ -10255,7 +10979,7 @@ export class GameEngine {
         }
 
         if ((ship.asrocCooldown || 0) <= 0 && (ship.readyASROC ?? 8) > 0) {
-          const asrocRange = ship.asrocRange || 2400;
+          const asrocRange = (ship.asrocRange || 2400) * STANDOFF_ASW[ship.standoffAswWeapon ?? 'ASROC'].rangeFactor;
           const targetSub = this.enemyShips.find(
             (s) => !s.isSunk && this.isSubmarine(s) && s.isSpotted && dist(ship.pos, s.pos) <= asrocRange
           );
@@ -10380,7 +11104,7 @@ export class GameEngine {
     // 扇歌火控雷達主動波束照射偵測: 當雷達照射在空友機時，在空野鼬戰機即刻感應波束並發動反輻射狙擊
     if (fanSongAlive && activeFanSong && this.era === 'era4') {
       const planeInBeam = this.aircraft.find(
-        (a) => this.isHostile(activeFanSong!.side, a.side) && a.state !== 'shot_down' && a.state !== 'landing' && dist(activeFanSong!.pos, a.pos) <= 3200
+        (a) => this.isHostile(activeFanSong!.side, a.side) && a.state !== 'shot_down' && a.state !== 'landing' && dist(activeFanSong!.pos, a.pos) <= 3200 && this.aaCanSee(activeFanSong!.pos, a, 0.06)
       );
       if (planeInBeam && Math.random() < 0.28 * dt) {
         this.triggerSeadAutoRetaliation(activeFanSong, planeInBeam);
@@ -10454,7 +11178,7 @@ export class GameEngine {
             (a) =>
               this.isHostile(inst.side, a.side) &&
               a.state !== 'shot_down' &&
-              dist(inst.pos, a.pos) <= samRange
+              dist(inst.pos, a.pos) <= samRange && this.aaCanSee(inst.pos, a)
           );
 
           if (targetPlane) {
@@ -10481,7 +11205,7 @@ export class GameEngine {
             (a) =>
               this.isHostile(inst.side, a.side) &&
               a.state !== 'shot_down' &&
-              dist(inst.pos, a.pos) <= samRange
+              dist(inst.pos, a.pos) <= samRange && this.aaCanSee(inst.pos, a)
           );
 
           if (targetPlane) {
@@ -10747,7 +11471,7 @@ export class GameEngine {
           }
           // 其次攔截進入空域之敵方超音速戰機或轟炸機
           const hostileJet = this.aircraft.find(
-            (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= samRange
+            (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= samRange && this.aaCanSee(inst.pos, a)
           );
           if (hostileJet) {
             this.firePatriotSAM(inst, hostileJet);
@@ -10786,7 +11510,7 @@ export class GameEngine {
           const isSA3 = inst.type === 'sa3_sam_site';
           const samRange = isSA3 ? (inst.range || 2900) : 4200;
           const targetPlayerPlane = this.aircraft.find(
-            (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= samRange
+            (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= samRange && this.aaCanSee(inst.pos, a)
           );
           if (targetPlayerPlane) {
             if (isSA3) {
@@ -10818,7 +11542,7 @@ export class GameEngine {
                 !s.isSunk &&
                 !this.isSubmarine(s) &&
                 this.isHostile(inst.side, s.side) &&
-                dist(inst.pos, s.pos) <= 4800
+                dist(inst.pos, s.pos) <= this.coastalReach(inst.pos, 4800)
             )
             .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
           if (targetPlayerShip) {
@@ -10983,7 +11707,7 @@ export class GameEngine {
           } else {
             // 攔截進入防空圈之敵方在空戰機
             const targetPlayerPlanes = this.aircraft.filter(
-              (a) => this.isHostile(eShip.side, a.side) && a.state !== 'shot_down' && dist(eShip.pos, a.pos) <= samRange
+              (a) => this.isHostile(eShip.side, a.side) && a.state !== 'shot_down' && dist(eShip.pos, a.pos) <= samRange && this.aaCanSee(eShip.pos, a, 0.06)
             );
             if (targetPlayerPlanes.length > 0) {
               this.launchShipSamSalvo(eShip, targetPlayerPlanes, (a) => this.fireSovietShipSAM(eShip, a, samName), (a) => a.state !== 'shot_down');
@@ -11080,7 +11804,7 @@ export class GameEngine {
                 a.side === 'enemy' &&
                 a.state !== 'shot_down' &&
                 a.state !== 'landing' &&
-                dist(ship.pos, a.pos) <= samRange
+                dist(ship.pos, a.pos) <= samRange && this.aaCanSee(ship.pos, a, 0.06)
             );
             if (targetPlanes.length > 0) {
               this.launchShipSamSalvo(ship, targetPlanes, (a) => this.fireSAM(ship, a, 'aircraft'), (a) => a.state !== 'shot_down');
@@ -12492,6 +13216,7 @@ export class GameEngine {
   // ══════════════════════════════════════════════════════════
   public fireASROC(ship: Ship, targetPos: Vector2D, targetEntityId?: string) {
     soundEngine.playRocketIgnition();
+    const standoff = STANDOFF_ASW[ship.standoffAswWeapon ?? 'ASROC'];
     const d = dist(ship.pos, targetPos);
     const angle = Math.atan2(targetPos.y - ship.pos.y, targetPos.x - ship.pos.x);
     const speed = MISSILE_SPEED.asroc;
@@ -12518,17 +13243,17 @@ export class GameEngine {
       isASROC: true,
       asrocStage: 'boost',
       asrocTimer: 0,
-      attackerName: `${ship.name} (RUR-5 ASROC 反潛火箭)`,
+      attackerName: `${ship.name} (${standoff.label})`,
     });
 
-    this.addBannerAlert(`🚀🌊【ASROC 反潛火箭發射！】「${ship.name}」8聯裝箱型發射架發射 ASROC 獵殺水下潛艦！`, 'player', 'alert', 5.5);
+    this.addBannerAlert(`🚀🌊【${standoff.label}發射！】「${ship.name}」${standoff.launcher}發射，獵殺水下潛艦！`, 'player', 'alert', 5.5);
     this.addCombatLog({
       category: 'naval',
       sourceSide: 'player',
       sourceName: ship.name,
       targetName: '水下目標',
       actionType: 'recon_spotted',
-      text: `🚀🌊【ASROC 反潛火箭發射】「${ship.name}」聲納鎖定敵水下音源，8聯裝發射架火箭助推 Mk 46 魚雷騰空飛向目標海域！`,
+      text: `🚀🌊【${standoff.label}】「${ship.name}」聲納鎖定敵水下音源，${standoff.launcher}將聲導反潛魚雷送往目標海域！`,
     });
   }
 
@@ -12558,7 +13283,7 @@ export class GameEngine {
         trail: [],
         isAcousticHoming: true,
         turnRate: 3.5,
-        attackerName: `${ship.name} (Mk 32 SVTT 艦側魚雷)`,
+        attackerName: `${ship.name} (${svttLabel(ship)})`,
       });
     }
     this.addCombatLog({
@@ -12567,7 +13292,7 @@ export class GameEngine {
       sourceName: ship.name,
       targetName: '水下潛艦方位',
       actionType: 'torpedo_hit',
-      text: `🌊【Mk 32 SVTT 艦側三聯裝魚雷發射】「${ship.name}」高壓空氣彈射 3 枚 Mk 46 聲自導反潛魚雷入水！`,
+      text: `🌊【${svttLabel(ship)}發射】「${ship.name}」高壓空氣彈射 3 枚聲自導反潛魚雷入水！`,
     });
   }
 
@@ -13915,6 +14640,7 @@ export class GameEngine {
       speed,
       heading: angle,
       isDead: false,
+      warhead: 'he',
       trail: [],
       attackerName: `${plane.name} (AGM-12 鬥牛犬超音速空地飛彈)`,
       ashmVariant: 'agm12_bullpup',
@@ -13973,7 +14699,8 @@ export class GameEngine {
 
   private dropSnakeyeBombs(plane: Aircraft, targetPos: Vector2D) {
     soundEngine.playTorpedoLaunch();
-    const count = 4;
+    const spec = bombSpec(plane.model, 'bombs_snakeye_retarded');
+    const count = Math.max(2, Math.min(12, plane.maxAmmo ?? 4)); // Mk 82 Snakeye on MERs / TERs
     for (let i = 0; i < count; i++) {
       const offsetSide = (i % 2 === 0 ? 1 : -1) * (8 + i * 2);
       const startX = plane.pos.x + Math.sin(plane.heading) * offsetSide;
@@ -13995,11 +14722,12 @@ export class GameEngine {
         flightProgress: 0,
         maxDistance: bDist,
         distanceTraveled: 0,
-        damage: 650,
+        damage: spec.damage,
         blastRadius: 36,
         speed: 240,
         heading: plane.heading,
         isDead: false,
+        warhead: 'he',
         trail: [],
         attackerName: `${plane.name} (Mk 82 蛇眼減速炸彈)`,
         bombType: 'bomb_500',
@@ -14038,6 +14766,7 @@ export class GameEngine {
       speed,
       heading: angle,
       isDead: false,
+      warhead: 'ap',
       trail: [],
       attackerName: `${plane.name} (GBU-10 鋪路雷射導引重彈)`,
       bombType: 'bomb_2000',
@@ -14082,6 +14811,7 @@ export class GameEngine {
         speed: 260,
         heading: plane.heading,
         isDead: false,
+        warhead: 'cluster',
         trail: [],
         attackerName: `${plane.name} (CBU-24 集束子母彈)`,
         bombType: 'bomb_500',
@@ -14145,7 +14875,10 @@ export class GameEngine {
 
   private dropMERIronBombStick(plane: Aircraft, targetPos: Vector2D) {
     soundEngine.playTorpedoLaunch();
-    const count = 18;
+    const spec = bombSpec(plane.model, 'mer_iron_bombs');
+    // Mk 82s on multiple ejector racks: A-6 up to 22, F-111 24, A-7 / A-10 12, F-105 16, B-52 54
+    const MER_COUNT: Partial<Record<AircraftModel, number>> = { a6a: 22, a6e: 22, f111: 24, a7: 12, a10a: 12, f105: 16, b52: 54 };
+    const count = Math.min(30, MER_COUNT[plane.model] ?? 12);
     for (let i = 0; i < count; i++) {
       const stepForward = (i - count / 2) * 22;
       const bTarget = {
@@ -14165,11 +14898,12 @@ export class GameEngine {
         flightProgress: 0,
         maxDistance: bDist,
         distanceTraveled: 0,
-        damage: 360,
+        damage: spec.damage,
         blastRadius: 38,
         speed: 280,
         heading: plane.heading,
         isDead: false,
+        warhead: 'he',
         trail: [],
         attackerName: `${plane.name} (MER 18聯裝 500lb 連續航彈走廊)`,
         bombType: 'bomb_500',
@@ -15022,7 +15756,7 @@ export class GameEngine {
     const strikers = pool.filter((p) => p.role !== 'fighter');
     const pick = <T,>(list: T[]): T => list[Math.floor(Math.random() * list.length)];
 
-    const hostilePlanes = this.aircraft.filter((a) => this.isHostile('allied', a.side) && a.state !== 'shot_down');
+    const hostilePlanes = this.aircraft.filter((a) => this.isHostile('allied', a.side) && a.state !== 'shot_down' && this.isAirTrackedBy(a, 'allied'));
     const hostileShips = this.enemyShips.filter((s) => !s.isSunk);
     const hostileGround = this.groundUnits.filter((u) => this.isHostile('allied', u.side) && !u.isDestroyed);
     const fleetPos = this.getFlagship()?.pos ?? baseCenter;
@@ -15206,6 +15940,9 @@ export class GameEngine {
         readySAMs: def.hasSAM ? 32 : 0,
         maxSAMs: def.hasSAM ? 32 : 0,
         torpedoCooldown: def.torpedoCooldown,
+        // Commonwealth / allied escorts all carried depth-charge rails and throwers
+        hasDepthCharges: def.type === 'destroyer' || def.type === 'ffg' || def.type === 'ddg',
+        depthChargeCooldown: 0,
         sonarRange:
           def.hasASROC || def.type === 'destroyer'
             ? this.era === 'era5'
@@ -15219,9 +15956,10 @@ export class GameEngine {
           targetPos: { x: this.worldSize - 600, y: shipY },
         },
       };
+      applyHistoricalAswFit(ship);
       if (this.navGrid) {
-        ship.pos = this.navGrid.projectToWalkableWater(ship.pos);
-        ship.order.waypoints = this.navGrid.findPath(ship.pos, { x: this.worldSize - 600, y: shipY });
+        ship.pos = this.navGrid.projectToWalkableWater(ship.pos, requiredDepth(ship));
+        ship.order.waypoints = this.navGrid.findPath(ship.pos, { x: this.worldSize - 600, y: shipY }, requiredDepth(ship));
         ship.order.activeWaypointIndex = 0;
       }
       this.alliedShips.push(ship);
@@ -15261,7 +15999,7 @@ export class GameEngine {
       const closestEnemy = enemySurfaceShips[0];
       const d = dist(ship.pos, closestEnemy.pos);
 
-      if (d < 1600 && (!this.navGrid || this.navGrid.hasClearWaterLine(ship.pos, closestEnemy.pos))) {
+      if (d < 1600 && (!this.navGrid || this.navGrid.hasClearWaterLine(ship.pos, closestEnemy.pos, true, requiredDepth(ship)))) {
         const bearing = Math.atan2(closestEnemy.pos.y - ship.pos.y, closestEnemy.pos.x - ship.pos.x);
         tacticalInterceptHeading = d < 1050 ? bearing + Math.PI * 0.72 : bearing + Math.PI * 0.25;
         ship.targetSpeed = ship.maxSpeed;
@@ -15287,14 +16025,14 @@ export class GameEngine {
       }
 
       if (this.navGrid) {
-        navDestination = this.navGrid.projectToWalkableWater(navDestination);
+        navDestination = this.navGrid.projectToWalkableWater(navDestination, requiredDepth(ship));
         const needNewPath =
           !ship.order.waypoints ||
           ship.order.waypoints.length === 0 ||
           (ship.repathCooldown || 0) <= 0 ||
           ship.navStuck;
         if (needNewPath) {
-          ship.order.waypoints = this.navGrid.findPath(ship.pos, navDestination);
+          ship.order.waypoints = this.navGrid.findPath(ship.pos, navDestination, requiredDepth(ship));
           ship.order.activeWaypointIndex = 0;
           ship.order.targetPos = navDestination;
           ship.repathCooldown = 3.5;
@@ -15309,6 +16047,14 @@ export class GameEngine {
       ship.targetSpeed = ship.maxSpeed * 0.9;
     } else {
       ship.targetHeading = tacticalInterceptHeading;
+    }
+
+    // 1b. 反潛獵殺：持有或剛失去潛艦接觸的護航艦以搜索航速逼近目標或最後已知位置
+    const hunt = this.findAswHunt(ship);
+    if (hunt) {
+      const steer = this.getEnemySteerPoint(ship, hunt.pos);
+      ship.targetHeading = Math.atan2(steer.y - ship.pos.y, steer.x - ship.pos.x);
+      ship.targetSpeed = hunt.speedKt;
     }
 
     // 2. 自主特殊武裝反擊 (Harpoon / Exocet / Torpedo / ASROC - 反潛武器僅針對已定位潛艦)
@@ -15345,12 +16091,26 @@ export class GameEngine {
         ship.asrocCooldown = Math.max(0, ship.asrocCooldown - dt);
       }
       if ((ship.asrocCooldown || 0) <= 0) {
+        const reach = 2400 * STANDOFF_ASW[ship.standoffAswWeapon ?? 'ASROC'].rangeFactor;
         const enemySub = this.enemyShips.find(
-          (s) => !s.isSunk && this.isSubmarine(s) && s.isSpotted && dist(ship.pos, s.pos) <= 2400
+          (s) => !s.isSunk && this.isSubmarine(s) && s.isSpotted && dist(ship.pos, s.pos) <= reach
         );
         if (enemySub) {
           this.fireASROC(ship, enemySub.pos, enemySub.id);
           ship.asrocCooldown = 28.0;
+        }
+      }
+    }
+
+    if (ship.hasSVTT) {
+      ship.svttCooldown = Math.max(0, (ship.svttCooldown || 0) - dt);
+      if (ship.svttCooldown <= 0) {
+        const closeSub = this.enemyShips.find(
+          (s) => !s.isSunk && this.isSubmarine(s) && s.isSpotted && dist(ship.pos, s.pos) <= 1000
+        );
+        if (closeSub) {
+          this.fireSVTT(ship, closeSub.pos);
+          ship.svttCooldown = 28.0;
         }
       }
     }
@@ -15371,7 +16131,7 @@ export class GameEngine {
         } else {
           // 攔截防空射程內之敵方戰鬥機或轟炸機
           const hostilePlanes = this.aircraft.filter(
-            (a) => this.isHostile(ship.side, a.side) && a.state !== 'shot_down' && dist(ship.pos, a.pos) <= samRange
+            (a) => this.isHostile(ship.side, a.side) && a.state !== 'shot_down' && dist(ship.pos, a.pos) <= samRange && this.aaCanSee(ship.pos, a, 0.06)
           );
           if (hostilePlanes.length > 0) {
             this.launchShipSamSalvo(ship, hostilePlanes, (a) => this.fireSAM(ship, a, 'aircraft'), (a) => a.state !== 'shot_down');
@@ -15688,7 +16448,8 @@ export class GameEngine {
         x: anchorPos.x + (i - (packSize - 1) / 2) * 190,
         y: anchorPos.y + (i % 2 === 0 ? -90 : 90),
       };
-      const subPos = this.navGrid ? this.navGrid.projectToWalkableWater(offsetPosRaw) : offsetPosRaw;
+      // Wolfpacks deploy where they can dive
+      const subPos = this.navGrid ? this.navGrid.projectToWalkableWater(offsetPosRaw, SUBMERGED_MIN_DEPTH_M) : offsetPosRaw;
 
       let sub: Ship;
       if (this.era === 'era1' || this.era === 'era2') {
@@ -15752,29 +16513,6 @@ export class GameEngine {
     });
   }
 
-  // ══════════════════════════════════════════════════════════
-  // 跨時代潛艦戰爭迷霧與反潛聲吶偵測系統 (Submarine Fog of War)
-  // ══════════════════════════════════════════════════════════
-  private getShipAswSonarRange(ship: Ship): number {
-    if (ship.sonarRange !== undefined) return ship.sonarRange;
-    if (this.isSubmarine(ship)) return this.era === 'era5' ? 1950 : this.era === 'era4' ? 1450 : 950;
-    if (ship.hasASROC || ship.hasSVTT) return this.era === 'era5' ? 2100 : 1700;
-    if (ship.hasDepthCharges || ship.hasHedgehog) return 1050;
-    if (
-      ship.side === 'enemy' &&
-      (ship.type === 'destroyer' ||
-        ship.type === 'petya' ||
-        ship.type === 'riga' ||
-        ship.type === 'kashin' ||
-        ship.type === 'dd_udaloy' ||
-        ship.type === 'cgn_kirov' ||
-        ship.type === 'dd_sovremenny')
-    ) {
-      return this.era === 'era5' ? 1900 : this.era === 'era4' ? 1550 : 1000;
-    }
-    return 0;
-  }
-
   private getAircraftAswSonarRange(plane: Aircraft): number {
     if (plane.model === 'be12') return 1650;
     if (plane.model === 'il38') return 1900;
@@ -15801,8 +16539,12 @@ export class GameEngine {
     const logKey = `${sub.id}-${reason}`;
     const canLog = (this.sonarLogCooldowns[logKey] || 0) <= 0;
 
+    sub.datumPos = { ...sub.pos };
+    sub.datumAge = 0;
     if (sub.side === 'enemy') {
       const wasHidden = !sub.isSpotted;
+      // First contact by sonar or a buoy field: the boat hears the ping and half the time evades
+      if (wasHidden && reason !== 'firing' && Math.random() < 0.5) this.startSubmarineEvasion(sub, this.getFlagship()?.pos ?? sub.pos);
       sub.isSpotted = true;
       sub.spottedTimer = Math.max(sub.spottedTimer || 0, duration);
 
@@ -15863,6 +16605,105 @@ export class GameEngine {
     }
   }
 
+  /** Ships guns can engage: surface ships, and WWII boats caught on the surface that this side can see. */
+  private isGunTarget(s: Ship, shooterSide: Ship['side']): boolean {
+    // Enemy river craft hidden under the bank's canopy cannot be laid on
+    if (s.type === 'river_gunboat' && s.side === 'enemy' && shooterSide !== 'enemy') return this.isRiverBoatSpotted(s);
+    if (!this.isSubmarine(s)) return true;
+    if (!isSurfacedBoat(s, this.era)) return false;
+    return shooterSide === 'enemy' ? Boolean(s.isSpottedByEnemy) : Boolean(s.isSpotted);
+  }
+
+  /**
+   * A submarine under attack evades: it turns away from the attack and either creeps away
+   * slowly and quietly (diesel boats, "silent running") or sprints deep (nuclear boats).
+   */
+  private startSubmarineEvasion(sub: Ship, threatPos: Vector2D): void {
+    if ((sub.evadeTimer || 0) > 0 || sub.isSunk) return;
+    const away = Math.atan2(sub.pos.y - threatPos.y, sub.pos.x - threatPos.x);
+    sub.evadeHeading = away + (Math.random() < 0.5 ? -1 : 1) * (Math.PI / 3);
+    sub.evadeTimer = isDieselBoat(sub) ? 30 : 18;
+    sub.isSnorkeling = false;
+  }
+
+  /**
+   * Target for an escort's anti-submarine hunt: a submarine its side currently holds, or the
+   * datum (last known position) of one recently lost. Closed at hunting speed so the sonar keeps
+   * working.
+   */
+  /**
+   * A player escort with ASW weapons works a contact on its own: idle, it closes the held boat or
+   * its datum at sonar search speed; under way, it slows to that speed while a contact is near so
+   * flow noise does not blind the hull sonar.
+   */
+  private updatePlayerEscortAsw(ship: Ship): void {
+    const hunt = this.findAswHunt(ship, 2600, 2000);
+    const was = ship.aswHunting;
+    ship.aswHunting = false;
+    if (!hunt) return;
+    if (ship.order.type === 'idle') {
+      const steer = this.calculateNavalSteeringAvoidance(ship, Math.atan2(hunt.pos.y - ship.pos.y, hunt.pos.x - ship.pos.x), dist(ship.pos, hunt.pos));
+      ship.targetHeading = steer.targetHeading;
+      ship.targetSpeed = dist(ship.pos, hunt.pos) < 60 ? hunt.speedKt * 0.6 : hunt.speedKt * steer.speedScale;
+      ship.aswHunting = true;
+    } else if (ship.order.type === 'move') {
+      ship.targetSpeed = Math.min(ship.targetSpeed, hunt.speedKt);
+      ship.aswHunting = true;
+    }
+    if (ship.aswHunting && !was) {
+      this.addCombatLog({
+        category: 'naval',
+        sourceSide: 'player',
+        sourceName: ship.name,
+        targetName: '水下接觸',
+        actionType: 'recon_spotted',
+        text: `🎧【反潛搜索航速】「${ship.name}」減速至 ${Math.round(hunt.speedKt)} 節，降低流噪維持聲納接觸${ship.order.type === 'idle' ? '，自動逼近接觸 / 最後已知位置' : ''}！`,
+      });
+    }
+  }
+
+  private findAswHunt(ship: Ship, holdRange = 3500, datumRange = 3000): { pos: Vector2D; speedKt: number } | undefined {
+    const sonar = shipSonar(ship, this.era, false);
+    if (!sonar) return undefined;
+    const speedKt = Math.min(ship.maxSpeed, Math.max(6, sonar.huntSpeedKt - 2));
+    const subs = this.enemyShips.filter((s) => !s.isSunk && this.isSubmarine(s));
+    const held = subs.filter((s) => s.isSpotted && dist(ship.pos, s.pos) < holdRange).sort((a, b) => dist(ship.pos, a.pos) - dist(ship.pos, b.pos))[0];
+    if (held) return { pos: held.pos, speedKt };
+    const datum = subs
+      .filter((s) => s.datumPos && (s.datumAge ?? 999) < 75 && dist(ship.pos, s.datumPos) < datumRange)
+      .sort((a, b) => dist(ship.pos, a.datumPos!) - dist(ship.pos, b.datumPos!))[0];
+    return datum?.datumPos ? { pos: datum.datumPos, speedKt } : undefined;
+  }
+
+  /**
+   * One detection pass on a submarine (see asw.ts): hull sonars by era and class, degraded by the
+   * hunter's own speed and blind directly overhead; surface-search radar on a snorkelling or
+   * surfaced boat; aircraft by sighting, radar, MAD and dipping sonar.
+   */
+  private detectSubmarine(sub: Ship, ships: Ship[], planes: Aircraft[], revealSec: number): void {
+    for (const hunter of ships) {
+      const d = dist(hunter.pos, sub.pos);
+      if (d > 2600) continue;
+      const hunterIsSub = this.isSubmarine(hunter);
+      const sonar = shipSonar(hunter, this.era, hunterIsSub);
+      if (sonar && d <= sonarDetectionRange(sonar, hunter.speed, sub) * layerFactorForShipSonar(sonar, hunter, sub, hunterIsSub) && d >= sonarDeadZone(sonar, this.era)) {
+        this.revealSubmarine(sub, revealSec, 'sonar', `${hunter.name} · ${sonar.label}`);
+        return;
+      }
+      // Surface-search radar (SG / SPS-10 ...) on a snorkel mast or a boat recharging on the surface
+      if (sub.isSnorkeling && !hunterIsSub && d <= gameRangeFromKm(this.era === 'era1' ? 5 : 8)) {
+        this.revealSubmarine(sub, revealSec + 2, 'sonar', `${hunter.name} · 對海搜索雷達 (呼吸管)`);
+        return;
+      }
+    }
+    for (const plane of planes) {
+      if (dist(plane.pos, sub.pos) <= aircraftDetectionRange(plane, sub, this.era) * layerFactorForAircraft(plane, sub)) {
+        this.revealSubmarine(sub, revealSec + 0.5, 'sonar', plane.name);
+        return;
+      }
+    }
+  }
+
   private updateSubmarineFogOfWar(dt: number) {
     // 1. 衰減日誌節流冷卻與潛艦暴露倒數計時器
     for (const k in this.sonarLogCooldowns) {
@@ -15874,6 +16715,10 @@ export class GameEngine {
     const friendlySubs = [...this.playerShips, ...this.alliedShips].filter((s) => !s.isSunk && this.isSubmarine(s));
 
     for (const eSub of enemySubs) {
+      if (eSub.datumPos) {
+        eSub.datumAge = (eSub.datumAge ?? 0) + dt;
+        if (eSub.datumAge > 90) eSub.datumPos = undefined;
+      }
       if ((eSub.spottedTimer || 0) > 0) {
         eSub.spottedTimer = Math.max(0, (eSub.spottedTimer || 0) - dt);
         if (eSub.spottedTimer <= 0) {
@@ -15896,50 +16741,20 @@ export class GameEngine {
     }
 
     // 2. 友軍反潛艦艇與反潛機隊主動偵測敵潛艦
-    const friendlyAswShips = [...this.playerShips, ...this.alliedShips].filter((s) => !s.isSunk && this.getShipAswSonarRange(s) > 0);
+    const friendlyAswShips = [...this.playerShips, ...this.alliedShips].filter((s) => !s.isSunk);
     const friendlyAswPlanes = this.aircraft.filter(
-      (a) => (a.side === 'player' || a.side === 'allied') && a.state !== 'shot_down' && this.getAircraftAswSonarRange(a) > 0
+      (a) => (a.side === 'player' || a.side === 'allied') && a.state !== 'shot_down' && (this.getAircraftAswSonarRange(a) > 0 || a.role === 'scout' || a.role === 'aew')
     );
 
-    for (const eSub of enemySubs) {
-      for (const fShip of friendlyAswShips) {
-        const range = this.getShipAswSonarRange(fShip);
-        if (dist(fShip.pos, eSub.pos) <= range) {
-          this.revealSubmarine(eSub, 4.0, 'sonar', fShip.name);
-          break;
-        }
-      }
-      for (const fPlane of friendlyAswPlanes) {
-        const range = this.getAircraftAswSonarRange(fPlane);
-        if (dist(fPlane.pos, eSub.pos) <= range) {
-          this.revealSubmarine(eSub, 4.5, 'sonar', fPlane.name);
-          break;
-        }
-      }
-    }
+    for (const eSub of enemySubs) this.detectSubmarine(eSub, friendlyAswShips, friendlyAswPlanes, 4.0);
 
     // 3. 敵軍反潛艦艇與 Be-12 / Il-38 / Ka-27 反潛機隊主動偵測我方潛艦
-    const enemyAswShips = this.enemyShips.filter((s) => !s.isSunk && this.getShipAswSonarRange(s) > 0);
+    const enemyAswShips = this.enemyShips.filter((s) => !s.isSunk);
     const enemyAswPlanes = this.aircraft.filter(
-      (a) => a.side === 'enemy' && a.state !== 'shot_down' && this.getAircraftAswSonarRange(a) > 0
+      (a) => a.side === 'enemy' && a.state !== 'shot_down' && (this.getAircraftAswSonarRange(a) > 0 || a.role === 'scout' || a.role === 'aew')
     );
 
-    for (const fSub of friendlySubs) {
-      for (const eShip of enemyAswShips) {
-        const range = this.getShipAswSonarRange(eShip);
-        if (dist(eShip.pos, fSub.pos) <= range) {
-          this.revealSubmarine(fSub, 5.0, 'sonar', eShip.name);
-          break;
-        }
-      }
-      for (const ePlane of enemyAswPlanes) {
-        const range = this.getAircraftAswSonarRange(ePlane);
-        if (dist(ePlane.pos, fSub.pos) <= range) {
-          this.revealSubmarine(fSub, 5.0, 'sonar', ePlane.name);
-          break;
-        }
-      }
-    }
+    for (const fSub of friendlySubs) this.detectSubmarine(fSub, enemyAswShips, enemyAswPlanes, 5.0);
   }
 
   private updateProjectiles(dt: number) {
@@ -16596,7 +17411,10 @@ export class GameEngine {
           const currentOrg = u.organization ?? 100;
           const orgDmgScale = currentOrg < 50 ? 1.0 + 0.5 * (1.0 - currentOrg / 50) : 1.0;
           const urbanCoverMod = u.isInUrbanCover ? 0.50 : 1.0;
-          const dmg = Math.round(proj.damage * orgDmgScale * (1 - (u.armor || 0.2) * 0.35) * urbanCoverMod);
+          // Machine-gun rounds bounce off tanks; 30 mm GAU-8 depleted uranium goes through
+          const armourMod = (u.armor || 0.2) >= 0.55 ? proj.vsArmour ?? 0.1 : 1 - (u.armor || 0.2) * 0.35;
+          const canopy = proj.warhead === 'gun' ? this.terrain.airConcealment(u.pos.x, u.pos.y) : 1;
+          const dmg = Math.round(proj.damage * orgDmgScale * armourMod * urbanCoverMod * canopy);
           u.health = Math.max(0, u.health - dmg);
           u.strength = Math.max(0, Math.round((u.health / u.maxHealth) * 100));
           u.organization = Math.max(0, currentOrg - (u.isInUrbanCover ? 2 : 4));
@@ -16604,6 +17422,7 @@ export class GameEngine {
 
           // 遭受槍砲直射火力打擊產生火力壓制 (若為M61火神光束則壓制更劇烈)
           u.suppression = Math.min(100, (u.suppression || 0) + (proj.isBeamTracer ? 20 : 12));
+          this.spawnImpact(proj, 'land');
           u.suppressionTimer = 5.0;
           u.isSuppressed = u.suppression >= 30;
           u.isPinned = u.suppression >= 75;
@@ -16630,6 +17449,39 @@ export class GameEngine {
               text: `💥【步火交鋒突破】「${u.name}」在密集火力壓制下建制被徹底擊潰消滅！`,
             });
           }
+          break;
+        }
+      }
+    }
+
+    // Strafing: cannon and machine guns rake a ship's AA crews and topsides or a gun pit
+    if (!proj.isDead && proj.warhead === 'gun') {
+      for (const ship of [...this.playerShips, ...this.alliedShips, ...this.enemyShips]) {
+        if (ship.isSunk || !this.isHostile(proj.side, ship.side)) continue;
+        if (this.isSubmarine(ship) && !isSurfacedBoat(ship, this.era)) continue;
+        if (distToShipHull(proj.pos, ship) < ship.width * 0.6) {
+          const topside = Math.round(proj.damage * Math.max(0.05, 1 - Math.min(0.9, ship.armor || 0) * 1.1) * 0.6);
+          ship.weaponControlHealth = Math.max(0, (ship.weaponControlHealth ?? ship.health) - topside);
+          ship.health = Math.max(1, ship.health - Math.round(topside * 0.25));
+          proj.isDead = true;
+          break;
+        }
+      }
+    }
+    if (!proj.isDead && proj.warhead === 'gun') {
+      for (const isl of this.islands) {
+        const inst = isl.installations.find((i) => !i.isDestroyed && this.isHostile(proj.side, i.side) && dist(proj.pos, i.pos) < 18);
+        if (inst) {
+          const armor = inst.armor ?? 0.45;
+          inst.health -= Math.round(proj.damage * warheadVsInstallation('gun', armor >= 0.6) * (1 - armor * 0.5));
+          if (inst.health <= 0) {
+            if (inst.side === 'enemy') this.destroyInstallation(inst);
+            else {
+              inst.isDestroyed = true;
+              this.casualties.playerInstallationsLost++;
+            }
+          }
+          proj.isDead = true;
           break;
         }
       }
@@ -16700,10 +17552,22 @@ export class GameEngine {
     // Parabolic arc altitude
     proj.arcAltitude = Math.sin(proj.flightProgress * Math.PI) * 45;
 
+    // Depth-fused rounds (Squid, Limbo, Bofors, RBU) sink to their set depth and burst there
+    if (proj.isDepthFused) {
+      if (proj.flightProgress >= 1) {
+        soundEngine.playWaterSplash();
+        proj.type = 'depth_charge';
+        proj.fuseTimer = 0.9;
+        proj.vel = { x: 0, y: 0 };
+        proj.arcAltitude = 0;
+      }
+      return;
+    }
+
     // Check contact hit during terminal phase (progress > 0.85) or when landing
     if (proj.flightProgress >= 0.85) {
-      const directHitSub = this.enemyShips.find(
-        (e) => this.isSubmarine(e) && !e.isSunk && dist(proj.pos, e.pos) < 32
+      const directHitSub = [...this.playerShips, ...this.alliedShips, ...this.enemyShips].find(
+        (e) => this.isSubmarine(e) && !e.isSunk && this.isHostile(proj.side, e.side) && dist(proj.pos, e.pos) < 32
       );
       if (directHitSub) {
         this.detonateProjectile(proj, directHitSub);
@@ -16733,7 +17597,9 @@ export class GameEngine {
 
   private updateTorpedoProjectile(dt: number, proj: Projectile): void {
     // Mk 24 / Mk 34 / Mk 46 / APR-2 聲自導反潛魚雷主動導引鎖定 (Acoustic Homing Tracking: turnRate 3.5)
-    const isHoming = proj.isAcousticHoming || this.era === 'era3' || this.era === 'era4' || this.era === 'era5';
+    // Only homing torpedoes home (Mk 24 FIDO from 1943, Mk 44/46, 53-65K wake homers); WWII and
+    // Korean-war ship and submarine torpedoes ran straight
+    const isHoming = Boolean(proj.isAcousticHoming);
     const allShips = [...this.playerShips, ...this.alliedShips, ...this.enemyShips];
     const targetShips = allShips.filter((s) => !s.isSunk && this.isHostile(proj.side, s.side));
     if (isHoming) {
@@ -16839,6 +17705,11 @@ export class GameEngine {
   }
 
   private detonateProjectile(proj: Projectile, directHitShip?: Ship) {
+    // Naval gunfire from the sea is flat: a target behind a crest (reverse slope) is hard to hit
+    if (proj.type === 'shell' && proj.originPos) {
+      const ot = this.terrain.at(proj.originPos.x, proj.originPos.y);
+      if (ot === 0 || ot === 1) proj.damage = Math.round(proj.damage * reverseSlopeFactor(this.terrain, proj.originPos, proj.pos));
+    }
     if (this.applyNuclearDetonation(proj)) return;
 
     if (this.applyNapalmImpact(proj)) return;
@@ -16850,7 +17721,6 @@ export class GameEngine {
     const isTorpedo = proj.type === 'torpedo';
     const onIsland = this.islands.some((isl) => isPointInPolygon(proj.pos, isl.points));
 
-    this.applyBombImpact(proj, isBomb, isTorpedo, onIsland);
     const allShips = [...this.playerShips, ...this.enemyShips, ...this.alliedShips];
     const candidateShips = directHitShip
       ? (this.isHostile(proj.side, directHitShip.side) ? [directHitShip] : [])
@@ -16862,12 +17732,13 @@ export class GameEngine {
 
       // 潛水艇處於深潛狀態：完全免疫艦砲砲彈、機槍掃射、反艦飛彈、巡弋飛彈、火箭與常規航彈！
       // 依歷史與現代反潛作戰常理：潛水艇僅能被深水炸彈 (Depth Charges)、刺蝟砲 (Hedgehog)、ASROC 反潛火箭與魚雷 (Torpedoes) 命中傷害！
-      if (this.isSubmarine(ship) && !(
-        proj.type === 'depth_charge' ||
-        proj.type === 'hedgehog' ||
-        proj.type === 'torpedo' ||
-        proj.isASROC
-      )) {
+      const aswWeapon = proj.type === 'depth_charge' || proj.type === 'hedgehog' || proj.type === 'torpedo' || Boolean(proj.isASROC);
+      if (this.isSubmarine(ship) && aswWeapon && ship.side === 'enemy' && dist(proj.pos, ship.pos) < 500) {
+        this.startSubmarineEvasion(ship, proj.pos);
+      }
+      // A submerged boat is immune to shells, rockets, bombs and missiles; a WWII boat caught on
+      // the surface (transiting or still diving) is not
+      if (this.isSubmarine(ship) && !aswWeapon && !isSurfacedBoat(ship, this.era)) {
         continue;
       }
 
@@ -16929,7 +17800,7 @@ export class GameEngine {
 
         const critMultiplier = isCrit ? 1.45 : 1.0;
         const dmgMultiplier = Math.max(0.1, 1 - effectiveArmor) * critMultiplier;
-        const actualDmg = Math.round(proj.damage * dmgMultiplier);
+        const actualDmg = Math.round(proj.damage * dmgMultiplier * warheadVsShip(proj.warhead));
 
         // 確保雙重血條數值正確初始化
         if (ship.weaponControlHealth === undefined) ship.weaponControlHealth = ship.health;
@@ -17171,21 +18042,8 @@ export class GameEngine {
       }
     }
 
-    // Complete miss in open water: spawn massive water geyser
-    if (!anyHit && isBomb) {
-      this.particles.push({
-        id: `geyser-${Date.now()}`,
-        x: proj.pos.x,
-        y: proj.pos.y,
-        vx: 0,
-        vy: 0,
-        life: 0.85,
-        maxLife: 0.85,
-        radius: 34,
-        color: '#E0F7FA',
-        type: 'geyser',
-      });
-    }
+    // Detonation effect by weapon type and what it burst on (water column, fireball, crater…)
+    this.spawnImpact(proj, anyHit ? 'ship' : onIsland ? 'land' : 'sea');
 
     this.applyBlastToGroundUnits(proj);
 
@@ -17292,7 +18150,7 @@ export class GameEngine {
             if (isDirectPenetration) {
               // 直擊貫穿掩體: 專用穿甲航彈發揮穿透力，但加固工事仍提供防禦
               const effectiveArmor = isApBomb ? armorFactor * 0.4 : armorFactor * 0.8;
-              const actualDmg = Math.round(proj.damage * (1 - effectiveArmor));
+              const actualDmg = Math.round(proj.damage * (1 - effectiveArmor) * warheadVsInstallation(proj.warhead, armorFactor >= 0.6));
               inst.health -= actualDmg;
 
               soundEngine.playExplosion(true);
@@ -17314,7 +18172,8 @@ export class GameEngine {
               });
             } else {
               // 史實近失/沙袋土堤吸收衝擊 (二戰空襲不一定成功秒殺): 航彈落入土堤周圍
-              const actualDmg = Math.round(proj.damage * 0.22); // 大幅減免，僅承受震盪與破片
+              // 大幅減免，僅承受震盪與破片；集束子母彈對雷達、飛彈陣地等軟目標仍有效
+              const actualDmg = Math.round(proj.damage * 0.22 * warheadVsInstallation(proj.warhead, armorFactor >= 0.6));
               inst.health -= actualDmg;
               // 衝擊波暫時壓制設施運作 (冷卻延遲 3.5秒)
               inst.cooldown = Math.max(inst.cooldown, 3.5);
@@ -17355,7 +18214,7 @@ export class GameEngine {
           } else {
             // 火箭彈或艦砲砲擊: 計算裝甲減傷
             const armorFactor = inst.armor !== undefined ? inst.armor : 0.45;
-            const actualDmg = Math.round(proj.damage * (1 - armorFactor * 0.7));
+            const actualDmg = Math.round(proj.damage * (1 - armorFactor * 0.7) * warheadVsInstallation(proj.warhead, armorFactor >= 0.6));
             inst.health -= actualDmg;
 
             this.addCombatLog({
@@ -17414,7 +18273,12 @@ export class GameEngine {
           ? (proj.type === 'bomb' || proj.type === 'rocket' ? 0.30 : 0.50)
           : 1.0;
         const isBunkerBusterMod = proj.isBunkerBuster ? 1.7 : 1.0;
-        const physicalDmg = Math.round(proj.damage * (1 - unitArmor * (proj.isBunkerBuster ? 0.1 : 0.4)) * coverReduction * orgDmgScale * urbanCoverMod * isBunkerBusterMod);
+        const armoured = unitArmor >= 0.55;
+        const warheadMod = warheadVsGround(proj.warhead, armoured, proj.vsArmour);
+        // Forest and jungle canopy hide troops from pilots
+        const fromAir = Boolean(proj.sourceModel) || proj.warhead === 'gun';
+        const canopy = fromAir ? this.terrain.airConcealment(unit.pos.x, unit.pos.y) : 1;
+        const physicalDmg = Math.round(proj.damage * (1 - unitArmor * (proj.isBunkerBuster ? 0.1 : 0.4)) * coverReduction * orgDmgScale * urbanCoverMod * isBunkerBusterMod * warheadMod * canopy);
         unit.health = Math.max(0, unit.health - physicalDmg);
         unit.strength = Math.max(0, Math.round((unit.health / unit.maxHealth) * 100));
 
@@ -17470,118 +18334,16 @@ export class GameEngine {
     }
   }
 
-  private applyBombImpact(proj: Projectile, isBomb: boolean, isTorpedo: boolean, onIsland: boolean): void {
-    if (isBomb) {
-      // 1. Initial High-Intensity Shockwave Ring
-      this.particles.push({
-        id: `bomb-shock-${Date.now()}`,
-        x: proj.pos.x,
-        y: proj.pos.y,
-        vx: 0,
-        vy: 0,
-        life: 0.65,
-        maxLife: 0.65,
-        radius: proj.blastRadius * 1.5,
-        color: '#FF6D00',
-        type: 'shockwave',
-        shape: 'ring',
-      });
-
-      // 2. High-heat rolling fireball core (烈焰向外翻滾膨脹)
-      for (let f = 0; f < 4; f++) {
-        const fAng = (f * Math.PI) / 2 + Math.random() * 0.5;
-        const fSpd = 14 + Math.random() * 22;
-        this.particles.push({
-          id: `bomb-fire-${Date.now()}-${f}`,
-          x: proj.pos.x + (Math.random() - 0.5) * 8,
-          y: proj.pos.y + (Math.random() - 0.5) * 8,
-          vx: Math.cos(fAng) * fSpd,
-          vy: Math.sin(fAng) * fSpd,
-          life: 0.55 + Math.random() * 0.3,
-          maxLife: 0.85,
-          radius: 14 + Math.random() * 12,
-          color: f % 2 === 0 ? '#FF3D00' : '#FFD54F',
-          type: 'fire',
-        });
-      }
-
-      // 3. Billowing dark explosion smoke clouds (滾滾灰黑濃煙)
-      for (let s = 0; s < 3; s++) {
-        this.particles.push({
-          id: `bomb-smoke-${Date.now()}-${s}`,
-          x: proj.pos.x + (Math.random() - 0.5) * 16,
-          y: proj.pos.y + (Math.random() - 0.5) * 16,
-          vx: (Math.random() - 0.5) * 8,
-          vy: -10 - Math.random() * 16,
-          life: 1.6 + Math.random() * 0.8,
-          maxLife: 2.4,
-          radius: 16 + Math.random() * 14,
-          color: 'rgba(22, 26, 32, 0.85)',
-          type: 'smoke',
-        });
-      }
-
-      if (onIsland) {
-        // 地面炸彈：噴濺碎石與土石破片
-        for (let d = 0; d < 6; d++) {
-          const ang = Math.random() * Math.PI * 2;
-          const spd = 40 + Math.random() * 70;
-          this.particles.push({
-            id: `bomb-dirt-${Date.now()}-${d}`,
-            x: proj.pos.x,
-            y: proj.pos.y,
-            vx: Math.cos(ang) * spd,
-            vy: Math.sin(ang) * spd,
-            life: 0.7,
-            maxLife: 0.7,
-            radius: 8 + Math.random() * 8,
-            color: '#8D6E63',
-            type: 'smoke',
-          });
-        }
-      } else {
-        // 海面炸彈：巨型沖天水柱與環形浮沫
-        this.particles.push({
-          id: `bomb-geyser-${Date.now()}`,
-          x: proj.pos.x,
-          y: proj.pos.y,
-          vx: 0,
-          vy: 0,
-          life: 1.1,
-          maxLife: 1.1,
-          radius: Math.max(36, proj.blastRadius * 0.95),
-          color: '#E0F7FA',
-          type: 'geyser',
-        });
-        this.particles.push({
-          id: `bomb-splash-foam-${Date.now()}`,
-          x: proj.pos.x,
-          y: proj.pos.y,
-          vx: 0,
-          vy: 0,
-          life: 1.4,
-          maxLife: 1.4,
-          radius: Math.max(30, proj.blastRadius * 0.8),
-          color: 'rgba(255, 255, 255, 0.75)',
-          type: 'splash',
-          shape: 'ring',
-        });
-      }
-    } else {
-      this.particles.push({
-        id: `shock-${Date.now()}`,
-        x: proj.pos.x,
-        y: proj.pos.y,
-        vx: 0,
-        vy: 0,
-        life: 0.5,
-        maxLife: 0.5,
-        radius: proj.blastRadius * 1.35,
-        color: isTorpedo ? '#80DEEA' : '#FFA726',
-        type: 'shockwave',
-        shape: 'ring',
-      });
+  /** Record the detonation effect for this projectile on the surface it burst over. */
+  private spawnImpact(proj: Projectile, surface: ImpactSurface): void {
+    const e = impactFor(proj, surface, this.era);
+    if (!e) return;
+    if (this.impacts.length >= MAX_IMPACTS) {
+      // Drop the oldest short-lived effect (keep craters if possible)
+      const k = this.impacts.findIndex((x) => x.life <= 10);
+      this.impacts.splice(k >= 0 ? k : 0, 1);
     }
+    this.impacts.push(e);
   }
 
   // ══════════════════════════════════════════════════════════
@@ -18008,8 +18770,13 @@ export class GameEngine {
     const searchRadius = 2600;
 
     // 1. 活體敵方地面部隊 (未在登陸艇內，且與本機敵對)
+    // Pilots spot troops under jungle canopy, in woods or among buildings only from close by
     const validGround = this.groundUnits.filter(
-      (u) => this.isHostile(plane.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && dist(plane.pos, u.pos) <= searchRadius
+      (u) =>
+        this.isHostile(plane.side, u.side) &&
+        !u.isDestroyed &&
+        !u.embarkedInShipId &&
+        dist(plane.pos, u.pos) <= Math.max(700, searchRadius * concealment(this.terrain, u.pos))
     );
 
     // 2. 活體敵方防禦工事 (排除平民定居點，且與本機敵對)
@@ -18077,6 +18844,11 @@ export class GameEngine {
   }
 
   private updateParticles(dt: number) {
+    for (let i = this.impacts.length - 1; i >= 0; i--) {
+      const e = this.impacts[i];
+      e.age += dt;
+      if (e.age >= e.life) this.impacts.splice(i, 1);
+    }
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
       p.life -= dt;

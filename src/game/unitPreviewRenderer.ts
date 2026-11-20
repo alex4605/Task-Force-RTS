@@ -1,4 +1,6 @@
 import { AircraftPayloadType } from '../types/game';
+import { TANK_PLANS, drawTankPlan } from './render/groundPlan';
+import { SUPPORT_PLANS, drawSupportPlan } from './render/groundPlanSupport';
 
 export type UnitPreviewKind = 'ship' | 'aircraft' | 'ground' | 'installation';
 
@@ -42,40 +44,7 @@ interface TankSpec {
   muzzleBrake?: boolean;
 }
 
-// Plan-view proportions per tank (silhouette units, nose along +x). Matched against the unit type.
-const TANK_SPECS: TankSpec[] = [
-  // M3 Stuart: small riveted hull, small boxy turret, short 37mm
-  { match: /armor_m3/, hullL: 17, hullW: 9.5, glacis: 1.5, turret: 'boxy', turretX: 0.5, turretY: 0, turretRx: 3.2, turretRy: 3, gunLen: 7, gunW: 1.2 },
-  // M4 Sherman: rounded cast turret, 75mm
-  { match: /armor_m4/, hullL: 20, hullW: 10.5, glacis: 2.5, turret: 'round', turretX: 0.5, turretY: 0, turretRx: 4.8, turretRy: 4.2, gunLen: 10, gunW: 1.6 },
-  // Korea: M4A3E8 / M46 mix -> M46 Patton proportions with 90mm and bore evacuator
-  { match: /patton_m46|armor_korea/, hullL: 22, hullW: 11.5, glacis: 2, turret: 'round', turretX: 0, turretY: 0, turretRx: 5.6, turretRy: 4.8, gunLen: 13, gunW: 1.8, evacuatorAt: 0.75, muzzleBrake: true },
-  // M26 Pershing: long low hull, wide cast turret, 90mm with muzzle brake
-  { match: /pershing/, hullL: 22, hullW: 11.5, glacis: 2.5, turret: 'round', turretX: 0, turretY: 0, turretRx: 5.4, turretRy: 4.8, gunLen: 12.5, gunW: 1.8, muzzleBrake: true },
-  // M1A1 Abrams: angular wedge turret with bustle, long 120mm smoothbore, no bore evacuator brake
-  { match: /m1a1/, hullL: 25, hullW: 12.5, glacis: 3.5, turret: 'needle', turretX: -0.8, turretY: 0, turretRx: 7.5, turretRy: 5.6, gunLen: 16, gunW: 2.2, evacuatorAt: 0.55 },
-  // M551 Sheridan: low aluminium hull, flat welded turret, short fat 152mm gun-launcher
-  { match: /sheridan/, hullL: 19, hullW: 10.5, glacis: 3, turret: 'boxy', turretX: -0.5, turretY: 0, turretRx: 4.6, turretRy: 4, gunLen: 7.5, gunW: 2.6 },
-  // M48 Patton: big egg-shaped cast turret
-  { match: /m48/, hullL: 23, hullW: 12, glacis: 2.5, turret: 'round', turretX: -0.5, turretY: 0, turretRx: 6.2, turretRy: 5.2, gunLen: 13.5, gunW: 1.9, evacuatorAt: 0.72, muzzleBrake: true },
-  // M60A1: needle-nose turret, 105mm M68 with bore evacuator
-  { match: /m60/, hullL: 24, hullW: 12, glacis: 3, turret: 'needle', turretX: 0, turretY: 0, turretRx: 7, turretRy: 5, gunLen: 14, gunW: 2, evacuatorAt: 0.6 },
-  // Type 95 Ha-Go: tiny light tank, turret offset to the left
-  { match: /type95/, hullL: 15, hullW: 8, glacis: 1.5, turret: 'boxy', turretX: 0.5, turretY: -1.2, turretRx: 2.8, turretRy: 2.4, gunLen: 6, gunW: 1.1 },
-  // Type 97 Chi-Ha: turret offset to the right, short 57mm / 47mm
-  { match: /type97/, hullL: 17.5, hullW: 9, glacis: 1.5, turret: 'boxy', turretX: 0, turretY: 1.3, turretRx: 3.4, turretRy: 2.8, gunLen: 7.5, gunW: 1.4 },
-  // T-34-85: sloped hull, turret set well forward, 85mm
-  { match: /t34/, hullL: 21, hullW: 11, glacis: 3, turret: 'round', turretX: 2, turretY: 0, turretRx: 5.2, turretRy: 4.6, gunLen: 13, gunW: 1.8 },
-  // T-54/55: hemispherical turret forward, 100mm with bore evacuator near the muzzle
-  { match: /t54|t55/, hullL: 22, hullW: 11.5, glacis: 3, turret: 'round', turretX: 1.5, turretY: 0, turretRx: 5.5, turretRy: 5.5, gunLen: 14, gunW: 1.9, evacuatorAt: 0.85 },
-  // IS-3: flattened dome turret, 122mm D-25T with muzzle brake
-  { match: /is3/, hullL: 21, hullW: 11.5, turret: 'round', turretX: 0, turretY: 0, turretRx: 6, turretRy: 5.4, gunLen: 15, gunW: 2.1, muzzleBrake: true },
-  // PT-76: long boat hull, small turret forward, 76mm with muzzle brake
-  { match: /pt76/, hullL: 21, hullW: 10, turret: 'round', turretX: 3, turretY: 0, turretRx: 4.2, turretRy: 3.8, gunLen: 9, gunW: 1.4, muzzleBrake: true },
-  // T-72 / T-80: low cast dome, long 125mm smoothbore
-  { match: /t72|t80/, hullL: 23, hullW: 11.5, glacis: 3, turret: 'round', turretX: 0.5, turretY: 0, turretRx: 5.4, turretRy: 5, gunLen: 16, gunW: 2, evacuatorAt: 0.45 },
-];
-
+// Tanks with real plan dimensions are drawn by groundPlan.ts; the rest (Ontos, SU-100) use these defaults.
 const DEFAULT_TANK: TankSpec = { match: /./, hullL: 22, hullW: 11, glacis: 2, turret: 'round', turretX: -0.5, turretY: 0, turretRx: 5.4, turretRy: 4.4, gunLen: 11, gunW: 2 };
 
 interface VehiclePalette {
@@ -259,7 +228,8 @@ interface IfvSpec {
   hullW: number;
   /** 0 = tracked; otherwise wheels per side. */
   wheels: number;
-  nose: 'box' | 'wedge' | 'boat';
+  /** box = vertical front, wedge = sloped glacis narrowing forward, pointed = BMP / BRDM / LAV ribbed bow. */
+  nose: 'box' | 'wedge' | 'pointed' | 'boat';
   amphib?: boolean;
   /** Turret centre / radius, or none (MG cupola only). */
   turret?: { x: number; y: number; r: number };
@@ -291,26 +261,26 @@ interface IfvSpec {
 }
 
 const IFV_SPECS: IfvSpec[] = [
-  { match: /m113/, hullL: 19, hullW: 10, wheels: 0, nose: 'wedge', cupola: { x: 2, y: -1.5 }, rearRamp: true },
+  { match: /m113/, hullL: 19, hullW: 10, wheels: 0, nose: 'box', cupola: { x: 2, y: -1.5 }, rearRamp: true },
   { match: /lvt_42/, hullL: 21, hullW: 12, wheels: 0, nose: 'boat', amphib: true, openCargo: true, cupola: { x: 6, y: 0 } },
   { match: /lvt_45/, hullL: 21, hullW: 12, wheels: 0, nose: 'boat', amphib: true, openTurret: true, turret: { x: 0, y: 0, r: 4.2 }, gunLen: 8, gunW: 1.6 },
   { match: /lvtp5/, hullL: 24, hullW: 13, wheels: 0, nose: 'boat', amphib: true, turret: { x: 7, y: 0, r: 2.6 }, gunLen: 5, gunW: 1, rearRamp: true },
   { match: /aav7/, hullL: 22, hullW: 11.5, wheels: 0, nose: 'boat', amphib: true, turret: { x: 3.5, y: 3, r: 2.4 }, gunLen: 6, gunW: 1.2, rearRamp: true },
-  { match: /lav_ad/, hullL: 20, hullW: 9.5, wheels: 4, nose: 'wedge', turret: { x: -1, y: 0, r: 3.4 }, gunLen: 8, gunW: 1.6, stingerPods: true },
-  { match: /lav25/, hullL: 20, hullW: 9.5, wheels: 4, nose: 'wedge', turret: { x: 0, y: 0, r: 3.2 }, gunLen: 10, gunW: 1.3 },
+  { match: /lav_ad/, hullL: 20, hullW: 9.5, wheels: 4, nose: 'pointed', turret: { x: -1, y: 0, r: 3.4 }, gunLen: 8, gunW: 1.6, stingerPods: true },
+  { match: /lav25/, hullL: 20, hullW: 9.5, wheels: 4, nose: 'pointed', turret: { x: 0, y: 0, r: 3.2 }, gunLen: 10, gunW: 1.3 },
   { match: /bradley/, hullL: 21, hullW: 11.5, wheels: 0, nose: 'wedge', turret: { x: 0.5, y: 0.8, r: 3.8 }, gunLen: 9, gunW: 1.3, towBox: true, rearRamp: true },
-  { match: /bmp/, hullL: 20, hullW: 10.5, wheels: 0, nose: 'wedge', turret: { x: 1, y: 0, r: 3.6 }, gunLen: 11, gunW: 1.1, roofAtgm: true },
+  { match: /bmp/, hullL: 20, hullW: 10.5, wheels: 0, nose: 'pointed', turret: { x: 1, y: 0, r: 3.6 }, gunLen: 11, gunW: 1.1, roofAtgm: true },
   { match: /btr_zd/, hullL: 17, hullW: 9, wheels: 0, nose: 'wedge', turret: { x: -1, y: 0, r: 3 }, gunLen: 8, gunW: 1, twinGun: true },
 ];
 // Self-propelled air defence vehicles, drawn with the same plan-view vocabulary as APCs / IFVs
 const AD_SPECS: IfvSpec[] = [
   { match: /chaparral/, hullL: 19, hullW: 10, wheels: 0, nose: 'box', missiles: { x: -3, count: 4, len: 7 }, cupola: { x: 6, y: -2 } },
   { match: /duster|zsu57/, hullL: 21, hullW: 11, wheels: 0, nose: 'wedge', openTurret: true, turret: { x: -2, y: 0, r: 4.4 }, gunLen: 11, gunW: 1.4, barrels: 2 },
-  { match: /vads|m163/, hullL: 19, hullW: 10, wheels: 0, nose: 'wedge', turret: { x: -1, y: 0, r: 3.4 }, gunLen: 9, gunW: 2, radar: { x: -1, y: 4, r: 1.8 } },
+  { match: /vads|m163/, hullL: 19, hullW: 10, wheels: 0, nose: 'box', turret: { x: -1, y: 0, r: 3.4 }, gunLen: 9, gunW: 2, radar: { x: -1, y: 4, r: 1.8 } },
   { match: /shilka/, hullL: 20, hullW: 10.5, wheels: 0, nose: 'wedge', turret: { x: 0, y: 0, r: 4.6 }, gunLen: 9, gunW: 0.9, barrels: 4, radar: { x: -4, y: 0, r: 2.2 } },
   { match: /tunguska/, hullL: 22, hullW: 11.5, wheels: 0, nose: 'wedge', turret: { x: -1, y: 0, r: 4.8 }, gunLen: 8, gunW: 1.1, barrels: 2, missiles: { x: -1, count: 4, len: 6, sides: true }, radar: { x: -4, y: 0, r: 2.4 } },
   { match: /sa6|kub/, hullL: 21, hullW: 10.5, wheels: 0, nose: 'wedge', missiles: { x: -2, count: 3, len: 9 } },
-  { match: /sa9|strela/, hullL: 16, hullW: 8.5, wheels: 2, nose: 'wedge', missiles: { x: -2, count: 4, len: 6 } },
+  { match: /sa9|strela/, hullL: 16, hullW: 8.5, wheels: 2, nose: 'pointed', missiles: { x: -2, count: 4, len: 6 } },
   { match: /sa8|osa/, hullL: 21, hullW: 10, wheels: 3, nose: 'boat', amphib: true, missiles: { x: -2, count: 6, len: 7, sides: true }, radar: { x: -2, y: 0, r: 2.6 } },
   { match: /sa11|buk/, hullL: 22, hullW: 11, wheels: 0, nose: 'wedge', missiles: { x: -3, count: 4, len: 9 }, radar: { x: 5, y: 0, r: 2.2 } },
   { match: /sa15|(^|_)tor(_|$)/, hullL: 21, hullW: 11, wheels: 0, nose: 'wedge', turret: { x: -2, y: 0, r: 5 }, vls: 8, radar: { x: 2, y: 0, r: 2.4 } },
@@ -340,10 +310,12 @@ function drawArmoredCarrier(ctx: CanvasRenderingContext2D, sp: IfvSpec, pal: Veh
     ctx.moveTo(hl / 2, -hw * 0.3);
     ctx.quadraticCurveTo(hl / 2 + 2.5, 0, hl / 2, hw * 0.3);
     ctx.lineTo(hl / 2 - 3, hw / 2);
+  } else if (sp.nose === 'pointed') {
+    ctx.moveTo(hl / 2 + 1.5, 0);
+    ctx.lineTo(hl / 2 - 2.5, hw / 2);
   } else if (sp.nose === 'wedge') {
-    ctx.moveTo(hl / 2 + 1.5, 0);
-    ctx.lineTo(hl / 2 - 2.5, -hw / 2);
-    ctx.moveTo(hl / 2 + 1.5, 0);
+    ctx.moveTo(hl / 2, -hw * 0.36);
+    ctx.lineTo(hl / 2, hw * 0.36);
     ctx.lineTo(hl / 2 - 2.5, hw / 2);
   } else {
     ctx.moveTo(hl / 2, -hw / 2);
@@ -351,9 +323,10 @@ function drawArmoredCarrier(ctx: CanvasRenderingContext2D, sp: IfvSpec, pal: Veh
   }
   ctx.lineTo(-hl / 2, hw / 2);
   ctx.lineTo(-hl / 2, -hw / 2);
-  ctx.lineTo(sp.nose === 'boat' ? hl / 2 - 3 : hl / 2 - 2.5, -hw / 2);
+  ctx.lineTo(sp.nose === 'boat' ? hl / 2 - 3 : sp.nose === 'box' ? hl / 2 : hl / 2 - 2.5, -hw / 2);
   if (sp.nose === 'boat') ctx.lineTo(hl / 2, -hw * 0.3);
-  else if (sp.nose === 'wedge') ctx.lineTo(hl / 2 + 1.5, 0);
+  else if (sp.nose === 'pointed') ctx.lineTo(hl / 2 + 1.5, 0);
+  else if (sp.nose === 'wedge') ctx.lineTo(hl / 2, -hw * 0.36);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
@@ -961,7 +934,10 @@ export function drawGroundSilhouette(
 
   const kind = groundSilhouetteClass(t);
 
-  if (kind === 'rocket') {
+  if ((kind === 'tank' || kind === 'spg' || kind === 'air_defense') && SUPPORT_PLANS.some((p) => p.match.test(t))) {
+    // Self-propelled guns, tank destroyers and air-defence vehicles from real dimensions
+    drawSupportPlan(ctx, SUPPORT_PLANS.find((p) => p.match.test(t))!, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
+  } else if (kind === 'rocket') {
     const isNuke = t.includes('nuclear');
     const isAtacms = t.includes('atacms');
     const isScud = t.includes('scud');
@@ -1093,6 +1069,9 @@ export function drawGroundSilhouette(
         }
       }
     }
+  } else if (kind === 'tank' && TANK_PLANS.some((p) => p.match.test(t))) {
+    // Plan view from the vehicle's real dimensions
+    drawTankPlan(ctx, TANK_PLANS.find((p) => p.match.test(t))!, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
   } else if (kind === 'tank') {
     const isAbrams = t.includes('abrams') || t.includes('m1ip');
     const isSovietEra = t.includes('t72') || t.includes('t80');
@@ -1103,7 +1082,7 @@ export function drawGroundSilhouette(
     const isOntos = t.includes('ontos');
     const isPatton = t.includes('m60') || t.includes('m48') || t.includes('patton');
 
-    const spec = TANK_SPECS.find((sp) => sp.match.test(t));
+    const spec: TankSpec = DEFAULT_TANK;
     const hl = spec?.hullL ?? 22;
     const hw = spec?.hullW ?? 11;
 

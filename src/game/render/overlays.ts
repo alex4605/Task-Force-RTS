@@ -1,5 +1,6 @@
 import { Island, Vector2D, SelectionBox, RequisitionItem, Era } from '../../types/game';
-import { RenderContext, Camera, OrderMarker } from './context';
+import { RenderContext, Camera, OrderMarker, isWorldCircleVisible } from './context';
+import type { RadarCoverage } from '../engine';
 
 // Draw Screen-space RTS Drag Selection Box
 export function drawSelectionBox(rc: RenderContext, box: SelectionBox) {
@@ -413,5 +414,56 @@ export function drawOrderMarkers(rc: RenderContext, markers: OrderMarker[], came
     ctx.stroke();
   }
 
+  ctx.restore();
+}
+
+/**
+ * Radar coverage layer: for each radar, the low-level coverage (filled outline: where a strike at
+ * ~300 m would be seen, with terrain shadows and the radar horizon cut out) and the dashed
+ * high-altitude ring. Friendly sensors cyan, known enemy radars red.
+ */
+export function drawRadarCoverage(rc: RenderContext, coverage: RadarCoverage[], camera: Camera): void {
+  const ctx = rc.ctx;
+  ctx.save();
+  ctx.translate(rc.width / 2, rc.height / 2);
+  ctx.scale(camera.zoom, camera.zoom);
+  ctx.translate(-camera.x, -camera.y);
+  for (const enemy of [false, true]) {
+    const list = coverage.filter((c) => c.enemy === enemy && isWorldCircleVisible(rc, c.pos.x, c.pos.y, c.highRadius, camera));
+    if (list.length === 0) continue;
+    const rgb = enemy ? '255, 82, 82' : '0, 229, 255';
+    // Low-level coverage: one path for the whole side, filled once, so overlaps do not darken
+    ctx.beginPath();
+    for (const c of list) {
+      c.low.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.closePath();
+    }
+    ctx.fillStyle = `rgba(${rgb}, 0.07)`;
+    ctx.fill('nonzero');
+    ctx.strokeStyle = `rgba(${rgb}, 0.28)`;
+    ctx.lineWidth = 1 / camera.zoom;
+    ctx.stroke();
+    // High-altitude rings: one per cluster (a task force shows the ring of its best radar)
+    const kept: RadarCoverage[] = [];
+    for (const c of [...list].sort((x, y) => y.highRadius - x.highRadius)) {
+      if (kept.some((k) => Math.hypot(k.pos.x - c.pos.x, k.pos.y - c.pos.y) < 600 && k.highRadius >= c.highRadius * 0.9)) continue;
+      kept.push(c);
+    }
+    ctx.setLineDash([10 / camera.zoom, 8 / camera.zoom]);
+    ctx.strokeStyle = `rgba(${rgb}, 0.38)`;
+    ctx.lineWidth = 1.4 / camera.zoom;
+    for (const c of kept) {
+      ctx.beginPath();
+      ctx.arc(c.pos.x, c.pos.y, c.highRadius, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    if (camera.zoom >= 0.12) {
+      ctx.font = `${Math.round(10 / camera.zoom)}px monospace`;
+      ctx.fillStyle = `rgba(${rgb}, 0.9)`;
+      ctx.textAlign = 'center';
+      for (const c of kept) ctx.fillText(`📡 ${c.rangeKm}km`, c.pos.x, c.pos.y - c.highRadius - 6 / camera.zoom);
+    }
+  }
   ctx.restore();
 }

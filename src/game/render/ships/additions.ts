@@ -177,3 +177,96 @@ export function drawPBR(rc: RenderContext, ship: Ship, hullColor: string, detail
   }
   drawShipTurrets(rc, ship, hullColor);
 }
+
+/**
+ * Enemy river craft. Era 5: Project 1204 Shmel river gunboat, a narrow armoured hull with a
+ * PT-76 tank turret (76 mm D-56T) forward, the low wheelhouse and the twin 25 mm aft. Earlier
+ * eras: an armed motor junk, a beamy wooden hull with a square stern, deckhouse amidships, a
+ * mast with a battened sail furled along the boom and a machine gun in the bow.
+ */
+export function drawRiverGunboat(rc: RenderContext, ship: Ship, hullColor: string, detailColor: string) {
+  const ctx = rc.ctx;
+  const l = ship.length;
+  const w = ship.width;
+  if (ship.era === 'era5') {
+    ctx.fillStyle = '#3A4436';
+    ctx.strokeStyle = hullColor;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(l * 0.5, 0);
+    ctx.lineTo(l * 0.32, -w * 0.5);
+    ctx.lineTo(-l * 0.5, -w * 0.46);
+    ctx.lineTo(-l * 0.5, w * 0.46);
+    ctx.lineTo(l * 0.32, w * 0.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // PT-76 turret forward
+    ctx.fillStyle = '#4E5B48';
+    ctx.strokeStyle = detailColor;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(l * 0.22, 0, w * 0.42, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = '#B0BEC5';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(l * 0.22, 0);
+    ctx.lineTo(l * 0.6, 0);
+    ctx.stroke();
+    // Armoured wheelhouse and the aft twin 25 mm
+    ctx.fillStyle = '#2E3A2B';
+    ctx.fillRect(-l * 0.12, -w * 0.32, l * 0.18, w * 0.64);
+    ctx.strokeRect(-l * 0.12, -w * 0.32, l * 0.18, w * 0.64);
+    ctx.beginPath();
+    ctx.arc(-l * 0.32, 0, w * 0.25, 0, Math.PI * 2);
+    ctx.stroke();
+    return;
+  }
+  // Armed motor junk
+  ctx.fillStyle = '#5D4630';
+  ctx.strokeStyle = hullColor;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(l * 0.5, 0);
+  ctx.quadraticCurveTo(l * 0.38, -w * 0.55, 0, -w * 0.52);
+  ctx.lineTo(-l * 0.5, -w * 0.42);
+  ctx.lineTo(-l * 0.5, w * 0.42);
+  ctx.lineTo(0, w * 0.52);
+  ctx.quadraticCurveTo(l * 0.38, w * 0.55, l * 0.5, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // Planking
+  ctx.strokeStyle = 'rgba(30, 20, 10, 0.6)';
+  ctx.lineWidth = 0.6;
+  for (const y of [-w * 0.22, 0, w * 0.22]) {
+    ctx.beginPath();
+    ctx.moveTo(l * 0.4, y * 0.6);
+    ctx.lineTo(-l * 0.48, y);
+    ctx.stroke();
+  }
+  // Deckhouse with a matting roof
+  ctx.fillStyle = '#8D6E4A';
+  ctx.strokeStyle = detailColor;
+  ctx.lineWidth = 1;
+  ctx.fillRect(-l * 0.28, -w * 0.3, l * 0.3, w * 0.6);
+  ctx.strokeRect(-l * 0.28, -w * 0.3, l * 0.3, w * 0.6);
+  // Mast and furled battened sail along the boom
+  ctx.fillStyle = '#C8B48A';
+  ctx.beginPath();
+  ctx.ellipse(l * 0.08, w * 0.05, l * 0.2, w * 0.1, -0.15, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#3E2A18';
+  ctx.beginPath();
+  ctx.arc(l * 0.2, 0, 1.4, 0, Math.PI * 2);
+  ctx.fill();
+  // Bow machine gun
+  ctx.strokeStyle = '#B0BEC5';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(l * 0.36, 0);
+  ctx.lineTo(l * 0.55, 0);
+  ctx.stroke();
+}
