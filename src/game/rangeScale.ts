@@ -198,6 +198,14 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   nl_infantry_83: 0.6, // FN FAL / MAG
   frg_luchs: 1.5, // 20mm Rh 202
   uk_sas_83: 0.55, // M16A2 / GPMG
+  usmc_paramarine_42: 0.45, // Reising / Garand / BAR
+  us_airborne_45: 0.5, // M1A1 carbine / Thompson / bazooka
+  us_airborne_50: 0.5, // M1 / BAR / 3.5in bazooka
+  us_airborne_65: 0.5, // M16 / M60 / M79
+  us_airborne_83: 0.55, // M16A2 / M249 / Dragon
+  us_cav_air_assault_65: 0.5, // M16 / M60 / M79
+  us_m1a1_pack_75: 8.8, // M1A1 75mm pack howitzer
+  us_m102_105: 11.5, // M102 105mm
   uk_milan_team: 1.95, // MILAN
 };
 

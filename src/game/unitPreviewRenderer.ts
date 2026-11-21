@@ -499,6 +499,10 @@ const TOWED_SPECS: TowedSpec[] = [
   { match: /m46_130/, carriage: 'split', trailLen: 18, track: 6.2, wheel: 3.0, shield: 5.5, gunLen: 21, gunW: 1.9, muzzle: 'double' },
   // DShK on its wheeled tripod in the AA role
   { match: /dshk/, carriage: 'star3', trailLen: 6, track: 0, wheel: 0, gunLen: 9, gunW: 0.9 },
+  // M1A1 75mm pack howitzer: small split trail, short tube, no shield
+  { match: /pack_75/, carriage: 'split', trailLen: 9, track: 3.8, wheel: 2.0, gunLen: 7, gunW: 1.3 },
+  // M102 105mm: low box trail on its roller, round firing base, long thin tube
+  { match: /m102/, carriage: 'box', trailLen: 11, track: 4.4, wheel: 2.2, gunLen: 11, gunW: 1.5 },
   // M3 37mm anti-tank gun: light split trail, small shield
   { match: /37mm_at/, carriage: 'split', trailLen: 10, track: 4.5, wheel: 2.2, shield: 4.5, gunLen: 10, gunW: 1.1 },
   // ZU-23-2: light three-legged mount, twin 23mm
@@ -660,6 +664,14 @@ const EXPLICIT_SILHOUETTE_CLASS: Record<string, GroundSilhouetteClass> = {
   frg_gepard: 'air_defense',
   frg_m109g: 'spg',
   uk_milan_team: 'atgm',
+  usmc_paramarine_42: 'infantry',
+  us_airborne_45: 'infantry',
+  us_airborne_50: 'infantry',
+  us_airborne_65: 'infantry',
+  us_airborne_83: 'infantry',
+  us_cav_air_assault_65: 'infantry',
+  us_m1a1_pack_75: 'towed',
+  us_m102_105: 'towed',
   sof_coastwatcher_42: 'infantry',
   sof_alamo_scouts_45: 'infantry',
   sof_udt_45: 'infantry',

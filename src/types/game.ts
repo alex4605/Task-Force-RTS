@@ -179,6 +179,14 @@ export type GroundUnitType =
   | 'nl_infantry_83'          // 時代五 荷蘭第1軍 機械化步兵排
   | 'frg_luchs'               // 時代五 西德山貓式 8x8 裝甲偵察車
   | 'uk_sas_83'               // 時代五 英國第22特種空勤團 (SAS) 巡邏隊
+  | 'usmc_paramarine_42'      // 時代一 陸戰隊第1傘兵營 傘兵排 (Paramarines)
+  | 'us_airborne_45'          // 時代二 美陸軍空降傘兵排 (第11空降師 / 第503傘兵團)
+  | 'us_airborne_50'          // 時代三 第187空降團戰鬥群 傘兵排
+  | 'us_airborne_65'          // 時代四 第173空降旅 傘兵排
+  | 'us_airborne_83'          // 時代五 第82空降師 傘兵排
+  | 'us_cav_air_assault_65'   // 時代四 第1騎兵師(空中機動) 空中突擊排
+  | 'us_m1a1_pack_75'         // 時代二/三 M1A1 75mm 空降山砲排 (傘降綑包)
+  | 'us_m102_105'             // 時代四/五 M102 105mm 空降輕型榴彈砲排
   | 'uk_milan_team'         // 時代五 英國萊茵軍團 MILAN 反戰車飛彈組
   // OPFOR 歷史各時代守軍
   | 'opfor_infantry_42'  // 時代一 日軍海軍特別陸戰隊步槍排 (SNLF)
@@ -539,6 +547,11 @@ export type AircraftPayloadType =
   | 'ffar_rockets_pod'     // 70mm FFAR 密集火箭巢 (武裝直升機/強擊機)
   | 'helo_assault_troops'  // 空中突擊機降登陸 (直升機垂直包圍)
   | 'c1_paratroopers'      // C-1 貿易商型傘兵空降作戰
+  | 'para_sof_team'
+  | 'para_pack_howitzer'
+  | 'heavy_drop_sheridan'
+  | 'helo_sling_artillery'
+  | 'helo_vehicle_lift'
   | 'asw_acoustic_torpedo' // Mk 44 / Mk 46 主動聲自導航空反潛魚雷 (SH-2 / P-3C)
   | 'b52_megaton_nuke'     // ☢️ B-52 B28/B41 戰略百萬噸級熱核重彈 (消耗 6000 CP · 萬米平流層投擲)
   | 'tactical_b61_nuke'    // ☢️ F-4 / A-6 / A-4 B61/B43 戰術核炸彈 (消耗 4000 CP · 減速傘低空突防)
@@ -1069,13 +1082,13 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   helo_assault_troops: {
     id: 'helo_assault_troops',
     role: 'rescue',
-    name: '海軍陸戰隊直升機垂直包圍空中突擊隊',
-    desc: 'CH-46 海騎士或 UH-1 休伊直升機搭載全副武裝陸戰隊空中突擊班。不受灘頭地形限制，直接機降至島上任意內陸高地或敵後！',
+    name: '直升機空中突擊排 (機降)',
+    desc: 'UH-1 載第1騎兵師空中突擊排、CH-46 載陸戰隊空中突擊排、CH-53E 一次載兩個步兵排。不受灘頭地形限制，直接機降至內陸高地或敵後。',
     badge: '垂直機動突擊',
     era: 'era4',
     damage: 0,
     speedModifier: 0.92,
-    ammoCount: '1x 陸戰隊空中突擊強化排 (機降部署)',
+    ammoCount: 'UH-1/CH-46 1 排 / CH-53E 2 排',
     pros: '無視灘頭地形限制 · 任意陸地機降 · 奪取內陸要塞與制高點',
     purposeBadge: '【直升機垂直機降】',
     blastRadius: 0,
@@ -1085,18 +1098,98 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   c1_paratroopers: {
     id: 'c1_paratroopers',
     role: 'scout',
-    name: 'C-1 貿易商型 傘兵高空戰術空投突擊',
-    desc: '航艦起飛之雙發艦載運輸機。飛抵目標島嶼上空連續釋放傘兵分隊，白色降落傘群自天而降，突擊敵後防線！',
-    badge: 'C-1 傘兵空降',
+    name: '空降傘兵排 (傘降)',
+    desc: '運輸機飛抵目標上空投下傘兵：C-47 載一個傘兵排 (28 人)，C-130 載兩個排 (64 人)。各時代為陸戰傘兵、第503傘兵團、第187空降團、第173空降旅、第82空降師。',
+    badge: '傘兵空降',
     era: 'era4',
     damage: 0,
     speedModifier: 0.95,
-    ammoCount: '2x 空降突擊戰鬥班 (降落傘空投)',
+    ammoCount: 'C-47 1 排 / C-130 2 排',
     pros: '遠程高速戰術空投 · 降落傘覆蓋敵後要害 · 加速戰區推進',
     purposeBadge: '【高空傘兵突降】',
     blastRadius: 0,
     cpCost: 0,
     visualTag: '[機尾跳板空投傘兵群]',
+  },
+  para_sof_team: {
+    id: 'para_sof_team',
+    role: 'scout',
+    name: '特種部隊傘降滲透',
+    desc: '特種部隊小組自運輸機跳傘滲透敵後：遊騎兵低空傘降奪取機場、海豹部隊海上傘降、MACV-SOG 高空跳傘。',
+    badge: '特種部隊傘降',
+    era: 'era4',
+    damage: 0,
+    speedModifier: 0.95,
+    ammoCount: '1x 特種部隊小組',
+    pros: '隱蔽滲透 · 敵後偵察與爆破',
+    purposeBadge: '【特戰傘降】',
+    blastRadius: 0,
+    cpCost: 0,
+    visualTag: '[機尾跳板 · 特戰小組]',
+  },
+  para_pack_howitzer: {
+    id: 'para_pack_howitzer',
+    role: 'scout',
+    name: '空降砲兵 (山砲傘降 / 重裝空投)',
+    desc: 'C-47 以傘降綑包空投 M1A1 75mm 山砲；C-130 以重裝平台空投 M102 105mm 榴彈砲，讓空降部隊擁有自己的砲兵。',
+    badge: '空降砲兵',
+    era: 'era2',
+    damage: 0,
+    speedModifier: 0.95,
+    ammoCount: '1x 空降砲兵排',
+    pros: '空降頭堡即有砲兵火力支援',
+    purposeBadge: '【空降砲兵】',
+    blastRadius: 0,
+    cpCost: 0,
+    visualTag: '[貨艙重裝空投平台]',
+  },
+  heavy_drop_sheridan: {
+    id: 'heavy_drop_sheridan',
+    role: 'scout',
+    name: 'M551 謝里登 LAPES 低空抽取空投',
+    desc: 'C-130 以數公尺高度掠地飛行，以抽取傘把 M551 謝里登空降戰車連同墊板拉出貨艙落地，美軍唯一能空投的戰車。',
+    badge: 'LAPES 戰車空投',
+    era: 'era4',
+    damage: 0,
+    speedModifier: 0.95,
+    ammoCount: '1x M551 謝里登空降戰車排',
+    pros: '空降部隊的裝甲火力 · 152mm 砲 / 橡樹棍飛彈',
+    purposeBadge: '【戰車空投】',
+    blastRadius: 0,
+    cpCost: 0,
+    visualTag: '[低空抽取傘 · 重裝墊板]',
+  },
+  helo_sling_artillery: {
+    id: 'helo_sling_artillery',
+    role: 'rescue',
+    name: 'CH-53E 吊掛 M198 155mm 榴彈砲',
+    desc: 'CH-53E 超級種馬以機腹吊鉤吊掛 M198 155mm 榴彈砲，連同砲班與彈藥一起機降到內陸射擊陣地。',
+    badge: '吊掛砲兵',
+    era: 'era5',
+    damage: 0,
+    speedModifier: 0.95,
+    ammoCount: '1x M198 155mm 砲排',
+    pros: '砲兵直接機降內陸 · 不受灘頭限制',
+    purposeBadge: '【直升機吊掛】',
+    blastRadius: 0,
+    cpCost: 0,
+    visualTag: '[機腹吊鉤 · 155mm 榴彈砲]',
+  },
+  helo_vehicle_lift: {
+    id: 'helo_vehicle_lift',
+    role: 'rescue',
+    name: 'CH-53E 機艙運載悍馬 TOW',
+    desc: 'CH-53E 機艙可容納一輛悍馬，把 TOW 反戰車班直接送到敵裝甲接近路線上。',
+    badge: '機降反裝甲',
+    era: 'era5',
+    damage: 0,
+    speedModifier: 0.95,
+    ammoCount: '1x 悍馬 TOW 班',
+    pros: '快速部署反裝甲火力',
+    purposeBadge: '【車輛機降】',
+    blastRadius: 0,
+    cpCost: 0,
+    visualTag: '[機艙裝載悍馬]',
   },
   asw_acoustic_torpedo: {
     id: 'asw_acoustic_torpedo',

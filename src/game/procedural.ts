@@ -84,7 +84,9 @@ export function generateCoralAtoll(
   center: Vector2D,
   baseRadius: number,
   seed: number,
-  era: Era = 'era1'
+  era: Era = 'era1',
+  /** A high volcanic island (Guadalcanal, Nendo) rather than a ring atoll: no lagoon. */
+  solid = false
 ): Island {
   const points: Vector2D[] = [];
   const contours: Vector2D[][] = [];
@@ -738,22 +740,119 @@ export function generateCoralAtoll(
     })
   );
 
-  return {
+  // Reef passes: the lagoon opens to the sea through one or two channels cut in the ring,
+  // placed where no position or stronghold stands
+  const outline = solid ? points : cutReefPasses(points, center, lagoon, installations, strongholds, seed);
+
+  const island: Island = {
     id,
     name,
     center,
     radius: baseRadius,
-    points,
+    points: outline,
     contours,
     installations,
     strongholds,
     isFriendlyBase: false,
     isFullyCaptured: false,
-    isAtoll: true,
-    lagoons: [lagoon],
+    isAtoll: !solid,
+    lagoons: solid ? [] : [lagoon],
     forestBelts,
     mountainRidges,
   };
+  // Positions laid out on fixed radii can fall off the narrow sides of an elongated ring:
+  // walk each one along its bearing until it stands on the island
+  for (const inst of installations) inst.pos = onLand(island, inst.pos);
+  for (const sh of strongholds) sh.cpPos = onLand(island, sh.cpPos);
+  return island;
+}
+
+/** The nearest point on the island's land along the bearing from its centre (inwards first, then out). */
+function onLand(island: Island, p: Vector2D): Vector2D {
+  if (isPointOnIslandLand(p, island)) return p;
+  const c = island.center;
+  const r = Math.hypot(p.x - c.x, p.y - c.y) || 1;
+  const ux = (p.x - c.x) / r;
+  const uy = (p.y - c.y) / r;
+  for (let k = 1; k <= 60; k++) {
+    for (const sign of [-1, 1]) {
+      const q = { x: p.x + ux * k * 15 * sign, y: p.y + uy * k * 15 * sign };
+      if (isPointOnIslandLand(q, island)) {
+        // A little further in so it does not sit on the waterline
+        const q2 = { x: q.x + ux * 25 * sign, y: q.y + uy * 25 * sign };
+        return isPointOnIslandLand(q2, island) ? q2 : q;
+      }
+    }
+  }
+  return p;
+}
+
+/**
+ * Cuts navigable passes through an atoll's ring: for each chosen bearing the outer coastline
+ * is notched in to the lagoon's edge, so the lagoon water connects to the open sea (ships and
+ * landing craft can enter, as at Tarawa or Majuro). Bearings near installations or strongholds
+ * are avoided; the lagoon's channelBreaches are updated to match (the reef-depth model uses them).
+ */
+function cutReefPasses(
+  ring: Vector2D[],
+  center: Vector2D,
+  lagoon: LagoonWater,
+  installations: Installation[],
+  strongholds: IslandStronghold[],
+  seed: number
+): Vector2D[] {
+  const angOf = (p: Vector2D, c: Vector2D = center) => Math.atan2(p.y - c.y, p.x - c.x);
+  const diff = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+  const occupied = [...installations.map((i) => i.pos), ...strongholds.map((st) => st.cpPos)];
+  // Candidate bearings around the ring, scored by clearance from anything on the island
+  const cands: { a: number; clear: number }[] = [];
+  for (let k = 0; k < 24; k++) {
+    const a = (k / 24) * Math.PI * 2 + (Math.abs(seed) % 7) * 0.05;
+    let clear = Infinity;
+    for (const o of occupied) clear = Math.min(clear, diff(a, angOf(o)));
+    cands.push({ a, clear });
+  }
+  cands.sort((p, q) => q.clear - p.clear);
+  const passes: number[] = [cands[0].a];
+  // A second pass on the far side when there is room for it
+  const second = cands.find((c) => diff(c.a, passes[0]) > Math.PI * 0.55 && c.clear > 0.25);
+  if (second && Math.abs(seed) % 3 !== 0) passes.push(second.a);
+
+  let out = [...ring];
+  // Wide enough for a column of open navigation cells (real passes run 200-500 m)
+  const width = 300;
+  for (const a of passes) {
+    const n = out.length;
+    let idx = 0;
+    for (let i = 1; i < n; i++) if (diff(angOf(out[i]), a) < diff(angOf(out[idx]), a)) idx = i;
+    const p = out[idx];
+    const ux = Math.cos(a);
+    const uy = Math.sin(a);
+    // Perpendicular, pointing the way the ring runs (increasing angle)
+    const vx = -uy;
+    const vy = ux;
+    // Lagoon shore on this bearing
+    let q = lagoon.points[0];
+    for (const lp of lagoon.points) if (diff(angOf(lp, lagoon.center), a) < diff(angOf(q, lagoon.center), a)) q = lp;
+    const inner = { x: q.x - ux * 40, y: q.y - uy * 40 };
+    const notch = [
+      { x: p.x - vx * width * 0.5, y: p.y - vy * width * 0.5 },
+      { x: inner.x - vx * width * 0.5, y: inner.y - vy * width * 0.5 },
+      { x: inner.x + vx * width * 0.5, y: inner.y + vy * width * 0.5 },
+      { x: p.x + vx * width * 0.5, y: p.y + vy * width * 0.5 },
+    ];
+    // Replace the ring point at the pass and its two neighbours with the notch
+    const before = idx - 1 < 0 ? n - 1 : idx - 1;
+    const after = (idx + 1) % n;
+    const keep: Vector2D[] = [];
+    for (let i = 0; i < n; i++) {
+      if (i === idx) keep.push(...notch);
+      else if (i !== before && i !== after) keep.push(out[i]);
+    }
+    out = keep;
+  }
+  lagoon.channelBreaches = passes.map((a) => ({ angle: a, width }));
+  return out;
 }
 
 // Generate organic island polygon with multiple strongholds, NATO command posts, and ground defense installations
@@ -4954,6 +5053,8 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
         y: Math.max(1600, Math.min(worldSize - 1600, cfg.center.y + jitterY)),
       };
 
+      // Guadalcanal (a high volcanic island) never has a lagoon; Santa Cruz (Nendo) sometimes not
+      const solid = i === 0 || (i === 3 && Math.abs(Math.sin(seedBase * 7.13)) < 0.5);
       islands.push(
         generateCoralAtoll(
           `atoll-${i + 1}`,
@@ -4961,7 +5062,8 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
           center,
           cfg.radius,
           seedBase + i * 137,
-          era
+          era,
+          solid
         )
       );
     }

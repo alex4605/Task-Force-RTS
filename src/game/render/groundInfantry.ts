@@ -34,6 +34,9 @@ const KITS = {
   au_vietnam: { uniform: '#4C5638', helmet: 'slouch', helmetColour: '#6A6646', pack: 'alice' },
   // Bundeswehr 1983: olive "Moleskin" (Flecktarn only from 1990), M1-pattern steel helmet
   frg_83: { uniform: '#5E6142', helmet: 'm1', helmetColour: '#4E5236', pack: 'alice' },
+  // Paratroopers: jump smocks and netted helmets
+  para_ww2: { uniform: '#6E6A4C', camo: '#4A4630', helmet: 'm1', helmetColour: '#5A5C3C', pack: 'haversack' },
+  paramarine: { uniform: '#5F6E46', helmet: 'm1', helmetColour: '#6C7A49', pack: 'haversack' },
   // Special operations and irregulars
   coastwatcher: { uniform: '#6B6248', helmet: 'slouch', helmetColour: '#7A6A48', pack: 'haversack' },
   alamo: { uniform: '#4E5A3A', helmet: 'boonie', helmetColour: '#56603E', pack: 'haversack' },
@@ -114,6 +117,12 @@ const TEAMS: TeamSpec[] = [
   { match: /tr_infantry/, kit: KITS.tr_korea, men: WEDGE4('rifle', 'bar', 'rifle', 'rifle') },
   // ROK Tiger Division: M16, M60, M79
   { match: /rok_tiger/, kit: KITS.rok_tiger, men: WEDGE4('rifle', 'lmg', 'm79', 'rifle') },
+  // ── Airborne
+  { match: /paramarine/, kit: KITS.paramarine, men: WEDGE4('smg', 'bar', 'rifle', 'rifle') },
+  { match: /airborne_45/, kit: KITS.para_ww2, men: WEDGE4('smg', 'rifle', 'bazooka', 'rifle') },
+  { match: /airborne_50/, kit: KITS.us_korea, men: WEDGE4('rifle', 'bar', 'bazooka', 'rifle') },
+  { match: /airborne_65/, kit: KITS.us_vietnam, men: WEDGE4('rifle', 'lmg', 'm79', 'rifle') },
+  { match: /airborne_83/, kit: KITS.us_83, men: WEDGE4('rifle', 'lmg', 'at4', 'rifle') },
   // ── Special operations (small teams moving in file, kept low)
   { match: /sof_coastwatcher/, kit: KITS.coastwatcher, men: [{ x: 4.5, y: 0, w: 'long_rifle' }, { x: 0, y: 0.8, w: 'radio' }, { x: -4.5, y: -0.4, w: 'smg' }] },
   { match: /sof_alamo/, kit: KITS.alamo, foliage: true, men: [{ x: 6, y: 0, w: 'smg' }, { x: 2, y: 0.8, w: 'rifle' }, { x: -2.2, y: -0.6, w: 'radio' }, { x: -6.4, y: 0.4, w: 'smg' }] },

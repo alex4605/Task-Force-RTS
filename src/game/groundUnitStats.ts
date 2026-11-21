@@ -175,11 +175,21 @@ export const GROUND_UNIT_STATS: Record<GroundUnitType, GroundUnitStats> = {
   nl_infantry_83: { health: 2250, armor: 0.42, speed: 4.8, damage: 135, reloadTime: 0.85 },
   frg_luchs: { health: 2600, armor: 0.45, speed: 7.6, damage: 220, reloadTime: 0.8, isAmphibious: true },
   uk_sas_83: { health: 1600, armor: 0.3, speed: 5.0, damage: 140, reloadTime: 0.8 },
+  usmc_paramarine_42: { health: 1650, armor: 0.3, speed: 4.4, damage: 88, reloadTime: 1.0 },
+  us_airborne_45: { health: 1800, armor: 0.33, speed: 4.4, damage: 92, reloadTime: 1.0 },
+  us_airborne_50: { health: 1900, armor: 0.35, speed: 4.4, damage: 100, reloadTime: 1.0 },
+  us_airborne_65: { health: 2050, armor: 0.37, speed: 4.6, damage: 115, reloadTime: 0.9 },
+  us_airborne_83: { health: 2150, armor: 0.4, speed: 4.6, damage: 130, reloadTime: 0.85 },
+  us_cav_air_assault_65: { health: 2200, armor: 0.4, speed: 4.8, damage: 115, reloadTime: 0.9 },
+  us_m1a1_pack_75: { health: 1300, armor: 0.25, speed: 2.6, damage: 240, reloadTime: 3.0 },
+  us_m102_105: { health: 1500, armor: 0.28, speed: 2.6, damage: 320, reloadTime: 3.0 },
   uk_milan_team: { health: 1500, armor: 0.3, speed: 4.2, damage: 560, reloadTime: 3.2 },
 };
 
 /** Indirect-fire units: towed and self-propelled guns, rocket artillery and ballistic missiles. */
 export const ARTILLERY_UNIT_TYPES: ReadonlySet<GroundUnitType> = new Set<GroundUnitType>([
+  'us_m1a1_pack_75',
+  'us_m102_105',
   'opfor_m46_130mm',
   'cw_25pdr',
   'nz_l5_pack',
@@ -239,6 +249,8 @@ export const NUCLEAR_TEL_UNIT_TYPES: ReadonlySet<GroundUnitType> = new Set<Groun
 
 /** Units fielded as a battery (artillery, rocket and air-defence); the rest are platoons unless listed as companies. */
 export const BATTERY_ECHELON_TYPES: ReadonlySet<GroundUnitType> = new Set<GroundUnitType>([
+  'us_m1a1_pack_75',
+  'us_m102_105',
   'opfor_m46_130mm',
   'opfor_zis3_76',
   'opfor_ija_47mm_at',

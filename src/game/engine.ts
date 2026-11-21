@@ -4,6 +4,7 @@ import { AlliedHost, AlliedOps } from './allied/alliedOps';
 import { fitsInHold, formatHold, holdUsed, shipHold } from './naval/lift';
 import { AwardKind, Bundle, Economy, MOBILISATION, award, costOf, formatBundle, incomeRate, nuclearCost } from './economy';
 import { CARRIER_ONLY_AIR } from './airRequisition';
+import { airliftCargo, isAirliftPayload, isHeloLift } from './airlift';
 import { SOF_CAPTURE_BONUS, SOF_REVEAL_S, SOF_SABOTAGE_MULT, canSpotUnit, isSof, sofReconRange } from './sof';
 import { CasualtyLedger, Outcome, attritionOutcome, defeatOutcome, victoryOutcome } from './outcome';
 import { Escalation, STAGE_FLAVOUR, TIER_NAME, airEscalation, alliedEscalation, computeEscalation, ingressRoute } from './escalation';
@@ -1385,7 +1386,7 @@ export class GameEngine {
 
       const isTroopCarrier =
         plane.hasPayload &&
-        (plane.payloadType === 'c1_paratroopers' || plane.payloadType === 'helo_assault_troops');
+        isAirliftPayload(plane.payloadType);
       const moveDropsOnIsland =
         order.type === 'move' && targetPos && isTroopCarrier ? !!this.findIslandDropPoint(targetPos, 150) : false;
 
@@ -1501,7 +1502,7 @@ export class GameEngine {
         a.state !== 'shot_down' &&
         this.selectedUnitIds.includes(a.id) &&
         a.hasPayload &&
-        (a.payloadType === 'c1_paratroopers' || a.payloadType === 'helo_assault_troops')
+        isAirliftPayload(a.payloadType)
     );
 
     if (troopPlanes.length === 0) {
@@ -1515,7 +1516,7 @@ export class GameEngine {
     for (const plane of troopPlanes) {
       const immediateLandPt = this.findIslandDropPoint(plane.pos, 260);
       if (immediateLandPt) {
-        if (plane.payloadType === 'helo_assault_troops') {
+        if (isHeloLift(plane.payloadType)) {
           this.dropHeloAssaultTroops(plane, immediateLandPt);
         } else {
           this.dropParatroopers(plane, immediateLandPt);
@@ -4505,7 +4506,7 @@ export class GameEngine {
         plane.order = { type: 'rtb' };
         plane.state = 'returning';
       }
-    } else if (plane.payloadType === 'helo_assault_troops') {
+    } else if (isHeloLift(plane.payloadType)) {
       plane.altitude = Math.max(0.12, plane.altitude - dt * 0.4);
       if (d < 150) {
         this.dropHeloAssaultTroops(plane, targetPos);
@@ -4514,7 +4515,7 @@ export class GameEngine {
         plane.order = { type: 'rtb' };
         plane.state = 'returning';
       }
-    } else if (plane.payloadType === 'c1_paratroopers') {
+    } else if (isAirliftPayload(plane.payloadType)) {
       plane.altitude = 0.5;
       if (d < 220) {
         this.dropParatroopers(plane, targetPos);
@@ -4874,7 +4875,7 @@ export class GameEngine {
     const isPendingTroopDrop =
       plane.hasPayload &&
       plane.order.pendingUnload &&
-      (plane.payloadType === 'c1_paratroopers' || plane.payloadType === 'helo_assault_troops');
+      isAirliftPayload(plane.payloadType);
 
     if (plane.order.pendingSonobuoyPos) {
       const isHelo =
@@ -4895,15 +4896,15 @@ export class GameEngine {
         return true;
       }
     } else if (isPendingTroopDrop) {
-      const dropRadius = plane.payloadType === 'helo_assault_troops' ? 150 : 220;
-      if (plane.payloadType === 'helo_assault_troops' && moveDist < 420) {
+      const dropRadius = isHeloLift(plane.payloadType) ? 150 : 220;
+      if (isHeloLift(plane.payloadType) && moveDist < 420) {
         plane.altitude = Math.max(0.15, plane.altitude - dt * 0.35);
-      } else if (plane.payloadType === 'c1_paratroopers' && moveDist < 500) {
+      } else if (!isHeloLift(plane.payloadType) && moveDist < 500) {
         plane.altitude = 0.5;
       }
       if (moveDist < dropRadius) {
         const safeDropPt = this.findIslandDropPoint(plane.order.targetPos, 240) || plane.order.targetPos;
-        if (plane.payloadType === 'helo_assault_troops') {
+        if (isHeloLift(plane.payloadType)) {
           this.dropHeloAssaultTroops(plane, safeDropPt);
         } else {
           this.dropParatroopers(plane, safeDropPt);
@@ -15191,40 +15192,34 @@ export class GameEngine {
     });
   }
 
-  private getEraParatrooperProfile(): { type: GroundUnitType; name: string; label: string } {
-    if (this.era === 'era1') {
-      return {
-        type: 'usmc_rifle_42',
-        name: '第1陸戰傘兵突擊排 (1942 Paramarines)',
-        label: '1942 陸戰傘兵營分隊',
-      };
-    }
-    if (this.era === 'era2') {
-      return {
-        type: 'usmc_rifle_45',
-        name: '第11空降師「天使」傘兵突擊排 (1945)',
-        label: '第11空降師傘兵突擊隊',
-      };
-    }
-    if (this.era === 'era3') {
-      return {
-        type: 'us_army_infantry_korea',
-        name: '第187空降團戰鬥群「Rakkasans」傘兵排',
-        label: '第187空降團戰鬥群',
-      };
-    }
-    if (this.era === 'era4') {
-      return {
-        type: 'usmc_air_assault_65',
-        name: 'USMC 空中突擊步兵排',
-        label: '越戰空中突擊／傘降排',
-      };
-    }
-    return {
-      type: 'usmc_rifle_83',
-      name: 'USMC 83年編裝空中突擊陸戰步兵排',
-      label: '現代化空中突擊步兵排',
-    };
+  /** Cargo on board, from the transport type, its loadout and the era (airlift.ts). */
+  private cargoOf(plane: Aircraft) {
+    return airliftCargo(plane.payloadType ?? 'c1_paratroopers', plane.model, this.era) ?? airliftCargo('c1_paratroopers', plane.model, this.era)!;
+  }
+
+  /** Put the cargo down around a landing / drop point on the island. */
+  private landCargo(plane: Aircraft, base: Vector2D, spread: number, suffix: string): string[] {
+    const cargo = this.cargoOf(plane);
+    const names: string[] = [];
+    cargo.units.forEach((c, k) => {
+      const ang = (k / Math.max(1, cargo.units.length)) * Math.PI * 2 + Math.random();
+      const raw = { x: base.x + Math.cos(ang) * spread * (cargo.units.length > 1 ? 1 : 0.3), y: base.y + Math.sin(ang) * spread * (cargo.units.length > 1 ? 1 : 0.3) };
+      const pos = this.findIslandDropPoint(raw, 220) || base;
+      const u = createGroundUnit(`air-${cargo.method}-${Date.now()}-${k}`, c.type, `${c.name}${cargo.units.length > 1 ? ` (#${k + 1})` : ''}${suffix}`, 'player', this.era, pos);
+      this.groundUnits.push(u);
+      names.push(u.name);
+      if (cargo.method !== 'helo') {
+        // Canopies drifting down (one big cargo chute for heavy drop)
+        this.particles.push({ id: `para-drop-${Date.now()}-${k}`, x: pos.x, y: pos.y - 45, vx: 0, vy: 20, life: 1.5, maxLife: 1.5, radius: cargo.method === 'parachute' ? 12 : 18, color: '#E0F2F1', type: 'smoke' });
+      }
+      if (cargo.method === 'lapes') {
+        // Extraction: the pallet skids out and ploughs a dust trail
+        for (let p = 0; p < 10; p++) {
+          this.particles.push({ id: `lapes-${Date.now()}-${k}-${p}`, x: pos.x - Math.cos(plane.heading) * p * 9, y: pos.y - Math.sin(plane.heading) * p * 9, vx: (Math.random() - 0.5) * 20, vy: (Math.random() - 0.5) * 20, life: 1.2, maxLife: 1.2, radius: 7 + Math.random() * 6, color: 'rgba(215, 204, 200, 0.7)', type: 'smoke' });
+        }
+      }
+    });
+    return names;
   }
 
   private dropHeloAssaultTroops(plane: Aircraft, targetPos: Vector2D) {
@@ -15233,87 +15228,35 @@ export class GameEngine {
     for (let p = 0; p < 12; p++) {
       const ang = Math.random() * Math.PI * 2;
       const spd = 20 + Math.random() * 40;
-      this.particles.push({
-        id: `rotor-dust-${Date.now()}-${p}`,
-        x: safeDropBase.x,
-        y: safeDropBase.y,
-        vx: Math.cos(ang) * spd,
-        vy: Math.sin(ang) * spd,
-        life: 0.8,
-        maxLife: 0.8,
-        radius: 8 + Math.random() * 8,
-        color: 'rgba(215, 204, 200, 0.7)',
-        type: 'smoke',
-      });
+      this.particles.push({ id: `rotor-dust-${Date.now()}-${p}`, x: safeDropBase.x, y: safeDropBase.y, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd, life: 0.8, maxLife: 0.8, radius: 8 + Math.random() * 8, color: 'rgba(215, 204, 200, 0.7)', type: 'smoke' });
     }
-
-    const profile = this.getEraParatrooperProfile();
-    const rawPos = { x: safeDropBase.x + (Math.random() - 0.5) * 30, y: safeDropBase.y + (Math.random() - 0.5) * 30 };
-    const finalPos = this.findIslandDropPoint(rawPos, 220) || safeDropBase;
-    const assaultSquad = createGroundUnit(
-      `usmc-assault-${Date.now()}`,
-      profile.type,
-      `${profile.name} (垂直機降)`,
-      'player',
-      this.era,
-      finalPos
-    );
-    this.groundUnits.push(assaultSquad);
-
-    this.addBannerAlert(`🚁【垂直機動空降成功！】「${plane.name}」完成機降！${profile.label}投入灘頭據點奪控！`, 'player', 'capture', 6.0);
+    const cargo = this.cargoOf(plane);
+    const names = this.landCargo(plane, safeDropBase, 30, ' (機降)');
+    this.addBannerAlert(`🚁【直升機機降完成】「${plane.name}」將${cargo.label}送抵著陸區！`, 'player', 'capture', 6.0);
     this.addCombatLog({
       category: 'naval',
       sourceSide: 'player',
       sourceName: plane.name,
-      targetName: '機降高地灘頭',
+      targetName: '機降著陸區',
       actionType: 'recon_spotted',
-      text: `🚁【垂直機動作戰 (Vertical Envelopment)】運輸直升機於指定島嶼空降區完成卸載！「${profile.name}」迅速展開戰術包圍！`,
+      text: `🚁【垂直包圍】直升機於指定著陸區卸載：${names.join('、')}，立即展開！`,
     });
   }
 
   private dropParatroopers(plane: Aircraft, targetPos: Vector2D) {
     soundEngine.playPlaneSortie();
     const safeDropBase = this.findIslandDropPoint(targetPos, 280) || targetPos;
-    const profile = this.getEraParatrooperProfile();
-    for (let s = 0; s < 2; s++) {
-      const rawDropPos = {
-        x: safeDropBase.x + (s === 0 ? -35 : 35) + (Math.random() - 0.5) * 20,
-        y: safeDropBase.y + (s === 0 ? -25 : 25) + (Math.random() - 0.5) * 20,
-      };
-      const dropPos = this.findIslandDropPoint(rawDropPos, 220) || safeDropBase;
-
-      const paraSquad = createGroundUnit(
-        `usmc-para-${Date.now()}-${s}`,
-        profile.type,
-        `${profile.name} (#${s + 1})`,
-        'player',
-        this.era,
-        dropPos
-      );
-      this.groundUnits.push(paraSquad);
-
-      this.particles.push({
-        id: `para-drop-${Date.now()}-${s}`,
-        x: dropPos.x,
-        y: dropPos.y - 45,
-        vx: 0,
-        vy: 20,
-        life: 1.5,
-        maxLife: 1.5,
-        radius: 12,
-        color: '#E0F2F1',
-        type: 'smoke',
-      });
-    }
-
-    this.addBannerAlert(`🪂【傘降部隊空投完成！】「${plane.model.toUpperCase()}」投下 2 個${profile.label}！迅速控制周邊戰略要地！`, 'player', 'capture', 6.0);
+    const cargo = this.cargoOf(plane);
+    const names = this.landCargo(plane, safeDropBase, 42, '');
+    const how = cargo.method === 'lapes' ? 'LAPES 低空抽取空投' : cargo.method === 'heavy_drop' ? '重裝平台空投' : '傘降';
+    this.addBannerAlert(`🪂【空降完成】「${plane.model.toUpperCase()}」以${how}投下${cargo.label}！`, 'player', 'capture', 6.0);
     this.addCombatLog({
       category: 'air',
       sourceSide: 'player',
       sourceName: plane.name,
-      targetName: '空投戰區',
+      targetName: '空投區',
       actionType: 'recon_spotted',
-      text: `🪂【空降卸載完成】「${plane.name}」飛越目標島嶼空域投放 2 個「${profile.name}」！傘兵安全著陸，立即奪取防區！`,
+      text: `🪂【空降卸載】「${plane.name}」飛越空投區以${how}投下：${names.join('、')}，著陸後立即奪取防區！`,
     });
   }
 
@@ -15934,6 +15877,9 @@ export class GameEngine {
         { model: 'a20', role: 'attacker', modelName: 'A-20C 波士頓 (Boston) 攻擊機', speed: getAircraftSpeed('a20'), baseHealth: 520, payloadType: 'bombs_dual_500', payloadName: '機首機槍群 + 500lb 航彈', ammo: 2000, affiliation: '澳洲皇家空軍第22中隊 (RAAF)', nation: 'australia' },
         { model: 'beaufort', role: 'torpedo_bomber', modelName: '蒲福式 Mk.VIII (DAP Beaufort) 魚雷轟炸機', speed: getAircraftSpeed('beaufort'), baseHealth: 700, payloadType: 'aerial_torpedo', payloadName: '18吋 Mk XII 航空魚雷', ammo: 1500, affiliation: '澳洲皇家空軍第100中隊 (RAAF)', nation: 'australia' },
         { model: 'boomerang', role: 'fighter', modelName: 'CA-12 回力鏢 (Boomerang) 戰鬥機', speed: getAircraftSpeed('boomerang'), baseHealth: 460, payloadType: 'clean_guns', payloadName: '2x 20mm 機砲 + 4x .303 機槍', ammo: 1600, affiliation: '澳洲皇家空軍第84中隊 (RAAF)', nation: 'australia' },
+        { model: 'b25', role: 'attacker', modelName: 'B-25C 米切爾 (荷屬東印度)', speed: getAircraftSpeed('b25'), baseHealth: 640, payloadType: 'bombs_dual_500', payloadName: '4x 500lb 航彈', ammo: 1200, affiliation: '荷屬東印度陸軍航空隊第18中隊 (NEI-RAAF)', nation: 'netherlands' },
+        { model: 'pby', role: 'attacker', modelName: 'PBY 卡特琳娜「黑貓」夜間巡邏機', speed: getAircraftSpeed('pby'), baseHealth: 700, payloadType: 'bombs_dual_500', payloadName: '夜間佈雷 / 2x 500lb 航彈', ammo: 800, affiliation: '澳洲皇家空軍第11中隊 (RAAF)', nation: 'australia' },
+        { model: 'f4f', role: 'fighter', modelName: '岩燕 II (Martlet / F4F) 艦載戰鬥機', speed: getAircraftSpeed('f4f'), baseHealth: 420, payloadType: 'clean_guns', payloadName: '4x .50 白朗寧機槍', ammo: 1440, affiliation: '英國艦隊航空隊第888中隊 (FAA)', nation: 'uk' },
       ];
     } else if (this.era === 'era2') {
       pool = [
@@ -15946,6 +15892,10 @@ export class GameEngine {
         { model: 'tbf', role: 'torpedo_bomber', modelName: '復仇者 Mk.I (Avenger) 魚雷轟炸機', speed: getAircraftSpeed('tbf'), baseHealth: 460, payloadType: 'aerial_torpedo', payloadName: 'Mk 13 航空魚雷', ammo: 600, affiliation: '英國太平洋艦隊 艦隊航空隊 (FAA)', nation: 'british_pacific' },
         { model: 'seafire', role: 'fighter', modelName: '海火式 F.III (Seafire) 艦載戰鬥機', speed: getAircraftSpeed('seafire'), baseHealth: 420, payloadType: 'clean_guns', payloadName: '2x 20mm 機砲 + 4x .303 機槍', ammo: 1200, affiliation: '英國太平洋艦隊 第887中隊 (FAA)', nation: 'british_pacific' },
         { model: 'barracuda', role: 'attacker', modelName: '梭魚式 Mk.II (Barracuda) 俯衝/魚雷轟炸機', speed: getAircraftSpeed('barracuda'), baseHealth: 540, payloadType: 'bombs_dual_500', payloadName: '2x 500lb 航彈 (沙璜/巨港空襲)', ammo: 600, affiliation: '英國東方艦隊 第827中隊 (FAA)', nation: 'british_pacific' },
+        { model: 'f4u', role: 'fighter', modelName: 'F4U-1A 海盜 (布干維爾島)', speed: getAircraftSpeed('f4u'), baseHealth: 480, payloadType: 'clean_guns', payloadName: '6x .50 機槍', ammo: 2400, affiliation: '紐西蘭皇家空軍第1戰鬥聯隊 (RNZAF)', nation: 'new_zealand' },
+        { model: 'p40', role: 'fighter', modelName: 'P-40N 小鷹', speed: getAircraftSpeed('p40'), baseHealth: 420, payloadType: 'clean_guns', payloadName: '6x .50 機槍', ammo: 1440, affiliation: '紐西蘭皇家空軍第14中隊 (RNZAF)', nation: 'new_zealand' },
+        { model: 'b24', role: 'level_bomber', modelName: 'B-24M 解放者重型轟炸機', speed: getAircraftSpeed('b24'), baseHealth: 980, payloadType: 'bombs_carpet_250', payloadName: '婆羅洲巴里巴板地毯轟炸', ammo: 1800, affiliation: '澳洲皇家空軍第21中隊 (RAAF)', nation: 'australia' },
+        { model: 'b25', role: 'attacker', modelName: 'B-25J 米切爾', speed: getAircraftSpeed('b25'), baseHealth: 640, payloadType: 'bombs_dual_500', payloadName: '4x 500lb 航彈 + 機首機槍', ammo: 1600, affiliation: '荷屬東印度陸軍航空隊第18中隊', nation: 'netherlands' },
       ];
     } else if (this.era === 'era3') {
       pool = [
@@ -15958,6 +15908,8 @@ export class GameEngine {
         { model: 'p51', role: 'fighter', modelName: 'P-51D 野馬 (韓戰首月)', speed: getAircraftSpeed('p51'), baseHealth: 450, payloadType: 'hvar_rockets', payloadName: '6x HVAR + 6x .50 機槍', ammo: 1880, affiliation: '澳洲皇家空軍第77中隊 (RAAF)', nation: 'australia' },
         { model: 'sea_fury', role: 'attacker', modelName: '海怒 FB.11 (雪梨號航艦)', speed: getAircraftSpeed('sea_fury'), baseHealth: 500, payloadType: 'hvar_rockets', payloadName: '8x 60lb 火箭 + 4x 20mm', ammo: 1600, affiliation: '澳洲皇家海軍 第805中隊 (RAN FAA)', nation: 'australia' },
         { model: 'firefly_as5', role: 'attacker', modelName: '螢火蟲 FR.5 (雪梨號航艦)', speed: getAircraftSpeed('firefly_as5'), baseHealth: 490, payloadType: 'bombs_dual_500', payloadName: '2x 500lb 航彈 + 4x 20mm', ammo: 1200, affiliation: '澳洲皇家海軍 第817中隊 (RAN FAA)', nation: 'australia' },
+        { model: 'f86', role: 'fighter', modelName: 'F-86F 軍刀 (1953)', speed: getAircraftSpeed('f86'), baseHealth: 560, payloadType: 'clean_guns', payloadName: '6x .50 M3 機槍', ammo: 1800, affiliation: '南非空軍第2中隊「飛豹」(SAAF)', nation: 'south_africa' },
+        { model: 'meteor', role: 'fighter', modelName: '流星 F.8 (金浦)', speed: getAircraftSpeed('meteor'), baseHealth: 520, payloadType: 'clean_guns', payloadName: '4x 20mm 西斯帕諾機砲', ammo: 1600, affiliation: '澳洲皇家空軍第77中隊 (RAAF)', nation: 'australia' },
       ];
     } else if (this.era === 'era4') {
       pool = [
@@ -15971,6 +15923,9 @@ export class GameEngine {
         { model: 'f100', role: 'attacker', modelName: 'F-100D 超級軍刀', speed: getAircraftSpeed('f100'), baseHealth: 640, payloadType: 'bombs_snakeye_retarded', payloadName: '蛇眼減速彈 + 4x 20mm', ammo: 800, affiliation: '美國空軍第3戰術戰鬥聯隊 (邊和空軍基地)' },
         { model: 'canberra', role: 'level_bomber', modelName: '坎培拉 B.20 (Canberra) 轟炸機', speed: getAircraftSpeed('canberra'), baseHealth: 900, payloadType: 'bombs_carpet_250', payloadName: '6x 750lb 航彈 (藩朗 1967-71)', ammo: 0, affiliation: '澳洲皇家空軍第2中隊 (RAAF)', nation: 'australia' },
         { model: 'a4', role: 'attacker', modelName: 'A-4G 天鷹 (墨爾本號航艦)', speed: getAircraftSpeed('a4'), baseHealth: 580, payloadType: 'bombs_snakeye_retarded', payloadName: 'Mk 82 蛇眼 + 2x 20mm', ammo: 400, affiliation: '澳洲皇家海軍 第805中隊 (RAN FAA)', nation: 'australia' },
+        { model: 'mirage3', role: 'fighter', modelName: '幻象 IIIO (北海空軍基地)', speed: getAircraftSpeed('mirage3'), baseHealth: 580, payloadType: 'aim9_sidewinder', payloadName: '響尾蛇 + 雙門 30mm 機砲', ammo: 700, affiliation: '澳洲皇家空軍第3中隊 (RAAF)', nation: 'australia' },
+        { model: 'f5a', role: 'fighter', modelName: 'F-5A 自由鬥士', speed: getAircraftSpeed('f5a'), baseHealth: 560, payloadType: 'aim9_sidewinder', payloadName: '2x AIM-9 + 2x 20mm', ammo: 800, affiliation: '大韓民國空軍第10戰鬥聯隊 (ROKAF)', nation: 'rok' },
+        { model: 'f86', role: 'fighter', modelName: 'F-86F 軍刀', speed: getAircraftSpeed('f86'), baseHealth: 560, payloadType: 'aim9_sidewinder', payloadName: '2x AIM-9B + 6x .50', ammo: 1800, affiliation: '大韓民國空軍 (ROKAF)', nation: 'rok' },
       ];
     } else {
       // Era 5 Cold War NATO Coalition (Ceiling is SARH, AMRAAM not yet deployed)
@@ -15989,6 +15944,10 @@ export class GameEngine {
         { model: 'sea_harrier', role: 'fighter', modelName: '海獵鷹 FRS.1 (Sea Harrier)', speed: getAircraftSpeed('sea_harrier'), baseHealth: 640, payloadType: 'aim9_sidewinder', payloadName: '2x AIM-9L + 2x 30mm 亞丁', ammo: 300, affiliation: '英國皇家海軍 第800中隊 (FAA)', nation: 'uk' },
         { model: 'fa18a', role: 'fighter', modelName: 'CF-18A 大黃蜂', speed: getAircraftSpeed('fa18a'), baseHealth: 800, payloadType: 'aim7_aim9_combo', payloadName: '4x AIM-7M + 2x AIM-9L', ammo: 940, affiliation: '加拿大空軍第409中隊 (CAF, 西德巴登)', nation: 'canada' },
         { model: 'f16a', role: 'fighter', modelName: 'F-16A 戰隼 (MLU 前)', speed: getAircraftSpeed('f16a'), baseHealth: 760, payloadType: 'aim9_sidewinder', payloadName: '4x AIM-9 + M61', ammo: 940, affiliation: '荷蘭皇家空軍第322中隊 (RNLAF)', nation: 'netherlands' },
+        { model: 'f111', role: 'attacker', modelName: 'F-111C 土豚 (澳洲版)', speed: getAircraftSpeed('f111'), baseHealth: 900, payloadType: 'gbu10_laser_paveway', payloadName: 'Pave Tack 雷射導引炸彈', ammo: 0, affiliation: '澳洲皇家空軍第1中隊 (RAAF)', nation: 'australia' },
+        { model: 'fa18a', role: 'fighter', modelName: 'F/A-18A 大黃蜂 (澳洲版)', speed: getAircraftSpeed('fa18a'), baseHealth: 800, payloadType: 'aim7_aim9_combo', payloadName: '4x AIM-7M + 2x AIM-9M', ammo: 940, affiliation: '澳洲皇家空軍第3中隊 (RAAF)', nation: 'australia' },
+        { model: 'a4', role: 'attacker', modelName: 'A-4K 天鷹', speed: getAircraftSpeed('a4'), baseHealth: 600, payloadType: 'bombs_snakeye_retarded', payloadName: 'Mk 82 蛇眼 + 2x 20mm', ammo: 400, affiliation: '紐西蘭皇家空軍第75中隊 (RNZAF)', nation: 'new_zealand' },
+        { model: 'f5a', role: 'fighter', modelName: 'F-5E 虎II', speed: getAircraftSpeed('f5a'), baseHealth: 600, payloadType: 'aim9_sidewinder', payloadName: '2x AIM-9 + 2x 20mm', ammo: 560, affiliation: '大韓民國空軍 (ROKAF)', nation: 'rok' },
       ];
     }
 

@@ -51,6 +51,7 @@ const AIR_CARDS: Partial<Record<Era, AirCard[]>> = {
     { model: 'a1h', name: 'A-1H 天襲者攻擊機隊', count: 4, cost: 200, badge: '長滯空 · 搜救掩護', desc: '「Sandy」任務的主角，以長滯空時間掩護直升機救援擊落的飛行員。', statsDesc: '對地攻擊 | 陸基' },
     { model: 'a37b', name: 'A-37B 蜻蜓輕型攻擊機隊', count: 4, cost: 170, badge: '輕型近接支援', desc: '由教練機改裝的輕型攻擊機，美軍與南越空軍都大量使用。', statsDesc: '輕型攻擊 | 陸基' },
     { model: 'f5a', name: 'F-5A 自由鬥士戰鬥機隊', count: 4, cost: 190, badge: '「Skoshi Tiger」', desc: '1965 年起在越南實戰測試的輕型戰鬥機，後移交南越空軍。', statsDesc: '輕型戰鬥機 | 陸基' },
+    { model: 'c130', name: 'C-130 大力士戰術運輸機', count: 2, cost: 230, badge: '傘降 · LAPES · 重裝空投', desc: '章克申城行動空投第173空降旅、溪山以 LAPES 低空空投補給；可載兩個傘兵排或一輛 M551。', statsDesc: '戰術運輸 | 陸基' },
     { model: 'f104g', name: 'F-104G 星式戰鬥機隊', count: 4, cost: 220, badge: '高速攔截', desc: '1965 年部署越南擔任護航與阻止米格機攔截 EC-121 預警機。', statsDesc: '攔截機 | 陸基' },
   ],
   era5: [

@@ -10,6 +10,7 @@ export type Affiliation = 'friend' | 'hostile' | 'neutral' | 'unknown';
 export type App6Function =
   | 'infantry'
   | 'infantry_air_assault'
+  | 'infantry_airborne'
   | 'mech_infantry'
   | 'armour'
   | 'armoured_recon'
@@ -154,6 +155,15 @@ function drawIcon(ctx: CanvasRenderingContext2D, fn: App6Function, a: Affiliatio
       ctx.moveTo(-w * 0.35, h * 0.62);
       ctx.quadraticCurveTo(-w * 0.17, h * 0.3, 0, h * 0.62);
       ctx.quadraticCurveTo(w * 0.17, h * 0.3, w * 0.35, h * 0.62);
+      ctx.stroke();
+      break;
+    case 'infantry_airborne':
+      cross();
+      // Airborne: the gull-wing arc in the lower sector
+      ctx.beginPath();
+      ctx.moveTo(-w * 0.45, h * 0.62);
+      ctx.quadraticCurveTo(-w * 0.22, h * 0.25, 0, h * 0.55);
+      ctx.quadraticCurveTo(w * 0.22, h * 0.25, w * 0.45, h * 0.62);
       ctx.stroke();
       break;
     case 'mech_infantry':
@@ -428,6 +438,14 @@ const EXPLICIT_FUNCTION: Record<string, App6Function> = {
   frg_gepard: 'air_defence_gun',
   frg_m109g: 'field_artillery',
   uk_milan_team: 'anti_armour',
+  usmc_paramarine_42: 'infantry_airborne',
+  us_airborne_45: 'infantry_airborne',
+  us_airborne_50: 'infantry_airborne',
+  us_airborne_65: 'infantry_airborne',
+  us_airborne_83: 'infantry_airborne',
+  us_cav_air_assault_65: 'infantry_air_assault',
+  us_m1a1_pack_75: 'field_artillery',
+  us_m102_105: 'field_artillery',
   sof_coastwatcher_42: 'recon',
   sof_alamo_scouts_45: 'special_forces',
   sof_udt_45: 'special_forces',
@@ -477,6 +495,8 @@ const EXPLICIT_MOBILITY: Record<string, Mobility> = {
   rok_m36: 'tracked',
   nz_l5_pack: 'towed',
   frg_gepard: 'tracked',
+  us_m1a1_pack_75: 'towed',
+  us_m102_105: 'towed',
   sof_udt_45: 'amphibious',
   sof_udt_50: 'amphibious',
   sof_seal_65: 'amphibious',
