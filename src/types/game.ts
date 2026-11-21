@@ -108,6 +108,10 @@ export type GroundUnitType =
   | 'us_army_rifle_45'    // 時代二 美陸軍步兵排 (沖繩 · 第7/77/96步兵師)
   | 'usmc_m4a3r3_flame'   // 時代二 M4A3R3「打火機」噴火戰車排 (硫磺島 / 沖繩)
   | 'us_m24_chaffee'      // 時代三 M24 霞飛輕戰車排 (1950 年首批抵韓)
+  | 'us_redeye_team'      // 時代四 FIM-43 紅眼 (Redeye) 肩射防空飛彈小組 (1968 起配發陸戰隊與陸軍)
+  | 'us_stinger_team'     // 時代五 FIM-92 刺針 (Stinger) 肩射防空飛彈小組
+  | 'opfor_sa7_strela'    // 時代四 9K32 箭-2 (SA-7 Grail) 肩射防空飛彈小組 (北越 1972 年起)
+  | 'opfor_igla_team'     // 時代五 9K310 針-1 (SA-16 Gimlet) 肩射防空飛彈小組
   | 'usmc_90mm_aa_42'     // 時代一 USMC 第3防衛營 90mm M1 高射砲連 (牽引 · 瓜島韓德森機場防空)
   | 'usmc_40mm_bofors_45' // 時代二 USMC 防空營 40mm M1 波佛斯高射砲 (牽引)
   | 'us_m16_quad50'       // 時代三 M16 四聯裝 .50 半履帶防空車「絞肉機」
@@ -1919,6 +1923,7 @@ export type InstallationType =
   | 'city'               // 城市/城鎮核心市區 (密集街區與混凝土建築，提供部隊城市戰掩體)
   | 'town'               // 城鎮市集 (提供部隊城市戰掩蔽)
   | 'settlement'         // 沿海漁村與定居點 (平民居住區)
+  | 'motor_pool'         // 調車場 (車輛集結整備場 · 呼叫裝甲/車輛/火砲增援)
   | 'pow_camp'           // 戰俘營 (雙方皆有：我方構工建造、敵方預設於後方)
   | 'refugee_camp'       // 戰地難民收容營 (聯合國/紅十字帳篷區，遭受火力攻擊扣除 15 CP)
   // 時代四特種防空與前進雷達作戰設施 (Era 4 Cold War / Vietnam Installations)

@@ -1,4 +1,5 @@
-import { Era, GroundUnitType, RequisitionItem } from '../types/game';
+import { Era, GroundUnitType, Installation, RequisitionItem } from '../types/game';
+import { groundSilhouetteClass } from './unitPreviewRenderer';
 
 /**
  * One table from a ground requisition's typeTag to the unit it raises, shared by the engine
@@ -79,6 +80,8 @@ const GROUND_REQUISITIONS: Record<string, Resolver> = {
   us_army_rifle_45: fixed('us_army_rifle_45', '美陸軍步兵排 (1945 沖繩)'),
   usmc_m4a3r3_flame: fixed('usmc_m4a3r3_flame', 'USMC M4A3R3「打火機」噴火戰車排'),
   us_m24_chaffee: fixed('us_m24_chaffee', 'US Army M24 霞飛輕戰車排'),
+  us_redeye_team: fixed('us_redeye_team', 'FIM-43 紅眼肩射防空飛彈小組'),
+  us_stinger_team: fixed('us_stinger_team', 'FIM-92 刺針肩射防空飛彈小組'),
   usmc_90mm_aa_42: fixed('usmc_90mm_aa_42', 'USMC 90mm M1 高射砲連 (第3防衛營)'),
   usmc_40mm_bofors_45: fixed('usmc_40mm_bofors_45', 'USMC 40mm 波佛斯高射砲排'),
   us_m16_quad50: fixed('us_m16_quad50', 'M16 四聯裝 .50 防空半履帶車'),
@@ -129,6 +132,7 @@ const ADDITIONAL_GROUND_ITEMS: Partial<Record<Era, Omit<RequisitionItem, 'catego
     { id: 'req-ground-acav', name: 'M113 ACAV 裝甲騎兵突擊車排', cost: 240, badge: '三挺機槍+防盾', desc: '第11裝甲騎兵團在越南把 M113 改成「裝甲騎兵突擊車」，車長 .50 機槍與兩側 M60 都加裝防盾，穿越叢林正面衝擊。', statsDesc: '機動火力 | 兩棲 | 1500m', typeTag: 'us_m113_acav' },
     { id: 'req-sof-seal-65', name: '【SOF】海豹第一分隊 (SEAL)', cost: 280, badge: '湄公河伏擊', desc: '在湄公河三角洲以小艇滲透，夜間伏擊越共運補與綁架指揮幹部的海軍特戰隊。', statsDesc: '兩棲 | 隱蔽 | 爆破設施 ×3 | 據點奪取加速', typeTag: 'sof_seal_65' },
     { id: 'req-sof-sog', name: '【SOF】MACV-SOG 跨境偵察小組', cost: 260, badge: '胡志明小道偵察', desc: '美軍綠扁帽與南越、蒙達納族隊員組成的偵察小組，深入寮國與柬埔寨監視胡志明小道。', statsDesc: '隱蔽 | 偵察：艦船 3000m・機群 4200m', typeTag: 'sof_macv_sog_65' },
+    { id: 'req-ground-redeye', name: 'FIM-43 紅眼肩射防空飛彈小組', cost: 120, badge: '紅外線尾追 · 肩射', desc: '1968 年起配發陸戰隊與陸軍的第一代肩射防空飛彈，兩人小組隨步兵行動，只能從後方追擊低空噴射機的尾焰。', statsDesc: '輕裝 | 低空防空 | 4.5 km | 裝填慢', typeTag: 'us_redeye_team' },
     { id: 'req-ground-m107', name: 'M107 175mm 自走加農砲連', cost: 420, badge: '175mm · 32 km', desc: '越戰美軍射程最遠的火砲，自非軍事區南側的「岩石堆」等火力基地轟擊北越縱深。', statsDesc: '長程火力 | 反砲擊 | 32.7 km', typeTag: 'us_m107_175' },
   ],
   era5: [
@@ -136,6 +140,7 @@ const ADDITIONAL_GROUND_ITEMS: Partial<Record<Era, Omit<RequisitionItem, 'catego
     { id: 'req-sof-force-recon', name: '【SOF】陸戰隊武裝偵察排', cost: 280, badge: '兩棲偵察', desc: '以潛艦或橡皮艇滲透上岸，在登陸前偵察灘頭與敵陣地的陸戰隊特種偵察兵。', statsDesc: '兩棲 | 隱蔽 | 偵察：艦船 3000m・機群 4200m', typeTag: 'sof_force_recon_83' },
     { id: 'req-sof-seal-83', name: '【SOF】海豹第四分隊 (SEAL)', cost: 320, badge: '直接行動', desc: '1983 年格瑞那達行動中突襲總督府與廣播電台的海軍特戰隊。', statsDesc: '兩棲 | 隱蔽 | 爆破設施 ×3 | 據點奪取加速', typeTag: 'sof_seal_83' },
     { id: 'req-sof-ranger-83', name: '【SOF】第75遊騎兵團排', cost: 300, badge: '機場奪取', desc: '緊急狂怒行動中低空傘降奪取薩林斯角機場的遊騎兵。', statsDesc: '隱蔽 | 據點奪取加速 | 爆破設施 ×3 | 戰鬥力強', typeTag: 'sof_ranger_83' },
+    { id: 'req-ground-stinger', name: 'FIM-92 刺針肩射防空飛彈小組', cost: 140, badge: '全向紅外線 · 肩射', desc: '1981 年起服役的第二代肩射防空飛彈，可迎頭攻擊並配有敵我識別，兩人小組可隨步兵或乘直升機進入前線。', statsDesc: '輕裝 | 低空防空 | 4.8 km', typeTag: 'us_stinger_team' },
     { id: 'req-ground-avenger', name: 'M1097 復仇者 刺針防空車', cost: 260, badge: '8 枚刺針 + .50 機槍', desc: '1990 年起服役的悍馬底盤短程防空系統，兩具四聯刺針發射箱可行進間射擊。', statsDesc: '短程防空 | 4800m', typeTag: 'us_avenger' },
   ],
 };
@@ -148,4 +153,39 @@ export function withGroundRequisitions(items: RequisitionItem[], era: Era): Requ
   const firstInstallation = all.findIndex((it) => it.category === 'installations');
   all.splice(firstInstallation < 0 ? all.length : firstInstallation, 0, ...extra);
   return all.map((it) => (it.category === 'ground' ? { ...it, unitType: resolveGroundRequisition(it.typeTag, era)?.type } : it));
+}
+
+// ── Who can call what ─────────────────────────────────────────────────────
+
+/**
+ * Where ground reinforcements can be called to:
+ * - the HQ (the command posts the campaign starts with) can raise anything;
+ * - a forward command post the player builds handles light troops only: infantry, recon and
+ *   special forces, engineers, mortar, anti-tank and MANPAD teams;
+ * - a motor pool (調車場) brings up the vehicles and the guns that need prime movers: tanks,
+ *   APCs and IFVs, self-propelled and towed artillery, rocket launchers, AA vehicles.
+ */
+export type RallyKind = 'hq' | 'forward' | 'motor_pool';
+
+export function rallyKind(inst: Installation): RallyKind {
+  if (inst.type === 'motor_pool') return 'motor_pool';
+  return inst.id.startsWith('inst-built-') ? 'forward' : 'hq';
+}
+
+export const RALLY_LABEL: Record<RallyKind, string> = {
+  hq: 'HQ 指揮所（全部類型）',
+  forward: '前線指揮所（僅輕裝單位）',
+  motor_pool: '調車場（裝甲 / 車輛 / 火砲）',
+};
+
+/** Light units: what walks in or comes up by truck with the infantry. */
+export function isLightGroundUnit(type: GroundUnitType): boolean {
+  const cls = groundSilhouetteClass(type);
+  return cls === 'infantry' || cls === 'mortar' || cls === 'atgm' || cls === 'engineer';
+}
+
+export function canCallFrom(kind: RallyKind, type: GroundUnitType): boolean {
+  if (kind === 'hq') return true;
+  const light = isLightGroundUnit(type);
+  return kind === 'forward' ? light : !light;
 }

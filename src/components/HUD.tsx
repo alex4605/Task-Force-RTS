@@ -29,6 +29,7 @@ import { getRequisitionCatalog } from '../game/requisition';
 import { BattleAlertBanner, RadarCoverage } from '../game/engine';
 import {
   DEFAULT_AFB_FORMATION_COUNTS,
+  defaultFormationCount,
   DEFAULT_CARRIER_FORMATION_COUNTS,
   getAfbModelsForEra,
   getCarrierModelsForEra,
@@ -40,6 +41,7 @@ import { ActiveArmamentTrayState, ArmamentTrayModal } from './hud/ArmamentTrayMo
 import { SelectedUnitsPanel } from './hud/SelectedUnitsPanel';
 import { BUILDER_LABEL, BUILDER_RADIUS, builderRequirement } from '../game/construction';
 import { UnitPreviewCanvas } from './hud/UnitPreviewCanvas';
+import { RALLY_LABEL, canCallFrom, isLightGroundUnit, rallyKind, resolveGroundRequisition } from '../game/groundRequisition';
 import {
   ShieldAlert,
   Plane,
@@ -364,7 +366,7 @@ export const HUD: React.FC<HUDProps> = ({
     const out: Installation[] = [];
     for (const isl of islands) {
       for (const inst of isl.installations) {
-        if ((inst.type === 'battalion_cp' || inst.type === 'command_post') && !inst.isDestroyed && inst.side === 'player') out.push(inst);
+        if ((inst.type === 'battalion_cp' || inst.type === 'command_post' || inst.type === 'motor_pool') && !inst.isDestroyed && inst.side === 'player') out.push(inst);
       }
     }
     return out;
@@ -376,7 +378,7 @@ export const HUD: React.FC<HUDProps> = ({
     }
   }, [selectedAirfacility, playerCps]);
   const activeBattalionCp = React.useMemo(
-    () => playerCps.find((c) => c.id === chosenCpId) ?? playerCps.find((c) => c.type === 'battalion_cp') ?? playerCps[0] ?? null,
+    () => playerCps.find((c) => c.id === chosenCpId) ?? playerCps.find((c) => rallyKind(c) === 'hq') ?? playerCps[0] ?? null,
     [playerCps, chosenCpId]
   );
 
@@ -765,10 +767,10 @@ export const HUD: React.FC<HUDProps> = ({
           <button
             onClick={onOpenDockyard}
             className="flex items-center gap-1.5 px-3 py-1 bg-[#0B1E34] hover:bg-[#153252] border border-[#1E3A5F] rounded text-xs font-mono text-[#FFD54F] transition-colors"
-            title="珍珠港海軍造船廠：艦隊大修、科技研發與時代跨越"
+            title="戰區與時代選擇"
           >
             <Wrench className="w-3.5 h-3.5 text-[#FFD54F]" />
-            <span className="hidden min-[1800px]:inline">艦隊修護改裝</span>
+            <span className="hidden min-[1800px]:inline">戰區與時代</span>
           </button>
 
           {/* Tactical Battle Log Button with count badge */}
@@ -1495,7 +1497,7 @@ export const HUD: React.FC<HUDProps> = ({
                   .map(({ model, label, role, desc }) => {
                     const readyCount = planes[model] || 0;
                     const hasReady = readyCount > 0;
-                    const selectedCount = formationCounts[model] || (role === 'scout' ? 1 : 2);
+                    const selectedCount = formationCounts[model] || (role === 'scout' ? 1 : defaultFormationCount(model, 'carrier'));
                     const effectiveCount = Math.min(selectedCount, readyCount || 1);
                     const currentPayload = resolvePayload(model, modelPayloads[model] || activePayloads[role], era);
                     const payloadData = PAYLOAD_CATALOG[currentPayload] || PAYLOAD_CATALOG.clean_guns;
@@ -1777,7 +1779,7 @@ export const HUD: React.FC<HUDProps> = ({
                   .map(({ id, label, role, desc, isNavy }) => {
                     const mCount = airbaseStock[id] || 0;
                     const hasReady = mCount > 0;
-                    const selectedCount = afbFormationCounts[id] || 2;
+                    const selectedCount = afbFormationCounts[id] || defaultFormationCount(id, 'airbase');
                     const effectiveCount = Math.min(selectedCount, mCount || 1);
                     const currentPayload = resolvePayload(id, afbPayloads[id], era);
                     const payloadData = PAYLOAD_CATALOG[currentPayload] || PAYLOAD_CATALOG.clean_guns;
@@ -2136,7 +2138,7 @@ export const HUD: React.FC<HUDProps> = ({
                       return item.typeTag === 'dockyard' || item.typeTag === 'pontoon_pier' || item.typeTag === 'major_naval_port' || item.typeTag === 'coastal_gun' || item.typeTag === 'm1_240mm';
                     }
                     if (engineerTab === 'fortification') {
-                      return item.typeTag === 'fob' || item.typeTag === 'battalion_cp' || item.typeTag === 'command_post' || item.typeTag === 'radar' || item.typeTag === 'supply_depot' || item.typeTag === 'ammo_depot' || item.typeTag === 'field_hospital' || item.typeTag === 'pow_camp';
+                      return item.typeTag === 'fob' || item.typeTag === 'battalion_cp' || item.typeTag === 'command_post' || item.typeTag === 'radar' || item.typeTag === 'supply_depot' || item.typeTag === 'ammo_depot' || item.typeTag === 'field_hospital' || item.typeTag === 'pow_camp' || item.typeTag === 'motor_pool';
                     }
                     return true;
                   })
@@ -2284,7 +2286,7 @@ export const HUD: React.FC<HUDProps> = ({
               {/* Rally command post for ground reinforcements */}
               {requisitionTab === 'ground' && playerCps.length > 0 && (
                 <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
-                  <span className="text-slate-400">集結指揮所:</span>
+                  <span className="text-slate-400">集結點:</span>
                   {playerCps.map((c) => (
                     <button
                       key={c.id}
@@ -2294,9 +2296,9 @@ export const HUD: React.FC<HUDProps> = ({
                         onMiniMapClick(c.pos);
                       }}
                       className={`px-2 py-0.5 rounded font-bold border ${activeBattalionCp?.id === c.id ? 'bg-emerald-700 text-white border-emerald-300' : 'bg-[#040C16] text-slate-300 border-[#1E3A5F] hover:text-white'}`}
-                      title="地面增援自此指揮所旁集結"
+                      title={RALLY_LABEL[rallyKind(c)]}
                     >
-                      🎖️ {c.name.split(' (')[0]}
+                      {rallyKind(c) === 'motor_pool' ? '🛠️' : rallyKind(c) === 'hq' ? '🏛️ HQ' : '🎖️'} {c.name.split(' (')[0]}
                     </button>
                   ))}
                 </div>
@@ -2305,8 +2307,13 @@ export const HUD: React.FC<HUDProps> = ({
               {/* Items Catalog Cards for Battalion CP Support */}
               <DraggableScrollContainer className="gap-2 pb-1 max-w-full">
                 {currentCatalog.filter((item) => item.category === requisitionTab).map((item) => {
-                  const canAfford = sandboxStamp || affords(stock, itemCost(item));
                   const shortCp = shortfallText(stock, itemCost(item));
+                  // Call tier of the chosen rally point (HQ: all; forward CP: light; motor pool: vehicles)
+                  const groundTarget = requisitionTab === 'ground' ? resolveGroundRequisition(item.typeTag || '', era) : null;
+                  const rally = requisitionTab === 'ground' && activeBattalionCp ? rallyKind(activeBattalionCp) : null;
+                  const tierOk = !groundTarget || !rally || canCallFrom(rally, groundTarget.type);
+                  const tierNeed = groundTarget && isLightGroundUnit(groundTarget.type) ? 'HQ 或前線指揮所' : 'HQ 或調車場';
+                  const canAfford = tierOk && (sandboxStamp || affords(stock, itemCost(item)));
 
                   const previewKind =
                     requisitionTab === 'ships'
@@ -2365,10 +2372,10 @@ export const HUD: React.FC<HUDProps> = ({
                               ? 'bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white border border-emerald-400/80 shadow'
                               : 'bg-slate-900 border border-slate-800 text-slate-500 cursor-not-allowed'
                           }`}
-                          title={canAfford ? `呼叫支援 ${item.name}` : `資源點數不足 (尚缺 ${shortCp})`}
+                          title={!tierOk ? `此集結點無法呼叫：需在${tierNeed}` : canAfford ? `呼叫支援 ${item.name}` : `資源點數不足 (尚缺 ${shortCp})`}
                         >
                           <ShoppingCart className="w-2.5 h-2.5 shrink-0" />
-                          <span className="truncate">{canAfford ? ('呼叫支援') : `缺 ${shortCp}`}</span>
+                          <span className="truncate">{!tierOk ? `需${tierNeed}` : canAfford ? ('呼叫支援') : `缺 ${shortCp}`}</span>
                         </button>
                       </div>
                     </div>

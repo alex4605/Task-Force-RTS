@@ -352,22 +352,35 @@ export function getAfbModelsForEra(era: Era): AfbModelDef[] {
 export const DEFAULT_CARRIER_FORMATION_COUNTS: Partial<Record<AircraftModel, number>> = {
   f4f: 2, sbd: 2, tbd: 2, os2u: 1,
   f6f: 2, f4u: 2, f8f: 2, sb2c: 2, tbf: 2, sc1: 1,
-  f9f: 2, f2h: 2, ad1: 2, f4u4: 2, af_guardian: 2, ad3w: 1, ho3s1: 1,
-  f4b: 2, f4j: 2, f8: 2, a4: 2, a6a: 2, a6b_weasel: 1, e1: 1, s2: 2, uh2: 1, sh2: 2, p3: 1, c1: 1,
+  f9f: 2, f2h: 2, ad1: 2, f4u4: 2, af_guardian: 1, ad3w: 1, ho3s1: 1,
+  f4b: 2, f4j: 2, f8: 2, a4: 2, a6a: 2, a6b_weasel: 1, e1: 1, s2: 1, uh2: 1, sh2: 1, p3: 1, c1: 1,
   b52: 2, f4e: 2, f105: 2, a7: 2, ov10: 2, uh1: 2, ah1: 2,
   // Era 5 defaults
-  f14a: 2, fa18a: 2, a6e: 2, ea6b: 1, av8b: 2, s3a: 2, e2c: 1, sh3f: 2, ch53: 1, c2a: 1,
+  f14a: 2, fa18a: 2, a6e: 2, ea6b: 1, av8b: 2, s3a: 1, e2c: 1, sh3f: 1, ch53: 1, c2a: 1,
   a10a: 2, f15a: 2, f16a: 2, ah64a: 2, ah1w: 2, e3a: 1, f111: 2,
 };
 
 export const DEFAULT_AFB_FORMATION_COUNTS: Partial<Record<string, number>> = {
   b17: 2, b24: 2, b29: 2, p40: 2, p38: 2, p51: 2, p47: 2, f86: 2, a20: 2, a26: 2,
-  f4f: 2, f6f: 2, f4u: 2, f9f: 2, f2h: 2, ad1: 2, f4u4: 2, af_guardian: 2,
+  f4f: 2, f6f: 2, f4u: 2, f9f: 2, f2h: 2, ad1: 2, f4u4: 2, af_guardian: 1,
   c47: 1, c1: 1, c2a: 1, c130: 1, ch53: 1, uh1: 2,
   // Era 5 defaults
   a10a: 2, ah64a: 2, ah1w: 2, f15a: 2, f16a: 2, e3a: 1, f111: 2, b52: 2,
-  f14a: 2, fa18a: 2, a6e: 2, ea6b: 1, av8b: 2, s3a: 2, e2c: 1, sh3f: 2,
+  f14a: 2, fa18a: 2, a6e: 2, ea6b: 1, av8b: 2, s3a: 1, e2c: 1, sh3f: 1,
 };
+
+/** Airborne early warning and ASW aircraft work alone: they are sent out one at a time by default. */
+const SINGLE_SHIP_TYPES = new Set<string>([
+  'ad3w', 'e1', 'e2c', 'e3a', 'a50', // AEW
+  'af_guardian', 's2', 's3a', 'p3', 'pby', 'il38', 'be12', 'firefly_as5', 'sh2', 'sh3f', 'sh60b', 'lynx', 'ka27', 'os2u', 'sc1', // ASW / scouting
+]);
+
+/** Default number of aircraft per sortie for a type in the dispatch menus. */
+export function defaultFormationCount(model: string, origin: 'carrier' | 'airbase'): number {
+  if (SINGLE_SHIP_TYPES.has(model)) return 1;
+  const table = origin === 'carrier' ? DEFAULT_CARRIER_FORMATION_COUNTS : DEFAULT_AFB_FORMATION_COUNTS;
+  return (table as Record<string, number | undefined>)[model] ?? 2;
+}
 
 export type LaunchOrigin = 'carrier' | 'airbase';
 

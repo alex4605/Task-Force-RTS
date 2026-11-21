@@ -1,5 +1,6 @@
 // Per-type installation artwork. Each drawer runs with the canvas translated to the installation's position.
 import { Era, Installation, InstallationType, Island } from '../../../types/game';
+import { drawAmmoDepotSite, drawBattalionCpSite, drawCommandPostSite, drawFieldHospitalSite, drawMotorPoolSite, drawSupplyDepotSite } from './support';
 import { RenderContext } from '../context';
 import { drawGroundSilhouette, GROUND_SILHOUETTE_SCALE, groundSilhouetteClass } from '../../unitPreviewRenderer';
 import { InstallationStyle } from './style';
@@ -169,52 +170,6 @@ function drawRadarStation(rc: RenderContext, _inst: Installation, style: Install
   ctx.fillText(isPlayer ? '[友軍早期電探哨] SCR-270' : '[敵軍防空電探哨] 二一號', 0, -22);
 }
 
-function drawAmmoDepot(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-  const { isPlayer, color, labelColor } = style;
-
-  // Ammunition storage area: earth-covered igloo magazines in staggered rows (spaced against
-  // sympathetic detonation), a perimeter fence, access road and above-ground fuel tanks.
-  ctx.strokeStyle = 'rgba(176, 190, 197, 0.55)';
-  ctx.lineWidth = 0.8;
-  ctx.setLineDash([2, 1.5]);
-  ctx.strokeRect(-20, -14, 40, 30);
-  ctx.setLineDash([]);
-  // Access road
-  ctx.strokeStyle = 'rgba(176, 164, 140, 0.6)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(-20, 1);
-  ctx.lineTo(20, 1);
-  ctx.stroke();
-  // Igloos: earth mound with a concrete headwall facing the road
-  for (const [x, y, face] of [[-13, -7, 1], [0, -7, 1], [13, -7, 1], [-7, 9, -1], [7, 9, -1]] as const) {
-    ctx.fillStyle = 'rgba(85, 107, 47, 0.95)';
-    ctx.strokeStyle = 'rgba(30, 40, 20, 0.9)';
-    ctx.lineWidth = 0.8;
-    ctx.beginPath();
-    ctx.ellipse(x, y, 4.5, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = '#B0BEC5';
-    ctx.fillRect(x - 2.5, y + face * 3.2 - 0.6, 5, 1.2);
-  }
-  // Fuel storage tanks
-  ctx.fillStyle = isPlayer ? '#546E7A' : '#5D4037';
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 0.9;
-  for (const x of [-16, 16]) {
-    ctx.beginPath();
-    ctx.arc(x, 10, 3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  }
-
-  ctx.fillStyle = labelColor;
-  ctx.font = 'bold 8.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(isPlayer ? '[友軍戰略油彈庫]' : '[敵軍戰略彈藥庫]', 0, -23);
-}
 
 function drawInfantrySquad(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
   const ctx = rc.ctx;
@@ -525,60 +480,6 @@ function drawShipRepairDock(rc: RenderContext, _inst: Installation, _style: Inst
   ctx.fillText('⚓ [NATO 友軍船塢 REPAIR] 應急損管修船廠', 0, -38);
 }
 
-function drawCommandPost(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-  const { isPlayer, frameFill, frameStroke, labelColor } = style;
-
-  // ════ NATO 指揮所司令部 (APP-6 Command Post: Headquarters Flag + Fortified Bunker) ════
-  // 1. NATO APP-6 Headquarters Frame (友軍藍 / 敵軍紅 + 左側旗桿 Flagpole)
-  ctx.fillStyle = frameFill;
-  ctx.strokeStyle = frameStroke;
-  ctx.lineWidth = 2.2;
-  ctx.strokeRect(-16, -32, 32, 18);
-  ctx.fillRect(-16, -32, 32, 18);
-
-  // 左側指揮所旗桿延伸線 (Headquarters Staff/Flagpole)
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(-16, -32);
-  ctx.lineTo(-16, -42);
-  ctx.stroke();
-
-  // "CP" 字樣標示
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = 'bold 10px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('CP', 0, -20);
-
-  // 2. 地面物理建築: 重裝甲鋼筋混泥土司令掩體 + 旋轉無線電雷達天線
-  ctx.fillStyle = isPlayer ? 'rgba(21, 101, 192, 0.45)' : '#263238';
-  ctx.strokeStyle = isPlayer ? '#81C784' : '#90A4AE';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(-18, -4, 36, 26);
-  ctx.fillRect(-18, -4, 36, 26);
-
-  // 司令部防爆觀察窗狹縫
-  ctx.fillStyle = '#FFD54F';
-  ctx.fillRect(-12, 4, 24, 4);
-
-  // 通訊雷達天線桿
-  const antRot = rc.time * 2.5;
-  ctx.strokeStyle = '#80DEEA';
-  ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  ctx.moveTo(0, -4);
-  ctx.lineTo(0, -18);
-  ctx.moveTo(-7 * Math.cos(antRot), -18 - 7 * Math.sin(antRot));
-  ctx.lineTo(7 * Math.cos(antRot), -18 + 7 * Math.sin(antRot));
-  ctx.stroke();
-
-  // 標籤
-  ctx.fillStyle = labelColor;
-  ctx.font = 'bold 9.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(isPlayer ? '🚩 [NATO 友軍指揮所 CP] 後勤要塞' : '🚩 [NATO 指揮所 CP] 核心樞紐', 0, -46);
-}
 
 function drawHiddenTunnel(rc: RenderContext, _inst: Installation, _style: InstallationStyle, _island?: Island): void {
   const ctx = rc.ctx;
@@ -691,27 +592,6 @@ function drawMajorNavalPort(rc: RenderContext, _inst: Installation, _style: Inst
   ctx.fillText('⚓【正規深水軍港】全島戰略樞紐 (+1.5 RP/s)', 0, -32);
 }
 
-function drawSupplyDepot(rc: RenderContext, _inst: Installation, _style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-
-  // ════ 戰地輜重補給樞紐 (Supply Depot) ════
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = '#FFA726';
-  ctx.fillStyle = 'rgba(230, 81, 0, 0.45)';
-  ctx.strokeRect(-22, -12, 44, 24);
-  ctx.fillRect(-22, -12, 44, 24);
-
-  // 彈藥箱堆疊符號
-  ctx.strokeStyle = '#FFE082';
-  ctx.lineWidth = 1.4;
-  ctx.strokeRect(-16, -6, 12, 12);
-  ctx.strokeRect(4, -6, 12, 12);
-
-  ctx.fillStyle = '#FFE082';
-  ctx.font = 'bold 9px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('📦 [戰地輜重樞紐] 建制度修整 +2.0%/s', 0, -20);
-}
 
 function drawPowCamp(rc: RenderContext, inst: Installation, style: InstallationStyle, _island?: Island): void {
   const ctx = rc.ctx;
@@ -752,26 +632,6 @@ function drawPowCamp(rc: RenderContext, inst: Installation, style: InstallationS
   ctx.fillText(style.isPlayer ? `⛓ [戰俘營] 收押 ${n}/80${wait}` : `⛓ [敵戰俘營] 我方被俘 ${n}/80${wait} · 禁止射擊`, 0, -28);
 }
 
-function drawFieldHospital(rc: RenderContext, _inst: Installation, _style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-
-  // ════ 戰地野戰醫院 (Field Hospital) ════
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = '#EF5350';
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-  ctx.strokeRect(-20, -12, 40, 24);
-  ctx.fillRect(-20, -12, 40, 24);
-
-  // 紅十字 Red Cross
-  ctx.fillStyle = '#D32F2F';
-  ctx.fillRect(-3, -8, 6, 16);
-  ctx.fillRect(-8, -3, 16, 6);
-
-  ctx.fillStyle = '#EF5350';
-  ctx.font = 'bold 9px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('🏥 [戰地野戰醫院] 組織度穩定 +2.5%/s', 0, -20);
-}
 
 function drawCity(rc: RenderContext, inst: Installation, _style: InstallationStyle, _island?: Island): void {
   const ctx = rc.ctx;
@@ -1816,59 +1676,6 @@ function drawSa3Site(rc: RenderContext, _inst: Installation, _style: Installatio
 }
 
 // ════ Battalion command post: sandbagged command bunker, GP tents, radio mast and unit flag ════
-function drawBattalionCp(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-  const { color, labelColor } = style;
-  // Sandbag berm around the bunker
-  ctx.strokeStyle = '#A1887F';
-  ctx.lineWidth = 2.6;
-  ctx.setLineDash([2.4, 1.2]);
-  ctx.beginPath();
-  ctx.roundRect(-11, -8, 22, 16, 4);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  // Bunker roof (timber + earth) with entrance
-  ctx.fillStyle = '#3E4A3D';
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.2;
-  ctx.fillRect(-7, -5, 14, 10);
-  ctx.strokeRect(-7, -5, 14, 10);
-  ctx.fillStyle = '#1B1B1B';
-  ctx.fillRect(6, -1.5, 2.5, 3);
-  // Two GP medium tents
-  ctx.fillStyle = '#556B2F';
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
-  for (const [tx, ty] of [[-16, -12], [12, 10]]) {
-    ctx.fillRect(tx - 4, ty - 3, 8, 6);
-    ctx.beginPath();
-    ctx.moveTo(tx - 4, ty);
-    ctx.lineTo(tx + 4, ty);
-    ctx.stroke();
-  }
-  // Radio antenna mast with guy wires
-  ctx.strokeStyle = '#CFD8DC';
-  ctx.lineWidth = 0.8;
-  ctx.beginPath();
-  ctx.moveTo(-3, -5);
-  ctx.lineTo(-3, -18);
-  ctx.moveTo(-3, -18);
-  ctx.lineTo(-8, -10);
-  ctx.moveTo(-3, -18);
-  ctx.lineTo(2, -10);
-  ctx.stroke();
-  // Unit flag
-  ctx.fillStyle = color;
-  ctx.fillRect(3, -14, 6, 4);
-  ctx.strokeStyle = '#ECEFF1';
-  ctx.beginPath();
-  ctx.moveTo(3, -14);
-  ctx.lineTo(3, -5);
-  ctx.stroke();
-  ctx.fillStyle = labelColor;
-  ctx.font = 'bold 8.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('🎖️ [營指揮所 Battalion CP]', 0, -24);
-}
 
 // ════ Forward operating base: HESCO barrier perimeter, helipad, tent rows and parked vehicles ════
 function drawForwardFob(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
@@ -1927,7 +1734,7 @@ export const INSTALLATION_DRAWERS: Record<InstallationType, InstallationDrawer> 
   airfield: drawAirfield,
   coastal_gun: drawCoastalGun,
   radar_station: drawRadarStation,
-  ammo_depot: drawAmmoDepot,
+  ammo_depot: drawAmmoDepotSite,
   infantry_squad: drawInfantrySquad,
   infantry_platoon: drawInfantryPlatoon,
   tank_platoon: drawTankPlatoon,
@@ -1935,12 +1742,13 @@ export const INSTALLATION_DRAWERS: Record<InstallationType, InstallationDrawer> 
   towed_artillery: drawTowedArtillery,
   flak_battery: drawFlakBattery,
   ship_repair_dock: drawShipRepairDock,
-  command_post: drawCommandPost,
+  command_post: drawCommandPostSite,
   hidden_tunnel: drawHiddenTunnel,
   pontoon_pier: drawPontoonPier,
   major_naval_port: drawMajorNavalPort,
-  supply_depot: drawSupplyDepot,
-  field_hospital: drawFieldHospital,
+  supply_depot: drawSupplyDepotSite,
+  field_hospital: drawFieldHospitalSite,
+  motor_pool: drawMotorPoolSite,
   pow_camp: drawPowCamp,
   city: drawCity,
   town: drawTown,
@@ -1951,7 +1759,7 @@ export const INSTALLATION_DRAWERS: Record<InstallationType, InstallationDrawer> 
   sam_patriot: drawSamHawk,
   sa2_sam_site: drawSa2Site,
   sa3_sam_site: drawSa3Site,
-  battalion_cp: drawBattalionCp,
+  battalion_cp: drawBattalionCpSite,
   forward_fob: drawForwardFob,
   s300_sam_site: drawSa2SamSite,
   coastal_harpoon: drawCoastalHarpoon,

@@ -10,7 +10,6 @@ import { DockyardModal } from './components/DockyardModal';
 import { BattleLogModal } from './components/BattleLogModal';
 import { GameOverModal } from './components/GameOverModal';
 import {
-  FleetUpgrades,
   Ship,
   Aircraft,
   AircraftModel,
@@ -128,16 +127,6 @@ export default function App() {
   const handleCancelSonobuoy = () => {
     setIsDesignatingSonobuoy(false);
   };
-
-  // Upgrades
-  const [upgrades, setUpgrades] = useState<FleetUpgrades>({
-    hullArmorLevel: 1,
-    aaFirepowerLevel: 1,
-    radarRangeLevel: 1,
-    carrierCapacityLevel: 1,
-    artilleryDamageLevel: 1,
-    depthChargeSonarLevel: 1,
-  });
 
   const lastIslandsVer = useRef<number>(-1);
   const lastCombatLogsVer = useRef<number>(-1);
@@ -300,40 +289,6 @@ export default function App() {
     setIsPaused(false);
   };
 
-  // Upgrades & Repairs
-  const handleSpendStars = (amount: number): boolean => {
-    if (engine.score.stars >= amount) {
-      engine.score.stars -= amount;
-      setScore({ ...engine.score });
-      return true;
-    }
-    return false;
-  };
-
-  const handleRepairShips = () => {
-    for (const ship of engine.playerShips) {
-      ship.health = ship.maxHealth;
-      ship.isSunk = false;
-      if (ship.carrierPlanes) {
-        for (const k in ship.carrierPlanes.ready) {
-          ship.carrierPlanes.ready[k] = ship.carrierPlanes.maxPerType[k] || 6;
-        }
-      }
-    }
-    setPlayerShips([...engine.playerShips]);
-  };
-
-  const handleApplyUpgrade = (type: keyof FleetUpgrades) => {
-    const val = upgrades[type];
-    const next: FleetUpgrades = {
-      ...upgrades,
-      [type]: typeof val === 'number' ? val + 1 : true,
-    };
-    setUpgrades(next);
-    engine.applyFleetUpgrades(next);
-    setPlayerShips([...engine.playerShips]);
-  };
-
   const handleNextSector = () => {
     const nextSector = sectorNumber + 1;
     setSectorNumber(nextSector);
@@ -345,16 +300,6 @@ export default function App() {
   };
 
   const handleRestart = () => {
-    const baseUpgrades: FleetUpgrades = {
-      hullArmorLevel: 1,
-      aaFirepowerLevel: 1,
-      radarRangeLevel: 1,
-      carrierCapacityLevel: 1,
-      artilleryDamageLevel: 1,
-      depthChargeSonarLevel: 1,
-    };
-    setUpgrades(baseUpgrades);
-    engine.applyFleetUpgrades(baseUpgrades);
     setSectorNumber(1);
     engine.score = {
       enemyShipsSunk: 0,
@@ -661,12 +606,6 @@ export default function App() {
       <DockyardModal
         isOpen={isDockyardOpen}
         onClose={() => setIsDockyardOpen(false)}
-        stars={score.stars}
-        onSpendStars={handleSpendStars}
-        playerShips={playerShips}
-        onRepairShips={handleRepairShips}
-        upgrades={upgrades}
-        onUpgrade={handleApplyUpgrade}
         era={era}
         onSetEra={handleSetEra}
         canAdvance={engine.isVictory}

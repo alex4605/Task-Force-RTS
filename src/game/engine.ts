@@ -1,6 +1,6 @@
 import { ImpactEffect, ImpactSurface, impactFor, MAX_IMPACTS } from './impacts';
 import { snapOntoLand } from './coastline';
-import { resolveGroundRequisition } from './groundRequisition';
+import { canCallFrom, isLightGroundUnit, rallyKind, resolveGroundRequisition } from './groundRequisition';
 import { AlliedHost, AlliedOps } from './allied/alliedOps';
 import { fitsInHold, formatHold, holdUsed, shipHold } from './naval/lift';
 import { rollBailout, shipRaftGroups } from './aircrew';
@@ -169,7 +169,10 @@ const FULL_LOAD_TONS: Partial<Record<string, number>> = {
 };
 
 /** Defensive positions that keep firing for whoever holds them. */
-const FIELD_WORK_TYPES = new Set<string>(['bunker_nest', 'infantry_squad', 'tank_platoon', 'tank_battalion']);
+const FIELD_WORK_TYPES = new Set<string>(['bunker_nest', 'infantry_squad', 'infantry_platoon', 'tank_platoon', 'tank_battalion', 'command_post', 'battalion_cp']);
+
+/** Small craft a machine gun or a tank gun can usefully engage (landing craft, patrol and river boats). */
+const SMALL_CRAFT_TYPES = new Set<string>(['lcvp', 'lcm8', 'lcac', 'lsm_r', 'lst', 'patrol_boat', 'pbr', 'river_gunboat', 'komar_ptg', 'osa']);
 
 export class GameEngine {
   public sectorNumber: number = 1;
@@ -962,13 +965,6 @@ export class GameEngine {
 
   public setRolePayload(role: AircraftRole, payload: AircraftPayloadType) {
     this.activePayloads[role] = payload;
-  }
-
-  public applyFleetUpgrades(upgrades: FleetUpgrades) {
-    this.fleetUpgrades = { ...upgrades };
-    for (const ship of this.playerShips) {
-      this.applyUpgradesToShip(ship);
-    }
   }
 
   private applyUpgradesToShip(ship: Ship) {
@@ -8706,21 +8702,27 @@ export class GameEngine {
 
         if (inst.side !== 'enemy') {
           // 友軍島上固定式重砲 (M1 240mm / 203mm / 155mm 岸防砲) 與野戰砲兵連主動迎敵砲擊
-          if (inst.type === 'coastal_gun' || inst.type === 'towed_artillery') {
+          if (inst.type === 'coastal_gun' || inst.type === 'towed_artillery' || (inst.type === 'forward_fob' && inst.range > 0)) {
             const hasAmmoDepot = island.installations.some(
               (other) => !other.isDestroyed && other.side === inst.side && other.type === 'ammo_depot'
             );
             const reloadMod = hasAmmoDepot ? 0.75 : 1.0;
 
-            const shipTarget = this.enemyShips
-              .filter((s) => !s.isSunk && this.isHostile(inst.side, s.side) && (!this.isSubmarine(s) || Boolean(s.isSpotted)) && dist(inst.pos, s.pos) <= this.coastalReach(inst.pos, inst.range))
-              .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
+            // Coastal guns are laid on the sea approaches; field batteries (and an FOB's guns) support
+            // the troops and only turn on ships when no enemy troops are in reach
+            const fieldGuns = inst.type !== 'coastal_gun';
+            const findGroundTarget = () =>
+              this.groundUnits
+                .filter((u) => !u.isDestroyed && !u.embarkedInShipId && this.isHostile(inst.side, u.side) && this.canSpotGround(inst.pos, u) && this.canEngageGroundAt(inst.pos, inst.range, u.pos, fieldGuns))
+                .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
+            const earlyGround = fieldGuns ? findGroundTarget() : undefined;
+            const shipTarget = earlyGround
+              ? undefined
+              : this.enemyShips
+                  .filter((s) => !s.isSunk && this.isHostile(inst.side, s.side) && (!this.isSubmarine(s) || Boolean(s.isSpotted)) && dist(inst.pos, s.pos) <= this.coastalReach(inst.pos, inst.range))
+                  .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
 
-            const groundTarget = !shipTarget
-              ? this.groundUnits
-                  .filter((u) => !u.isDestroyed && !u.embarkedInShipId && this.isHostile(inst.side, u.side) && this.canSpotGround(inst.pos, u) && this.canEngageGroundAt(inst.pos, inst.range, u.pos, inst.type === 'towed_artillery'))
-                  .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0]
-              : undefined;
+            const groundTarget = earlyGround ?? (!shipTarget ? findGroundTarget() : undefined);
 
             const instTarget =
               !shipTarget && !groundTarget && inst.type === 'coastal_gun'
@@ -8785,19 +8787,35 @@ export class GameEngine {
         // ══════════════════════════════════════════════════════════
 
         // 尋找射程內我方或盟軍水面艦艇、搶灘登陸部隊 (ASuW 專用目標)
-        const shipTarget = (inst.side === 'enemy' ? [...this.playerShips, ...this.alliedShips] : this.enemyShips)
-          .filter(
-            (s) =>
-              !s.isSunk &&
-              this.isHostile(inst.side, s.side) &&
-              (!this.isSubmarine(s) || Boolean(inst.side === 'enemy' ? s.isSpottedByEnemy : s.isSpotted)) &&
-              dist(inst.pos, s.pos) <= this.coastalReach(inst.pos, inst.range)
-          )
-          .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
-        const groundTarget = !shipTarget
-          ? this.groundUnits.find((u) => this.isHostile(inst.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && this.canSpotGround(inst.pos, u) && this.canEngageGroundAt(inst.pos, inst.range, u.pos, inst.type === 'towed_artillery'))
-          : null;
-        const targetPos = shipTarget ? shipTarget.pos : groundTarget ? groundTarget.pos : null;
+        // What each work engages, in order: coastal guns go for ships; field guns, tanks and machine
+        // guns for the troops in front of them first, and of ships only what their weapons can hurt
+        // (machine guns and tank guns: landing craft and small boats, not a cruiser off the coast).
+        const smallArms = inst.type === 'infantry_squad' || inst.type === 'infantry_platoon' || inst.type === 'command_post' || inst.type === 'battalion_cp' || inst.type === 'bunker_nest' || inst.type === 'tank_platoon' || inst.type === 'tank_battalion';
+        // A headquarters' guard platoon covers its own perimeter, not the whole valley
+        const reach = inst.type === 'command_post' || inst.type === 'battalion_cp' ? Math.min(inst.range || 600, 650) : inst.range;
+        const findShip = () =>
+          (inst.side === 'enemy' ? [...this.playerShips, ...this.alliedShips] : this.enemyShips)
+            .filter(
+              (s) =>
+                !s.isSunk &&
+                this.isHostile(inst.side, s.side) &&
+                (!smallArms || SMALL_CRAFT_TYPES.has(s.type)) &&
+                (!this.isSubmarine(s) || (!smallArms && Boolean(inst.side === 'enemy' ? s.isSpottedByEnemy : s.isSpotted))) &&
+                dist(inst.pos, s.pos) <= this.coastalReach(inst.pos, reach)
+            )
+            .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
+        const findGround = () =>
+          this.groundUnits.find((u) => this.isHostile(inst.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && this.canSpotGround(inst.pos, u) && this.canEngageGroundAt(inst.pos, reach, u.pos, inst.type === 'towed_artillery'));
+        let shipTarget: Ship | undefined;
+        let groundTarget: GroundUnit | undefined | null;
+        if (inst.type === 'coastal_gun') {
+          shipTarget = findShip();
+          groundTarget = shipTarget ? null : findGround();
+        } else {
+          groundTarget = findGround();
+          shipTarget = groundTarget ? undefined : findShip();
+        }
+        const targetPos = groundTarget ? groundTarget.pos : shipTarget ? shipTarget.pos : null;
 
         if (inst.type === 'coastal_gun') {
           // 203mm 岸防重砲 (ASuW Only)：砲擊近海美軍及盟軍巡洋艦/航母/登陸艦
@@ -8828,7 +8846,7 @@ export class GameEngine {
               inst.cooldown = inst.reloadTime;
             }
           }
-        } else if (inst.type === 'infantry_squad' || inst.type === 'command_post') {
+        } else if (inst.type === 'infantry_squad' || inst.type === 'infantry_platoon' || inst.type === 'command_post' || inst.type === 'battalion_cp') {
           // 步兵班 / 指揮所衛隊 (ASuW Only)：九二式重機槍點射搶灘舟艇或上陸步兵
           if (targetPos) {
             inst.angle = Math.atan2(targetPos.y - inst.pos.y, targetPos.x - inst.pos.x);
@@ -11196,6 +11214,18 @@ export class GameEngine {
         armor: 0.4,
         angle: instAngle,
       }));
+    } else if (item.typeTag === 'motor_pool') {
+      targetIsland.installations.push(makeInstallation({
+        id: instId,
+        type: 'motor_pool',
+        name: `前進調車場 (${targetIsland.name.split(' (')[0]})`,
+        weaponDesc: '車輛集結整備場 · 戰車 / 裝甲車 / 火砲增援在此集結',
+        side: 'player',
+        pos: instPos,
+        health: 1800,
+        armor: 0.3,
+        angle: instAngle,
+      }));
     } else if (item.typeTag === 'pow_camp') {
       targetIsland.installations.push(makeInstallation({
         id: instId,
@@ -11381,6 +11411,19 @@ export class GameEngine {
         if (!activeBattalionCp || (targetIslandId && isl.id === targetIslandId)) {
           activeBattalionCp = found;
         }
+      }
+    }
+
+    // Call tiers: the HQ raises anything, a forward CP light troops, a motor pool vehicles and guns
+    if (customPos) {
+      const rally = this.islands
+        .flatMap((isl) => isl.installations)
+        .find((i) => !i.isDestroyed && i.side === 'player' && (i.type === 'battalion_cp' || i.type === 'command_post' || i.type === 'motor_pool') && dist(i.pos, customPos) < 60);
+      const target = resolveGroundRequisition(item.typeTag || '', this.era);
+      if (rally && target && !canCallFrom(rallyKind(rally), target.type)) {
+        const need = isLightGroundUnit(target.type) ? 'HQ 或前線指揮所' : 'HQ 或調車場';
+        this.addBannerAlert(`⚠️【無法在此集結】「${item.name}」需在${need}呼叫`, 'player', 'alert', 4.5);
+        return false;
       }
     }
 
@@ -12014,6 +12057,7 @@ export class GameEngine {
     this.updateLandMissileSites(dt);
 
     this.updateMobileAirDefenseUnits();
+    this.updateManpads();
 
     // 7. 大陸戰線前線據點動態爭奪與佔領
     this.updateMainlandInstallationCapture(dt);
@@ -12026,6 +12070,74 @@ export class GameEngine {
         this.checkOpforNuclearRetaliation();
       }
     }
+  }
+
+  /**
+   * Shoulder-launched SAM teams of either side: a two-man team engages a low-flying hostile
+   * aircraft inside its reach with one heat-seeking missile, then takes a while to reload.
+   * First-generation tail-chasers (Redeye, SA-7) need the target going away from them.
+   */
+  private updateManpads(): void {
+    const SPEC: Partial<Record<GroundUnitType, { label: string; damage: number; allAspect: boolean }>> = {
+      us_redeye_team: { label: 'FIM-43 紅眼', damage: 420, allAspect: false },
+      us_stinger_team: { label: 'FIM-92 刺針', damage: 480, allAspect: true },
+      opfor_sa7_strela: { label: '9K32 箭-2 (SA-7)', damage: 380, allAspect: false },
+      opfor_igla_team: { label: '9K310 針-1 (SA-16)', damage: 460, allAspect: true },
+    };
+    for (const u of this.groundUnits) {
+      const spec = SPEC[u.type];
+      if (!spec || u.isDestroyed || u.embarkedInShipId || u.cooldown > 0) continue;
+      const reach = u.range || 1500;
+      const target = this.aircraft.find((a) => {
+        if (!this.isHostile(u.side, a.side) || a.state === 'shot_down' || a.altitude > 0.9) return false;
+        if (dist(u.pos, a.pos) > reach || !this.aaCanSee(u.pos, a)) return false;
+        if (spec.allAspect) return true;
+        // Tail-chase only: the aircraft must be flying away from the team
+        const away = Math.atan2(a.pos.y - u.pos.y, a.pos.x - u.pos.x);
+        return Math.cos(a.heading - away) > 0.2;
+      });
+      if (!target) continue;
+      this.fireManpad(u, target, spec.label, spec.damage);
+      u.cooldown = u.reloadTime || 9;
+    }
+  }
+
+  private fireManpad(unit: GroundUnit, target: Aircraft, label: string, damage: number): void {
+    soundEngine.playRocketWhoosh();
+    const angle = Math.atan2(target.pos.y - unit.pos.y, target.pos.x - unit.pos.x);
+    const speed = MISSILE_SPEED.chaparral;
+    const d = dist(unit.pos, target.pos);
+    this.projectiles.push({
+      id: `manpad-${unit.id}-${Date.now()}-${Math.random()}`,
+      type: 'missile_sam',
+      side: unit.side,
+      pos: { ...unit.pos },
+      vel: { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
+      originPos: { ...unit.pos },
+      targetPos: { ...target.pos },
+      flightProgress: 0,
+      maxDistance: d + 350,
+      distanceTraveled: 0,
+      damage,
+      blastRadius: 18,
+      speed,
+      heading: angle,
+      isDead: false,
+      trail: [],
+      targetEntityId: target.id,
+      targetEntityType: 'aircraft',
+      guidanceType: 'infrared',
+      turnRate: 5.2,
+      attackerName: `${unit.name} (${label})`,
+    });
+    this.addCombatLog({
+      category: 'aa',
+      sourceSide: unit.side === 'enemy' ? 'enemy' : 'player',
+      sourceName: unit.name,
+      targetName: target.name,
+      actionType: 'recon_spotted',
+      text: `🚀【肩射防空飛彈】「${unit.name}」以 ${label} 鎖定低空的「${target.name.split(' ')[0]}」發射！`,
+    });
   }
 
   // 6f. 友軍與敵軍地面裝甲自走防空車自動防空攔截 (LAV-AD / M163 VADS / 通古斯卡 2S6 / 箭-10)
@@ -16265,9 +16377,9 @@ export class GameEngine {
 
     // One more element from the era's wider order of battle
     const extraPool: [GroundUnitType, string][] = isEra5
-      ? [['opfor_t64b', '蘇軍第20近衛集團軍 T-64B 戰車排'], ['opfor_btr70', '蘇軍摩步 BTR-70 裝甲運兵排'], ['opfor_bmd1', '蘇軍第103近衛空降師 BMD-1 傘兵戰車排'], ['opfor_spetsnaz_83', 'GRU 特種偵察排 (Spetsnaz)']]
+      ? [['opfor_t64b', '蘇軍第20近衛集團軍 T-64B 戰車排'], ['opfor_btr70', '蘇軍摩步 BTR-70 裝甲運兵排'], ['opfor_bmd1', '蘇軍第103近衛空降師 BMD-1 傘兵戰車排'], ['opfor_spetsnaz_83', 'GRU 特種偵察排 (Spetsnaz)'], ['opfor_igla_team', '蘇軍摩步營 9K310 針-1 (SA-16) 防空小組']]
       : isEra4
-      ? [['opfor_vc_guerrilla_65', '越共第9師 地方游擊隊'], ['opfor_rpg_team_65', 'PAVN B-40/B-41 火箭筒組'], ['opfor_dshk_aa', 'PAVN DShK 12.7mm 防空機槍組']]
+      ? [['opfor_vc_guerrilla_65', '越共第9師 地方游擊隊'], ['opfor_rpg_team_65', 'PAVN B-40/B-41 火箭筒組'], ['opfor_dshk_aa', 'PAVN DShK 12.7mm 防空機槍組'], ['opfor_sa7_strela', 'PAVN 9K32 箭-2 (SA-7) 肩射防空小組']]
       : [['opfor_pva_infantry_50', '中國人民志願軍第39軍 步兵排'], ['opfor_su76m', 'KPA SU-76M 自走突擊砲排'], ['opfor_zis3_76', 'KPA ZiS-3 76mm 加農砲連']];
     const [extraType, extraName] = extraPool[Math.floor(Math.random() * extraPool.length)];
     waveUnits.push(

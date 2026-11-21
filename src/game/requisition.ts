@@ -682,6 +682,18 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
         typeTag: 'pow_camp',
         requiresIsland: true,
       },
+      {
+        id: 'req-fac-motor-pool',
+        category: 'installations',
+        name: '調車場 (Motor Pool)',
+        cost: 220,
+        era: 'era5',
+        badge: '裝甲 / 車輛 / 火砲增援集結點',
+        desc: '工兵整平的車輛集結與整備場，有加油、維修與裝卸設備。戰車、裝甲車、自走砲、牽引火砲與防空車輛的增援只能在 HQ 或調車場集結。',
+        statsDesc: '呼叫裝甲與車輛增援 | 需工兵在場構工',
+        typeTag: 'motor_pool',
+        requiresIsland: true,
+      },
     ];
   }
 
@@ -1167,6 +1179,18 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
         desc: '以鐵絲網圍起的收容營區，收押俘獲的敵方飛行員與艦員（每座 80 人），審訊所得持續轉為研究點數 RP。',
         statsDesc: '容量 80 人 | 每名戰俘 +0.03 RP/s | 需步兵在場構工',
         typeTag: 'pow_camp',
+        requiresIsland: true,
+      },
+      {
+        id: 'req-fac-motor-pool',
+        category: 'installations',
+        name: '調車場 (Motor Pool)',
+        cost: 220,
+        era: 'era4',
+        badge: '裝甲 / 車輛 / 火砲增援集結點',
+        desc: '工兵整平的車輛集結與整備場，有加油、維修與裝卸設備。戰車、裝甲車、自走砲、牽引火砲與防空車輛的增援只能在 HQ 或調車場集結。',
+        statsDesc: '呼叫裝甲與車輛增援 | 需工兵在場構工',
+        typeTag: 'motor_pool',
         requiresIsland: true,
       },
     ];
@@ -1915,6 +1939,18 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       desc: '以鐵絲網圍起的收容營區，收押俘獲的敵方飛行員與艦員（每座 80 人），審訊所得持續轉為研究點數 RP。',
       statsDesc: '容量 80 人 | 每名戰俘 +0.03 RP/s | 需步兵在場構工',
       typeTag: 'pow_camp',
+      requiresIsland: true,
+    },
+    {
+      id: 'req-fac-motor-pool',
+      category: 'installations',
+      name: '調車場 (Motor Pool)',
+      cost: 220,
+      era: era,
+      badge: '裝甲 / 車輛 / 火砲增援集結點',
+      desc: '工兵整平的車輛集結與整備場，有加油、維修與裝卸設備。戰車、裝甲車、自走砲、牽引火砲與防空車輛的增援只能在 HQ 或調車場集結。',
+      statsDesc: '呼叫裝甲與車輛增援 | 需工兵在場構工',
+      typeTag: 'motor_pool',
       requiresIsland: true,
     },
     {

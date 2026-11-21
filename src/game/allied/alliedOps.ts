@@ -161,6 +161,7 @@ const BASE_ROSTER: Partial<Record<Era, { base: string; forward: string; units: C
       { type: 'uk_sas_83', name: '英國第22特種空勤團 D中隊 巡邏隊', minTier: 1 },
       { type: 'nl_leopard1', name: '荷蘭第1軍 第41裝甲旅 豹1V 戰車排', minTier: 2 },
       { type: 'frg_gepard', name: '西德第1裝甲師 獵豹防空砲排', minTier: 1 },
+      { type: 'us_stinger_team', name: '西德第1裝甲擲彈兵旅 Fliegerfaust 2 (刺針) 防空小組', minTier: 1 },
       { type: 'frg_leopard2', name: '西德第3裝甲師 豹2戰車排', minTier: 1 },
       { type: 'frg_m109g', name: '西德第1砲兵團 M109G 自走砲連', minTier: 2 },
       { type: 'uk_challenger1', name: '皇家驃騎兵 挑戰者戰車排', minTier: 2 },

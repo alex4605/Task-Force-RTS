@@ -724,7 +724,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         // Check if clicked an installation (Battalion CP or Airfield)
         for (const isl of engine.islands) {
           const hitBattalionCp = isl.installations.find(
-            (inst) => (inst.type === 'battalion_cp' || inst.type === 'command_post') && !inst.isDestroyed && dist(worldPos, inst.pos) < 85
+            (inst) => (inst.type === 'battalion_cp' || inst.type === 'command_post' || (inst.type === 'motor_pool' && inst.side === 'player')) && !inst.isDestroyed && dist(worldPos, inst.pos) < 85
           );
           if (hitBattalionCp) {
             onSelectAirfacility?.('battalion_cp', hitBattalionCp.id);

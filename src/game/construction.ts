@@ -21,6 +21,7 @@ const REQUIREMENT_BY_TAG: Record<string, BuilderRequirement> = {
   // Engineering works: graders, cranes, concrete and pile drivers
   airfield: 'engineer',
   fob: 'engineer',
+  motor_pool: 'engineer',
   dockyard: 'engineer',
   pontoon_pier: 'engineer',
   major_naval_port: 'engineer',
