@@ -6,7 +6,7 @@ import { fitsInHold, formatHold, holdUsed, shipHold } from './naval/lift';
 import { isRotaryOrVstol, rollBailout, shipRaftGroups } from './aircrew';
 import { deckAccepts, shipAviation } from './shipAviation';
 import { addCivilTransport } from './civilSites';
-import { onAirfield } from './airfieldLayout';
+import { clearAirfieldFootprints, findAirfieldSite, nudgeOffAirfield, onAirfield } from './airfieldLayout';
 import { canDipSonar, dippingSonarRange } from './asw';
 import { buildRequisitionShip } from './requisitionShips';
 import { LIBERATE_CLEAR, LIBERATE_RADIUS, PLAYER_CAMP_NAME, POW_CAMP_CAPACITY, POW_RP_PER_SECOND } from './pow';
@@ -969,7 +969,7 @@ export class GameEngine {
     const ground = this.groundUnits.filter((u) => !u.isDestroyed && !u.embarkedInShipId);
     for (const isl of this.islands) {
       for (const inst of isl.installations) {
-        const isTransport = inst.type === 'rail_station' || (inst.type === 'airfield' && inst.wasCivil);
+        const isTransport = inst.type === 'rail_station';
         if (inst.isDestroyed || !(isTransport || inst.type === 'settlement' || inst.type === 'town' || inst.type === 'city')) continue;
         const r = isTransport ? 300 : (inst.civilianZoneRadius ?? 120) + 220;
         const friendly = ground.some((u) => (u.side === 'player' || u.side === 'allied') && dist(u.pos, inst.pos) < r);
@@ -1127,6 +1127,8 @@ export class GameEngine {
     this.islands = generated.islands;
     // Civilian railway stations and the airport (eras with a mainland)
     addCivilTransport(this.islands, getTerrainMap(this.islands, this.worldSize, era), era);
+    // Nothing stands on a runway
+    clearAirfieldFootprints(this.islands);
     this.applyHistoricalInstallationRanges();
     this.friendlyBase = generated.friendlyBase;
     this.playerShips = generated.playerShips;
@@ -2885,6 +2887,7 @@ export class GameEngine {
     this.updateShipAviation(effectiveDt);
     this.updateConstruction(effectiveDt);
     this.updateAirfieldDamage(effectiveDt);
+    this.updateAirfieldControl(effectiveDt);
     this.updateCivilControl(effectiveDt);
     this.updateAircraft(effectiveDt);
     this.updateInstallations(effectiveDt);
@@ -11211,6 +11214,73 @@ export class GameEngine {
     }
   }
 
+  /**
+   * Airfields are hard to destroy, so they are fought over: ground troops of one side on the
+   * strip with none of the other's there take it after about 12 s (contested ground slowly
+   * undoes progress). The new owner flies from it; aircraft left on the ground are lost with it.
+   */
+  private updateAirfieldControl(dt: number): void {
+    const ground = this.groundUnits.filter((u) => !u.isDestroyed && !u.embarkedInShipId);
+    for (const isl of this.islands) {
+      for (const inst of isl.installations) {
+        if (inst.type !== 'airfield' || inst.isDestroyed) continue;
+        const ours = ground.filter((u) => (u.side === 'player' || u.side === 'allied') && onAirfield(inst, u.pos, 60));
+        const theirs = ground.some((u) => u.side === 'enemy' && onAirfield(inst, u.pos, 60));
+        const owner = inst.side === 'allied' ? 'player' : inst.side;
+        let claimant: 'player' | 'enemy' | null = null;
+        if (ours.length > 0 && !theirs && owner !== 'player') claimant = 'player';
+        else if (theirs && ours.length === 0 && owner !== 'enemy') claimant = 'enemy';
+        if (!claimant) {
+          if (inst.captureProgress) inst.captureProgress = Math.max(0, inst.captureProgress - 6 * dt);
+          if (!inst.captureProgress) inst.captureBy = undefined;
+          continue;
+        }
+        if (inst.captureBy !== claimant) {
+          inst.captureBy = claimant;
+          inst.captureProgress = 0;
+        }
+        inst.captureProgress = (inst.captureProgress ?? 0) + 8 * dt;
+        if (inst.captureProgress < 100) continue;
+        // Changes hands
+        inst.captureProgress = 0;
+        inst.captureBy = undefined;
+        const previous = inst.side;
+        inst.side = claimant;
+        inst.controlledBy = claimant;
+        this.islandsVersion++;
+        if (claimant === 'player') {
+          this.airfieldPlanes[inst.id] = {};
+          const gainTxt = previous === 'enemy' ? this.grant(150, 'capture') : '';
+          soundEngine.playPlaneSortie();
+          this.addBannerAlert(`🛬【機場奪取】我軍控制「${inst.name}」，可供我方飛機起降`, 'player', 'capture', 6);
+          this.addCombatLog({
+            category: 'air',
+            sourceSide: 'player',
+            sourceName: ours[0].name,
+            targetName: inst.name,
+            actionType: 'installation_down',
+            text: `🛬【機場奪取】「${ours[0].name}」肅清跑道守軍，「${inst.name}」改由我軍使用${inst.cratered ? '（跑道彈坑待搶修）' : ''}。${gainTxt ? `繳獲 +${gainTxt}。` : ''}`,
+          });
+        } else {
+          // Our aircraft caught on the ground are lost with the field
+          const pool = this.airfieldPlanes[inst.id] ?? (inst.id === this.hqAirfieldId ? this.airbasePlanes : {});
+          const lost = Object.values(pool).reduce((a, b) => a + (b || 0), 0);
+          for (const k of Object.keys(pool)) pool[k] = 0;
+          soundEngine.playKlaxon();
+          this.addBannerAlert(`⚠️【機場失守】「${inst.name}」被敵軍奪取${lost ? `，地面 ${lost} 架飛機損失` : ''}`, 'enemy', 'sunk', 6);
+          this.addCombatLog({
+            category: 'air',
+            sourceSide: 'enemy',
+            sourceName: '敵軍地面部隊',
+            targetName: inst.name,
+            actionType: 'installation_down',
+            text: `⚠️【機場失守】敵軍佔領「${inst.name}」${lost ? `，停放地面的 ${lost} 架飛機來不及疏散而損失` : ''}；敵方可由此出擊，奪回需派地面部隊進佔跑道。`,
+          });
+        }
+      }
+    }
+  }
+
   /** Engineer works under way: progress while engineers are on site, then enter service. */
   public constructionSites: { inst: Installation; islandId: string; progress: number; total: number; itemName: string; builders: number }[] = [];
 
@@ -11323,6 +11393,23 @@ export class GameEngine {
         this.addBannerAlert(`🏗️【無法開工】「${item.name}」${blocked}`, 'player', 'alert', 5.0);
         return false;
       }
+    }
+
+    // Runways need a long stretch of clear land; other works go beside a strip, never on it
+    if (item.typeTag === 'airfield' || item.typeTag === 'farp') {
+      const site = findAirfieldSite(targetIsland, instPos, instAngle, { id: 'inst-built-probe', rotaryOnly: item.typeTag === 'farp' } as Installation);
+      if (!site) {
+        this.addBannerAlert(`🏗️【無法開工】「${item.name}」附近找不到夠長的平坦空地（跑道需完整落在陸地上且不壓到其他設施）`, 'player', 'alert', 5);
+        return false;
+      }
+      instPos = site.pos;
+      instAngle = site.angle;
+    } else {
+      const fields = [
+        ...targetIsland.installations.filter((i) => i.type === 'airfield'),
+        ...this.constructionSites.filter((c) => c.islandId === targetIsland!.id && c.inst.type === 'airfield').map((c) => c.inst),
+      ];
+      for (const f of fields) instPos = nudgeOffAirfield(f, instPos, targetIsland);
     }
 
     const instId = `inst-built-${Date.now()}`;
@@ -14420,7 +14507,8 @@ export class GameEngine {
     if (!mainland) return;
 
     for (const inst of mainland.installations) {
-      if (inst.isDestroyed) continue;
+      // Airfields are contested over their whole strip (updateAirfieldControl)
+      if (inst.isDestroyed || inst.type === 'airfield') continue;
       const nearbyFriendly = this.groundUnits.filter(
         (u) => !u.isDestroyed && !u.embarkedInShipId && u.side === 'player' && dist(u.pos, inst.pos) <= 120
       );

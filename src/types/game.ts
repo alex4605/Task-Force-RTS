@@ -1974,6 +1974,8 @@ export interface Installation {
   samMissilesReady?: number;   // 鷹式/SA-2 飛彈備射量
   samMaxMissiles?: number;
   captureProgress?: number;    // 陣地/設施佔領進度 (0~100)
+  /** Who is taking the installation (airfields). */
+  captureBy?: 'player' | 'enemy';
   /** Whose troops hold the ground round a civilian site (villages, towns, stations, airports). */
   controlledBy?: 'player' | 'enemy';
   /** Airfield knocked out by conventional attack: runway cratered, repair progress 0..1. */

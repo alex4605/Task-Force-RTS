@@ -87,6 +87,18 @@ export function drawInstallation(rc: RenderContext, inst: Installation, island?:
   // Type-specific body: see bodies.ts
   INSTALLATION_DRAWERS[inst.type]?.(rc, inst, style, island);
   if (inst.type === 'airfield' && inst.cratered) drawCrateredOverlay(rc, inst);
+  if (inst.type === 'airfield' && inst.captureProgress && inst.captureBy) {
+    // Ground troops taking the field
+    const { hy } = airfieldFootprint(inst);
+    const k = Math.min(1, inst.captureProgress / 100);
+    ctx.fillStyle = 'rgba(4, 12, 22, 0.85)';
+    ctx.fillRect(-40, -hy - 34, 80, 6);
+    ctx.fillStyle = inst.captureBy === 'player' ? '#4FC3F7' : '#FF5252';
+    ctx.fillRect(-39, -hy - 33, 78 * k, 4);
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(inst.captureBy === 'player' ? `🚩 我軍奪取機場 ${Math.floor(k * 100)}%` : `⚠️ 敵軍奪取機場 ${Math.floor(k * 100)}%`, 0, -hy - 38);
+  }
 
   // Whose sphere a village or town is in (our troops holding the ground round it make it ours)
   if (inst.controlledBy && (inst.type === 'settlement' || inst.type === 'town' || inst.type === 'city')) {

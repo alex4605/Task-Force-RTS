@@ -73,18 +73,6 @@ function revetment(ctx: Ctx, x: number, y: number, a: number, s: number): void {
   ctx.restore();
 }
 
-function runwayMarkings(ctx: Ctx, len: number, wid: number): void {
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
-  for (const tx of [-len / 2 + 3, len / 2 - 9]) for (let k = 0; k < 4; k++) ctx.fillRect(tx, -wid / 2 + 2 + k * (wid - 4) / 4, 6, 1.6);
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
-  ctx.lineWidth = 1.1;
-  ctx.setLineDash([7, 6]);
-  ctx.beginPath();
-  ctx.moveTo(-len / 2 + 14, 0);
-  ctx.lineTo(len / 2 - 14, 0);
-  ctx.stroke();
-  ctx.setLineDash([]);
-}
 
 // ── Air bases ─────────────────────────────────────────────────────────────
 
@@ -96,137 +84,302 @@ export function drawAirfieldSite(rc: RenderContext, inst: Installation, style: I
   scaled(ctx, AIRFIELD_SCALE.base, () => drawAirBase(rc, inst, style, island));
 }
 
-/** Permanent air base: paved runway, parallel taxiway, apron with hangars and tower, revetments. */
+/** Paved runway with the full marking set (edges, thresholds, numbers, touchdown and aiming points). */
+function runway(ctx: Ctx, half: number, w: number, surface: string, numbers: [string, string], blastPads: boolean): void {
+  // Shoulders, then the pavement
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
+  ctx.fillRect(-half - 1, -w / 2 - 1.4, half * 2 + 2, w + 2.8);
+  ctx.fillStyle = surface;
+  ctx.fillRect(-half, -w / 2, half * 2, w);
+  if (blastPads) {
+    // Blast pads / overruns with yellow chevrons
+    ctx.fillStyle = 'rgba(60, 60, 60, 0.9)';
+    for (const sgn of [-1, 1]) ctx.fillRect(sgn > 0 ? half : -half - 5, -w / 2, 5, w);
+    ctx.strokeStyle = 'rgba(255, 213, 79, 0.85)';
+    ctx.lineWidth = 0.5;
+    for (const sgn of [-1, 1]) {
+      for (let k = 1; k <= 2; k++) {
+        const x = sgn * (half + k * 1.6);
+        ctx.beginPath();
+        ctx.moveTo(x - sgn * 1.4, -w / 2 + 0.6);
+        ctx.lineTo(x, 0);
+        ctx.lineTo(x - sgn * 1.4, w / 2 - 0.6);
+        ctx.stroke();
+      }
+    }
+  }
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.lineWidth = 0.35;
+  ctx.strokeRect(-half + 0.6, -w / 2 + 0.6, half * 2 - 1.2, w - 1.2);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  for (const sgn of [-1, 1]) {
+    // Threshold bars
+    const tx = sgn > 0 ? half - 3.2 : -half + 1.2;
+    for (let k = 0; k < 6; k++) ctx.fillRect(tx, -w / 2 + 1.1 + k * ((w - 2.2) / 6), 2, (w - 2.2) / 6 - 0.5);
+    // Touchdown zone and aiming point
+    const tz = sgn * (half - 12);
+    for (const dy of [-1, 1]) ctx.fillRect(tz - 1.5, dy * w * 0.22 - 0.4, 3, 0.8);
+    const ap = sgn * (half - 20);
+    for (const dy of [-1, 1]) ctx.fillRect(ap - 2.5, dy * w * 0.25 - 0.7, 5, 1.4);
+  }
+  // Runway designators, read from each approach
+  ctx.save();
+  ctx.font = `bold ${Math.max(2.4, w * 0.32)}px monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.translate(-half + 6.5, 0);
+  ctx.rotate(Math.PI / 2);
+  ctx.fillText(numbers[0], 0, 0);
+  ctx.restore();
+  ctx.save();
+  ctx.font = `bold ${Math.max(2.4, w * 0.32)}px monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.translate(half - 6.5, 0);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText(numbers[1], 0, 0);
+  ctx.restore();
+  // Centreline
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+  ctx.lineWidth = 0.35;
+  ctx.setLineDash([3, 2.2]);
+  ctx.beginPath();
+  ctx.moveTo(-half + 10, 0);
+  ctx.lineTo(half - 10, 0);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+/** Taxiway strip with its yellow centreline. */
+function taxiway(ctx: Ctx, pts: [number, number][], w: number, surface: string): void {
+  ctx.strokeStyle = surface;
+  ctx.lineWidth = w;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255, 213, 79, 0.8)';
+  ctx.lineWidth = 0.25;
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.stroke();
+  ctx.lineCap = 'butt';
+}
+
+function windsock(ctx: Ctx, x: number, y: number): void {
+  ctx.strokeStyle = '#ECEFF1';
+  ctx.lineWidth = 0.3;
+  ctx.beginPath();
+  ctx.arc(x, y, 1.6, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = '#FF7043';
+  ctx.beginPath();
+  ctx.moveTo(x, y - 0.5);
+  ctx.lineTo(x + 3, y - 0.2);
+  ctx.lineTo(x + 3, y + 0.2);
+  ctx.lineTo(x, y + 0.5);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/** Control tower: base building and the glazed cab. */
+function tower(ctx: Ctx, x: number, y: number): void {
+  ctx.fillStyle = '#B0BEC5';
+  ctx.fillRect(x - 2.5, y - 2.5, 5, 5);
+  ctx.fillStyle = '#37474F';
+  ctx.fillRect(x - 1.6, y - 1.6, 3.2, 3.2);
+  ctx.fillStyle = 'rgba(129, 212, 250, 0.85)';
+  ctx.fillRect(x - 1.2, y - 1.2, 2.4, 2.4);
+}
+
+function fuelFarm(ctx: Ctx, x: number, y: number, n: number): void {
+  ctx.strokeStyle = 'rgba(141, 123, 90, 0.9)';
+  ctx.lineWidth = 0.8;
+  ctx.strokeRect(x - 1.5, y - 4.5, n * 4.4 + 1, 9);
+  for (let k = 0; k < n; k++) {
+    ctx.fillStyle = '#CFD8DC';
+    ctx.beginPath();
+    ctx.arc(x + 1.6 + k * 4.4, y, 1.8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.lineWidth = 0.2;
+    ctx.stroke();
+  }
+}
+
+/**
+ * Permanent military air base: runway with full markings and overruns, a parallel taxiway with
+ * links, the apron with tower, fire station, hangars of the era and the fuel farm on one side,
+ * and on the other the dispersal: WWII hardstands on a loop, revetments, or hardened shelters.
+ */
 function drawAirBase(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
   const ctx = rc.ctx;
   const { color, labelColor, isPlayer } = style;
-  // WWII Pacific fields were crushed coral (pale), later ones asphalt
   const pale = rc.era === 'era1' || rc.era === 'era2';
-  ctx.fillStyle = 'rgba(2, 8, 16, 0.35)';
-  ctx.fillRect(-68, -13, 136, 30);
-  ctx.fillStyle = pale ? '#B9B29A' : '#2E3438';
-  ctx.fillRect(-66, -11, 132, 20);
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+  const surface = pale ? '#C8C0A4' : '#30363A';
+  const taxi = pale ? '#B4AC90' : '#3C4347';
+  // Perimeter track
+  ctx.strokeStyle = 'rgba(121, 85, 72, 0.6)';
   ctx.lineWidth = 0.8;
-  ctx.strokeRect(-66, -11, 132, 20);
-  runwayMarkings(ctx, 132, 20);
-  // Parallel taxiway and links
-  ctx.fillStyle = pale ? '#A79F86' : '#3B4246';
-  ctx.fillRect(-56, 13, 112, 5);
-  for (const x of [-52, 0, 48]) ctx.fillRect(x - 2, 9, 4, 4);
-  // Apron, hangars, tower
-  ctx.fillStyle = pale ? '#A79F86' : '#3B4246';
-  ctx.fillRect(-20, 18, 44, 12);
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 0.8;
-  for (const hx of [-18, -4]) {
+  ctx.setLineDash([2, 1.4]);
+  ctx.strokeRect(-70, -30, 140, 60);
+  ctx.setLineDash([]);
+  runway(ctx, 64, 10, surface, ['09', '27'], !pale);
+  // Parallel taxiway and links (angled high-speed exits from Korea on)
+  taxiway(ctx, [[-58, 13], [58, 13]], 3.2, taxi);
+  for (const x of [-58, 58]) taxiway(ctx, [[x, 5], [x, 13]], 3, taxi);
+  for (const x of [-18, 22]) taxiway(ctx, pale ? [[x, 5], [x, 13]] : [[x - 6, 5], [x, 13]], 3, taxi);
+  // Apron with stand lead-in lines and parked aircraft
+  ctx.fillStyle = taxi;
+  ctx.fillRect(-28, 15, 44, 10);
+  ctx.strokeStyle = 'rgba(255, 213, 79, 0.7)';
+  ctx.lineWidth = 0.25;
+  for (const x of [-22, -10, 2]) {
+    ctx.beginPath();
+    ctx.moveTo(x, 15);
+    ctx.lineTo(x, 21);
+    ctx.stroke();
+    parkedPlane(ctx, x, 20, Math.PI / 2, 8, color);
+  }
+  // Hangars of the era
+  for (const hx of [20, 33]) {
     if (pale) {
-      // Quonset huts: corrugated half-cylinders
       ctx.fillStyle = '#78909C';
       ctx.beginPath();
-      ctx.roundRect(hx, 31, 12, 7, 3.5);
+      ctx.roundRect(hx, 17, 11, 8, 4);
       ctx.fill();
-      ctx.stroke();
       ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      ctx.lineWidth = 0.3;
       for (let k = 1; k < 6; k++) {
         ctx.beginPath();
-        ctx.moveTo(hx + k * 2, 31);
-        ctx.lineTo(hx + k * 2, 38);
+        ctx.moveTo(hx + k * 1.8, 17);
+        ctx.lineTo(hx + k * 1.8, 25);
         ctx.stroke();
       }
     } else {
-      // Steel hangars with sliding doors
       ctx.fillStyle = '#546E7A';
-      ctx.fillRect(hx, 30, 12, 9);
-      ctx.strokeRect(hx, 30, 12, 9);
-      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-      for (let k = 1; k < 4; k++) {
-        ctx.beginPath();
-        ctx.moveTo(hx + k * 3, 30);
-        ctx.lineTo(hx + k * 3, 39);
-        ctx.stroke();
-      }
+      ctx.fillRect(hx, 17, 11, 9);
+      ctx.fillStyle = '#455A64';
+      ctx.fillRect(hx, 17, 11, 1.4);
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+      ctx.lineWidth = 0.3;
+      ctx.strokeRect(hx, 17, 11, 9);
     }
-    ctx.strokeStyle = color;
   }
-  // From Korea on: a GCA / approach radar beside the runway
+  tower(ctx, -36, 19);
+  // Fire station beside the tower
+  ctx.fillStyle = '#C62828';
+  ctx.fillRect(-42, 23, 4, 3);
+  fuelFarm(ctx, -62, 22, 3);
   if (!pale) {
+    // Approach radar
     ctx.fillStyle = '#ECEFF1';
     ctx.beginPath();
-    ctx.arc(30, 22, 3, 0, Math.PI * 2);
+    ctx.arc(52, 23, 2.4, 0, Math.PI * 2);
     ctx.fill();
   }
-  ctx.fillStyle = '#ECEFF1';
-  ctx.fillRect(14, 31, 5, 5);
-  ctx.fillStyle = '#4FC3F7';
-  ctx.fillRect(14.8, 31.8, 3.4, 1.4);
-  // Dispersal: earth revetments, or (from the late 1970s) hardened aircraft shelters
-  for (const x of [-50, -36, 36, 50]) {
-    if (rc.era === 'era5') {
-      ctx.fillStyle = '#78807A';
+  windsock(ctx, 58, -8);
+  // Dispersal on the far side
+  if (pale) {
+    // WWII: a taxi loop with hardstands, aircraft in revetments
+    taxiway(ctx, [[-50, -5], [-50, -16], [-30, -24], [0, -26], [30, -24], [50, -16], [50, -5]], 2.6, taxi);
+    for (const x of [-38, -18, 2, 22, 40]) {
+      ctx.fillStyle = taxi;
       ctx.beginPath();
-      ctx.ellipse(x, -21, 6, 5, 0, Math.PI, 0);
-      ctx.lineTo(x + 6, -16);
-      ctx.lineTo(x - 6, -16);
+      ctx.arc(x, -26, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      revetment(ctx, x, -27, Math.PI, 4.2);
+      parkedPlane(ctx, x, -26, -Math.PI / 2, 7, color);
+    }
+  } else if (rc.era === 'era5') {
+    // Hardened aircraft shelters on taxi links
+    taxiway(ctx, [[-50, -5], [-50, -18], [50, -18], [50, -5]], 2.6, taxi);
+    for (const x of [-40, -24, -8, 8, 24, 40]) {
+      taxiway(ctx, [[x, -18], [x, -22]], 2, taxi);
+      ctx.fillStyle = '#7A817C';
+      ctx.beginPath();
+      ctx.ellipse(x, -26, 4.6, 4, 0, Math.PI, 0);
+      ctx.lineTo(x + 4.6, -22);
+      ctx.lineTo(x - 4.6, -22);
       ctx.closePath();
       ctx.fill();
       ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-      ctx.lineWidth = 0.6;
+      ctx.lineWidth = 0.3;
       ctx.stroke();
-    } else {
-      revetment(ctx, x, -20, 0, 5);
-      parkedPlane(ctx, x, -18, -Math.PI / 2, 8, color);
+    }
+  } else {
+    // Revetted dispersal along a parallel track
+    taxiway(ctx, [[-50, -5], [-50, -18], [50, -18], [50, -5]], 2.6, taxi);
+    for (const x of [-36, -18, 0, 18, 36]) {
+      revetment(ctx, x, -24, 0, 4.2);
+      parkedPlane(ctx, x, -23, -Math.PI / 2, 7.5, color);
     }
   }
-  for (const x of [-12, 0, 12]) parkedPlane(ctx, x, 24, Math.PI / 2, 8, color);
-  label(ctx, isPlayer ? '✈️ [友軍航空基地]' : '✈️ [敵軍航空基地]', -30, labelColor);
+  label(ctx, isPlayer ? '✈️ [友軍航空基地]' : '✈️ [敵軍航空基地]', -34, labelColor);
 }
 
-/** Expedient strip: pierced-steel-plank matting, dispersal loop with revetments, tents and fuel. */
+/**
+ * Expedient strip: one long, narrow mat runway (PSP / AM-2) with a turning pad at each end, a
+ * single stub to a small dispersal of hardstands, tents, a fuel dump and a windsock. No tower:
+ * the field is run from a jeep with a radio.
+ */
 function drawExpedientStrip(rc: RenderContext, _inst: Installation, style: InstallationStyle): void {
   const ctx = rc.ctx;
   const { color, labelColor } = style;
-  // Graded strip with PSP (Marston) matting
-  ctx.fillStyle = 'rgba(141, 110, 80, 0.55)';
-  ctx.fillRect(-62, -13, 124, 26);
-  // PSP (Marston) steel planking to Korea; AM-2 aluminium matting in Vietnam and after
   const am2 = rc.era === 'era4' || rc.era === 'era5';
-  ctx.fillStyle = am2 ? '#9AA3A6' : '#6F7A70';
-  ctx.fillRect(-56, -8, 112, 16);
-  ctx.strokeStyle = 'rgba(30, 35, 30, 0.55)';
-  ctx.lineWidth = 0.5;
-  for (let x = -56; x <= 56; x += 3) {
+  const mat = am2 ? '#9AA3A6' : '#6F7A70';
+  // Graded and cleared strip
+  ctx.fillStyle = 'rgba(141, 110, 80, 0.5)';
+  ctx.fillRect(-66, -6, 132, 12);
+  // Mat runway: long and narrow
+  ctx.fillStyle = mat;
+  ctx.fillRect(-62, -3, 124, 6);
+  ctx.strokeStyle = 'rgba(30, 35, 30, 0.5)';
+  ctx.lineWidth = 0.25;
+  for (let x = -62; x <= 62; x += 1.6) {
     ctx.beginPath();
-    ctx.moveTo(x, -8);
-    ctx.lineTo(x, 8);
+    ctx.moveTo(x, -3);
+    ctx.lineTo(x, 3);
     ctx.stroke();
   }
-  ctx.fillStyle = 'rgba(30, 35, 30, 0.35)';
-  for (let x = -55; x < 56; x += 6) for (let y = -6; y < 8; y += 4) ctx.fillRect(x, y, 1, 1);
-  // Threshold markers (white panels)
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-  ctx.fillRect(-56, -8, 2, 16);
-  ctx.fillRect(54, -8, 2, 16);
-  // Dispersal loop and revetments
-  ctx.strokeStyle = '#8D7B5A';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.ellipse(0, 22, 34, 8, 0, Math.PI, 0, true);
-  ctx.stroke();
-  for (const x of [-26, -9, 9, 26]) {
-    revetment(ctx, x, 28, Math.PI, 4);
-    parkedPlane(ctx, x, 26, Math.PI / 2, 7, color);
+  if (!am2) {
+    ctx.fillStyle = 'rgba(30, 35, 30, 0.35)';
+    for (let x = -61; x < 62; x += 3) for (const y of [-1.6, 0, 1.6]) ctx.fillRect(x, y, 0.5, 0.5);
   }
-  // Tents and fuel drums
+  // Turning pads at both ends
+  for (const x of [-62, 62]) {
+    ctx.fillStyle = mat;
+    ctx.beginPath();
+    ctx.arc(x, 4, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // White panel markers at the thresholds
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  for (const x of [-58, 56]) {
+    ctx.fillRect(x, -2.6, 2, 1);
+    ctx.fillRect(x, 1.6, 2, 1);
+  }
+  // Single stub to the dispersal hardstands
+  taxiway(ctx, [[-6, 3], [-6, 9], [-26, 9], [16, 9]], 2.2, mat);
+  for (const x of [-24, -12, 2, 14]) {
+    ctx.fillStyle = mat;
+    ctx.fillRect(x - 3, 10, 6, 5);
+    parkedPlane(ctx, x, 13, Math.PI / 2, 6.5, color);
+  }
+  // Ops tent and jeep, tents, fuel drums, windsock
   ctx.fillStyle = '#6B7B45';
-  for (const x of [-52, -44]) ctx.fillRect(x, 16, 6, 4);
+  for (const [x, y] of [[28, 10], [35, 10], [28, 14]] as const) ctx.fillRect(x, y, 5, 3);
+  ctx.fillStyle = '#3E4D24';
+  ctx.fillRect(40, 11, 3.6, 2);
   ctx.fillStyle = '#33691E';
   for (let k = 0; k < 8; k++) {
     ctx.beginPath();
-    ctx.arc(44 + (k % 4) * 2.4, 18 + Math.floor(k / 4) * 2.4, 1, 0, Math.PI * 2);
+    ctx.arc(46 + (k % 4) * 1.6, 10 + Math.floor(k / 4) * 1.6, 0.7, 0, Math.PI * 2);
     ctx.fill();
   }
-  label(ctx, am2 ? '🛬 [急造前進機場] AM-2 鋁板跑道' : '🛬 [急造前進機場] PSP 鋼板跑道', -18, labelColor);
+  windsock(ctx, 60, -6);
+  label(ctx, am2 ? '🛬 [急造前進機場] AM-2 鋁板跑道' : '🛬 [急造前進機場] PSP 鋼板跑道', -12, labelColor);
 }
 
 /** FARP: three cleared landing pads, fuel bladders and ammunition racks, a few tents. */
@@ -284,28 +437,66 @@ function drawFarp(rc: RenderContext, _inst: Installation, style: InstallationSty
   label(ctx, '🚁 [FARP 前進加油彈藥點] 直升機專用', -22, labelColor);
 }
 
-/** A former civilian airport: concrete runway, terminal and apron with airliner stands. */
+/**
+ * A (former) civilian airport: a long paved runway, full parallel taxiway, a terminal with
+ * boarding piers (jet bridges from the 1960s), the airliner apron, tower, cargo shed, fuel farm,
+ * car park and the access road.
+ */
 function drawCivilAirport(rc: RenderContext, inst: Installation, style: InstallationStyle): void {
   const ctx = rc.ctx;
   const { labelColor } = style;
-  ctx.fillStyle = '#3A3F42';
-  ctx.fillRect(-70, -10, 140, 18);
-  runwayMarkings(ctx, 140, 18);
-  ctx.fillStyle = '#4A5054';
-  ctx.fillRect(-50, 12, 100, 5);
-  ctx.fillRect(-30, 17, 60, 12);
-  // Terminal building with a glazed front and the tower
+  const surface = '#33393C';
+  const taxi = '#41484B';
+  runway(ctx, 68, 11, surface, ['07', '25'], true);
+  taxiway(ctx, [[-62, 14], [62, 14]], 3.4, taxi);
+  for (const x of [-62, -28, 6, 40, 62]) taxiway(ctx, [[x, 5.5], [x, 14]], 3, taxi);
+  // Apron and terminal
+  ctx.fillStyle = taxi;
+  ctx.fillRect(-36, 16, 60, 10);
   ctx.fillStyle = '#B0BEC5';
-  ctx.fillRect(-24, 29, 40, 9);
-  ctx.fillStyle = 'rgba(129, 212, 250, 0.7)';
-  ctx.fillRect(-23, 29, 38, 1.6);
-  ctx.fillStyle = '#ECEFF1';
-  ctx.fillRect(20, 28, 6, 6);
-  ctx.fillStyle = '#4FC3F7';
-  ctx.fillRect(21, 29, 4, 1.4);
-  for (const x of [-18, -2, 14]) parkedPlane(ctx, x, 22, -Math.PI / 2, 11, '#ECEFF1');
+  ctx.fillRect(-32, 26, 50, 5);
+  ctx.fillStyle = 'rgba(129, 212, 250, 0.75)';
+  ctx.fillRect(-31, 26, 48, 1);
+  const bridges = rc.era === 'era4' || rc.era === 'era5';
+  for (const x of [-26, -12, 2]) {
+    if (bridges) {
+      ctx.fillStyle = '#90A4AE';
+      ctx.fillRect(x - 0.6, 21, 1.2, 5);
+    }
+    // Stand markings and an airliner
+    ctx.strokeStyle = 'rgba(255, 213, 79, 0.7)';
+    ctx.lineWidth = 0.25;
+    ctx.beginPath();
+    ctx.moveTo(x, 16);
+    ctx.lineTo(x, 22);
+    ctx.stroke();
+    parkedPlane(ctx, x, 19.5, Math.PI / 2, 10, '#ECEFF1');
+  }
+  tower(ctx, 22, 20);
+  // Cargo shed and fuel farm
+  ctx.fillStyle = '#78909C';
+  ctx.fillRect(30, 17, 12, 8);
+  fuelFarm(ctx, 48, 21, 3);
+  // Car park and access road out of the field
+  ctx.fillStyle = 'rgba(90, 96, 100, 0.9)';
+  ctx.fillRect(-24, 31.5, 30, 3);
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.lineWidth = 0.2;
+  for (let x = -22; x < 6; x += 2) {
+    ctx.beginPath();
+    ctx.moveTo(x, 31.5);
+    ctx.lineTo(x, 34.5);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = '#5D6366';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(6, 33);
+  ctx.lineTo(70, 33);
+  ctx.stroke();
+  windsock(ctx, 64, -9);
   const owner = inst.side === 'player' ? '我方控制' : inst.side === 'enemy' ? '敵方控制' : '中立';
-  label(ctx, `🛫 [原民用機場] ${owner}`, -18, labelColor);
+  label(ctx, `🛫 [原民用機場] ${owner}`, -14, labelColor);
 }
 
 // ── Harbour works (drawn along the seaward angle) ─────────────────────────
