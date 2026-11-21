@@ -440,6 +440,11 @@ export interface Ship {
     hangar: Record<string, number>;
     maxPerType: Record<string, number>;
   };
+  /** A surface combatant's own aircraft: catapult floatplanes or a helicopter deck (see shipAviation.ts). */
+  flightDeck?: 'floatplane' | 'helicopter';
+  aviationFitted?: boolean;
+  /** AI: seconds until the ship next considers launching its aircraft. */
+  shipAirTimer?: number;
   embarkedUnitIds?: string[];
   /** Allied ships on a scripted task (beach landing) steer by AlliedOps, not the surface-action AI. */
   alliedTask?: 'landing';
@@ -566,6 +571,7 @@ export type AircraftPayloadType =
   | 'agm78_standard_arm'   // AGM-78 標準長程反輻射飛彈 (A-6B Weasel / F-105 3600m 防空壓制)
   | 'mer_iron_bombs'       // MER 多聯掛架 18-24枚 500lb 通用高爆彈群 (F-105 / A-6 / B-52 彈幕走廊)
   // 時代五海空現代戰術打擊載荷 (Era 5 Modern Guided Missiles & Standoff Weapons):
+  | 'heli_asm'             // 艦載直升機輕型反艦飛彈 (AGM-119 企鵝 / 海賊鷗 Sea Skua)
   | 'rgm84_harpoon'        // RGM-84 / AGM-84 魚叉主動雷達導引反艦巡弋飛彈 (掠海突防)
   | 'aim54_phoenix'        // AIM-54 鳳凰超遠程主動雷達空空飛彈 (F-14A 專屬超視距攔截超音速轟炸機與反艦飛彈)
   | 'p700_granit'          // P-700 花崗岩超音速重型反艦巡弋飛彈 (基洛夫/奧斯卡 飽和集體突防)
@@ -1353,6 +1359,22 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     cpCost: 0,
     visualTag: '[雙翼 MER 複式六聯掛架 18彈]',
   },
+  heli_asm: {
+    id: 'heli_asm',
+    role: 'attacker',
+    name: '艦載直升機輕型反艦飛彈 (AGM-119 企鵝 / Sea Skua 海賊鷗)',
+    desc: '反水面作戰 (ASuW) 掛載：直升機在艦隊雷達視距外以搜索雷達接觸敵艦，射出兩枚輕型反艦飛彈，專打快艇、巡邏艦與護衛艦的上層結構。',
+    badge: '輕型反艦飛彈',
+    era: 'era5',
+    damage: 1100,
+    speedModifier: 0.95,
+    ammoCount: '2x 輕型反艦飛彈',
+    pros: '直升機 ASuW · 約 25–34 km 射程 · 掠海紅外/半主動導引',
+    purposeBadge: '【直升機反水面作戰 ASuW】',
+    blastRadius: 30,
+    cpCost: 0,
+    visualTag: '[機身兩側 2x 輕型反艦飛彈]',
+  },
   rgm84_harpoon: {
     id: 'rgm84_harpoon',
     role: 'attacker',
@@ -1679,6 +1701,9 @@ export type AircraftModel =
   | 'canberra'    // English Electric Canberra B.20 坎培拉 (RAAF 第2中隊 · 越南)
   | 'buccaneer'   // Blackburn Buccaneer S.2B 海盜式 (英國低空海上打擊機)
   | 'sea_harrier' // BAe Sea Harrier FRS.1 海獵鷹 (福克蘭戰爭艦載戰鬥機)
+  | 'walrus' // Supermarine Walrus 海象式水陸兩用偵察機 (英國/澳洲巡洋艦與戰艦彈射機)
+  | 'lynx'   // Westland Lynx HAS.2 山貓艦載直升機 (北約巡防艦/驅逐艦 · Sea Skua / Mk 46)
+  | 'e13a'   // 愛知 E13A 零式水上偵察機 Jake (重巡/戰艦彈射水上偵察機 · 三座雙浮筒)
   | 'rufe'   // A6M2-N 二式水上戰鬥機 Rufe (所羅門群島水上戰鬥機隊)
   | 'ki84'   // Ki-84 四式戰鬥機 疾風 Frank (陸軍末期最強戰鬥機)
   | 'po2'    // Po-2 夜間騷擾雙翼機 Bedcheck Charlie (韓戰北韓夜襲)
@@ -1789,6 +1814,8 @@ export interface Aircraft {
   bombingPassedTargetDist?: number;
   missionType?: EnemyAirMissionType;
   nation?: AircraftNation; // 機徽覆寫：同一機型由不同國家操作時 (如日本航空自衛隊 F-15J)
+  /** Flown from a cruiser's / destroyer's own deck (AI recovers it to the same ship). */
+  shipDetachment?: boolean;
   homeBaseId?: string; // 母基地：返航降落的機場 (Installation id) 或航艦 (Ship id)
   ferryTo?: string; // 轉場目的地 (機場或航艦 id)：抵達後降落並計入該基地庫存
   sonobuoyDropTimer?: number; // 反潛巡邏自動布放聲納浮標計時

@@ -32,7 +32,7 @@ export const AIRCRAFT_NATION: Record<AircraftModel, AircraftNation> = {
   c47: 'usaf', f15a: 'usaf', f16a: 'usaf', a10a: 'usaf', f111: 'usaf', e3a: 'usaf', ah64a: 'usaf', c130: 'usaf',
   p36a: 'usaf', b25: 'usaf', p39d: 'usaf', b17_late: 'usaf', f82: 'usaf', a37b: 'usaf', f5a: 'usaf', f84: 'usaf', ac47: 'usaf', f100: 'usaf',
   // Imperial Japan
-  rufe: 'japan', ki84: 'japan',
+  rufe: 'japan', e13a: 'japan', walrus: 'uk', lynx: 'uk', ki84: 'japan',
   zero: 'japan', zero_a6m2: 'japan', zero_a6m5: 'japan', kamikaze_zero: 'japan', ki61: 'japan', george: 'japan',
   val: 'japan', judy: 'japan', kate: 'japan', jill: 'japan', g4m: 'japan', ohka: 'japan', kamikaze_judy: 'japan',
   // Commonwealth

@@ -25,7 +25,7 @@ const CREW: Partial<Record<AircraftModel, number>> = {
   sbd: 2, sb2c: 2, tbd: 3, tbf: 3, os2u: 2, a20: 3, a26: 3, b25: 5, b17: 10, b17_late: 10, b24: 10, b29: 11,
   pby: 8, c47: 4, mosquito: 2, beaufighter: 2, swordfish: 3, beaufort: 4, barracuda: 3, lancaster: 7,
   // IJN / IJA
-  val: 2, judy: 2, kate: 3, jill: 3, g4m: 7,
+  e13a: 3, walrus: 3, lynx: 3, val: 2, judy: 2, kate: 3, jill: 3, g4m: 7,
   // Korea
   f82: 2, firefly_as5: 2, af_guardian: 2, ad3w: 3, ho3s1: 2, il10: 2, tu14: 3, po2: 2,
   // Vietnam
@@ -42,14 +42,14 @@ const PISTON_LATE = new Set<AircraftModel>([
   // Every Second World War type
   'f4f', 'sbd', 'tbd', 'os2u', 'b17', 'p40', 'a20', 'f6f', 'f4u', 'f8f', 'sb2c', 'tbf', 'sc1', 'b24', 'p51', 'p47', 'p38',
   'a26', 'p36a', 'b25', 'p39d', 'hurricane', 'spitfire_v', 'beaufighter', 'swordfish', 'b17_late', 'spitfire_xiv',
-  'tempest', 'mosquito', 'lancaster', 'beaufort', 'boomerang', 'seafire', 'barracuda', 'rufe', 'ki84', 'zero',
+  'tempest', 'mosquito', 'lancaster', 'beaufort', 'boomerang', 'seafire', 'barracuda', 'rufe', 'e13a', 'walrus', 'ki84', 'zero',
   'zero_a6m2', 'zero_a6m5', 'ki61', 'george', 'val', 'judy', 'kate', 'jill', 'g4m',
   // Piston types still flying in the jet eras
   'f4u4', 'ad1', 'ad3w', 'a1h', 'af_guardian', 'yak9', 'il10', 'po2', 'sea_fury', 'firefly_as5', 'rokaf_p51',
   'f82', 'pby', 'c47', 'ac47', 'b29', 'tu14', 'e1', 's2', 'c1', 'p3', 'c130', 'il38', 'be12', 'ov10',
 ]);
 
-const HELICOPTERS = new Set<AircraftModel>(['ho3s1', 'uh2', 'sh2', 'uh1', 'ah1', 'sh3f', 'ch53', 'ah64a', 'ah1w', 'ka27', 'mi24', 'ch46', 'sh60b']);
+const HELICOPTERS = new Set<AircraftModel>(['ho3s1', 'uh2', 'sh2', 'uh1', 'ah1', 'sh3f', 'ch53', 'ah64a', 'ah1w', 'ka27', 'mi24', 'ch46', 'sh60b', 'lynx']);
 
 const SUICIDE = new Set<AircraftModel>(['ohka', 'kamikaze_zero', 'kamikaze_judy']);
 

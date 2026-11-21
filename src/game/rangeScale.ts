@@ -225,6 +225,7 @@ export const AIR_WEAPON_RANGE = {
   k13: gameRangeFromKm(7.5), // K-13 / AA-2 Atoll (MiG-21)
   r27er: gameRangeFromKm(130), // R-27ER Alamo
   harpoon: gameRangeFromKm(124), // AGM-84A Harpoon
+  heliAsm: gameRangeFromKm(30), // AGM-119B Penguin (34 km) / Sea Skua (25 km)
   kh22: gameRangeFromKm(600), // Kh-22 Burya
   p700: gameRangeFromKm(625), // P-700 Granit
   harm: gameRangeFromKm(150), // AGM-88 HARM

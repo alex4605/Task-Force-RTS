@@ -4,6 +4,7 @@ import { resolveGroundRequisition } from './groundRequisition';
 import { AlliedHost, AlliedOps } from './allied/alliedOps';
 import { fitsInHold, formatHold, holdUsed, shipHold } from './naval/lift';
 import { rollBailout, shipRaftGroups } from './aircrew';
+import { deckAccepts, shipAviation } from './shipAviation';
 import { LIBERATE_CLEAR, LIBERATE_RADIUS, PLAYER_CAMP_NAME, POW_CAMP_CAPACITY, POW_RP_PER_SECOND } from './pow';
 import { AwardKind, Bundle, Economy, MOBILISATION, award, costOf, formatBundle, incomeRate, nuclearCost } from './economy';
 import { airCardDelivery } from './airRequisition';
@@ -1640,7 +1641,8 @@ export class GameEngine {
     let sent = 0;
     let refused = 0;
     for (const plane of planes) {
-      if (target.isCarrier && !this.isCarrierCapable(plane.model)) {
+      const deck = target.isCarrier ? this.playerShips.find((sh) => sh.id === target.id) : undefined;
+      if (target.isCarrier && (!this.isCarrierCapable(plane.model) || (deck && !deckAccepts(deck, plane.model)))) {
         refused++;
         continue;
       }
@@ -2406,6 +2408,7 @@ export class GameEngine {
         payloadType,
         payloadName,
         carrierId: flagship.id,
+        homeBaseId: flagship.id,
         shootCooldown: 0,
         wingmanOffset: { x: (i - (actualCount - 1) / 2) * 28, y: i * 20 },
         ...((): { sonobuoyAmmo?: number; maxSonobuoyAmmo?: number; sonobuoyModel?: string } => {
@@ -2664,6 +2667,7 @@ export class GameEngine {
     this.updateShips(effectiveDt);
     this.updateGroundUnits(effectiveDt);
     this.updateStrongholds(effectiveDt);
+    this.updateShipAviation(effectiveDt);
     this.updateAircraft(effectiveDt);
     this.updateInstallations(effectiveDt);
     this.updateEra3Mechanics(effectiveDt);
@@ -3667,6 +3671,120 @@ export class GameEngine {
     return data;
   }
 
+  /**
+   * Shipboard aviation: fits each surface combatant with its historical floatplanes or helicopter
+   * once, then flies the allied and enemy ships' aircraft (the player launches their own from the
+   * deck menu): helicopters go after submarines near their ship, or, with light anti-ship
+   * missiles, after small surface ships; floatplanes scout ahead. They come back to their own ship.
+   */
+  private updateShipAviation(dt: number): void {
+    const ships = [...this.playerShips, ...this.alliedShips, ...this.enemyShips];
+    for (const ship of ships) {
+      if (ship.isSunk) continue;
+      if (!ship.aviationFitted) {
+        ship.aviationFitted = true;
+        const fit = shipAviation(ship, this.era);
+        if (fit) {
+          ship.flightDeck = fit.kind;
+          ship.carrierPlanes = { ready: { [fit.model]: fit.count }, hangar: {}, maxPerType: { [fit.model]: fit.count } };
+        }
+      }
+      if (ship.side === 'player' || !ship.flightDeck || !ship.carrierPlanes) continue;
+      ship.shipAirTimer = (ship.shipAirTimer ?? 20 + Math.random() * 40) - dt;
+      if (ship.shipAirTimer > 0) continue;
+      ship.shipAirTimer = 50 + Math.random() * 60;
+      if (this.aircraft.some((a) => a.carrierId === ship.id && a.state !== 'shot_down')) continue;
+      const model = Object.keys(ship.carrierPlanes.ready).find((m) => (ship.carrierPlanes!.ready[m] ?? 0) > 0) as AircraftModel | undefined;
+      if (!model) continue;
+      const hostileShips = (ship.side === 'enemy' ? [...this.playerShips, ...this.alliedShips] : this.enemyShips).filter((h) => !h.isSunk);
+      const sub = hostileShips.find((h) => this.isSubmarine(h) && dist(h.pos, ship.pos) < 3600);
+      const surface = hostileShips
+        .filter((h) => !this.isSubmarine(h) && dist(h.pos, ship.pos) < 3200)
+        .sort((a, b) => dist(a.pos, ship.pos) - dist(b.pos, ship.pos))[0];
+      if (ship.flightDeck === 'helicopter') {
+        const canAsuw = model === 'lynx' || model === 'sh60b';
+        if (sub) this.launchShipFlight(ship, model, 'asw_acoustic_torpedo', { type: 'patrol', patrolOrigin: { ...sub.pos } });
+        else if (canAsuw && surface) this.launchShipFlight(ship, model, 'heli_asm', { type: 'attack', targetId: surface.id, targetPos: { ...surface.pos } });
+        else if (Math.random() < 0.35) this.launchShipFlight(ship, model, 'asw_acoustic_torpedo', { type: 'patrol', patrolOrigin: { ...ship.pos } });
+      } else if (Math.random() < 0.5) {
+        // Scouting ahead of the ship
+        const ahead = { x: ship.pos.x + Math.cos(ship.heading) * 1400, y: ship.pos.y + Math.sin(ship.heading) * 1400 };
+        this.launchShipFlight(ship, model, 'scout_fuel', { type: 'patrol', patrolOrigin: ahead });
+      }
+    }
+
+    // Recover AI detachments to their own ship when the sortie is over
+    for (let i = this.aircraft.length - 1; i >= 0; i--) {
+      const plane = this.aircraft[i];
+      if (!plane.shipDetachment || plane.side === 'player' || plane.state === 'shot_down') continue;
+      const home = ships.find((sh) => sh.id === plane.carrierId && !sh.isSunk);
+      if (!home) {
+        // Ship gone: the aircraft ditches when its fuel runs out
+        plane.missionTimer = (plane.missionTimer ?? 60) - dt;
+        if (plane.missionTimer < -60) this.aircraft.splice(i, 1);
+        continue;
+      }
+      plane.missionTimer = (plane.missionTimer ?? 90) - dt;
+      const done = plane.missionTimer <= 0 || plane.order.type === 'rtb' || (!plane.hasPayload && plane.payloadType !== 'scout_fuel');
+      if (!done) continue;
+      plane.order = { type: 'move', targetPos: { ...home.pos } };
+      plane.state = 'cruising';
+      plane.targetHeading = Math.atan2(home.pos.y - plane.pos.y, home.pos.x - plane.pos.x);
+      if (dist(plane.pos, home.pos) < 55) {
+        if (home.carrierPlanes) home.carrierPlanes.ready[plane.model] = (home.carrierPlanes.ready[plane.model] ?? 0) + 1;
+        this.aircraft.splice(i, 1);
+      }
+    }
+  }
+
+  /** One aircraft off an allied or enemy ship's deck. */
+  private launchShipFlight(ship: Ship, model: AircraftModel, payloadType: AircraftPayloadType, order: UnitOrder): void {
+    const cp = ship.carrierPlanes;
+    if (!cp || (cp.ready[model] ?? 0) <= 0) return;
+    cp.ready[model] -= 1;
+    const role: AircraftRole = getCatalogRole(model, 'carrier', this.era);
+    const speed = getAircraftBaseSpeed(model);
+    const health = getAircraftBaseHealth(model);
+    const gun = getAircraftGunRounds(model);
+    const sono = this.getSonobuoySpec(model);
+    const shipName = ship.codeName || ship.name;
+    const label = model === 'ka27' ? 'Ka-27 螺旋' : model === 'e13a' ? 'E13A 零式水偵' : model === 'walrus' ? 'Walrus 海象' : model === 'lynx' ? 'Lynx 山貓' : model === 'sh3f' ? 'HSS-2 海王' : model.toUpperCase();
+    this.aircraft.push({
+      id: `shipair-${ship.id}-${model}-${Date.now()}-${Math.floor(Math.random() * 1e5)}`,
+      squadronId: `sq-ship-${ship.id}-${Date.now()}`,
+      model,
+      role,
+      name: `${shipName} · ${label}`,
+      flightName: `${shipName} 艦載機`,
+      side: ship.side,
+      pos: { ...ship.pos },
+      vel: { x: Math.cos(ship.heading) * speed, y: Math.sin(ship.heading) * speed },
+      heading: ship.heading,
+      targetHeading: ship.heading,
+      speed,
+      maxSpeed: speed,
+      altitude: 0.6,
+      state: order.type === 'patrol' ? 'patrolling' : 'cruising',
+      health,
+      maxHealth: health,
+      order,
+      hasPayload: payloadType !== 'scout_fuel',
+      payloadType,
+      payloadName: PAYLOAD_CATALOG[payloadType]?.badge ?? '',
+      ammoRemaining: 2,
+      maxAmmo: 2,
+      gunAmmo: gun,
+      maxGunAmmo: gun,
+      carrierId: ship.id,
+      homeBaseId: ship.id,
+      shipDetachment: true,
+      missionTimer: 70 + Math.random() * 40,
+      shootCooldown: 0,
+      wingmanOffset: { x: 0, y: 0 },
+      ...(sono ? { sonobuoyAmmo: sono.count, maxSonobuoyAmmo: sono.count, sonobuoyModel: sono.label } : {}),
+    });
+  }
+
   private updateAircraft(dt: number) {
     const flagship = this.getFlagship();
     this.updateAirPicture(dt);
@@ -4420,7 +4538,16 @@ export class GameEngine {
 
   // ════ 優先判定超視距/遠程導引飛彈（確保 B-52G / Tu-22 等戰略轟炸機掛載魚叉/暴風反艦飛彈時能在 4000m 外實施遠程獵殺，不誤入近距離地毯投彈）════
   private releasePayloadOnTarget(dt: number, plane: Aircraft, targetEntity: Aircraft | GroundUnit | Installation | Ship | undefined, targetPos: Vector2D, d: number): void {
-    if (plane.payloadType === 'rgm84_harpoon') {
+    if (plane.payloadType === 'heli_asm') {
+      // Helicopter ASuW: a pair of light anti-ship missiles from outside the target's gun range
+      if (d < AIR_WEAPON_RANGE.heliAsm) {
+        this.fireAirLaunchedHarpoon(plane, targetPos, targetEntity, { light: true });
+        plane.ammoRemaining = 0;
+        plane.hasPayload = false;
+        plane.order = { type: 'rtb' };
+        plane.state = 'returning';
+      }
+    } else if (plane.payloadType === 'rgm84_harpoon') {
       // ════ 魚叉超視距反艦飛彈 (AGM-84 Harpoon AShM): 4000m 掠海主動雷達導引 ════
       if (d < AIR_WEAPON_RANGE.harpoon) {
         this.fireAirLaunchedHarpoon(plane, targetPos, targetEntity);
@@ -5229,6 +5356,7 @@ export class GameEngine {
     const toPos = this.getAirBasePos(toId);
     if (!fromPos || !toPos) return fail('⚠️ 轉場基地不存在或已被摧毀。');
     const toCarrier = this.findFriendlyCarrier(toId);
+    if (toCarrier && !deckAccepts(toCarrier, model)) return fail(`⚠️「${toCarrier.name}」只能收容自己的艦載直升機 / 水上飛機。`);
     if (toCarrier && !this.isCarrierCapable(model)) return fail(`⚠️ ${model.toUpperCase()} 並非艦載機型，無法降落「${toCarrier.name}」。`);
 
     const fromCarrier = this.findFriendlyCarrier(fromId);
@@ -9848,12 +9976,13 @@ export class GameEngine {
   // 時代五反艦、防空與對地現代化導引飛彈發射系統 (Era 5 Precision Missiles)
   // ══════════════════════════════════════════════════════════
 
-  private fireAirLaunchedHarpoon(plane: Aircraft, targetPos: Vector2D, targetEntity?: CombatTargetEntity) {
+  private fireAirLaunchedHarpoon(plane: Aircraft, targetPos: Vector2D, targetEntity?: CombatTargetEntity, opts?: { light?: boolean }) {
+    const light = !!opts?.light;
     soundEngine.playRocketIgnition();
     const attackerName = `${plane.name} (戰機 #${plane.id.slice(-4)})`;
     const heading = plane.heading;
     const speed = MISSILE_SPEED.harpoon; // Mach 0.71 sea-skimming
-    const range = 4200;
+    const range = light ? AIR_WEAPON_RANGE.heliAsm * 1.3 : 4200;
 
     let targetShipId: string | undefined = undefined;
     if (targetEntity && 'isSunk' in targetEntity && !this.isSubmarine(targetEntity)) {
@@ -9874,7 +10003,7 @@ export class GameEngine {
     }
 
     // 依據機型決定魚叉齊射枚數 (B-52 現代化戰轟可掛 8~12 枚齊射 6 枚; A-6E / F-111 掛 4 枚齊射 4 枚; F/A-18 / S-3A 雙發齊射)
-    const salvoCount = plane.model === 'b52' ? 6 : (plane.model === 'a6e' || plane.model === 'f111') ? 4 : 2;
+    const salvoCount = light ? 2 : plane.model === 'b52' ? 6 : (plane.model === 'a6e' || plane.model === 'f111') ? 4 : 2;
     const allShips = [...this.playerShips, ...this.enemyShips, ...this.alliedShips];
     const hostileShips = allShips.filter((s) => !s.isSunk && this.isHostile(plane.side, s.side) && !this.isSubmarine(s));
 
@@ -9901,8 +10030,8 @@ export class GameEngine {
         flightProgress: 0,
         maxDistance: range,
         distanceTraveled: 0,
-        damage: 2600, // Heavy armor-piercing blast fragmentation warhead
-        blastRadius: 55,
+        damage: light ? 1100 : 2600, // Penguin 120 kg / Sea Skua 28 kg vs Harpoon 221 kg
+        blastRadius: light ? 30 : 55,
         speed,
         heading: mHeading,
         isDead: false,
@@ -9917,8 +10046,8 @@ export class GameEngine {
         ashmVariant: 'harpoon_agm84',
         ashmProfile: 'pop_up_dive',
         missileAltitude: 0.22,
-        missileHealth: 130,
-        maxMissileHealth: 130,
+        missileHealth: light ? 80 : 130,
+        maxMissileHealth: light ? 80 : 130,
       });
     }
 
@@ -9928,7 +10057,9 @@ export class GameEngine {
       sourceName: attackerName,
       targetName: '敵水面戰鬥群',
       actionType: 'recon_spotted',
-      text: `🚀【AGM-84 魚叉波次狼群齊射！】「${plane.name}」釋放 ${salvoCount} 枚 AGM-84 魚叉反艦飛彈飽和狼群！火箭助推點火掠海超低空突防！`,
+      text: light
+        ? `🚀【直升機反艦飛彈】「${plane.name}」以搜索雷達鎖定敵艦，射出 ${salvoCount} 枚輕型反艦飛彈。`
+        : `🚀【AGM-84 魚叉波次狼群齊射！】「${plane.name}」釋放 ${salvoCount} 枚 AGM-84 魚叉反艦飛彈飽和狼群！火箭助推點火掠海超低空突防！`,
     });
   }
 

@@ -391,6 +391,10 @@ export const HUD: React.FC<HUDProps> = ({
       if (targetTab === 'airbase' && typeof selectedAirfacility === 'object' && selectedAirfacility.id) {
         if (airfields.some((a) => a.id === selectedAirfacility.id)) setSelectedAirfieldId(selectedAirfacility.id);
       }
+      // Clicking a ship with its own aircraft (cruiser floatplanes, frigate helicopter) shows that deck
+      if (targetTab === 'carrier' && typeof selectedAirfacility === 'object' && selectedAirfacility.id) {
+        if (carriers.some((c) => c.id === selectedAirfacility.id)) setSelectedCarrierId(selectedAirfacility.id);
+      }
     }
   }, [selectedAirfacility]);
 

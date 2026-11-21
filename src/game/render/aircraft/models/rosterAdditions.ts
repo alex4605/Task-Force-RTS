@@ -325,6 +325,49 @@ function rotorDisc(ctx: CanvasRenderingContext2D, x: number, r: number, blades: 
  * A6M2-N "Rufe": the Zero adapted as a floatplane fighter for the Solomons, with one large
  * central float on a pylon, small stabilising floats under the wings and an enlarged fin.
  */
+/**
+ * Westland Lynx HAS.2/3: compact naval helicopter, short boxy cabin, slim tail boom with a
+ * swept fin and tail rotor, wheeled undercarriage sponsons; Sea Skua or Mk 46 on side pylons.
+ */
+function drawLynx(rc: RenderContext, plane: Aircraft, color: string): void {
+  const ctx = rc.ctx;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.1;
+  ctx.fillStyle = '#2B3238';
+  ctx.beginPath();
+  ctx.moveTo(-3.5, -1.3);
+  ctx.lineTo(-17, -0.7);
+  ctx.lineTo(-17, 0.7);
+  ctx.lineTo(-3.5, 1.3);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillRect(-17, -3.6, 2, 7.2);
+  ctx.fillStyle = '#323B42';
+  ctx.beginPath();
+  ctx.moveTo(8.5, 0);
+  ctx.quadraticCurveTo(8, -3.4, 3, -3.6);
+  ctx.lineTo(-4.5, -3.2);
+  ctx.lineTo(-4.5, 3.2);
+  ctx.lineTo(3, 3.6);
+  ctx.quadraticCurveTo(8, 3.4, 8.5, 0);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // Undercarriage sponsons and weapon pylons
+  ctx.fillStyle = '#263238';
+  ctx.fillRect(-2, -5.2, 3, 1.6);
+  ctx.fillRect(-2, 3.6, 3, 1.6);
+  if (plane.hasPayload) {
+    ctx.fillStyle = '#90A4AE';
+    ctx.fillRect(-3, -7, 5, 1.2);
+    ctx.fillRect(-3, 5.8, 5, 1.2);
+  }
+  ctx.fillStyle = 'rgba(128, 222, 234, 0.5)';
+  ctx.fillRect(4, -2.4, 3.4, 4.8);
+  drawNationalInsignia(rc, plane, -9, 0, 2.2);
+}
+
 function drawRufe(rc: RenderContext, plane: Aircraft, color: string): void {
   const ctx = rc.ctx;
   ctx.strokeStyle = color;
@@ -854,6 +897,7 @@ export const ROSTER_ADDITION_DRAWERS: AircraftDrawerTable = {
   buccaneer: drawBuccaneer,
   sea_harrier: drawSeaHarrier,
   rufe: drawRufe,
+  lynx: drawLynx,
   ki84: drawKi84,
   po2: drawPo2,
   ac47: drawAc47,

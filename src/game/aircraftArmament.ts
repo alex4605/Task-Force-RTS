@@ -99,6 +99,9 @@ export const AIRCRAFT_GUNS: Record<AircraftModel, GunBattery | null> = {
   zero: wing('2x 20mm 九九式 + 2x 7.7mm', g('20', 2, 120), g('7.7', 2, 1360)),
   zero_a6m2: wing('2x 20mm 九九式一號 + 2x 7.7mm', g('20', 2, 120), g('7.7', 2, 1360)),
   zero_a6m5: wing('2x 20mm 九九式二號 + 2x 7.7mm', g('20', 2, 250), g('7.7', 2, 1360)),
+  walrus: nose('1x .303 維克斯 K 旋轉機槍', g('7.7', 1, 600)), // bow and rear flexible guns
+  lynx: null, // door gun only
+  e13a: nose('1x 7.7mm 後座旋轉機槍', g('7.7', 1, 500)), // flexible rear gun (no fixed forward gun)
   rufe: wing('2x 20mm + 2x 7.7mm', g('20', 2, 120), g('7.7', 2, 1000)),
   ki61: nose('2x 20mm Ho-5 + 2x 12.7mm', g('20', 2, 240), g('12.7', 2, 500)),
   ki84: nose('2x 20mm Ho-5 + 2x 12.7mm Ho-103', g('20', 2, 300), g('12.7', 2, 700)),
@@ -410,6 +413,7 @@ export function payloadWarhead(payload: AircraftPayloadType | undefined): Warhea
     case 'bomb_1600_ap':
     case 'tiny_tim_rocket':
     case 'rgm84_harpoon':
+    case 'heli_asm':
       return 'ap';
     case 'agm65_maverick':
     case 'hellfire_missiles':

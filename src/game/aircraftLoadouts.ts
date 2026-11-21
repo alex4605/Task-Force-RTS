@@ -73,6 +73,7 @@ const DEFAULT_ROUNDS: Record<AircraftPayloadType, number> = {
   agm78_standard_arm: 2,
   mer_iron_bombs: 1,
   rgm84_harpoon: 2,
+  heli_asm: 2,
   aim54_phoenix: 4,
   p700_granit: 2,
   kh22_burya: 2,
@@ -142,7 +143,7 @@ const LOADOUTS: Partial<Record<AircraftModel, readonly Store[]>> = {
   uh1: [s('helo_assault_troops'), s('clean_guns')],
   ah1: [s('ffar_rockets_pod', 16), s('clean_guns')], // AH-1G: 2.75" pods, minigun / 40 mm turret
   uh2: [s('scout_fuel')], // unarmed utility / plane-guard helicopter
-  sh2: [s('asw_acoustic_torpedo', 2)], // SH-2F: two Mk 46
+  sh2: [s('asw_acoustic_torpedo', 2), s('heli_asm', 2, ['era5'])], // SH-2F: two Mk 46; SH-2G Penguin
   s2: [s('asw_acoustic_torpedo', 2), s('depth_bombs', 4), s('scout_fuel')], // S-2E: Mk 44 torpedoes in the bay
   e1: [s('scout_fuel')],
   c1: [s('para_sof_team')], // COD: room for a small team only
@@ -160,7 +161,10 @@ const LOADOUTS: Partial<Record<AircraftModel, readonly Store[]>> = {
   ah64a: [s('hellfire_missiles', 16), s('clean_guns')], // sixteen Hellfire, M230 chain gun
   ah1w: [s('tow_missiles', 8), s('hellfire_missiles', 8), s('aim9_sidewinder', 2), s('clean_guns')],
   s3a: [s('asw_acoustic_torpedo', 4), s('rgm84_harpoon', 2), s('depth_bombs', 4), s('scout_fuel')], // four Mk 46 in the bay; no gun
-  sh60b: [s('asw_acoustic_torpedo', 2), s('depth_bombs', 2)], // LAMPS III: two Mk 46 (Penguin from 1989)
+  lynx: [s('asw_acoustic_torpedo', 2), s('heli_asm', 4), s('depth_bombs', 2)], // Lynx HAS.2/3: two Mk 46 / Stingray or four Sea Skua
+  walrus: [s('scout_fuel'), s('scout_depth_charge', 2)], // two 250 lb depth charges
+  e13a: [s('scout_fuel'), s('scout_depth_charge', 1)], // one 250 kg bomb or depth charge
+  sh60b: [s('asw_acoustic_torpedo', 2), s('heli_asm', 2), s('depth_bombs', 2)], // LAMPS III: two Mk 46, or AGM-119B Penguin (ASuW)
   sh3f: [s('asw_acoustic_torpedo', 2), s('depth_bombs', 4)],
   f111: [s('gbu10_laser_paveway', 4), s('mer_iron_bombs'), s('bomb_2000', 4), s('cbu_cluster_bombs', 4)], // F-111F Pave Tack
   e2c: [s('scout_fuel')],

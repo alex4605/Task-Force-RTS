@@ -701,7 +701,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
           lastLeftClickRef.current = { time: now, key: clickKey };
           onSelectUnits(engine.selectedUnitIds);
-          if (hitShip.type === 'carrier' || hitShip.type === 'cve' || hitShip.type === 'cv63' || hitShip.type === 'cvn' || hitShip.type === 'lph' || hitShip.type === 'lha_tarawa') {
+          if (hitShip.flightDeck || hitShip.type === 'carrier' || hitShip.type === 'cve' || hitShip.type === 'cv63' || hitShip.type === 'cvn' || hitShip.type === 'lph' || hitShip.type === 'lha_tarawa') {
             onSelectAirfacility?.('carrier', hitShip.id);
           } else {
             onSelectAirfacility?.(null);

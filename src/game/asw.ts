@@ -112,7 +112,7 @@ export function sonarDeadZone(sonar: SonarSuite, era: Era): number {
 }
 
 /** Patrol / ASW aircraft carrying a MAD boom (from 1944). */
-const MAD_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>(['pby', 'af_guardian', 's2', 'p3', 's3a', 'sh2', 'sh60b', 'il38', 'be12', 'ka27']);
+const MAD_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>(['pby', 'af_guardian', 's2', 'p3', 's3a', 'sh2', 'sh60b', 'lynx', 'il38', 'be12', 'ka27']);
 /** Helicopters with dipping sonar. */
 const DIPPING_SONAR: Partial<Record<AircraftModel, number>> = { sh3f: 8, ka27: 7, uh2: 0, sh60b: 0 };
 /** Aircraft with a search radar able to pick up a snorkel or a surfaced boat (km). */

@@ -966,7 +966,7 @@ const AIRCRAFT_PROPULSION: Record<AircraftModel, Propulsion> = {
   kamikaze_judy: 'single_prop', yak9: 'single_prop', il10: 'single_prop', p36a: 'single_prop',
   p39d: 'single_prop', hurricane: 'single_prop', spitfire_v: 'single_prop', swordfish: 'single_prop',
   spitfire_xiv: 'single_prop', tempest: 'single_prop', sea_fury: 'single_prop', rokaf_p51: 'single_prop',
-  firefly_as5: 'single_prop', a1h: 'single_prop', rufe: 'single_prop', ki84: 'single_prop', po2: 'single_prop', boomerang: 'single_prop',
+  firefly_as5: 'single_prop', a1h: 'single_prop', rufe: 'single_prop', e13a: 'single_prop', walrus: 'single_prop', lynx: 'helicopter', ki84: 'single_prop', po2: 'single_prop', boomerang: 'single_prop',
   seafire: 'single_prop', barracuda: 'single_prop',
   // multi_prop
   b17: 'multi_prop', a20: 'multi_prop', b24: 'multi_prop', p38: 'multi_prop', a26: 'multi_prop',
@@ -1018,6 +1018,7 @@ const ROTOR_SPECS: Partial<Record<AircraftModel, RotorSpec>> = {
   ka27: { radius: 14, blades: 3, hubX: 0, coaxial: true },
   mi24: { radius: 18, blades: 5, hubX: 1 },
   sh60b: { radius: 15, blades: 4, hubX: 1 },
+  lynx: { radius: 12, blades: 4, hubX: 0 },
 };
 const DEFAULT_ROTOR: RotorSpec = { radius: 14, blades: 3, hubX: 1 };
 
