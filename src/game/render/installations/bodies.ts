@@ -688,7 +688,7 @@ function drawMajorNavalPort(rc: RenderContext, _inst: Installation, _style: Inst
   ctx.fillStyle = '#80DEEA';
   ctx.font = 'bold 9.5px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('⚓【正規深水軍港】全島戰略樞紐 (+1.5 CP/s)', 0, -32);
+  ctx.fillText('⚓【正規深水軍港】全島戰略樞紐 (+1.5 RP/s)', 0, -32);
 }
 
 function drawSupplyDepot(rc: RenderContext, _inst: Installation, _style: InstallationStyle, _island?: Island): void {
@@ -888,7 +888,7 @@ function drawRefugeeCamp(rc: RenderContext, _inst: Installation, _style: Install
   ctx.fillStyle = '#FFE082';
   ctx.font = 'bold 9px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(`⛺【人道救援難民營】誤擊 -15 CP`, 0, -26);
+  ctx.fillText(`⛺【人道救援難民營】誤擊扣政治值`, 0, -26);
 }
 
 function drawBunkerNest(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {

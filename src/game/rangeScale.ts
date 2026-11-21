@@ -147,6 +147,66 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   frg_leopard2: 3.0, // Rh 120
   uk_challenger1: 3.0, // L11 120mm
   uk_warrior: 1.5, // L21 RARDEN 30mm
+  nz_infantry_43: 0.5, // SMLE / Bren
+  fj_commando_43: 0.45, // Owen / SMLE, jungle scouts
+  cw_25pdr: 12.25, // QF 25-pounder, 12.25 km
+  au_commando_45: 0.45, // Owen / Bren
+  ph_guerrilla_45: 0.4, // Garand / Springfield / BAR
+  au_matilda_frog: 0.15, // flame gun ~80 m
+  tr_infantry_50: 0.46, // M1 Garand / BAR
+  rok_m36: 1.8, // 90mm M3
+  rok_tiger_65: 0.5, // M1 / M16 / M60
+  au_centurion_68: 2.0, // 20pdr
+  arvn_m113_acav: 1.5, // M2 .50 cal
+  nz_l5_pack: 10.6, // L5 pack howitzer
+  frg_gepard: 3.5, // twin 35mm KDA, 3.5 km
+  frg_m109g: 18.5, // M109G with Rheinmetall tube
+  sof_coastwatcher_42: 0.4, // SMLE / Owen, radio
+  sof_alamo_scouts_45: 0.45, // M1 carbine / Thompson
+  sof_udt_45: 0.3, // demolition packs
+  sof_ranger_50: 0.5, // M1 / BAR / bazooka
+  sof_udt_50: 0.3, // demolition
+  sof_seal_65: 0.5, // Stoner 63 / M16 / M79
+  sof_macv_sog_65: 0.45, // CAR-15 / Swedish K
+  sof_force_recon_83: 0.55, // M16A2 / M249
+  sof_seal_83: 0.55, // M16A2 / M60E3 / M203
+  sof_ranger_83: 0.6, // M16A2 / M249 / M72
+  opfor_ija_hmg_42: 0.9, // Type 92 HMG
+  opfor_ija_47mm_at: 1.0, // Type 1 47mm AT
+  opfor_ija_kami: 1.0, // 37mm Type 1
+  opfor_ija_banzai_45: 0.3, // lunge mines, bayonets
+  opfor_pva_infantry_50: 0.4, // PPSh / Mosin / grenades
+  opfor_zis3_76: 2.0, // ZiS-3 direct fire
+  opfor_su76m: 2.0, // ZiS-3Sh 76mm
+  opfor_vc_guerrilla_65: 0.4, // SKS / AK / B-40
+  opfor_rpg_team_65: 0.3, // RPG-2 / RPG-7
+  opfor_m46_130mm: 27.5, // M-46 130mm
+  opfor_dshk_aa: 1.5, // DShK
+  opfor_spetsnaz_83: 0.5, // AKS-74 / PBS
+  opfor_bmd1: 1.3, // 2A28 Grom 73mm
+  opfor_btr70: 1.5, // KPVT 14.5mm
+  opfor_t64b: 4.0, // 9M112 Kobra
+  cw_bren_carrier: 0.8, // Bren
+  au_vickers_mg_45: 1.0, // Vickers MMG
+  cw_churchill_50: 1.4, // 75mm
+  gr_infantry_50: 0.46, // M1 / BAR
+  fr_infantry_50: 0.46, // M1 / BAR
+  th_cobra_67: 0.5, // M16 / M60
+  arvn_m48a3: 2.0, // M41 90mm
+  au_sasr_66: 0.5, // L1A1 / M16
+  nl_leopard1: 2.5, // L7 105mm
+  nl_infantry_83: 0.6, // FN FAL / MAG
+  frg_luchs: 1.5, // 20mm Rh 202
+  uk_sas_83: 0.55, // M16A2 / GPMG
+  usmc_paramarine_42: 0.45, // Reising / Garand / BAR
+  us_airborne_45: 0.5, // M1A1 carbine / Thompson / bazooka
+  us_airborne_50: 0.5, // M1 / BAR / 3.5in bazooka
+  us_airborne_65: 0.5, // M16 / M60 / M79
+  us_airborne_83: 0.55, // M16A2 / M249 / Dragon
+  us_cav_air_assault_65: 0.5, // M16 / M60 / M79
+  us_m1a1_pack_75: 8.8, // M1A1 75mm pack howitzer
+  us_m102_105: 11.5, // M102 105mm
+  uk_milan_team: 1.95, // MILAN
 };
 
 export function getGroundUnitRange(type: GroundUnitType): number {

@@ -82,6 +82,23 @@ const TRIBAL_DD: Mount[] = [
 const EXTRA_SAG_FLEETS: Record<Era, AlliedSagFleet[]> = {
   era1: [
     {
+      title: 'ABDA 聯合打擊部隊 (ABDA Striking Force · 爪哇海 1942)',
+      ships: [
+        sagShip({ name: 'HNLMS De Ruyter (德魯伊特號輕巡洋艦)', codeName: 'HNLMS De Ruyter', type: 'cruiser', length: 104, width: 17, maxHealth: 7400, speed: 22, flakRange: 1200 }, 'abda-dr', [
+          [30, 0, '15cm 雙聯裝 (A砲塔)', 2000, 460, 4.2], [20, 0, '15cm 單裝 (B砲)', 2000, 300, 4.2], [-20, 0, '15cm 雙聯裝 (X砲塔)', 2000, 460, 4.2], [-30, 0, '15cm 雙聯裝 (Y砲塔)', 2000, 460, 4.2],
+        ]),
+        sagShip({ name: 'HMS Exeter (埃克塞特號重巡洋艦)', codeName: 'HMS Exeter (68)', type: 'cruiser', length: 108, width: 18, maxHealth: 8800, speed: 21, flakRange: 1200 }, 'abda-exe', [
+          [32, 0, '8吋 Mk VIII 雙聯裝 (A砲塔)', 2300, 620, 5.2], [22, 0, '8吋 Mk VIII 雙聯裝 (B砲塔)', 2300, 620, 5.2], [-30, 0, '8吋 Mk VIII 雙聯裝 (Y砲塔)', 2300, 620, 5.2],
+        ]),
+        sagShip({ name: 'HMS Electra (伊萊克特拉號 E級驅逐艦)', codeName: 'HMS Electra (H27)', type: 'destroyer', length: 66, width: 11, maxHealth: 3800, speed: 27, flakRange: 1000, torpedoCooldown: 22 }, 'abda-ele', [
+          [20, 0, '4.7吋 Mk IX 單裝 (A砲)', 1500, 300, 2.8], [12, 0, '4.7吋 Mk IX 單裝 (B砲)', 1500, 300, 2.8], [-18, 0, '4.7吋 Mk IX 單裝 (X砲)', 1500, 300, 2.8], [-25, 0, '4.7吋 Mk IX 單裝 (Y砲)', 1500, 300, 2.8],
+        ]),
+        sagShip({ name: 'HNLMS Kortenaer (科爾特納爾號驅逐艦)', codeName: 'HNLMS Kortenaer', type: 'destroyer', length: 64, width: 10, maxHealth: 3400, speed: 27, flakRange: 950, torpedoCooldown: 22 }, 'abda-kor', [
+          [18, 0, '12cm 單裝 (A砲)', 1450, 260, 3.0], [10, 0, '12cm 單裝 (B砲)', 1450, 260, 3.0], [-20, 0, '12cm 單裝 (X砲)', 1450, 260, 3.0],
+        ]),
+      ],
+    },
+    {
       title: '澳美聯合第44特遣艦隊 (Task Force 44 · 瓜達爾卡納爾 1942)',
       ships: [
         sagShip({ name: 'HMAS Australia (澳大利亞號重巡洋艦)', codeName: 'HMAS Australia (D84)', type: 'cruiser', length: 112, width: 21, maxHealth: 9800, speed: 20, flakRange: 1300 }, 'ran-aus', COUNTY_8IN),
@@ -95,6 +112,24 @@ const EXTRA_SAG_FLEETS: Record<Era, AlliedSagFleet[]> = {
     },
   ],
   era2: [
+    {
+      title: '英國太平洋艦隊 第4巡洋艦中隊與第4驅逐艦隊 (BPF · 先島群島 1945)',
+      ships: [
+        sagShip({ name: 'HMS Argonaut (阿爾戈英雄號 Dido 級防空巡洋艦)', codeName: 'HMS Argonaut (61)', type: 'cruiser', length: 94, width: 15, maxHealth: 6800, speed: 23, flakRange: 1500, hasModernNavalGunAA: true }, 'bpf-arg', [
+          [28, 0, '5.25吋 雙聯裝高平砲 (A砲塔)', 1700, 320, 2.6], [20, 0, '5.25吋 雙聯裝高平砲 (B砲塔)', 1700, 320, 2.6], [12, 0, '5.25吋 雙聯裝高平砲 (Q砲塔)', 1700, 320, 2.6],
+          [-20, 0, '5.25吋 雙聯裝高平砲 (X砲塔)', 1700, 320, 2.6], [-28, 0, '5.25吋 雙聯裝高平砲 (Y砲塔)', 1700, 320, 2.6],
+        ]),
+        sagShip({ name: 'HMNZS Achilles (阿基里斯號 Leander 級輕巡洋艦)', codeName: 'HMNZS Achilles (70)', type: 'cruiser', length: 98, width: 17, maxHealth: 7600, speed: 22, flakRange: 1200 }, 'bpf-ach', [
+          [30, 0, '6吋 Mk XXIII 雙聯裝 (A砲塔)', 2000, 480, 4.0], [18, 0, '6吋 Mk XXIII 雙聯裝 (B砲塔)', 2000, 480, 4.0], [-30, 0, '6吋 Mk XXIII 雙聯裝 (Y砲塔)', 2000, 480, 4.0],
+        ]),
+        sagShip({ name: 'HMS Grenville (格倫維爾號 U級驅逐艦)', codeName: 'HMS Grenville (R97)', type: 'destroyer', length: 70, width: 12, maxHealth: 4200, speed: 27, flakRange: 1100, torpedoCooldown: 22 }, 'bpf-gren', [
+          [22, 0, '4.7吋 Mk IX 單裝 (A砲)', 1500, 300, 2.8], [12, 0, '4.7吋 Mk IX 單裝 (B砲)', 1500, 300, 2.8], [-18, 0, '4.7吋 Mk IX 單裝 (X砲)', 1500, 300, 2.8], [-26, 0, '4.7吋 Mk IX 單裝 (Y砲)', 1500, 300, 2.8],
+        ]),
+        sagShip({ name: 'HMAS Napier (納皮爾號 N級驅逐艦)', codeName: 'HMAS Napier (G97)', type: 'destroyer', length: 72, width: 11, maxHealth: 4400, speed: 27, flakRange: 1100, torpedoCooldown: 22 }, 'bpf-nap', [
+          [22, 0, '4.7吋 Mk XII 雙聯裝 (A砲塔)', 1600, 340, 2.8], [12, 0, '4.7吋 Mk XII 雙聯裝 (B砲塔)', 1600, 340, 2.8], [-20, 0, '4.7吋 Mk XII 雙聯裝 (Y砲塔)', 1600, 340, 2.8],
+        ]),
+      ],
+    },
     {
       title: '英國太平洋艦隊 第1戰列中隊與第4巡洋艦中隊 (BPF · 沖繩 冰山行動 1945)',
       ships: [
@@ -125,6 +160,25 @@ const EXTRA_SAG_FLEETS: Record<Era, AlliedSagFleet[]> = {
   ],
   era3: [
     {
+      title: '聯合國軍西海岸封鎖部隊 (TE 95.12 · 1951)',
+      ships: [
+        sagShip({ name: 'HMS Belfast (貝爾法斯特號輕巡洋艦)', codeName: 'HMS Belfast (C35)', type: 'cruiser', length: 112, width: 19, maxHealth: 9200, speed: 22, flakRange: 1400, hasModernNavalGunAA: true }, 'un-bel', [
+          [34, 0, '6吋 Mk XXIII 三聯裝 (A砲塔)', 2000, 500, 4.0], [22, 0, '6吋 Mk XXIII 三聯裝 (B砲塔)', 2000, 500, 4.0],
+          [-22, 0, '6吋 Mk XXIII 三聯裝 (X砲塔)', 2000, 500, 4.0], [-34, 0, '6吋 Mk XXIII 三聯裝 (Y砲塔)', 2000, 500, 4.0],
+        ]),
+        sagShip({ name: 'HMCS Athabaskan (阿薩巴斯卡號部族級驅逐艦)', codeName: 'HMCS Athabaskan (219)', type: 'destroyer', length: 72, width: 13, maxHealth: 4800, speed: 26, flakRange: 1200, torpedoCooldown: 22 }, 'un-ath', TRIBAL_DD),
+        sagShip({ name: 'HNLMS Evertsen (埃弗森號驅逐艦)', codeName: 'HNLMS Evertsen (D802)', type: 'destroyer', length: 66, width: 11, maxHealth: 3800, speed: 26, flakRange: 1100, torpedoCooldown: 22 }, 'un-eve', [
+          [20, 0, '4.7吋 Mk IX 單裝 (A砲)', 1500, 300, 2.8], [12, 0, '4.7吋 Mk IX 單裝 (B砲)', 1500, 300, 2.8], [-18, 0, '4.7吋 Mk IX 單裝 (X砲)', 1500, 300, 2.8],
+        ]),
+        sagShip({ name: 'HMAS Murchison (默奇森號 River 級巡防艦)', codeName: 'HMAS Murchison (K442)', type: 'destroyer', length: 62, width: 11, maxHealth: 3000, speed: 18, flakRange: 1000 }, 'un-mur', [
+          [20, 0, '4吋 Mk XVI 雙聯裝', 1450, 220, 2.4], [-20, 0, '40mm 博福斯', 1100, 90, 0.8],
+        ]),
+        sagShip({ name: 'FS La Grandière (拉格朗迪耶爾號通報艦)', codeName: 'FS La Grandière (F731)', type: 'destroyer', length: 60, width: 10, maxHealth: 2800, speed: 15, flakRange: 950 }, 'fr-lag', [
+          [18, 0, '138mm 單裝', 1700, 320, 4.0], [-18, 0, '138mm 單裝', 1700, 320, 4.0],
+        ]),
+      ],
+    },
+    {
       title: '大英國協與大韓民國海軍 (Commonwealth & ROKN · 仁川 / 元山 1950)',
       ships: [
         sagShip({ name: 'HMS Jamaica (牙買加號輕巡洋艦)', codeName: 'HMS Jamaica (44)', type: 'cruiser', length: 100, width: 18, maxHealth: 8200, speed: 22, flakRange: 1400, hasModernNavalGunAA: true }, 'cw-jam', [
@@ -144,6 +198,20 @@ const EXTRA_SAG_FLEETS: Record<Era, AlliedSagFleet[]> = {
   ],
   era4: [
     {
+      title: '自由世界海軍沿岸監視部隊 (Market Time · 南韓 / 南越 / 澳洲 1969)',
+      ships: [
+        sagShip({ name: 'HMAS Brisbane 布里斯本號 (D41 珀斯級飛彈驅逐艦)', codeName: 'HMAS Brisbane (D41)', type: 'ddg', length: 92, width: 15, maxHealth: 6400, speed: 26, flakRange: 1300, hasModernNavalGunAA: true, hasSAM: true, samRange: 2800, samModel: 'RIM-24 韃靼人 (Mk 13 單臂)', hasASROC: true }, 'ran-d41', [
+          [26, 0, '5吋/54 Mk 42 單裝', 2000, 420, 2.0], [-30, 0, '5吋/54 Mk 42 單裝', 2000, 420, 2.0],
+        ]),
+        sagShip({ name: 'ROKS Chungbuk 忠北號 (DD-915 驅逐艦)', codeName: 'ROKS Chungbuk (DD-915)', type: 'destroyer', length: 76, width: 13, maxHealth: 5200, speed: 26, flakRange: 1200, torpedoCooldown: 24 }, 'rok-dd915', [
+          [24, 0, '5吋/38 Mk 38 雙聯裝', 1850, 380, 2.4], [14, 0, '5吋/38 Mk 38 雙聯裝', 1850, 380, 2.4], [-26, 0, '5吋/38 Mk 38 雙聯裝', 1850, 380, 2.4],
+        ]),
+        sagShip({ name: 'RVNS Trần Hưng Đạo 陳興道號 (HQ-1 護航驅逐艦)', codeName: 'RVNS Tran Hung Dao (HQ-1)', type: 'destroyer', length: 64, width: 11, maxHealth: 3200, speed: 19, flakRange: 1000 }, 'rvn-hq1', [
+          [20, 0, '3吋/50 Mk 22 單裝', 1500, 220, 2.2], [-22, 0, '3吋/50 Mk 22 單裝', 1500, 220, 2.2],
+        ]),
+      ],
+    },
+    {
       title: '澳大利亞皇家海軍 越南砲擊線驅逐艦 (RAN Gunline · 1967-1971)',
       ships: [
         sagShip({ name: 'HMAS Hobart 荷巴特號 (D39 珀斯級飛彈驅逐艦)', codeName: 'HMAS Hobart (D39)', type: 'ddg', length: 92, width: 15, maxHealth: 6400, speed: 26, flakRange: 1300, hasModernNavalGunAA: true, hasSAM: true, samRange: 2800, samModel: 'RIM-24 韃靼人 (Mk 13 單臂)', hasASROC: true }, 'ran-d39', [
@@ -159,6 +227,45 @@ const EXTRA_SAG_FLEETS: Record<Era, AlliedSagFleet[]> = {
     },
   ],
   era5: [
+    {
+      title: '英國皇家海軍第317特遣艦隊 護衛群 (福克蘭 1982)',
+      ships: [
+        sagShip({ name: 'HMS Coventry 考文垂號 (Type 42 飛彈驅逐艦)', codeName: 'HMS Coventry (D118)', type: 'ddg', length: 90, width: 15, maxHealth: 6000, speed: 27, flakRange: 1300, hasModernNavalGunAA: true, hasSAM: true, samRange: 3200, samModel: 'Sea Dart (海標槍) 區域防空飛彈' }, 'rn-d118', [
+          [28, 0, '4.5吋 Mk 8 單裝', 2100, 420, 2.4],
+        ]),
+        sagShip({ name: 'HMS Glasgow 格拉斯哥號 (Type 42 飛彈驅逐艦)', codeName: 'HMS Glasgow (D88)', type: 'ddg', length: 90, width: 15, maxHealth: 6000, speed: 27, flakRange: 1300, hasModernNavalGunAA: true, hasSAM: true, samRange: 3200, samModel: 'Sea Dart (海標槍) 區域防空飛彈' }, 'rn-d88', [
+          [28, 0, '4.5吋 Mk 8 單裝', 2100, 420, 2.4],
+        ]),
+        sagShip({ name: 'HMS Plymouth 普利茅斯號 (Rothesay 級巡防艦)', codeName: 'HMS Plymouth (F126)', type: 'ffg', length: 82, width: 13, maxHealth: 4800, speed: 26, flakRange: 1200, hasModernNavalGunAA: true, hasSAM: true, samRange: 1600, samModel: 'Sea Cat (海貓) 點防空飛彈' }, 'rn-f126', [
+          [24, 0, '4.5吋 Mk 6 雙聯裝', 2000, 400, 2.6],
+        ]),
+      ],
+    },
+    {
+      title: '法國海軍地中海艦隊 (Marine Nationale · 1985)',
+      ships: [
+        sagShip({ name: 'FS Suffren 絮弗倫號 (D602 飛彈驅逐艦)', codeName: 'FS Suffren (D602)', type: 'ddg', length: 104, width: 16, maxHealth: 7200, speed: 26, flakRange: 1400, hasModernNavalGunAA: true, hasSAM: true, samRange: 3000, samModel: 'Masurca (馬蘇卡) 區域防空飛彈', hasHarpoon: true, ashmType: 'exocet_mm38' }, 'fr-d602', [
+          [30, 0, '100mm Mle 1953 單裝', 2000, 360, 1.8], [22, 0, '100mm Mle 1953 單裝', 2000, 360, 1.8],
+        ]),
+        sagShip({ name: 'FS Georges Leygues 喬治·萊格號 (D640 反潛驅逐艦)', codeName: 'FS Georges Leygues (D640)', type: 'ddg', length: 92, width: 14, maxHealth: 6200, speed: 26, flakRange: 1300, hasModernNavalGunAA: true, hasSAM: true, samRange: 1600, samModel: 'Crotale (響尾蛇) 點防空飛彈', hasHarpoon: true, ashmType: 'exocet_mm40', torpedoCooldown: 24 }, 'fr-d640', [
+          [30, 0, '100mm Mle 1968 單裝', 2000, 360, 1.8],
+        ]),
+      ],
+    },
+    {
+      title: '日本海上自衛隊 第1護衛隊群 (JMSDF Escort Flotilla 1 · 1986)',
+      ships: [
+        sagShip({ name: 'JDS Shirane 白根號 (DDH-143 直升機護衛艦)', codeName: 'JDS Shirane (DDH-143)', type: 'ddg', length: 104, width: 17, maxHealth: 7400, speed: 26, flakRange: 1300, hasModernNavalGunAA: true, hasSAM: true, samRange: 2400, samModel: 'RIM-7 海麻雀防空飛彈', hasASROC: true, hasCIWS: true }, 'jp-143', [
+          [32, 0, '5吋/54 Mk 42 單裝', 2000, 420, 2.0], [22, 0, '5吋/54 Mk 42 單裝', 2000, 420, 2.0],
+        ]),
+        sagShip({ name: 'JDS Hatakaze 旗風號 (DDG-171 飛彈護衛艦)', codeName: 'JDS Hatakaze (DDG-171)', type: 'ddg', length: 98, width: 16, maxHealth: 6800, speed: 28, flakRange: 1300, hasModernNavalGunAA: true, hasSAM: true, samRange: 3000, samModel: 'SM-1MR 標準 (Mk 13 單臂)', hasHarpoon: true, ashmType: 'harpoon', hasASROC: true, hasCIWS: true }, 'jp-171', [
+          [32, 0, '5吋/54 Mk 42 單裝', 2000, 420, 2.0], [-34, 0, '5吋/54 Mk 42 單裝', 2000, 420, 2.0],
+        ]),
+        sagShip({ name: 'JDS Hatsuyuki 初雪號 (DD-122 護衛艦)', codeName: 'JDS Hatsuyuki (DD-122)', type: 'ffg', length: 88, width: 14, maxHealth: 5600, speed: 28, flakRange: 1200, hasModernNavalGunAA: true, hasSAM: true, samRange: 2400, samModel: 'RIM-7 海麻雀防空飛彈', hasHarpoon: true, ashmType: 'harpoon', hasASROC: true, hasCIWS: true }, 'jp-122', [
+          [28, 0, '76mm OTO 快砲', 1800, 220, 1.0],
+        ]),
+      ],
+    },
     {
       title: '英國皇家海軍特遣群 (Royal Navy Task Group · 1982-1990)',
       ships: [

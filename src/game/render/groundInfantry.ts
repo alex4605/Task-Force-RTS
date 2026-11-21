@@ -7,7 +7,7 @@
 import type { PlanPalette } from './groundPlan';
 
 export type InfantryWeapon = 'rifle' | 'long_rifle' | 'smg' | 'bar' | 'lmg' | 'type96' | 'rpg' | 'bazooka' | 'at4' | 'm79' | 'flame' | 'satchel' | 'radio' | 'knee_mortar' | 'detector' | 'none';
-type Helmet = 'm1' | 'm1_cover' | 'ija' | 'soviet' | 'pasgt' | 'pith' | 'slouch' | 'brodie';
+type Helmet = 'm1' | 'm1_cover' | 'ija' | 'soviet' | 'pasgt' | 'pith' | 'slouch' | 'brodie' | 'cap' | 'boonie' | 'bare' | 'conical' | 'beret';
 
 interface Kit {
   uniform: string;
@@ -34,6 +34,39 @@ const KITS = {
   au_vietnam: { uniform: '#4C5638', helmet: 'slouch', helmetColour: '#6A6646', pack: 'alice' },
   // Bundeswehr 1983: olive "Moleskin" (Flecktarn only from 1990), M1-pattern steel helmet
   frg_83: { uniform: '#5E6142', helmet: 'm1', helmetColour: '#4E5236', pack: 'alice' },
+  // Paratroopers: jump smocks and netted helmets
+  para_ww2: { uniform: '#6E6A4C', camo: '#4A4630', helmet: 'm1', helmetColour: '#5A5C3C', pack: 'haversack' },
+  paramarine: { uniform: '#5F6E46', helmet: 'm1', helmetColour: '#6C7A49', pack: 'haversack' },
+  // Special operations and irregulars
+  coastwatcher: { uniform: '#6B6248', helmet: 'slouch', helmetColour: '#7A6A48', pack: 'haversack' },
+  alamo: { uniform: '#4E5A3A', helmet: 'boonie', helmetColour: '#56603E', pack: 'haversack' },
+  udt: { uniform: '#7E6650', helmet: 'bare', helmetColour: '#B08868', pack: 'haversack' },
+  ranger_50: { uniform: '#5B5E3C', helmet: 'm1', helmetColour: '#4B5531', pack: 'haversack' },
+  seal_65: { uniform: '#3C4A30', camo: '#1E1E14', helmet: 'boonie', helmetColour: '#3C4A30', pack: 'alice' },
+  sog: { uniform: '#4A503A', camo: '#1E1F16', helmet: 'boonie', helmetColour: '#4A503A', pack: 'alice' },
+  recon_83: { uniform: '#4F5638', camo: '#2F2A1F', helmet: 'boonie', helmetColour: '#4F5638', pack: 'alice' },
+  ranger_83: { uniform: '#4F5638', camo: '#2F2A1F', helmet: 'pasgt', helmetColour: '#4F5638', pack: 'alice' },
+  sas: { uniform: '#5F6040', camo: '#3B2F22', helmet: 'beret', helmetColour: '#C2B280', pack: 'alice' },
+  sasr: { uniform: '#4C5638', helmet: 'boonie', helmetColour: '#4C5638', pack: 'alice' },
+  spetsnaz: { uniform: '#4D5E3A', camo: '#2D3A20', helmet: 'cap', helmetColour: '#4D5E3A', pack: 'veshmeshok' },
+  pva: { uniform: '#7D7A55', helmet: 'cap', helmetColour: '#6E6B48', pack: 'ruck' },
+  vc: { uniform: '#262626', helmet: 'conical', helmetColour: '#C8B27A', pack: 'ruck' },
+  ija_banzai: { uniform: '#8C7D4E', helmet: 'cap', helmetColour: '#8C7D4E', pack: 'ruck' },
+  greek: { uniform: '#5E6040', helmet: 'm1', helmetColour: '#4E5536', pack: 'haversack' },
+  french: { uniform: '#5D5F3E', helmet: 'm1', helmetColour: '#52583A', pack: 'haversack' },
+  thai: { uniform: '#4E5A36', helmet: 'm1_cover', helmetColour: '#5A6A3C', pack: 'alice' },
+  dutch: { uniform: '#535842', helmet: 'm1', helmetColour: '#4A4F38', pack: 'alice' },
+  // 3rd NZ Division in jungle green with the Brodie helmet; Fijian scouts and Australian commandos in bush hats
+  nz_ww2: { uniform: '#4D5839', helmet: 'brodie', helmetColour: '#56603E', pack: 'haversack' },
+  fj_ww2: { uniform: '#535C3C', helmet: 'slouch', helmetColour: '#5B5A3E', pack: 'haversack' },
+  // Philippine guerrillas: khaki and denim, straw and cloth hats, whatever kit was to hand
+  ph_guerrilla: { uniform: '#7C7258', camo: '#4A5468', helmet: 'slouch', helmetColour: '#B59B62', pack: 'haversack' },
+  // Turkish Brigade in US-issue kit
+  tr_korea: { uniform: '#626343', helmet: 'm1', helmetColour: '#535A38', pack: 'haversack' },
+  // ROK Capital (Tiger) Division in Vietnam: tiger-stripe over OG-107, covered M1
+  rok_tiger: { uniform: '#58623E', camo: '#2B2A1C', helmet: 'm1_cover', helmetColour: '#5A6A3C', pack: 'alice' },
+  // BAOR 1983: DPM smock, Mk 6 helmet with scrim
+  uk_83: { uniform: '#5F6040', camo: '#3B2F22', helmet: 'brodie', helmetColour: '#4F5536', pack: 'alice' },
 } satisfies Record<string, Kit>;
 
 interface Member {
@@ -72,6 +105,47 @@ const TEAMS: TeamSpec[] = [
   { match: /arvn_ranger/, kit: KITS.arvn_ranger, men: WEDGE4('rifle', 'lmg', 'm79', 'radio') },
   // 1 ATF: L1A1 SLR, M60, Owen
   { match: /au_rar/, kit: KITS.au_vietnam, men: WEDGE4('long_rifle', 'lmg', 'smg', 'long_rifle') },
+  // 3rd NZ Division: SMLE, Bren, Thompson
+  { match: /nz_infantry/, kit: KITS.nz_ww2, men: WEDGE4('long_rifle', 'type96', 'smg', 'long_rifle') },
+  // Fiji Commandos: light, fast jungle scouts
+  { match: /fj_commando/, kit: KITS.fj_ww2, men: [{ x: 6.5, y: 0, w: 'smg' }, { x: 2, y: 0.8, w: 'long_rifle' }, { x: -2.5, y: -0.6, w: 'smg' }, { x: -7, y: 0.4, w: 'radio' }] },
+  // Australian independent commandos: Owen guns, Bren
+  { match: /au_commando/, kit: KITS.au_ww2, men: WEDGE4('smg', 'type96', 'smg', 'smg') },
+  // USAFIP-NL guerrillas: Springfields, a BAR, a radio to call the Thunderbolts
+  { match: /ph_guerrilla/, kit: KITS.ph_guerrilla, men: WEDGE4('long_rifle', 'bar', 'radio', 'long_rifle') },
+  // Turkish Brigade: Garands with fixed bayonets, BAR
+  { match: /tr_infantry/, kit: KITS.tr_korea, men: WEDGE4('rifle', 'bar', 'rifle', 'rifle') },
+  // ROK Tiger Division: M16, M60, M79
+  { match: /rok_tiger/, kit: KITS.rok_tiger, men: WEDGE4('rifle', 'lmg', 'm79', 'rifle') },
+  // ── Airborne
+  { match: /paramarine/, kit: KITS.paramarine, men: WEDGE4('smg', 'bar', 'rifle', 'rifle') },
+  { match: /airborne_45/, kit: KITS.para_ww2, men: WEDGE4('smg', 'rifle', 'bazooka', 'rifle') },
+  { match: /airborne_50/, kit: KITS.us_korea, men: WEDGE4('rifle', 'bar', 'bazooka', 'rifle') },
+  { match: /airborne_65/, kit: KITS.us_vietnam, men: WEDGE4('rifle', 'lmg', 'm79', 'rifle') },
+  { match: /airborne_83/, kit: KITS.us_83, men: WEDGE4('rifle', 'lmg', 'at4', 'rifle') },
+  // ── Special operations (small teams moving in file, kept low)
+  { match: /sof_coastwatcher/, kit: KITS.coastwatcher, men: [{ x: 4.5, y: 0, w: 'long_rifle' }, { x: 0, y: 0.8, w: 'radio' }, { x: -4.5, y: -0.4, w: 'smg' }] },
+  { match: /sof_alamo/, kit: KITS.alamo, foliage: true, men: [{ x: 6, y: 0, w: 'smg' }, { x: 2, y: 0.8, w: 'rifle' }, { x: -2.2, y: -0.6, w: 'radio' }, { x: -6.4, y: 0.4, w: 'smg' }] },
+  { match: /sof_udt/, kit: KITS.udt, prone: true, men: [{ x: 4.5, y: -3, w: 'satchel' }, { x: 4.5, y: 3, w: 'satchel' }, { x: -2, y: -2.5, w: 'satchel' }, { x: -2, y: 2.5, w: 'smg' }] },
+  { match: /sof_ranger_50/, kit: KITS.ranger_50, men: WEDGE4('smg', 'bar', 'bazooka', 'rifle') },
+  { match: /sof_seal/, kit: KITS.seal_65, foliage: true, men: WEDGE4('rifle', 'lmg', 'm79', 'radio') },
+  { match: /sof_macv_sog/, kit: KITS.sog, foliage: true, men: [{ x: 6.5, y: 0, w: 'rifle' }, { x: 2, y: 0.8, w: 'smg' }, { x: -2.5, y: -0.6, w: 'radio' }, { x: -7, y: 0.4, w: 'rifle' }] },
+  { match: /sof_force_recon/, kit: KITS.recon_83, foliage: true, men: [{ x: 6.5, y: 0, w: 'rifle' }, { x: 2, y: 0.8, w: 'radio' }, { x: -2.5, y: -0.6, w: 'rifle' }, { x: -7, y: 0.4, w: 'lmg' }] },
+  { match: /sof_ranger_83/, kit: KITS.ranger_83, men: WEDGE4('rifle', 'lmg', 'at4', 'rifle') },
+  { match: /uk_sas/, kit: KITS.sas, men: [{ x: 6, y: 0, w: 'rifle' }, { x: 2, y: 0.8, w: 'lmg' }, { x: -2.2, y: -0.6, w: 'radio' }, { x: -6.4, y: 0.4, w: 'rifle' }] },
+  { match: /au_sasr/, kit: KITS.sasr, foliage: true, men: [{ x: 6, y: 0, w: 'long_rifle' }, { x: 2, y: 0.8, w: 'lmg' }, { x: -2.2, y: -0.6, w: 'radio' }, { x: -6.4, y: 0.4, w: 'm79' }] },
+  { match: /spetsnaz/, kit: KITS.spetsnaz, men: [{ x: 6, y: 0, w: 'rifle' }, { x: 2, y: 0.8, w: 'rifle' }, { x: -2.2, y: -0.6, w: 'radio' }, { x: -6.4, y: 0.4, w: 'rpg' }] },
+  // ── More OPFOR and allied infantry
+  { match: /ija_hmg/, kit: KITS.ija, men: [{ x: 3.5, y: 0, w: 'lmg' }, { x: 0, y: -3, w: 'long_rifle' }, { x: 0, y: 3, w: 'long_rifle' }] },
+  { match: /ija_banzai/, kit: KITS.ija_banzai, men: WEDGE4('long_rifle', 'satchel', 'long_rifle', 'satchel') },
+  { match: /pva_infantry/, kit: KITS.pva, men: WEDGE4('smg', 'long_rifle', 'satchel', 'smg') },
+  { match: /vc_guerrilla/, kit: KITS.vc, foliage: true, men: WEDGE4('rifle', 'rifle', 'rpg', 'smg') },
+  { match: /rpg_team/, kit: KITS.nva, men: [{ x: 3, y: -3, w: 'rpg' }, { x: 3, y: 3, w: 'rpg' }, { x: -2.5, y: 0, w: 'rifle' }] },
+  { match: /vickers_mg/, kit: KITS.au_ww2, men: [{ x: 3.5, y: 0, w: 'lmg' }, { x: 0, y: -3, w: 'long_rifle' }, { x: 0, y: 3, w: 'long_rifle' }] },
+  { match: /gr_infantry/, kit: KITS.greek, men: WEDGE4('rifle', 'bar', 'rifle', 'rifle') },
+  { match: /fr_infantry/, kit: KITS.french, men: WEDGE4('rifle', 'bar', 'bazooka', 'rifle') },
+  { match: /th_cobra/, kit: KITS.thai, men: WEDGE4('rifle', 'lmg', 'm79', 'rifle') },
+  { match: /nl_infantry/, kit: KITS.dutch, men: WEDGE4('long_rifle', 'lmg', 'at4', 'long_rifle') },
   // Panzergrenadiere: G3, MG3, Panzerfaust
   { match: /frg_infantry/, kit: KITS.frg_83, men: WEDGE4('rifle', 'lmg', 'at4', 'rifle') },
   // USMC fireteam: leader, BAR man, two riflemen (1945 brings an M2 flamethrower)
@@ -276,6 +350,68 @@ function drawHelmet(ctx: CanvasRenderingContext2D, kit: Kit, x: number) {
       ctx.beginPath();
       ctx.arc(x, 0, 0.75, 0, Math.PI * 2);
       ctx.fill();
+      break;
+    case 'cap':
+      // Soft field cap (PVA cotton cap, Soviet pilotka) with a short peak
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.ellipse(x, 0, 0.95, 0.9, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(x + 0.7, 0, 0.3, 0.6, 0, -Math.PI / 2, Math.PI / 2);
+      ctx.fill();
+      break;
+    case 'boonie':
+      // Boonie / jungle hat: soft floppy brim, darker crown
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.ellipse(x, 0, 1.25, 1.15, 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+      ctx.beginPath();
+      ctx.arc(x, 0, 0.7, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    case 'bare':
+      // Bare head (UDT swimmers): skin and a dark face-mask strap
+      ctx.fillStyle = '#B08868';
+      ctx.beginPath();
+      ctx.arc(x, 0, 0.85, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = '#263238';
+      ctx.lineWidth = 0.35;
+      ctx.beginPath();
+      ctx.moveTo(x - 0.1, -0.85);
+      ctx.lineTo(x - 0.1, 0.85);
+      ctx.stroke();
+      break;
+    case 'conical':
+      // Non la: wide conical straw hat with radial weave
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.arc(x, 0, 1.45, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+      ctx.lineWidth = 0.2;
+      ctx.beginPath();
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x + Math.cos(a) * 1.4, Math.sin(a) * 1.4);
+      }
+      ctx.stroke();
+      break;
+    case 'beret':
+      // Beret pulled to one side
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.ellipse(x - 0.1, 0.25, 0.95, 0.8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
       break;
     case 'brodie':
       // Mk II Brodie helmet: shallow bowl with a wide flat brim

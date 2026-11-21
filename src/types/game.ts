@@ -128,6 +128,66 @@ export type GroundUnitType =
   | 'frg_leopard2'        // 時代五 豹 2A4 主力戰車 (120mm Rh)
   | 'uk_challenger1'      // 時代五 英國挑戰者 1 主力戰車 (120mm L11)
   | 'uk_warrior'          // 時代五 英國武士步兵戰車 (30mm 拉登砲)
+  | 'nz_infantry_43'        // 時代一 紐西蘭第3師步兵排 (所羅門群島 · 布倫機槍)
+  | 'fj_commando_43'        // 時代一 斐濟突擊隊叢林偵搜排 (所羅門群島)
+  | 'cw_25pdr'              // 時代一至三 大英國協 25 磅野戰砲連 (QF 25-pounder)
+  | 'au_commando_45'        // 時代二 澳洲第2/x 獨立突擊中隊 (婆羅洲)
+  | 'ph_guerrilla_45'       // 時代二 菲律賓美軍游擊隊 (USAFIP-NL) 排
+  | 'au_matilda_frog'       // 時代二 澳軍瑪蒂達「青蛙」噴火戰車排 (婆羅洲)
+  | 'tr_infantry_50'        // 時代三 土耳其旅步兵排 (軍隅里 · 刺刀衝鋒)
+  | 'rok_m36'               // 時代三 南韓陸軍 M36 傑克森驅逐戰車排 (90mm)
+  | 'rok_tiger_65'          // 時代四 南韓陸軍首都師「猛虎部隊」排
+  | 'au_centurion_68'       // 時代四 澳洲第1裝甲團 百夫長 Mk 5/1 戰車排
+  | 'arvn_m113_acav'        // 時代四 越南共和國陸軍 M113「綠龍」裝騎排
+  | 'nz_l5_pack'            // 時代四 紐西蘭皇家砲兵第161砲兵連 L5 105mm 山砲
+  | 'frg_gepard'            // 時代五 西德獵豹式 35mm 自走防空砲 (Flakpanzer Gepard)
+  | 'frg_m109g'             // 時代五 西德 M109G 155mm 自走榴彈砲連
+  | 'sof_coastwatcher_42'     // 時代一 SOF 澳紐海岸監視員偵搜組 (費迪南行動 · 無線電預警)
+  | 'sof_alamo_scouts_45'     // 時代二 SOF 第6軍阿拉莫偵察隊 (卡巴納圖安突襲)
+  | 'sof_udt_45'              // 時代二 SOF 海軍水下爆破隊 UDT (灘頭障礙爆破)
+  | 'sof_ranger_50'           // 時代三 SOF 第8軍遊騎兵連 (滲透突擊)
+  | 'sof_udt_50'              // 時代三 SOF UDT-1 水下爆破隊 (韓國海岸鐵路爆破)
+  | 'sof_seal_65'             // 時代四 SOF 海豹第一分隊 (湄公河三角洲)
+  | 'sof_macv_sog_65'         // 時代四 SOF MACV-SOG 跨境偵察小組 (RT)
+  | 'sof_force_recon_83'      // 時代五 SOF 陸戰隊武裝偵察排 (Force Recon)
+  | 'sof_seal_83'             // 時代五 SOF 海豹第四分隊 (格瑞那達)
+  | 'sof_ranger_83'           // 時代五 SOF 第75遊騎兵團排 (緊急狂怒行動)
+  | 'opfor_ija_hmg_42'        // 時代一/二 日軍九二式重機槍隊
+  | 'opfor_ija_47mm_at'       // 時代一/二 日軍一式機動四十七粍速射砲
+  | 'opfor_ija_kami'          // 時代一/二 特二式內火艇「カミ」水陸戰車
+  | 'opfor_ija_banzai_45'     // 時代二 日軍挺身斬込隊 (刺突爆雷)
+  | 'opfor_pva_infantry_50'   // 時代三 中國人民志願軍步兵排 (棉衣 · 衝鋒號)
+  | 'opfor_zis3_76'           // 時代三 ZiS-3 76mm 師屬加農砲連
+  | 'opfor_su76m'             // 時代三 SU-76M 自走突擊砲排
+  | 'opfor_vc_guerrilla_65'   // 時代四 越共地方游擊隊 (黑衣 · 斗笠)
+  | 'opfor_rpg_team_65'       // 時代四 北越 B-40/B-41 火箭筒組
+  | 'opfor_m46_130mm'         // 時代四 M-46 130mm 加農砲連 (射程壓制美軍砲兵)
+  | 'opfor_dshk_aa'           // 時代四 DShK 12.7mm 防空機槍陣地
+  | 'opfor_spetsnaz_83'       // 時代五 蘇軍 GRU 特種偵察排 (Spetsnaz)
+  | 'opfor_bmd1'              // 時代五 蘇軍空降兵 BMD-1 傘兵戰車排
+  | 'opfor_btr70'             // 時代五 蘇軍摩步 BTR-70 輪型裝甲運兵車排
+  | 'opfor_t64b'              // 時代五 蘇軍 T-64B 主力戰車排
+  | 'cw_bren_carrier'         // 時代一至三 大英國協通用載具 (布倫機槍運載車)
+  | 'au_vickers_mg_45'        // 時代二 澳軍維克斯重機槍排
+  | 'cw_churchill_50'         // 時代三 第7皇家坦克團 邱吉爾鱷魚戰車排
+  | 'gr_infantry_50'          // 時代三 希臘遠征軍斯巴達營步兵排
+  | 'fr_infantry_50'          // 時代三 法國營步兵排 (砥平里)
+  | 'th_cobra_67'             // 時代四 泰國皇家志願團「女王眼鏡蛇」排
+  | 'arvn_m48a3'              // 時代四 越南共和國陸軍 M48A3 戰車排 (第20戰車團)
+  | 'au_sasr_66'              // 時代四 澳洲特種空勤團巡邏隊 (SASR)
+  | 'nl_leopard1'             // 時代五 荷蘭第1軍 豹1V 戰車排
+  | 'nl_infantry_83'          // 時代五 荷蘭第1軍 機械化步兵排
+  | 'frg_luchs'               // 時代五 西德山貓式 8x8 裝甲偵察車
+  | 'uk_sas_83'               // 時代五 英國第22特種空勤團 (SAS) 巡邏隊
+  | 'usmc_paramarine_42'      // 時代一 陸戰隊第1傘兵營 傘兵排 (Paramarines)
+  | 'us_airborne_45'          // 時代二 美陸軍空降傘兵排 (第11空降師 / 第503傘兵團)
+  | 'us_airborne_50'          // 時代三 第187空降團戰鬥群 傘兵排
+  | 'us_airborne_65'          // 時代四 第173空降旅 傘兵排
+  | 'us_airborne_83'          // 時代五 第82空降師 傘兵排
+  | 'us_cav_air_assault_65'   // 時代四 第1騎兵師(空中機動) 空中突擊排
+  | 'us_m1a1_pack_75'         // 時代二/三 M1A1 75mm 空降山砲排 (傘降綑包)
+  | 'us_m102_105'             // 時代四/五 M102 105mm 空降輕型榴彈砲排
+  | 'uk_milan_team'         // 時代五 英國萊茵軍團 MILAN 反戰車飛彈組
   // OPFOR 歷史各時代守軍
   | 'opfor_infantry_42'  // 時代一 日軍海軍特別陸戰隊步槍排 (SNLF)
   | 'opfor_infantry_45'  // 時代二 日軍要塞守備步兵排 / 萬歲突擊排 (Late-war IJA)
@@ -242,6 +302,12 @@ export interface GroundUnit {
   isMLRS?: boolean;
   /** What the ground under the unit does to it (refreshed every tick; shown in the unit panel). */
   terrainInfo?: GroundTerrainInfo;
+  /** Special forces: seconds left visible after firing. */
+  revealTimer?: number;
+  /** Special forces: currently placing charges on an installation. */
+  sabotaging?: boolean;
+  /** Allied garrison post (a captured stronghold) this unit holds. */
+  holdPost?: Vector2D;
   /** Terrain route for AI movement that is not a standing order (chases, charges). */
   route?: Vector2D[];
   routeIdx?: number;
@@ -469,7 +535,7 @@ export type AircraftPayloadType =
   | 'napalm_canister'     // 凝固汽油彈 (Napalm Canister - 灘頭陣地與坑道廣域焦土覆蓋)
   | 'asw_torpedo'         // Mk 24 / Mk 34 航空聲自導反潛魚雷
   | 'bomb_2000'           // 2,000磅重型低阻通用炸彈 (巨型打擊)
-  | 'tactical_nuke'       // ☢️ Mk 4 / Mk 6 戰術原子彈 (消耗 4500 CP · 全島要塞部隊瞬間汽化)
+  | 'tactical_nuke'       // ☢️ Mk 4 / Mk 6 戰術原子彈 (消耗 PP 1125 · 全島要塞部隊瞬間汽化)
   // 時代四導引飛彈與立體垂直突擊特遣武器 (Era 4 Guided Missiles & Heliborne Assault):
   | 'aim9_sidewinder'      // AIM-9 響尾蛇紅外線空空飛彈 (近戰格鬥攔截)
   | 'aim7_sparrow'         // AIM-7 麻雀半主動雷達導引空空飛彈 (超視距截擊/反飛彈)
@@ -481,9 +547,14 @@ export type AircraftPayloadType =
   | 'ffar_rockets_pod'     // 70mm FFAR 密集火箭巢 (武裝直升機/強擊機)
   | 'helo_assault_troops'  // 空中突擊機降登陸 (直升機垂直包圍)
   | 'c1_paratroopers'      // C-1 貿易商型傘兵空降作戰
+  | 'para_sof_team'
+  | 'para_pack_howitzer'
+  | 'heavy_drop_sheridan'
+  | 'helo_sling_artillery'
+  | 'helo_vehicle_lift'
   | 'asw_acoustic_torpedo' // Mk 44 / Mk 46 主動聲自導航空反潛魚雷 (SH-2 / P-3C)
-  | 'b52_megaton_nuke'     // ☢️ B-52 B28/B41 戰略百萬噸級熱核重彈 (消耗 6000 CP · 萬米平流層投擲)
-  | 'tactical_b61_nuke'    // ☢️ F-4 / A-6 / A-4 B61/B43 戰術核炸彈 (消耗 4000 CP · 減速傘低空突防)
+  | 'b52_megaton_nuke'     // ☢️ B-52 B28/B41 戰略百萬噸級熱核重彈 (消耗 PP 1500 · 萬米平流層投擲)
+  | 'tactical_b61_nuke'    // ☢️ F-4 / A-6 / A-4 B61/B43 戰術核炸彈 (消耗 PP 1000 · 減速傘低空突防)
   | 'opfor_tactical_nuke'  // ☢️ OPFOR 蘇聯顧問團 RDS-4 戰術核炸彈 (Il-28 絕望突擊)
   // 時代四 BLUFOR 升級自訂特化掛載 (Optimized Vietnam Era Loadouts):
   | 'aim7_aim9_combo'      // AIM-7 麻雀 + AIM-9 響尾蛇 雙重空優混編 (F-4 / F-8)
@@ -539,7 +610,7 @@ export interface PayloadOption {
   pros: string;
   purposeBadge?: string; // 作戰用途標籤, 如 【全島要塞汽化】 / 【地毯面狀毀滅】 / 【重甲穿甲破壞】
   blastRadius?: number;  // 殺傷爆炸半徑 (m)
-  cpCost?: number;       // 戰略CP授權成本 (如核彈 4500)
+  cpCost?: number;       // 政治授權成本 (舊 CP 數值，換算見 economy.nuclearCost) (如核彈 4500)
   visualTag?: string;    // 模型外觀特徵標籤, 如 [彈艙降落傘核彈] / [24枚連環掛架]
 }
 
@@ -867,14 +938,14 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   tactical_nuke: {
     id: 'tactical_nuke',
     role: 'level_bomber',
-    name: 'Mk 4 / Mk 6 戰術原子彈 (☢️ 4500 CP 戰略打擊)',
-    desc: '冷戰戰略威懾終極兵器。自 B-29 超高空彈艙投下，於目標島嶼上空引爆毀滅性核分裂反應，瞬間汽化全島要塞工事與守備部隊！伴隨極高政治代價（消耗 4,500 CP）。',
-    badge: '☢️ 4500 CP 戰術核武',
+    name: 'Mk 4 / Mk 6 戰術原子彈 (☢️ PP 1125 戰略打擊)',
+    desc: '冷戰戰略威懾終極兵器。自 B-29 超高空彈艙投下，於目標島嶼上空引爆毀滅性核分裂反應，瞬間汽化全島要塞工事與守備部隊！伴隨極高政治代價（消耗 PP 1125）。',
+    badge: '☢️ PP 1125 戰術核武',
     era: 'era3',
     damage: 120000,
     speedModifier: 0.88,
     ammoCount: '1x Mk 4 戰術核航彈 (毀滅半徑520m)',
-    pros: '整座島嶼瞬間汽化 · 摧毀全島要塞守軍 · 消耗 4,500 CP',
+    pros: '整座島嶼瞬間汽化 · 摧毀全島要塞守軍 · 消耗 PP 1125',
     purposeBadge: '【全島要塞瞬間汽化】',
     blastRadius: 520,
     cpCost: 4500,
@@ -1011,13 +1082,13 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   helo_assault_troops: {
     id: 'helo_assault_troops',
     role: 'rescue',
-    name: '海軍陸戰隊直升機垂直包圍空中突擊隊',
-    desc: 'CH-46 海騎士或 UH-1 休伊直升機搭載全副武裝陸戰隊空中突擊班。不受灘頭地形限制，直接機降至島上任意內陸高地或敵後！',
+    name: '直升機空中突擊排 (機降)',
+    desc: 'UH-1 載第1騎兵師空中突擊排、CH-46 載陸戰隊空中突擊排、CH-53E 一次載兩個步兵排。不受灘頭地形限制，直接機降至內陸高地或敵後。',
     badge: '垂直機動突擊',
     era: 'era4',
     damage: 0,
     speedModifier: 0.92,
-    ammoCount: '1x 陸戰隊空中突擊強化排 (機降部署)',
+    ammoCount: 'UH-1/CH-46 1 排 / CH-53E 2 排',
     pros: '無視灘頭地形限制 · 任意陸地機降 · 奪取內陸要塞與制高點',
     purposeBadge: '【直升機垂直機降】',
     blastRadius: 0,
@@ -1027,18 +1098,98 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   c1_paratroopers: {
     id: 'c1_paratroopers',
     role: 'scout',
-    name: 'C-1 貿易商型 傘兵高空戰術空投突擊',
-    desc: '航艦起飛之雙發艦載運輸機。飛抵目標島嶼上空連續釋放傘兵分隊，白色降落傘群自天而降，突擊敵後防線！',
-    badge: 'C-1 傘兵空降',
+    name: '空降傘兵排 (傘降)',
+    desc: '運輸機飛抵目標上空投下傘兵：C-47 載一個傘兵排 (28 人)，C-130 載兩個排 (64 人)。各時代為陸戰傘兵、第503傘兵團、第187空降團、第173空降旅、第82空降師。',
+    badge: '傘兵空降',
     era: 'era4',
     damage: 0,
     speedModifier: 0.95,
-    ammoCount: '2x 空降突擊戰鬥班 (降落傘空投)',
+    ammoCount: 'C-47 1 排 / C-130 2 排',
     pros: '遠程高速戰術空投 · 降落傘覆蓋敵後要害 · 加速戰區推進',
     purposeBadge: '【高空傘兵突降】',
     blastRadius: 0,
     cpCost: 0,
     visualTag: '[機尾跳板空投傘兵群]',
+  },
+  para_sof_team: {
+    id: 'para_sof_team',
+    role: 'scout',
+    name: '特種部隊傘降滲透',
+    desc: '特種部隊小組自運輸機跳傘滲透敵後：遊騎兵低空傘降奪取機場、海豹部隊海上傘降、MACV-SOG 高空跳傘。',
+    badge: '特種部隊傘降',
+    era: 'era4',
+    damage: 0,
+    speedModifier: 0.95,
+    ammoCount: '1x 特種部隊小組',
+    pros: '隱蔽滲透 · 敵後偵察與爆破',
+    purposeBadge: '【特戰傘降】',
+    blastRadius: 0,
+    cpCost: 0,
+    visualTag: '[機尾跳板 · 特戰小組]',
+  },
+  para_pack_howitzer: {
+    id: 'para_pack_howitzer',
+    role: 'scout',
+    name: '空降砲兵 (山砲傘降 / 重裝空投)',
+    desc: 'C-47 以傘降綑包空投 M1A1 75mm 山砲；C-130 以重裝平台空投 M102 105mm 榴彈砲，讓空降部隊擁有自己的砲兵。',
+    badge: '空降砲兵',
+    era: 'era2',
+    damage: 0,
+    speedModifier: 0.95,
+    ammoCount: '1x 空降砲兵排',
+    pros: '空降頭堡即有砲兵火力支援',
+    purposeBadge: '【空降砲兵】',
+    blastRadius: 0,
+    cpCost: 0,
+    visualTag: '[貨艙重裝空投平台]',
+  },
+  heavy_drop_sheridan: {
+    id: 'heavy_drop_sheridan',
+    role: 'scout',
+    name: 'M551 謝里登 LAPES 低空抽取空投',
+    desc: 'C-130 以數公尺高度掠地飛行，以抽取傘把 M551 謝里登空降戰車連同墊板拉出貨艙落地，美軍唯一能空投的戰車。',
+    badge: 'LAPES 戰車空投',
+    era: 'era4',
+    damage: 0,
+    speedModifier: 0.95,
+    ammoCount: '1x M551 謝里登空降戰車排',
+    pros: '空降部隊的裝甲火力 · 152mm 砲 / 橡樹棍飛彈',
+    purposeBadge: '【戰車空投】',
+    blastRadius: 0,
+    cpCost: 0,
+    visualTag: '[低空抽取傘 · 重裝墊板]',
+  },
+  helo_sling_artillery: {
+    id: 'helo_sling_artillery',
+    role: 'rescue',
+    name: 'CH-53E 吊掛 M198 155mm 榴彈砲',
+    desc: 'CH-53E 超級種馬以機腹吊鉤吊掛 M198 155mm 榴彈砲，連同砲班與彈藥一起機降到內陸射擊陣地。',
+    badge: '吊掛砲兵',
+    era: 'era5',
+    damage: 0,
+    speedModifier: 0.95,
+    ammoCount: '1x M198 155mm 砲排',
+    pros: '砲兵直接機降內陸 · 不受灘頭限制',
+    purposeBadge: '【直升機吊掛】',
+    blastRadius: 0,
+    cpCost: 0,
+    visualTag: '[機腹吊鉤 · 155mm 榴彈砲]',
+  },
+  helo_vehicle_lift: {
+    id: 'helo_vehicle_lift',
+    role: 'rescue',
+    name: 'CH-53E 機艙運載悍馬 TOW',
+    desc: 'CH-53E 機艙可容納一輛悍馬，把 TOW 反戰車班直接送到敵裝甲接近路線上。',
+    badge: '機降反裝甲',
+    era: 'era5',
+    damage: 0,
+    speedModifier: 0.95,
+    ammoCount: '1x 悍馬 TOW 班',
+    pros: '快速部署反裝甲火力',
+    purposeBadge: '【車輛機降】',
+    blastRadius: 0,
+    cpCost: 0,
+    visualTag: '[機艙裝載悍馬]',
   },
   asw_acoustic_torpedo: {
     id: 'asw_acoustic_torpedo',
@@ -1059,14 +1210,14 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   b52_megaton_nuke: {
     id: 'b52_megaton_nuke',
     role: 'level_bomber',
-    name: 'B28 / B41 戰略百萬噸級熱核重彈 (☢️ 900 CP)',
-    desc: 'B-52 巨型同溫層堡壘專屬平流層萬噸級熱核打擊武器。萬米高空投擲，產生毀滅性熱核反應與 EMP 電磁脈衝，瞬間汽化方圓 750m 內一切陣地！消耗 900 CP，將觸發 OPFOR 相互保證毀滅 (MAD) 核報復！',
-    badge: '☢️ 900 CP 戰略熱核',
+    name: 'B28 / B41 戰略百萬噸級熱核重彈 (☢️ PP 225)',
+    desc: 'B-52 巨型同溫層堡壘專屬平流層萬噸級熱核打擊武器。萬米高空投擲，產生毀滅性熱核反應與 EMP 電磁脈衝，瞬間汽化方圓 750m 內一切陣地！消耗 PP 225，將觸發 OPFOR 相互保證毀滅 (MAD) 核報復！',
+    badge: '☢️ PP 225 戰略熱核',
     era: 'era5',
     damage: 250000,
     speedModifier: 0.85,
     ammoCount: '1x 戰略熱核重彈',
-    pros: '萬米平流層投擲 · 毀滅半徑750m + EMP · 消耗 900 CP',
+    pros: '萬米平流層投擲 · 毀滅半徑750m + EMP · 消耗 PP 225',
     purposeBadge: '【平流層戰略熱核毀滅】',
     blastRadius: 750,
     cpCost: 900,
@@ -1075,14 +1226,14 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   tactical_b61_nuke: {
     id: 'tactical_b61_nuke',
     role: 'attacker',
-    name: 'B61 / B43 戰術核炸彈 (☢️ 4000 CP 低空投擲)',
-    desc: 'F-4、A-6、A-4 戰轟機專用低空核武器。配備尼龍減速傘，可在極低高度高速投擲後安全拉升脫離，精準汽化要塞工事！消耗 4,000 CP。',
-    badge: '☢️ 4000 CP 戰術核武',
+    name: 'B61 / B43 戰術核炸彈 (☢️ PP 1000 低空投擲)',
+    desc: 'F-4、A-6、A-4 戰轟機專用低空核武器。配備尼龍減速傘，可在極低高度高速投擲後安全拉升脫離，精準汽化要塞工事！消耗 PP 1000。',
+    badge: '☢️ PP 1000 戰術核武',
     era: 'era4',
     damage: 90000,
     speedModifier: 0.92,
     ammoCount: '1x B61 戰術核航彈',
-    pros: '減速傘低空突防 · 毀滅半徑420m · 消耗 4,000 CP',
+    pros: '減速傘低空突防 · 毀滅半徑420m · 消耗 PP 1000',
     purposeBadge: '【戰術核突防打擊】',
     blastRadius: 420,
     cpCost: 4000,
@@ -1683,6 +1834,8 @@ export interface Aircraft {
   disengageTimer?: number;
   bugOutHeading?: number;
   hitAndRunStage?: 'ingress' | 'slashing' | 'disengaging';
+  /** Turn points an escalated raid flies before running in on its target. */
+  ingress?: Vector2D[];
 }
 
 export type InstallationType =
@@ -1789,6 +1942,8 @@ export interface LagoonWater {
   points: Vector2D[]; // Lagoon interior water polygon
   depth?: number;
   channelBreaches?: { angle: number; width: number }[];
+  /** Reef-pass water polygons (mouth corners first and last, the lagoon edge in the middle), for drawing. */
+  channels?: Vector2D[][];
 }
 
 export interface TerrainZone {
@@ -1884,6 +2039,8 @@ export interface Projectile {
   trail: Vector2D[];
   fuseTimer?: number;
   attackerName?: string;
+  /** Fired by a unit the player does not command (AI frontline forces): no collateral penalty. */
+  autonomous?: boolean;
   sourceModel?: AircraftModel;
   bombType?: AircraftPayloadType;
   /** Warhead class deciding effect per target type (aircraftArmament.ts). */
@@ -2078,15 +2235,21 @@ export interface RequisitionItem {
   requiresIsland?: boolean;
   /** Ground entries: the unit this requisition raises (drives the menu card artwork). */
   unitType?: GroundUnitType;
+  /** Aircraft entries: how many airframes the card delivers. */
+  airCount?: number;
 }
 
+/** War economy snapshot (MP / RP / PP / TP, see game/economy.ts). */
+export type ResourceBundle = Record<'mp' | 'rp' | 'pp' | 'tp', number>;
+
 export interface ResourceState {
-  points: number;
-  ratePerSecond: number;
-  totalEarned: number;
-  totalSpent: number;
-  islandBonus: number;
-  killBonus: number;
+  stock: ResourceBundle;
+  /** Income per second. */
+  rate: ResourceBundle;
+  earned: ResourceBundle;
+  spent: ResourceBundle;
+  /** Current mobilisation level name. */
+  mobilisation: string;
 }
 
 export interface CasualtiesReport {

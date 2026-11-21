@@ -1,4 +1,5 @@
 import { Era, Island, TerrainZone, Vector2D } from '../../types/game';
+import { isThatchedEra } from '../coastline';
 import { chaikin, fbm, meander, rng } from './noise';
 
 /**
@@ -68,7 +69,7 @@ export interface UrbanDistrict {
   name: string;
   center: Vector2D;
   radius: number;
-  kind: 'city' | 'town' | 'settlement' | 'camp';
+  kind: 'city' | 'town' | 'settlement' | 'camp' | 'village';
   blocks: UrbanBlock[];
   /** Street segments in world coordinates. */
   streets: { from: Vector2D; to: Vector2D; width: number }[];
@@ -472,7 +473,12 @@ export class TerrainMap {
       for (const inst of isl.installations) {
         const r = inst.civilianZoneRadius ?? 0;
         if (r <= 0) continue;
-        const kind = inst.type === 'city' ? 'city' : inst.type === 'town' ? 'town' : inst.type === 'refugee_camp' ? 'camp' : 'settlement';
+        const kind =
+          inst.type === 'city' ? 'city'
+          : inst.type === 'town' ? 'town'
+          : inst.type === 'refugee_camp' ? 'camp'
+          : inst.id.includes('-village-') && isThatchedEra(era) ? 'village'
+          : 'settlement';
         this.districts.push(this.buildDistrict(inst.name, inst.pos, r, kind, s + Math.round(inst.pos.x + inst.pos.y)));
       }
     }
@@ -643,6 +649,26 @@ export class TerrainMap {
       taken.add(key);
       return true;
     };
+
+    if (kind === 'village') {
+      // Thatched huts scattered round a clearing and along the beach path: no street grid,
+      // each hut turned its own way, a larger meeting house near the middle
+      blocks.push({ pts: rect(center.x, center.y, 16, 10, rand() * Math.PI), tone: -1 });
+      const huts = Math.round(radius / 7);
+      for (let k = 0; k < huts; k++) {
+        const a = rand() * Math.PI * 2;
+        const r = radius * (0.25 + 0.7 * Math.sqrt(rand()));
+        const x = center.x + Math.cos(a) * r;
+        const y = center.y + Math.sin(a) * r;
+        if (!buildable(x, y) || !claim(x, y)) continue;
+        const s = 6 + rand() * 4;
+        blocks.push({ pts: rect(x, y, s, s * (0.7 + rand() * 0.3), rand() * Math.PI), tone: -(0.2 + rand() * 0.6) });
+      }
+      // The path through the village
+      const pa = rand() * Math.PI;
+      streets.push({ from: { x: center.x - Math.cos(pa) * radius, y: center.y - Math.sin(pa) * radius }, to: { x: center.x + Math.cos(pa) * radius, y: center.y + Math.sin(pa) * radius }, width: 3 });
+      return { name, center, radius, kind, blocks, streets };
+    }
 
     if (kind === 'camp') {
       // Tent lines in a rough rectangle

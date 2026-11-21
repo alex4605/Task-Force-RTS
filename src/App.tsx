@@ -513,10 +513,8 @@ export default function App() {
         airbaseReplenishTimer={engine.airbaseReplenishTimer}
         convoyReinforceTimer={engine.convoyReinforceTimer}
         nextConvoyEscort={engine.nextConvoyEscort}
-        resourcePoints={engine.resourcePoints}
-        commandPointsPerSec={engine.commandPointsPerSec}
-        totalCpEarned={engine.totalCpEarned}
-        totalCpSpent={engine.totalCpSpent}
+        resources={engine.getResourceState()}
+        escalation={engine.escalation}
         casualties={engine.casualties}
         activeBannerAlerts={engine.activeBannerAlerts}
         activePlacementItem={activePlacementItem}
@@ -664,6 +662,8 @@ export default function App() {
           isVictory={isVictory}
           score={score}
           intel={intel}
+          outcome={engine.outcome}
+          casualties={engine.casualties}
           onNextSector={handleNextSector}
           onRestart={handleRestart}
         />

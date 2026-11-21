@@ -47,6 +47,14 @@ export class NavalNavigationGrid {
     const half = this.cellSize * 0.5;
     const probeOffset = this.cellSize * 0.34;
 
+    // Reach of each island from its centre: its farthest coastline point, not the nominal radius
+    // (elongated atolls run out to 1.6 x radius at their tips)
+    const reach = this.islands.map((isl) => {
+      let r = isl.radius;
+      for (const p of isl.points) r = Math.max(r, Math.hypot(p.x - isl.center.x, p.y - isl.center.y));
+      return r + this.cellSize * 1.4;
+    });
+
     // Pass 1: Detect island dry land cells using 5-point sampling within each cell
     for (let gy = 0; gy < this.rows; gy++) {
       const wy = gy * this.cellSize + half;
@@ -54,8 +62,9 @@ export class NavalNavigationGrid {
         const wx = gx * this.cellSize + half;
         let isLand = false;
 
-        for (const isl of this.islands) {
-          const maxReach = isl.radius + this.cellSize * 1.4;
+        for (let ii = 0; ii < this.islands.length; ii++) {
+          const isl = this.islands[ii];
+          const maxReach = reach[ii];
           const dx = wx - isl.center.x;
           const dy = wy - isl.center.y;
           if (dx * dx + dy * dy > maxReach * maxReach) continue;

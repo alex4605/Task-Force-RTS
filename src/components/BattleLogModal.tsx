@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { splitLogText } from '../game/logFormat';
 import { CombatLogEntry, CombatLogCategory, CasualtiesReport, ResourceState, Era } from '../types/game';
 import {
   X,
@@ -413,7 +414,7 @@ export const BattleLogModal: React.FC<BattleLogModalProps> = ({
                 <div className="grid grid-cols-12 p-3 items-center hover:bg-[#081B30] transition-colors bg-[#040C16]">
                   <div className="col-span-5 text-left font-bold text-cyan-300">
                     <span>
-                      {resourceState ? resourceState.totalSpent : 0} CP 已採購後勤投入
+                      {resourceState ? `已投入 MP ${Math.round(resourceState.spent.mp)} · RP ${Math.round(resourceState.spent.rp)} · PP ${Math.round(resourceState.spent.pp)} · TP ${Math.round(resourceState.spent.tp)}` : '尚無投入'}
                     </span>
                   </div>
                   <div className="col-span-2 text-center text-slate-400 font-semibold flex items-center justify-center gap-1">
@@ -421,7 +422,7 @@ export const BattleLogModal: React.FC<BattleLogModalProps> = ({
                     <span>資源調遣</span>
                   </div>
                   <div className="col-span-5 text-right font-bold text-slate-400">
-                    <span>物資枯竭 (封鎖中)</span>
+                    <span>{resourceState ? `動員：${resourceState.mobilisation}` : '物資枯竭 (封鎖中)'}</span>
                   </div>
                 </div>
               </div>
@@ -441,7 +442,7 @@ export const BattleLogModal: React.FC<BattleLogModalProps> = ({
                       ? '戰區處於冷戰高亞音速／超音速飛彈交戰階段。請以 F-4 Phantom 與 A-6 Intruder 執行制空與 SEAD 壓制，防範冥河反艦飛彈與 SA-2 地空飛彈威脅，並善用艦隊防空飛彈與全自動艦砲建立低空火網。'
                       : era === 'era3'
                       ? '噴射時代空戰節奏大幅加快。F-86 軍刀機與 F9F 黑豹需維持高空動能與編隊掩護，防範敵 MiG-15 重砲對頭射擊，並以反潛護航艦艇結合兩棲部隊穩步奪取關鍵岸防據點。'
-                      : '我軍持續維持海空戰略優勢。透過巡洋艦與驅逐艦組成護航防空網、重轟炸機實施高空基地壓制，並及時運用 CP 徵調艦載機與兩棲部隊，敵方聯合艦隊與岸防要塞將被逐步瓦解。'}
+                      : '我軍持續維持海空戰略優勢。透過巡洋艦與驅逐艦組成護航防空網、重轟炸機實施高空基地壓制，並及時運用人力、資源、政治與時間值徵調艦載機與兩棲部隊，敵方聯合艦隊與岸防要塞將被逐步瓦解。'}
                 </div>
               </div>
             </div>
@@ -611,7 +612,17 @@ export const BattleLogModal: React.FC<BattleLogModalProps> = ({
 
                         {/* Description Text */}
                         <div className="text-slate-200 text-[11px] leading-relaxed break-words">
-                          {log.text}
+                          {(() => {
+                            const part = splitLogText(log.text);
+                            return (
+                              <>
+                                {part.icon && <span className="mr-1">{part.icon}</span>}
+                                {part.title && <span className={`font-bold ${isPlayerSource ? 'text-sky-200' : 'text-rose-200'}`}>{part.title}</span>}
+                                {part.title && part.body && <span className="text-slate-500"> — </span>}
+                                <span>{part.body}</span>
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
 

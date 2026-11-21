@@ -57,6 +57,11 @@ const DEFAULT_ROUNDS: Record<AircraftPayloadType, number> = {
   ffar_rockets_pod: 16,
   helo_assault_troops: 1,
   c1_paratroopers: 1,
+  para_sof_team: 1,
+  para_pack_howitzer: 1,
+  heavy_drop_sheridan: 1,
+  helo_sling_artillery: 1,
+  helo_vehicle_lift: 1,
   asw_acoustic_torpedo: 2,
   b52_megaton_nuke: 1,
   tactical_b61_nuke: 1,
@@ -103,7 +108,7 @@ const LOADOUTS: Partial<Record<AircraftModel, readonly Store[]>> = {
   p38: [s('hvar_rockets', 10), s('clean_guns'), s('bombs_dual_500'), s('bomb_1000')], // P-38L: ten HVAR "Christmas tree"
   a26: [s('napalm_canister', 2, ['era3']), s('bombs_dual_500'), s('bomb_1000'), s('bombs_quad_500'), s('hvar_rockets', 8)],
   b29: [s('bombs_carpet_250'), s('bombs_quad_500'), s('bombs_dual_1000'), s('bomb_2000'), s('bomb_1600'), s('bomb_1000'), s('tactical_nuke')],
-  c47: [s('c1_paratroopers')],
+  c47: [s('c1_paratroopers'), s('para_pack_howitzer', 1, ['era2', 'era3'])], // 28 jumpers, or a 75 mm pack howitzer in bundles
   pby: [s('scout_fuel'), s('depth_bombs', 4), s('aerial_torpedo', 2), s('bombs_dual_500')], // Black Cat: radar search, depth charges, two Mk 13 torpedoes
   // ── Korean War ──
   f9f: [s('clean_guns'), s('hvar_rockets', 6), s('bombs_dual_500'), s('napalm_canister', 2)], // F9F-2: six HVAR or 2 x 500 lb
@@ -140,7 +145,7 @@ const LOADOUTS: Partial<Record<AircraftModel, readonly Store[]>> = {
   sh2: [s('asw_acoustic_torpedo', 2)], // SH-2F: two Mk 46
   s2: [s('asw_acoustic_torpedo', 2), s('depth_bombs', 4), s('scout_fuel')], // S-2E: Mk 44 torpedoes in the bay
   e1: [s('scout_fuel')],
-  c1: [s('c1_paratroopers')],
+  c1: [s('para_sof_team')], // COD: room for a small team only
   p3: [s('asw_acoustic_torpedo', 4), s('rgm84_harpoon', 4, ['era5']), s('depth_bombs', 4), s('scout_fuel')], // P-3C: Mk 46 bay, Harpoon from 1981
   b52: [s('rgm84_harpoon', 12, ['era5']), s('b52_megaton_carpet'), s('mer_iron_bombs'), s('cbu_cluster_bombs', 4), s('bombs_snakeye_retarded', 6), s('bomb_2000', 2), s('bomb_1000', 2), s('b52_megaton_nuke')], // B-52G: twelve Harpoons
   // ── Late Cold War ──
@@ -160,9 +165,9 @@ const LOADOUTS: Partial<Record<AircraftModel, readonly Store[]>> = {
   f111: [s('gbu10_laser_paveway', 4), s('mer_iron_bombs'), s('bomb_2000', 4), s('cbu_cluster_bombs', 4)], // F-111F Pave Tack
   e2c: [s('scout_fuel')],
   e3a: [s('scout_fuel')],
-  c2a: [s('c1_paratroopers')],
-  c130: [s('c1_paratroopers')],
-  ch53: [s('helo_assault_troops'), s('c1_paratroopers')],
+  c2a: [s('para_sof_team')],
+  c130: [s('c1_paratroopers'), s('heavy_drop_sheridan'), s('para_pack_howitzer'), s('para_sof_team')], // 64 jumpers / LAPES / heavy drop
+  ch53: [s('helo_assault_troops'), s('helo_sling_artillery'), s('helo_vehicle_lift')], // CH-53E: 55 troops, M198 on the hook, HMMWV inside
   // ── Allied (Commonwealth, ROK and NATO) squadrons flown from the friendly airbase ──
   beaufort: [s('aerial_torpedo'), s('bombs_dual_500'), s('clean_guns')],
   boomerang: [s('clean_guns'), s('bomb_500')],

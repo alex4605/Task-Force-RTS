@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { ERA_ECONOMY_NOTE } from '../game/economy';
 import { SectorIntel } from '../types/game';
 import { FileText, Target, Crosshair, CheckCircle2, X, ShieldAlert, Compass } from 'lucide-react';
 
@@ -128,17 +129,21 @@ export const BriefingModal: React.FC<BriefingModalProps> = ({
                   <>
                     <li>【防空火網攔截】請保持戰鬥機空中巡邏 (CAP) 攔截神風特攻與櫻花火箭；旗艦可開啟密集防空彈幕阻截敵機。</li>
                     <li>【兩棲登陸突擊】派遣 LCVP / LST 靠岸裝載陸戰隊與裝甲排，航抵敵島灘頭右鍵點擊執行搶灘登陸。</li>
-                    <li>【城區掩體優勢】城鎮與要塞提供部隊 70% 航彈防禦與 50% 直射減傷；注意避開平民掩蔽部以防扣除 CP。</li>
+                    <li>【城區掩體優勢】城鎮與要塞提供部隊 70% 航彈防禦與 50% 直射減傷；注意避開平民掩蔽部以免政治值 (PP) 流失。</li>
                     <li>【VT信管與雷達火控】裝備 VT 接近引信與火控雷達之巡洋艦與驅逐艦可建立綿密艦隊防空圈。</li>
                   </>
                 ) : (
                   <>
                     <li>【機場與轉場】每座機場有獨立的飛機庫存，所有增援先抵達 HQ 島機場；可自任一機場或航艦派機轉場至其他機場或航艦（實際飛行，抵達後入庫），並由所在基地出擊、返航。</li>
                     <li>【兩棲登陸突擊】派遣 LCVP / LST 靠岸裝載陸戰隊與裝甲排，航抵敵島灘頭右鍵點擊執行搶灘登陸。</li>
-                    <li>【城區掩體優勢】城市、城鎮與難民營提供部隊 70% 航彈防禦與 50% 直射減傷；誤擊平民收容區將扣除 15 CP 戰略懲戒。</li>
+                    <li>【城區掩體優勢】城市、城鎮與難民營提供部隊 70% 航彈防禦與 50% 直射減傷；誤擊平民收容區將扣除政治值 (PP) 戰略懲戒。</li>
                     <li>【艦載偵察索敵】善用 OS2U 偵察機探明敵艦隊方位，先敵發現、先敵實施俯衝轟炸與魚雷夾擊。</li>
                   </>
                 )}
+                <li>
+                  【戰爭經濟】{ERA_ECONOMY_NOTE[intel.era]}。增援與構工需消耗 MP 人力／RP 資源／PP 政治／TP 時間四種資源，
+                  佔領據點推進戰役階段會提高動員程度與產出；我軍傷亡與誤擊平民會使政治值流失。
+                </li>
               </>
             )}
           </ul>

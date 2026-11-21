@@ -1,4 +1,5 @@
 import React from 'react';
+import { isAirliftPayload } from '../../game/airlift';
 import { Anchor, HelpCircle, Plane, Radio, Shield } from 'lucide-react';
 import { Era } from '../../types/game';
 import { SelectableUnit, isAircraftUnit, isGroundUnit, isShipUnit } from '../../game/airWingCatalog';
@@ -129,7 +130,7 @@ export const SelectedUnitsPanel: React.FC<SelectedUnitsPanelProps> = ({
       isAircraftUnit(u) &&
       u.hasPayload &&
       (u.ammoRemaining ?? 0) > 0 &&
-      (u.payloadType === 'c1_paratroopers' || u.payloadType === 'helo_assault_troops')
+      isAirliftPayload(u.payloadType)
   );
 
   const hasSonobuoyCapablePlane = selectedUnits.some(
@@ -376,7 +377,7 @@ export const SelectedUnitsPanel: React.FC<SelectedUnitsPanelProps> = ({
                     ) : u.hasPayload && (u.ammoRemaining ?? 0) > 0 ? (
                       <div className="flex justify-between items-center w-full">
                         <span className="text-amber-300 font-bold flex items-center gap-1">
-                          <span>{(u.payloadType === 'c1_paratroopers' || u.payloadType === 'helo_assault_troops') ? '🪂' : '💥'} {((u.payloadType === 'c1_paratroopers' || u.payloadType === 'helo_assault_troops') ? '空降編制:' : '航彈/火箭:')}</span>
+                          <span>{isAirliftPayload(u.payloadType) ? '🪂' : '💥'} {(isAirliftPayload(u.payloadType) ? '空降編制:' : '航彈/火箭:')}</span>
                           <span>[{u.payloadName}] x{u.ammoRemaining}</span>
                         </span>
                         {u.gunAmmo !== undefined && u.gunAmmo > 0 && (
@@ -408,7 +409,7 @@ export const SelectedUnitsPanel: React.FC<SelectedUnitsPanelProps> = ({
                   )}
                   {u.hasPayload &&
                     (u.ammoRemaining ?? 0) > 0 &&
-                    (u.payloadType === 'c1_paratroopers' || u.payloadType === 'helo_assault_troops') && (
+                    isAirliftPayload(u.payloadType) && (
                       <button
                         type="button"
                         onClick={() => onUnloadAircraft?.()}

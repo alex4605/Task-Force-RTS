@@ -1,9 +1,10 @@
 import { withGroundRequisitions } from './groundRequisition';
+import { withAircraftRequisitions } from './airRequisition';
 import { RequisitionItem, Era } from '../types/game';
 
 /** Reinforcement menu for an era, with every ground entry tagged with the unit it raises. */
 export function getRequisitionCatalog(era: Era): RequisitionItem[] {
-  return withGroundRequisitions(buildRequisitionCatalog(era), era);
+  return withAircraftRequisitions(withMissingWorks(withGroundRequisitions(buildRequisitionCatalog(era), era), era), era);
 }
 
 function buildRequisitionCatalog(era: Era): RequisitionItem[] {
@@ -340,7 +341,7 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
         id: 'req-air-b52-modern',
         category: 'aircraft',
         name: 'B-52G 同溫層堡壘巡弋飛彈重轟炸機 (+2架)',
-        cost: 460,
+        cost: 520,
         era: 'era5',
         badge: '魚叉長程反艦+巨型地毯覆蓋轟炸',
         desc: '巨型戰略轟炸機近代化改進型！雙翼重聯掛架可攜帶 8枚 AGM-84 魚叉反艦巡弋飛彈，亦可裝載 108枚 500磅航彈實施毀滅性走廊地毯轟炸！',
@@ -816,7 +817,7 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
         id: 'req-air-b52',
         category: 'aircraft',
         name: 'B-52 巨型同溫層堡壘戰略重轟炸機 (+2架)',
-        cost: 550,
+        cost: 480,
         era: 'era4',
         badge: '36枚巨量地毯轟炸',
         desc: '「滾雷行動」戰略重轟炸機，8具渦輪噴射發動機，直線穿透投擲 36枚高爆炸彈實施毀滅性地毯轟炸！',
@@ -1907,4 +1908,23 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
   ];
 
   return [...ships, ...aircraft, ...ground, ...installations];
+}
+
+/**
+ * Field works every era needs: eras 4 and 5 had no cards for the battalion command post, ammunition
+ * dump, pier, dug-in command post or gun air defence, although reinforcements assemble at the
+ * battalion CP and 設施構工 lists them.
+ */
+function withMissingWorks(items: RequisitionItem[], era: Era): RequisitionItem[] {
+  if (era !== 'era4' && era !== 'era5') return items;
+  const e5 = era === 'era5';
+  const works: RequisitionItem[] = [
+    { id: 'req-fac-battalion-cp', category: 'installations', name: '營指揮所 (Battalion CP)', cost: 250, era, badge: '呼叫支援樞紐', desc: '在島嶼構築營級戰術指揮所，新徵集的地面部隊將直接自該指揮所周邊集結開出。', statsDesc: 'HP: 3800 | 專屬解鎖地面部隊增援 | 就地集結出生點', typeTag: 'battalion_cp' },
+    { id: 'req-fac-command-post', category: 'installations', name: e5 ? '強化野戰指揮掩體 (TOC)' : '沙包掩體戰術作戰中心 (TOC)', cost: 200, era, badge: '組織度抵抗', desc: e5 ? '以預鑄混凝土與沙包構築的戰術作戰中心，提升駐軍韌性與視距。' : '火力基地中央以沙包與鋼板構築的戰術作戰中心。', statsDesc: 'HP: 3600 | 守備組織度抵抗 +50% | 視距 +1000m', typeTag: 'command_post' },
+    { id: 'req-fac-heavy-aa', category: 'installations', name: e5 ? 'M167 火神 20mm 防空砲陣地' : 'M42 雙聯 40mm 防空砲陣地', cost: 200, era, badge: '低空防空', desc: e5 ? '牽引式 M167 火神 6 管 20mm 機砲，保護機場與指揮所免受低空攻擊。' : '固定於火力基地周邊的雙聯 40mm 博福斯防空砲，兼作平射壓制。', statsDesc: '射程: 1200m | 自動攔截低空敵機', typeTag: 'heavy_aa' },
+    { id: 'req-fac-ammo-depot', category: 'installations', name: e5 ? '前進彈藥補給點 (ASP)' : '火力基地彈藥庫', cost: 180, era, badge: '彈藥倍增', desc: '囤積砲彈、火箭與航空彈藥，加快全島火砲裝填。', statsDesc: '重砲裝填加速 +35% | 友軍艦隊砲擊冷卻縮短 25%', typeTag: 'ammo_depot' },
+    { id: 'req-fac-pontoon-pier', category: 'installations', name: e5 ? '模組化浮動碼頭 (LOTS)' : '浮式人工棧橋港 (急造港口)', cost: 180, era, badge: '搶灘補給線', desc: '工兵架設的浮動碼頭，打通全島補給線；工兵駐守後可升級為正規軍港。', statsDesc: '建立全島陸軍補給線 | LST/LCU 快速泊靠', typeTag: 'pontoon_pier' },
+  ];
+  const have = new Set(items.filter((i) => i.category === 'installations').map((i) => i.typeTag));
+  return [...items, ...works.filter((w) => !have.has(w.typeTag))];
 }

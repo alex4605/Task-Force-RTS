@@ -13,6 +13,13 @@ function tracePath(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[
   ctx.closePath();
 }
 
+/** Adds a closed polygon to the current path. */
+function traceRing(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[]): void {
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.closePath();
+}
+
 /** Ring around an island's coast pushed outward from its centre by `offset` (reef, surf line). */
 function traceOffsetRing(ctx: CanvasRenderingContext2D, island: Island, offset: number): void {
   ctx.beginPath();
@@ -71,6 +78,33 @@ export function drawIslands(rc: RenderContext, islands: Island[], camera: Camera
   // 3. Lagoons and coastline
   for (const island of visible) {
     for (const lag of island.lagoons ?? []) {
+      // Keep the lagoon tint inside the ring and its passes (its shore can poke past a pass)
+      ctx.save();
+      ctx.beginPath();
+      traceRing(ctx, island.points);
+      for (const ch of lag.channels ?? []) traceRing(ctx, ch);
+      ctx.clip('nonzero');
+      for (const ch of lag.channels ?? []) {
+        // Pass water: lagoon turquoise shading to the deep blue of the open sea
+        const last = ch.length - 1;
+        const mid = Math.floor(ch.length / 2);
+        const mouth = { x: (ch[0].x + ch[last].x) / 2, y: (ch[0].y + ch[last].y) / 2 };
+        const inner = { x: (ch[mid - 1].x + ch[mid].x) / 2, y: (ch[mid - 1].y + ch[mid].y) / 2 };
+        const cg = ctx.createLinearGradient(inner.x, inner.y, mouth.x, mouth.y);
+        cg.addColorStop(0, 'rgba(77, 208, 225, 0.5)');
+        cg.addColorStop(0.75, 'rgba(0, 150, 175, 0.16)');
+        cg.addColorStop(1, 'rgba(0, 150, 175, 0)');
+        ctx.fillStyle = cg;
+        ctx.beginPath();
+        traceRing(ctx, ch);
+        ctx.fill();
+      }
+      // The lagoon itself stays inside the ring; the passes have their own shading above
+      ctx.restore();
+      ctx.save();
+      ctx.beginPath();
+      traceRing(ctx, island.points);
+      ctx.clip();
       const lagGrad = ctx.createRadialGradient(lag.center.x, lag.center.y, lag.radius * 0.15, lag.center.x, lag.center.y, lag.radius);
       lagGrad.addColorStop(0, 'rgba(0, 120, 140, 0.85)');
       lagGrad.addColorStop(0.7, 'rgba(0, 160, 180, 0.6)');
@@ -78,18 +112,28 @@ export function drawIslands(rc: RenderContext, islands: Island[], camera: Camera
       ctx.fillStyle = lagGrad;
       tracePath(ctx, lag.points);
       ctx.fill();
+      ctx.restore();
+      // Lagoon shoreline only where it meets land (not across the passes)
+      ctx.save();
+      ctx.beginPath();
+      traceRing(ctx, island.points);
+      ctx.clip();
       ctx.strokeStyle = 'rgba(178, 235, 242, 0.55)';
       ctx.lineWidth = 1.5;
+      tracePath(ctx, lag.points);
       ctx.stroke();
+      ctx.restore();
       if (camera.zoom >= 0.55) {
         ctx.font = '8px monospace';
         ctx.fillStyle = 'rgba(128, 222, 234, 0.7)';
         ctx.textAlign = 'center';
         ctx.fillText('⚓ 潟湖 · 水深 26M · 可通航', lag.center.x, lag.center.y);
       }
-      for (const ch of lag.channelBreaches ?? []) {
-        const chX = island.center.x + Math.cos(ch.angle) * island.radius * 0.95;
-        const chY = island.center.y + Math.sin(ch.angle) * island.radius * 0.95;
+      for (const [ci, ch] of (lag.channelBreaches ?? []).entries()) {
+        const quad = lag.channels?.[ci];
+        const qe = quad ? quad[quad.length - 1] : undefined;
+        const chX = quad && qe ? (quad[0].x + qe.x) / 2 : island.center.x + Math.cos(ch.angle) * island.radius * 0.95;
+        const chY = quad && qe ? (quad[0].y + qe.y) / 2 : island.center.y + Math.sin(ch.angle) * island.radius * 0.95;
         ctx.strokeStyle = 'rgba(0, 229, 255, 0.6)';
         ctx.setLineDash([4, 4]);
         ctx.beginPath();

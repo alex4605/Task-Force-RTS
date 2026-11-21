@@ -1,4 +1,5 @@
 import { applyHistoricalAswFit } from './asw';
+import { addIslandSettlements, naturalizeCoast, naturalizeIslands } from './coastline';
 import { applyMainlandTemplate } from './terrain/theaters';
 import {
   Island,
@@ -84,7 +85,9 @@ export function generateCoralAtoll(
   center: Vector2D,
   baseRadius: number,
   seed: number,
-  era: Era = 'era1'
+  era: Era = 'era1',
+  /** A high volcanic island (Guadalcanal, Nendo) rather than a ring atoll: no lagoon. */
+  solid = false
 ): Island {
   const points: Vector2D[] = [];
   const contours: Vector2D[][] = [];
@@ -738,22 +741,134 @@ export function generateCoralAtoll(
     })
   );
 
-  return {
+  // Reef passes: the lagoon opens to the sea through one or two channels cut in the ring,
+  // placed where no position or stronghold stands
+  // Natural coasts: bays and points on the ring and along the lagoon shore (the passes stay straight-sided)
+  const coast = naturalizeCoast(points, seed, baseRadius * 0.07);
+  if (!solid) lagoon.points = naturalizeCoast(lagoon.points, seed + 5, baseRadius * 0.035);
+  const outline = solid ? coast : cutReefPasses(coast, center, lagoon, installations, strongholds, seed);
+
+  const island: Island = {
     id,
     name,
     center,
     radius: baseRadius,
-    points,
+    points: outline,
     contours,
     installations,
     strongholds,
     isFriendlyBase: false,
     isFullyCaptured: false,
-    isAtoll: true,
-    lagoons: [lagoon],
+    isAtoll: !solid,
+    lagoons: solid ? [] : [lagoon],
     forestBelts,
     mountainRidges,
   };
+  // Positions laid out on fixed radii can fall off the narrow sides of an elongated ring:
+  // walk each one along its bearing until it stands on the island
+  for (const inst of installations) inst.pos = onLand(island, inst.pos);
+  for (const sh of strongholds) sh.cpPos = onLand(island, sh.cpPos);
+  return island;
+}
+
+/** The nearest point on the island's land along the bearing from its centre (inwards first, then out). */
+function onLand(island: Island, p: Vector2D): Vector2D {
+  if (isPointOnIslandLand(p, island)) return p;
+  const c = island.center;
+  const r = Math.hypot(p.x - c.x, p.y - c.y) || 1;
+  const ux = (p.x - c.x) / r;
+  const uy = (p.y - c.y) / r;
+  for (let k = 1; k <= 60; k++) {
+    for (const sign of [-1, 1]) {
+      const q = { x: p.x + ux * k * 15 * sign, y: p.y + uy * k * 15 * sign };
+      if (isPointOnIslandLand(q, island)) {
+        // A little further in so it does not sit on the waterline
+        const q2 = { x: q.x + ux * 25 * sign, y: q.y + uy * 25 * sign };
+        return isPointOnIslandLand(q2, island) ? q2 : q;
+      }
+    }
+  }
+  return p;
+}
+
+/**
+ * Cuts navigable passes through an atoll's ring: for each chosen bearing the outer coastline
+ * is notched in to the lagoon's edge, so the lagoon water connects to the open sea (ships and
+ * landing craft can enter, as at Tarawa or Majuro). Bearings near installations or strongholds
+ * are avoided; the lagoon's channelBreaches are updated to match (the reef-depth model uses them).
+ */
+function cutReefPasses(
+  ring: Vector2D[],
+  center: Vector2D,
+  lagoon: LagoonWater,
+  installations: Installation[],
+  strongholds: IslandStronghold[],
+  seed: number
+): Vector2D[] {
+  const angOf = (p: Vector2D, c: Vector2D = center) => Math.atan2(p.y - c.y, p.x - c.x);
+  const diff = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+  const occupied = [...installations.map((i) => i.pos), ...strongholds.map((st) => st.cpPos)];
+  // Candidate bearings around the ring, scored by clearance from anything on the island
+  const cands: { a: number; clear: number }[] = [];
+  for (let k = 0; k < 24; k++) {
+    const a = (k / 24) * Math.PI * 2 + (Math.abs(seed) % 7) * 0.05;
+    let clear = Infinity;
+    for (const o of occupied) clear = Math.min(clear, diff(a, angOf(o)));
+    cands.push({ a, clear });
+  }
+  cands.sort((p, q) => q.clear - p.clear);
+  const passes: number[] = [cands[0].a];
+  // A second pass on the far side when there is room for it
+  const second = cands.find((c) => diff(c.a, passes[0]) > Math.PI * 0.55 && c.clear > 0.25);
+  if (second && Math.abs(seed) % 3 !== 0) passes.push(second.a);
+
+  let out = [...ring];
+  const channels: Vector2D[][] = [];
+  // Wide enough for a column of open navigation cells (real passes run 200-500 m)
+  const width = 300;
+  for (const a of passes) {
+    const n = out.length;
+    let idx = 0;
+    for (let i = 1; i < n; i++) if (diff(angOf(out[i]), a) < diff(angOf(out[idx]), a)) idx = i;
+    const ux = Math.cos(a);
+    const uy = Math.sin(a);
+    // Perpendicular, pointing the way the ring runs (increasing angle)
+    const vx = -uy;
+    const vy = ux;
+    const side = (pt: Vector2D) => (pt.x - center.x) * vx + (pt.y - center.y) * vy;
+    // Mouth corners: the first coastline points either side that lie half a pass-width off the axis
+    let lo = idx;
+    for (let k = 0; k < n / 4 && side(out[lo]) > -width * 0.5; k++) lo = (lo - 1 + n) % n;
+    let hi = idx;
+    for (let k = 0; k < n / 4 && side(out[hi]) < width * 0.5; k++) hi = (hi + 1) % n;
+    const mouthA = out[lo];
+    const mouthB = out[hi];
+    // Lagoon shore on this bearing
+    let q = lagoon.points[0];
+    for (const lp of lagoon.points) if (diff(angOf(lp, lagoon.center), a) < diff(angOf(q, lagoon.center), a)) q = lp;
+    const inner = { x: q.x - ux * 40, y: q.y - uy * 40 };
+    const innerA = { x: inner.x - vx * width * 0.5, y: inner.y - vy * width * 0.5 };
+    const innerB = { x: inner.x + vx * width * 0.5, y: inner.y + vy * width * 0.5 };
+    // Channel walls: coral banks that only ever widen the pass, never narrow it
+    const wall = (from: Vector2D, to: Vector2D, outward: number, s2: number): Vector2D[] => {
+      const pts: Vector2D[] = [];
+      for (let t = 1; t <= 3; t++) {
+        const f = t / 4;
+        const bulge = (0.5 + 0.5 * Math.sin(s2 + t * 2.3)) * 45;
+        pts.push({ x: from.x + (to.x - from.x) * f + vx * outward * bulge, y: from.y + (to.y - from.y) * f + vy * outward * bulge });
+      }
+      return pts;
+    };
+    const notch = [mouthA, ...wall(mouthA, innerA, -1, seed + a), innerA, innerB, ...wall(innerB, mouthB, 1, seed - a), mouthB];
+    channels.push(notch.map((p2) => ({ ...p2 })));
+    // Replace the coastline between the two mouth corners with the pass
+    const keep: Vector2D[] = [];
+    for (let k = (hi + 1) % n; k !== lo; k = (k + 1) % n) keep.push(out[k]);
+    out = [...keep, ...notch];
+  }
+  lagoon.channelBreaches = passes.map((a) => ({ angle: a, width }));
+  lagoon.channels = channels;
+  return out;
 }
 
 // Generate organic island polygon with multiple strongholds, NATO command posts, and ground defense installations
@@ -1077,6 +1192,8 @@ export function generateOrganicIsland(
       ? '野戰重型砲兵陣地 (D-30 122mm 榴彈砲)'
       : era === 'era2'
       ? '拖曳野戰砲兵陣地 (九〇式75mm野砲)'
+      : era === 'era5'
+      ? '野戰牽引砲兵連 (D-30 122mm 榴彈砲)'
       : '野戰砲兵陣地 (三十八式75mm野砲)';
   const art1Desc =
     era === 'era4'
@@ -4954,6 +5071,8 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
         y: Math.max(1600, Math.min(worldSize - 1600, cfg.center.y + jitterY)),
       };
 
+      // Guadalcanal (a high volcanic island) never has a lagoon; Santa Cruz (Nendo) sometimes not
+      const solid = i === 0 || (i === 3 && Math.abs(Math.sin(seedBase * 7.13)) < 0.5);
       islands.push(
         generateCoralAtoll(
           `atoll-${i + 1}`,
@@ -4961,7 +5080,8 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
           center,
           cfg.radius,
           seedBase + i * 137,
-          era
+          era,
+          solid
         )
       );
     }
@@ -4971,6 +5091,10 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
   const friendlyBasePos: Vector2D = { x: 2000, y: 12400 };
   const friendlyBase = generateFriendlyBaseIsland(friendlyBasePos, seedBase + 999, era);
   islands.unshift(friendlyBase);
+
+  // Natural coastlines (atolls did theirs before their reef passes were cut) and island villages
+  naturalizeIslands(islands, seedBase, (isl) => isl.id.startsWith('atoll-'), worldSize);
+  addIslandSettlements(islands, era, seedBase * 31 + 7);
 
   // 初始友軍地面部隊
   const groundUnits: GroundUnit[] = [];
@@ -5577,7 +5701,7 @@ function addNorthVietnamSites(continent: Island): void {
       id: 'neutral-plantation-1',
       type: 'rubber_plantation',
       name: '米芝蓮法式橡膠種植園莊園 [Michelin Plantation]',
-      weaponDesc: '密集橡膠林覆蓋之熱帶種植園 · 佔領提供戰術隱蔽與物資補給 (+15 CP)',
+      weaponDesc: '密集橡膠林覆蓋之熱帶種植園 · 佔領提供戰術隱蔽與物資補給 (+資源值)',
       pos: { x: 7800, y: 6200 },
       health: 3200,
       armor: 0.40,
@@ -5788,7 +5912,7 @@ function addNorthVietnamSites(continent: Island): void {
       id: 'neutral-clinic-1',
       type: 'settlement',
       name: '國際戰地平民診所與紅十字醫療站 [Civilian Field Clinic]',
-      weaponDesc: '中立戰地醫療院所 · 嚴禁實彈射擊 · 誤擊遭軍法懲處 -15 CP',
+      weaponDesc: '中立戰地醫療院所 · 嚴禁實彈射擊 · 誤擊扣政治值',
       pos: { x: 7400, y: 7700 },
       health: 2600,
       armor: 0.30,
@@ -6007,7 +6131,7 @@ function addWarsawPactSites(continent: Island): void {
       id: 'neutral-plantation-1',
       type: 'rubber_plantation',
       name: '北德平原農業集體農莊與糧食儲備倉 [Collective Granary]',
-      weaponDesc: '歐陸開闊農業合作社與糧庫 · 奪佔提供戰術補給 (+20 CP)',
+      weaponDesc: '歐陸開闊農業合作社與糧庫 · 奪佔提供戰術補給 (+資源值)',
       pos: { x: 7800, y: 6200 },
       health: 3800,
       armor: 0.45,
@@ -6071,7 +6195,7 @@ function addWarsawPactSites(continent: Island): void {
       id: 'neutral-clinic-1',
       type: 'settlement',
       name: '西德紅十字會戰地人道救護站 [Red Cross Field Hospital]',
-      weaponDesc: '中立戰地醫療院所 · 嚴禁實彈射擊 · 誤擊遭軍法懲處 -15 CP',
+      weaponDesc: '中立戰地醫療院所 · 嚴禁實彈射擊 · 誤擊扣政治值',
       pos: { x: 7400, y: 7700 },
       health: 3000,
       armor: 0.35,
@@ -6109,7 +6233,7 @@ function addWarsawPactSites(continent: Island): void {
 // ══════════════════════════════════════════════════════════
 // 大陸板塊城鎮、平民定居點與難民收容營 (Civilian Zones & Urban Terrain)
 // 進入城鎮市區戰鬥獲 +50% 直射掩護與 70% 空襲炸彈減傷；
-// 若我方砲火誤擊平民區或難民營，將遭受附帶損害懲處 (-15 CP)
+// 若我方砲火誤擊平民區或難民營，將遭受附帶損害懲處 (扣政治值)
 // ══════════════════════════════════════════════════════════
 /** Towns, villages and refugee camps that grant urban cover and carry collateral-damage penalties. */
 function addMainlandCivilianZones(era: Era, continent: Island): void {
@@ -6194,7 +6318,7 @@ function addMainlandCivilianZones(era: Era, continent: Island): void {
       id: 'refugee-hungnam',
       type: 'refugee_camp',
       name: '興南港聯合國戰地難民收容營 (UN Refugee Camp)',
-      weaponDesc: '聯合國與紅十字會人道救援帳篷區 · 嚴禁實彈射擊 · 誤擊遭軍法懲處 -15 CP',
+      weaponDesc: '聯合國與紅十字會人道救援帳篷區 · 嚴禁實彈射擊 · 誤擊扣政治值',
       pos: { x: 5900, y: 6600 },
       health: 2600,
       armor: 0.25,
@@ -6206,7 +6330,7 @@ function addMainlandCivilianZones(era: Era, continent: Island): void {
       id: 'refugee-chongjin',
       type: 'refugee_camp',
       name: '紅十字會前線戰地難民救濟站 (Red Cross Camp)',
-      weaponDesc: '國際人道救濟與醫療帳篷站 · 受擊將嚴重損害盟軍國際聲譽 (-15 CP)',
+      weaponDesc: '國際人道救濟與醫療帳篷站 · 受擊將嚴重損害盟軍國際聲譽 (扣政治值)',
       pos: { x: 7600, y: 8000 },
       health: 2400,
       armor: 0.25,
@@ -6271,7 +6395,7 @@ function addMainlandCivilianZones(era: Era, continent: Island): void {
       id: 'cont-hydroelectric-dam',
       type: 'radio_station',
       name: '中央河流石灰岩水力發電與水閘機房 [Hydroelectric Dam Station]',
-      weaponDesc: '混凝土堅固水壩樞紐 · 佔領掌控全區電力與戰術通訊中繼 (+20 CP)',
+      weaponDesc: '混凝土堅固水壩樞紐 · 佔領掌控全區電力與戰術通訊中繼 (+資源值)',
       pos: { x: 8500, y: 7100 },
       health: 4500,
       armor: 0.65,
@@ -6281,7 +6405,7 @@ function addMainlandCivilianZones(era: Era, continent: Island): void {
       id: 'cont-buddhist-pagoda',
       type: 'settlement',
       name: '山林避難古佛寺與僧侶禪院 [Mountain Pagoda Sanctuary]',
-      weaponDesc: '石砌高山避難古剎 · 嚴禁砲擊 · 誤擊遭軍法懲處 -15 CP',
+      weaponDesc: '石砌高山避難古剎 · 嚴禁砲擊 · 誤擊扣政治值',
       pos: { x: 9300, y: 6400 },
       health: 3200,
       armor: 0.40,
@@ -6484,7 +6608,7 @@ function addMainlandCivilianZones(era: Era, continent: Island): void {
       id: 'neutral-se-rice-hamlet',
       type: 'settlement',
       name: '東南部湄公河支流水稻農莊農舍群 [SE Delta Rice Farm Hamlet]',
-      weaponDesc: '阡陌水田與茅草農舍農莊 · 農業平民區 · 誤擊遭軍法懲處 -15 CP',
+      weaponDesc: '阡陌水田與茅草農舍農莊 · 農業平民區 · 誤擊扣政治值',
       pos: { x: 10600, y: 7200 },
       health: 3000,
       armor: 0.30,
@@ -7044,7 +7168,7 @@ function addMainlandCivilianZones(era: Era, continent: Island): void {
       id: 'cont-south-refugee',
       type: 'refugee_camp',
       name: '聯合國戰地難民臨時庇護營 [UN South Refugee Humanitarian Shelter]',
-      weaponDesc: '聯合國人道救援與戰地醫療帳篷群 · 嚴禁砲擊誤傷 -15 CP',
+      weaponDesc: '聯合國人道救援與戰地醫療帳篷群 · 嚴禁砲擊 · 誤擊扣政治值',
       pos: { x: 7300, y: 12400 },
       health: 2400,
       armor: 0.20,
@@ -7362,6 +7486,38 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
 }
 
 // 敵軍機動地面部隊 (OPFOR Mobile Ground Units) - 常駐要塞與機場島嶼，執行巡邏與防守反突擊
+/** Supporting weapons and specialists that vary the island garrisons, by era. */
+const GARRISON_SUPPORT: Record<Era, { type: GroundUnitType; name: string }[]> = {
+  era1: [
+    { type: 'opfor_ija_hmg_42', name: '九二式重機槍隊' },
+    { type: 'opfor_ija_47mm_at', name: '一式機動四十七粍速射砲隊' },
+    { type: 'opfor_ija_kami', name: '特二式內火艇「カミ」水陸戰車隊' },
+  ],
+  era2: [
+    { type: 'opfor_ija_banzai_45', name: '挺身斬込隊 (刺突爆雷)' },
+    { type: 'opfor_ija_hmg_42', name: '九二式重機槍隊' },
+    { type: 'opfor_ija_47mm_at', name: '一式機動四十七粍速射砲隊' },
+    { type: 'opfor_ija_kami', name: '特二式內火艇「カミ」水陸戰車隊' },
+  ],
+  era3: [
+    { type: 'opfor_pva_infantry_50', name: '志願軍步兵排 (衝鋒號)' },
+    { type: 'opfor_su76m', name: 'SU-76M 自走突擊砲排' },
+    { type: 'opfor_zis3_76', name: 'ZiS-3 76mm 加農砲連' },
+  ],
+  era4: [
+    { type: 'opfor_vc_guerrilla_65', name: '越共地方游擊隊' },
+    { type: 'opfor_rpg_team_65', name: 'B-40/B-41 火箭筒組' },
+    { type: 'opfor_dshk_aa', name: 'DShK 12.7mm 防空機槍陣地' },
+    { type: 'opfor_m46_130mm', name: 'M-46 130mm 加農砲連' },
+  ],
+  era5: [
+    { type: 'opfor_spetsnaz_83', name: 'GRU 特種偵察排 (Spetsnaz)' },
+    { type: 'opfor_btr70', name: 'BTR-70 海軍步兵裝甲運兵排' },
+    { type: 'opfor_bmd1', name: 'BMD-1 空降突擊排' },
+    { type: 'opfor_t64b', name: 'T-64B 戰車排' },
+  ],
+};
+
 /** OPFOR mobile ground units garrisoning the fortress and airfield islands. */
 function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundUnit[]): void {
   for (let i = 1; i < islands.length; i++) {
@@ -7401,6 +7557,18 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
         { x: center.x - 35, y: center.y + 35 }
       )
     );
+
+    // One supporting unit per island (two on the big ones), rotating through the era's list
+    const support = GARRISON_SUPPORT[era];
+    for (let k = 0; k < (isl.radius > 380 ? 2 : 1); k++) {
+      const pick = support[(i + k * 2) % support.length];
+      groundUnits.push(
+        createGroundUnit(`opfor-sup-${i}-${k}`, pick.type, `${islShortName} · ${pick.name}`, 'enemy', era, {
+          x: center.x + (k === 0 ? 25 : -60),
+          y: center.y + (k === 0 ? 60 : 5),
+        })
+      );
+    }
 
     // 較大要塞島嶼配置機動裝甲小隊、迫擊砲排與野戰重砲隊
     if (isl.radius > 380) {

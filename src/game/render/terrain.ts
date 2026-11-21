@@ -520,7 +520,17 @@ export function drawTerrainOverlays(rc: RenderContext, map: TerrainMap, camera: 
   if (zoom >= 0.18) {
     for (const d of map.districts) {
       if (!isWorldCircleVisible(rc, d.center.x, d.center.y, d.radius * 2, camera)) continue;
-      ctx.strokeStyle = 'rgba(200, 196, 180, 0.5)';
+      if (d.kind === 'village') {
+        // Trodden-earth clearing under the huts
+        const g = ctx.createRadialGradient(d.center.x, d.center.y, d.radius * 0.1, d.center.x, d.center.y, d.radius * 1.05);
+        g.addColorStop(0, 'rgba(150, 128, 90, 0.55)');
+        g.addColorStop(1, 'rgba(150, 128, 90, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(d.center.x, d.center.y, d.radius * 1.05, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.strokeStyle = d.kind === 'village' ? 'rgba(170, 150, 110, 0.6)' : 'rgba(200, 196, 180, 0.5)';
       for (const st of d.streets) {
         ctx.lineWidth = st.width;
         ctx.beginPath();
@@ -540,7 +550,11 @@ export function drawTerrainOverlays(rc: RenderContext, map: TerrainMap, camera: 
           ctx.fill();
         }
         if (d.kind === 'camp') ctx.fillStyle = 'rgba(240, 230, 190, 0.8)';
-        else {
+        else if (b.tone < 0) {
+          // Thatch: straw roofs, darker on older huts; the meeting house (tone -1) darkest
+          const t = -b.tone;
+          ctx.fillStyle = `rgb(${Math.round(196 - t * 70)}, ${Math.round(168 - t * 62)}, ${Math.round(104 - t * 44)})`;
+        } else {
           const v = Math.round(70 + b.tone * 70);
           ctx.fillStyle = `rgb(${v}, ${v - 4}, ${v - 12})`;
         }
@@ -549,6 +563,15 @@ export function drawTerrainOverlays(rc: RenderContext, map: TerrainMap, camera: 
         for (let k = 1; k < 4; k++) ctx.lineTo(p[k].x, p[k].y);
         ctx.closePath();
         ctx.fill();
+        if (b.tone < 0 && zoom >= 0.5) {
+          // Roof ridge along the hut's long axis
+          ctx.strokeStyle = 'rgba(70, 50, 30, 0.7)';
+          ctx.lineWidth = 0.8;
+          ctx.beginPath();
+          ctx.moveTo((p[0].x + p[3].x) / 2, (p[0].y + p[3].y) / 2);
+          ctx.lineTo((p[1].x + p[2].x) / 2, (p[1].y + p[2].y) / 2);
+          ctx.stroke();
+        }
       }
     }
   }

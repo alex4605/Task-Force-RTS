@@ -167,7 +167,49 @@ const iroquoisDdh: ClassDrawer = (ctx, l, w) => {
   flightDeck(ctx, -l * 0.46, l, w, 0.24);
 };
 
+/** Generic layout from a funnel list and fittings: covers the rest of the Commonwealth, Dutch, French and Japanese ships. */
+function layout(funnels: number[], opts: { bridge?: number; radome?: number; deck?: number; launcher?: number; mack?: boolean } = {}): ClassDrawer {
+  return (ctx, l, w) => {
+    block(ctx, l * (opts.bridge ?? 0.12), -w * 0.24, l * 0.12, w * 0.48);
+    for (const f of funnels) {
+      if (opts.mack) {
+        // Japanese "mack" (combined mast-stack) and French block funnels: tall rectangular
+        block(ctx, l * f - 3, -w * 0.16, 6, w * 0.32, '#1A2530');
+      } else {
+        funnel(ctx, l * f, 3.6, 2.4);
+      }
+    }
+    if (opts.radome !== undefined) {
+      // Big fire-control / search radome (Suffren's DRBI 23 golf ball)
+      ctx.fillStyle = '#ECEFF1';
+      ctx.strokeStyle = '#90A4AE';
+      ctx.beginPath();
+      ctx.arc(l * opts.radome, 0, w * 0.22, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    if (opts.launcher !== undefined) launcherBox(ctx, l * opts.launcher, 0, l * 0.05, w * 0.3, '#FFB300');
+    if (opts.deck !== undefined) flightDeck(ctx, -l * 0.46, l, w, opts.deck);
+  };
+}
+
 const CLASS_RULES: Array<[RegExp, ClassDrawer]> = [
+  [/De Ruyter/, layout([-0.04], { bridge: 0.1 })],
+  [/Exeter/, layout([0.02, -0.08])],
+  [/Electra|Kortenaer|Grenville|Napier|Evertsen/, layout([0.0])],
+  [/Argonaut|Belfast/, layout([0.04, -0.1])],
+  [/Achilles/, leanderCruiser],
+  [/Athabaskan/, tribalDestroyer],
+  [/Murchison|Grandière|Trần Hưng Đạo/, layout([-0.02], { bridge: 0.08 })],
+  [/Brisbane/, adamsDerivative],
+  [/Chungbuk/, layout([0.04, -0.1])],
+  [/Coventry|Glasgow/, layout([-0.04], { launcher: 0.24, deck: 0.18 })],
+  [/Plymouth/, layout([-0.02], { launcher: -0.3 })],
+  [/Suffren/, layout([0.12], { radome: -0.02, launcher: -0.36, mack: true })],
+  [/Georges Leygues/, layout([0.02], { deck: 0.24, launcher: -0.12 })],
+  [/Shirane/, layout([0.06, -0.06], { deck: 0.3, mack: true })],
+  [/Hatakaze/, layout([0.04, -0.06], { launcher: 0.3, mack: true })],
+  [/Hatsuyuki/, layout([0.0], { deck: 0.22, mack: true })],
   [/Australia|Canberra|Shropshire/, countyHeavyCruiser],
   [/HMAS Hobart \(荷巴特號輕巡洋艦\)/, leanderCruiser],
   [/Arunta|Warramunga|Bataan|Cayuga|Cossack/, tribalDestroyer],
@@ -201,5 +243,7 @@ export function alliedEnsign(ship: Ship): NavalEnsign | undefined {
   if (n.startsWith('HNLMS ')) return 'nl_ensign';
   if (n.startsWith('ROKS ')) return 'rok_ensign';
   if (n.startsWith('FGS ')) return 'de_bundesmarine';
+  if (n.startsWith('FS ')) return 'fr_marine';
+  if (n.startsWith('JDS ')) return 'rising_sun';
   return undefined;
 }

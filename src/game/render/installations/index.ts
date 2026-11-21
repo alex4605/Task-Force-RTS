@@ -37,11 +37,11 @@ export function drawInstallation(rc: RenderContext, inst: Installation, island?:
     ctx.font = 'bold 8px monospace';
     ctx.textAlign = 'center';
     if (inst.type === 'refugee_camp') {
-      ctx.fillText('⛺【聯合國難民收容安全區 · 誤擊扣15CP】', 0, -zR - 6);
+      ctx.fillText('⛺【聯合國難民收容安全區 · 誤擊扣政治值】', 0, -zR - 6);
     } else if (inst.type === 'city' || inst.type === 'town') {
       ctx.fillText('🏛️【城區防禦掩體: 空襲減傷70% · 直射掩護50%】', 0, -zR - 6);
     } else {
-      ctx.fillText('🏘️【定居點平民區 · 誤擊扣15CP】', 0, -zR - 6);
+      ctx.fillText('🏘️【定居點平民區 · 誤擊扣政治值】', 0, -zR - 6);
     }
     ctx.restore();
   }
