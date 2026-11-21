@@ -631,6 +631,8 @@ const EXPLICIT_SILHOUETTE_CLASS: Record<string, GroundSilhouetteClass> = {
   usmc_m4a3r3_flame: 'tank',
   us_m24_chaffee: 'tank',
   us_m16_quad50: 'air_defense',
+  usmc_90mm_aa_42: 'towed',
+  usmc_40mm_bofors_45: 'towed',
   us_m113_acav: 'carrier',
   us_m107_175: 'spg',
   us_hmmwv_tow: 'carrier',
@@ -852,17 +854,19 @@ export const GROUND_SILHOUETTE_SCALE: Record<GroundSilhouetteClass, number> = {
 export function drawGroundSilhouette(
   ctx: CanvasRenderingContext2D,
   unitType: string,
-  isPlayer: boolean,
+  isPlayer: boolean | 'allied',
   scale: number = 1
 ): void {
   const t = unitType.toLowerCase();
-  const hullFill = isPlayer ? '#1B3A2B' : '#3A2322';
-  const hullHighlight = isPlayer ? '#295740' : '#4E2F2D';
-  const hullStroke = isPlayer ? '#66BB6A' : '#EF9A9A';
-  const turretFill = isPlayer ? '#2E5A44' : '#52302E';
+  // Allied formations in a brighter green throughout, so they are not mistaken for the player's
+  const allied = isPlayer === 'allied';
+  const hullFill = allied ? '#24461F' : isPlayer ? '#1B3A2B' : '#3A2322';
+  const hullHighlight = allied ? '#3A6B2E' : isPlayer ? '#295740' : '#4E2F2D';
+  const hullStroke = allied ? '#B2FF59' : isPlayer ? '#66BB6A' : '#EF9A9A';
+  const turretFill = allied ? '#3D6A2F' : isPlayer ? '#2E5A44' : '#52302E';
   const trackColor = '#0F1419';
-  const barrelColor = isPlayer ? '#CFD8DC' : '#FFCCBC';
-  const accentColor = isPlayer ? '#4FC3F7' : '#FF5252';
+  const barrelColor = allied ? '#DCEDC8' : isPlayer ? '#CFD8DC' : '#FFCCBC';
+  const accentColor = allied ? '#76FF03' : isPlayer ? '#4FC3F7' : '#FF5252';
 
   ctx.save();
   ctx.scale(scale, scale);

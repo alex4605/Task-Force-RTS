@@ -127,6 +127,8 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   us_army_rifle_45: 0.5,
   usmc_m4a3r3_flame: 0.15, // flame gun
   us_m24_chaffee: 1.3, // M6 75mm
+  usmc_90mm_aa_42: 1.8, // 90mm M1 (slant range engaged)
+  usmc_40mm_bofors_45: 1.3, // 40mm M1
   us_m16_quad50: 1.2, // M45 quad .50, effective AA
   us_m113_acav: 1.5, // M2 .50 cal
   us_m107_175: 32.7, // M113 175mm
@@ -225,6 +227,7 @@ export const AIR_WEAPON_RANGE = {
   k13: gameRangeFromKm(7.5), // K-13 / AA-2 Atoll (MiG-21)
   r27er: gameRangeFromKm(130), // R-27ER Alamo
   harpoon: gameRangeFromKm(124), // AGM-84A Harpoon
+  heliAsm: gameRangeFromKm(30), // AGM-119B Penguin (34 km) / Sea Skua (25 km)
   kh22: gameRangeFromKm(600), // Kh-22 Burya
   p700: gameRangeFromKm(625), // P-700 Granit
   harm: gameRangeFromKm(150), // AGM-88 HARM
@@ -248,7 +251,8 @@ const GARRISON_KM: Record<Era, { rifle: number; tank: number; gun: number; flak:
 };
 
 /** Coastal gun range from the bore parsed out of its name (240mm "Black Dragon", 15cm, 14", ...). */
-function coastalGunKm(name: string): number {
+function coastalGunKm(rawName: string | undefined): number {
+  const name = rawName ?? '';
   const mm = name.match(/(\d+(?:\.\d+)?)\s*mm/);
   const inch = name.match(/(\d+(?:\.\d+)?)\s*(?:-inch|吋|")/);
   const cm = name.match(/(\d+(?:\.\d+)?)\s*cm/);

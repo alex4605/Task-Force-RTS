@@ -55,7 +55,7 @@ export function snapOntoLand(island: Island, p: Vector2D): Vector2D {
   const r = Math.hypot(p.x - c.x, p.y - c.y) || 1;
   const ux = (p.x - c.x) / r;
   const uy = (p.y - c.y) / r;
-  for (let k = 1; k <= 60; k++) {
+  for (let k = 1; k <= 140; k++) {
     for (const sign of [-1, 1]) {
       const q = { x: p.x + ux * k * 15 * sign, y: p.y + uy * k * 15 * sign };
       if (onIslandLand(q, island)) {
@@ -127,6 +127,7 @@ export function addIslandSettlements(islands: Island[], era: Era, seed: number):
       // Room for the huts all round
       if (![0, 1, 2, 3, 4, 5].every((j) => onIslandLand({ x: p.x + Math.cos(j) * 80, y: p.y + Math.sin(j) * 80 }, isl))) continue;
       if (military.some((m) => dist(m, p) < 380) || placed.some((m) => dist(m, p) < 700)) continue;
+      if (names.length === 0) break;
       placed.push(p);
       const name = names.splice(Math.floor(rand() * names.length), 1)[0];
       const village: Installation = makeInstallation({

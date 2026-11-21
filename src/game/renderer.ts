@@ -125,8 +125,20 @@ export class VectorRenderer {
   }
 
   // Interactive Tactical CAP Area Designation Reticle
-  public drawCapPreview(pos: Vector2D, camera: Camera) {
-    overlaysRender.drawCapPreview(this.rc, pos, camera);
+  public drawCapPreview(pos: Vector2D, camera: Camera, dragStart?: Vector2D | null) {
+    overlaysRender.drawCapPreview(this.rc, pos, camera, dragStart);
+  }
+
+  public drawRebasePreview(pos: Vector2D, target: { name: string; pos: Vector2D; isCarrier: boolean } | undefined, camera: Camera) {
+    overlaysRender.drawRebasePreview(this.rc, pos, target, camera);
+  }
+
+  public drawEscortPreview(pos: Vector2D, charge: Aircraft | undefined, camera: Camera) {
+    overlaysRender.drawEscortPreview(this.rc, pos, charge, camera);
+  }
+
+  public drawCapBoxes(aircraft: Aircraft[], selectedIds: string[], camera: Camera) {
+    overlaysRender.drawCapBoxes(this.rc, aircraft, selectedIds, camera);
   }
 
   // Render Active Air-Dropped Passive Sonobuoys & Acoustic Ping Sweeps

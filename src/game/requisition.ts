@@ -670,6 +670,18 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
         typeTag: 'field_hospital',
         requiresIsland: true,
       },
+      {
+        id: 'req-fac-pow-camp',
+        category: 'installations',
+        name: '戰俘營 (POW Camp)',
+        cost: 140,
+        era: 'era5',
+        badge: '收押戰俘 · 審訊情資',
+        desc: '以鐵絲網圍起的收容營區，收押俘獲的敵方飛行員與艦員（每座 80 人），審訊所得持續轉為研究點數 RP。',
+        statsDesc: '容量 80 人 | 每名戰俘 +0.03 RP/s | 需步兵在場構工',
+        typeTag: 'pow_camp',
+        requiresIsland: true,
+      },
     ];
   }
 
@@ -1143,6 +1155,18 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
         desc: '設立外科手術野戰醫院，救治負傷官兵迅速歸隊，顯著穩定部隊組織度 (+2.5%/s)！',
         statsDesc: '人員救治返部 | 組織度恢復 +2.5%/s | 防止士氣崩潰',
         typeTag: 'field_hospital',
+        requiresIsland: true,
+      },
+      {
+        id: 'req-fac-pow-camp',
+        category: 'installations',
+        name: '戰俘營 (POW Camp)',
+        cost: 140,
+        era: 'era4',
+        badge: '收押戰俘 · 審訊情資',
+        desc: '以鐵絲網圍起的收容營區，收押俘獲的敵方飛行員與艦員（每座 80 人），審訊所得持續轉為研究點數 RP。',
+        statsDesc: '容量 80 人 | 每名戰俘 +0.03 RP/s | 需步兵在場構工',
+        typeTag: 'pow_camp',
         requiresIsland: true,
       },
     ];
@@ -1879,6 +1903,18 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       desc: '設立戰地野戰醫院，救治前線負傷官兵，使傷患重回作戰建制，顯著穩定陸軍部隊組織度！',
       statsDesc: '人員救治返部 | 組織度恢復 +2.5%/s | 防止士氣崩潰',
       typeTag: 'field_hospital',
+      requiresIsland: true,
+    },
+    {
+      id: 'req-fac-pow-camp',
+      category: 'installations',
+      name: '戰俘營 (POW Camp)',
+      cost: 140,
+      era: era,
+      badge: '收押戰俘 · 審訊情資',
+      desc: '以鐵絲網圍起的收容營區，收押俘獲的敵方飛行員與艦員（每座 80 人），審訊所得持續轉為研究點數 RP。',
+      statsDesc: '容量 80 人 | 每名戰俘 +0.03 RP/s | 需步兵在場構工',
+      typeTag: 'pow_camp',
       requiresIsland: true,
     },
     {

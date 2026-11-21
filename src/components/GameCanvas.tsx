@@ -28,7 +28,7 @@ interface GameCanvasProps {
   onCancelPlacement?: () => void;
   onTogglePlacement?: () => void;
   isDesignatingCap?: boolean;
-  onConfirmCapTarget?: (worldPos: Vector2D) => void;
+  onConfirmCapTarget?: (worldPos: Vector2D, box?: { x0: number; y0: number; x1: number; y1: number }) => void;
   onCancelCap?: () => void;
   isDesignatingSonobuoy?: boolean;
   onConfirmSonobuoyTarget?: (worldPos: Vector2D, keepActive?: boolean) => void;
@@ -104,6 +104,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const isDesignatingCapRef = useRef<boolean>(isDesignatingCap);
   isDesignatingCapRef.current = isDesignatingCap;
   const onConfirmCapTargetRef = useRef(onConfirmCapTarget);
+  /** World point where the CAP box drag began. */
+  const capDragStartRef = useRef<Vector2D | null>(null);
   onConfirmCapTargetRef.current = onConfirmCapTarget;
   const onCancelCapRef = useRef(onCancelCap);
   onCancelCapRef.current = onCancelCap;
@@ -322,8 +324,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       // Draw Interactive Tactical CAP Area Designation Preview
       if (isDesignatingCapRef.current) {
-        renderer.drawCapPreview(hoverWorldPosRef.current, cameraRef.current);
+        renderer.drawCapPreview(hoverWorldPosRef.current, cameraRef.current, capDragStartRef.current);
       }
+
+      if (engine.isDesignatingRebase) {
+        renderer.drawRebasePreview(hoverWorldPosRef.current, engine.findRebaseTarget(hoverWorldPosRef.current), cameraRef.current);
+      }
+      if (engine.isDesignatingEscort) {
+        renderer.drawEscortPreview(hoverWorldPosRef.current, engine.findEscortCharge(hoverWorldPosRef.current), cameraRef.current);
+      }
+      // Selected aircraft's assigned CAP boxes and escort charges
+      renderer.drawCapBoxes(engine.aircraft, engine.selectedUnitIds, cameraRef.current);
 
       // Draw Interactive Passive Sonobuoy Drop Preview
       if (isDesignatingSonobuoyRef.current) {
@@ -385,13 +396,28 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
     }
 
+    // Escort charge pick
+    if (engine.isDesignatingEscort) {
+      e.preventDefault();
+      if (e.button === 0) engine.assignEscort(screenToWorld(e.clientX, e.clientY));
+      engine.isDesignatingEscort = false;
+      return;
+    }
+
+    // Rebase destination pick
+    if (engine.isDesignatingRebase) {
+      e.preventDefault();
+      if (e.button === 0) engine.rebaseSelectedAircraft(screenToWorld(e.clientX, e.clientY));
+      engine.isDesignatingRebase = false;
+      return;
+    }
+
     // Interactive CAP Area Designation Interceptor
     if (isDesignatingCapRef.current) {
       if (e.button === 0) {
-        // Left click: confirm CAP area
+        // Left button: start dragging out the CAP box (a plain click sets a point orbit on release)
         e.preventDefault();
-        const worldPos = screenToWorld(e.clientX, e.clientY);
-        onConfirmCapTargetRef.current?.(worldPos);
+        capDragStartRef.current = screenToWorld(e.clientX, e.clientY);
         return;
       } else if (e.button === 2) {
         // Right click: cancel CAP mode
@@ -600,6 +626,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   // Mouse Up
   const handleMouseUp = (e: React.MouseEvent) => {
+    if (capDragStartRef.current && e.button === 0) {
+      const a = capDragStartRef.current;
+      capDragStartRef.current = null;
+      const b = screenToWorld(e.clientX, e.clientY);
+      const minSide = 24 / cameraRef.current.zoom;
+      if (Math.abs(b.x - a.x) > minSide && Math.abs(b.y - a.y) > minSide) {
+        const box = { x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) };
+        onConfirmCapTargetRef.current?.({ x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 }, box);
+      } else {
+        onConfirmCapTargetRef.current?.(a);
+      }
+      return;
+    }
     if (isPanningRef.current) {
       isPanningRef.current = false;
       return;
@@ -673,7 +712,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
           lastLeftClickRef.current = { time: now, key: clickKey };
           onSelectUnits(engine.selectedUnitIds);
-          if (hitShip.type === 'carrier' || hitShip.type === 'cve' || hitShip.type === 'cv63' || hitShip.type === 'cvn' || hitShip.type === 'lph' || hitShip.type === 'lha_tarawa') {
+          if (hitShip.flightDeck || hitShip.type === 'carrier' || hitShip.type === 'cve' || hitShip.type === 'cv63' || hitShip.type === 'cvn' || hitShip.type === 'lph' || hitShip.type === 'lha_tarawa') {
             onSelectAirfacility?.('carrier', hitShip.id);
           } else {
             onSelectAirfacility?.(null);
@@ -696,7 +735,13 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           );
           const hasAirfield = isl.installations.some((i) => i.type === 'airfield' && !i.isDestroyed);
           if (hitAirfieldInst || ((isl.isFriendlyBase || hasAirfield) && isPointInPolygon(worldPos, isl.points))) {
-            onSelectAirfacility?.('airbase', isl.id);
+            // Open the stock of the airfield that was clicked (or the island's nearest friendly one)
+            const field =
+              (hitAirfieldInst?.type === 'airfield' && hitAirfieldInst.side === 'player' ? hitAirfieldInst : undefined) ??
+              isl.installations
+                .filter((i) => i.type === 'airfield' && i.side === 'player' && !i.isDestroyed)
+                .sort((a, b) => dist(worldPos, a.pos) - dist(worldPos, b.pos))[0];
+            onSelectAirfacility?.('airbase', field?.id ?? isl.id);
             return;
           }
         }
@@ -745,6 +790,12 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       keysDownRef.current[e.key] = true;
 
       if (e.key === 'Escape') {
+        if (engine.isDesignatingRebase || engine.isDesignatingEscort) {
+          e.preventDefault();
+          engine.isDesignatingRebase = false;
+          engine.isDesignatingEscort = false;
+          return;
+        }
         if (isDesignatingSonobuoyRef.current) {
           e.preventDefault();
           onCancelSonobuoyRef.current?.();
@@ -818,11 +869,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       if (e.key === ' ' || e.code === 'Space') {
         e.preventDefault();
-        if (engine.isPaused) {
-          onTogglePauseRef.current?.();
-        } else {
-          engine.triggerFleetFlakBarrage();
-        }
+        onTogglePauseRef.current?.();
       } else if (e.key === 'f' || e.key === 'F') {
         // Focus Camera on Selected Units or Flagship Carrier
         const flagship = engine.getFlagship();
@@ -848,6 +895,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         // Radar coverage layer
         engine.showRadarCoverage = !engine.showRadarCoverage;
         onRadarLayerChangeRef.current?.(engine.showRadarCoverage);
+      } else if (e.key === 'v' || e.key === 'V') {
+        // Escort: pick the friendly aircraft the selected fighters protect
+        if (engine.aircraft.some((a) => a.side === 'player' && a.state !== 'shot_down' && engine.selectedUnitIds.includes(a.id))) {
+          engine.isDesignatingEscort = !engine.isDesignatingEscort;
+          engine.isDesignatingRebase = false;
+        }
+      } else if (e.key === 't' || e.key === 'T') {
+        // Rebase: pick the airfield or carrier the selected aircraft divert to
+        if (engine.aircraft.some((a) => a.side === 'player' && a.state !== 'shot_down' && engine.selectedUnitIds.includes(a.id))) {
+          engine.isDesignatingRebase = !engine.isDesignatingRebase;
+          engine.isDesignatingEscort = false;
+        }
       } else if (e.key === 'p' || e.key === 'P') {
         engine.issueOrderToSelected({ type: 'patrol' });
       } else if (e.key === 'u' || e.key === 'U') {

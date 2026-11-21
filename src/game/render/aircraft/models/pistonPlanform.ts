@@ -30,6 +30,8 @@ interface PistonSpec {
   wing: string;
   spats?: boolean;
   floats?: boolean;
+  /** Twin main floats (E13A Jake) instead of a central float with wingtip floats. */
+  twinFloats?: boolean;
   diveFlaps?: boolean;
   ballTurret?: boolean;
   corrugated?: boolean;
@@ -53,6 +55,10 @@ const SPECS: Partial<Record<AircraftModel, PistonSpec>> = {
   zero_a6m2: { span: 27.6, rootChord: 6.2, tipChord: 3, wingX: 5.5, sweep: 1.2, tip: 'round', nose: 'radial', width: 3.6, canopy: { x: 3.5, len: 6.5, kind: 'framed' }, ...IJN_GREY },
   zero_a6m5: { span: 25.3, rootChord: 6.2, tipChord: 3.6, wingX: 5.5, sweep: 1, tip: 'square', nose: 'radial', width: 3.6, canopy: { x: 3.5, len: 6.5, kind: 'framed' }, ...IJN_GREEN },
   kamikaze_zero: { span: 25.3, rootChord: 6.2, tipChord: 3.6, wingX: 5.5, sweep: 1, tip: 'square', nose: 'radial', width: 3.6, canopy: { x: 3.5, len: 6.5, kind: 'framed' }, ...IJN_GREEN },
+  // Supermarine Walrus: 14 m span amphibian, boat hull drawn as the central float, wingtip floats
+  walrus: { span: 32.1, rootChord: 7.6, tipChord: 7, wingX: 5, sweep: 0, tip: 'square', nose: 'radial', width: 4.4, canopy: { x: 6, len: 6, kind: 'framed' }, floats: true, ...RAF_GREEN },
+  // E13A1 Jake: 14.5 m span, three-seat, twin floats, long greenhouse canopy
+  e13a: { span: 33.4, rootChord: 6.8, tipChord: 3.6, wingX: 4.5, sweep: 0.8, tip: 'round', nose: 'radial', width: 3.4, canopy: { x: 4, len: 11, kind: 'greenhouse' }, floats: true, twinFloats: true, ...IJN_GREY },
   rufe: { span: 27.6, rootChord: 6.2, tipChord: 3, wingX: 5.5, sweep: 1.2, tip: 'round', nose: 'radial', width: 3.6, canopy: { x: 3.5, len: 6.5, kind: 'framed' }, floats: true, ...IJN_GREY },
   ki61: { span: 27.6, rootChord: 5, tipChord: 2.2, wingX: 4.5, sweep: 0.8, tip: 'round', nose: 'inline', width: 3, canopy: { x: 2, len: 5.5, kind: 'framed' }, radiator: true, ...IJA_GREEN },
   ki84: { span: 25.8, rootChord: 5.6, tipChord: 2.4, wingX: 5, sweep: 1, tip: 'round', nose: 'radial', width: 3.6, canopy: { x: 2.5, len: 5, kind: 'bubble' }, ...IJA_GREEN },
@@ -192,7 +198,17 @@ function drawPiston(rc: RenderContext, plane: Aircraft, s: PistonSpec): void {
   const tailX = (TAIL_SPECS[plane.model]?.x ?? -10) + 0.5;
   const half = s.span / 2;
   // Floats under the Rufe: a long central float and two wingtip floats
-  if (s.floats) {
+  if (s.floats && s.twinFloats) {
+    ctx.save();
+    ctx.fillStyle = '#263238';
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(9, side * 5.5, 10, 1.8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  } else if (s.floats) {
     ctx.save();
     ctx.fillStyle = '#263238';
     ctx.beginPath();

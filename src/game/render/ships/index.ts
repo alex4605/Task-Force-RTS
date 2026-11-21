@@ -36,6 +36,12 @@ export function drawShips(rc: RenderContext, ships: Ship[], camera: Camera, sele
       continue;
     }
 
+    // Gone under: only the oil slick on the water is left
+    if (ship.isSunk && ship.sinkProgress >= 1) {
+      drawBattleDamage(rc, ship);
+      continue;
+    }
+
     drawWake(rc, ship);
 
     drawSubmarineContactRing(rc, ship, isSub);
@@ -175,8 +181,10 @@ function drawHull(rc: RenderContext, ship: Ship, hullColor: string, detailColor:
     renderShipHullByType(rc, ship, hullColor, detailColor);
     ctx.restore();
 
-    // 3. 斷裂接縫處 (Jagged Steel Fracture Line & Raging Internal Flame)
+    // 3. 斷裂接縫處 (Jagged Steel Fracture Line & Raging Internal Flame), gone once she is under
+    if (alpha <= 0.02) return;
     ctx.save();
+    ctx.globalAlpha = Math.min(1, alpha * 1.5);
     ctx.translate(ship.pos.x, ship.pos.y);
     ctx.rotate(ship.heading);
 
@@ -243,8 +251,14 @@ function drawBattleDamage(rc: RenderContext, ship: Ship): void {
   const ctx = rc.ctx;
 
   if (ship.isSunk) {
-    // Sinking Ship: Expanding Iridescent Oil Slick on Water Surface
-    const slickRadius = (ship.length * 0.5) + ship.sinkProgress * 32;
+    // Sinking Ship: Expanding Iridescent Oil Slick on Water Surface, spreading and thinning out
+    // over a few minutes after she has gone down
+    const t = ship.sunkTime ?? 0;
+    const slickFade = t < 90 ? 1 : Math.max(0, 1 - (t - 90) / 120);
+    if (slickFade <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = slickFade;
+    const slickRadius = (ship.length * 0.5) + ship.sinkProgress * 32 + Math.min(60, t * 0.4);
     const oilGrad = ctx.createRadialGradient(
       ship.pos.x, ship.pos.y, 4,
       ship.pos.x, ship.pos.y, slickRadius
@@ -259,10 +273,12 @@ function drawBattleDamage(rc: RenderContext, ship: Ship): void {
     ctx.ellipse(ship.pos.x, ship.pos.y, slickRadius, slickRadius * 0.65, ship.heading, 0, Math.PI * 2);
     ctx.fill();
 
-    // Water boil, foam and boiler room steam bubbles
+    // Water boil, foam and boiler room steam bubbles: only while she is going down and just after
+    const boil = Math.max(0, 1 - Math.max(0, t - 15) / 10);
+    ctx.globalAlpha = slickFade * boil;
     ctx.strokeStyle = 'rgba(224, 247, 250, 0.45)';
     ctx.lineWidth = 1.2;
-    for (let b = 0; b < 4; b++) {
+    for (let b = 0; b < (boil > 0 ? 4 : 0); b++) {
       const bAngle = (rc.time * 3 + b * 1.5) % (Math.PI * 2);
       const bDist = (b * 9 + rc.time * 12) % (ship.length * 0.4);
       const bx = ship.pos.x + Math.cos(ship.heading + bAngle) * bDist;
@@ -271,6 +287,7 @@ function drawBattleDamage(rc: RenderContext, ship: Ship): void {
       ctx.arc(bx, by, 3 + (b % 3), 0, Math.PI * 2);
       ctx.stroke();
     }
+    ctx.restore();
   } else if (ship.health < ship.maxHealth * 0.55) {
     // Heavy Battle Damage: Multi-stage Billowing Black Smoke & Internal Fiery Core
     const isCritical = ship.health < ship.maxHealth * 0.3;

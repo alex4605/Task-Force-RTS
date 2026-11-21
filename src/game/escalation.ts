@@ -90,6 +90,27 @@ export function airEscalation(tier: EscalationTier): AirEscalation {
   };
 }
 
+export interface NavalEscalation {
+  /** Escorts added to (or, when negative, taken from) each enemy surface action group. */
+  escortDelta: number;
+  /** Multiplier on the gap between enemy surface sorties (smaller = more often). */
+  intervalMul: number;
+  /** Troops a reinforcement run brings (Tokyo Express). */
+  troopUnits: number;
+}
+
+/**
+ * The enemy's surface effort grows with the campaign: probing groups at first, full squadrons as
+ * the fighting peaks; in the final stage its fleet is spent and fewer, smaller groups come out.
+ */
+export function navalEscalation(tier: EscalationTier): NavalEscalation {
+  return {
+    escortDelta: [-1, 0, 1, 2, -1][tier],
+    intervalMul: [1.15, 1, 0.85, 0.75, 1.35][tier],
+    troopUnits: [1, 2, 2, 3, 1][tier],
+  };
+}
+
 export interface AlliedEscalation {
   /** Most allied units alive at once from the mainland base. */
   maxUnits: number;

@@ -139,6 +139,9 @@ const AIRCRAFT_BASE_STATS: Partial<Record<AircraftModel, AircraftBaseStats>> = {
   buccaneer: { health: 900 },
   sea_harrier: { health: 640 }, // 2 x 30 mm ADEN pods
   rufe: { health: 420 },
+  e13a: { health: 380 },
+  walrus: { health: 400 },
+  lynx: { health: 560 },
   ki84: { health: 520 }, // 2 x 20 mm + 2 x 12.7 mm
   po2: { health: 260 },
   ac47: { health: 900 }, // three GAU-2 miniguns

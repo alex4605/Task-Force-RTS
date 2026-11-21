@@ -41,6 +41,8 @@ export const TAIL_SPECS: Partial<Record<AircraftModel, TailSpec>> = {
   ki84: { kind: 'prop', x: -10.5, halfSpan: 5.8, chord: 3.6 },
   boomerang: { kind: 'prop', x: -10.5, halfSpan: 5.5, chord: 3.5 },
   seafire: { kind: 'prop', x: -11, halfSpan: 6, chord: 3.8 },
+  walrus: { kind: 'prop', x: -12, halfSpan: 6.5, chord: 4 },
+  e13a: { kind: 'prop', x: -12, halfSpan: 6, chord: 4 },
   rufe: { kind: 'prop', x: -10, halfSpan: 5.5, chord: 3.5 },
   george: { kind: 'prop', x: -11, halfSpan: 6.5, chord: 3.5 },
   val: { kind: 'prop', x: -11, halfSpan: 6, chord: 3.5 },

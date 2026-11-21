@@ -251,10 +251,13 @@ function tileCache(map: TerrainMap): TileCache {
  * finished tiles of the zoom's detail level on top. Missing tiles are queued nearest-first and
  * shaded a few rows per frame within FRAME_BUDGET_MS; the least recently used are evicted.
  */
-function drawGroundTiles(rc: RenderContext, map: TerrainMap, camera: Camera, budgetMs = FRAME_BUDGET_MS): void {
+function drawGroundTiles(rc: RenderContext, map: TerrainMap, camera: Camera, budgetMs = FRAME_BUDGET_MS, base?: () => void): void {
   let lod = -1;
   for (let i = 0; i < LODS.length; i++) if (camera.zoom >= LODS[i].minZoom) lod = i;
-  if (lod < 0) return;
+  if (lod < 0) {
+    base?.();
+    return;
+  }
   const cache = tileCache(map);
   cache.frame++;
   const { scale } = LODS[lod];
@@ -267,6 +270,7 @@ function drawGroundTiles(rc: RenderContext, map: TerrainMap, camera: Camera, bud
   const y1 = Math.min(Math.ceil(map.worldSize / tileWorld) - 1, Math.floor((camera.y + halfH) / tileWorld));
 
   const pending: Tile[] = [];
+  const ready: Tile[] = [];
   for (let ty = y0; ty <= y1; ty++) {
     for (let tx = x0; tx <= x1; tx++) {
       // Skip open sea: nothing to draw where no land touches the tile
@@ -278,10 +282,13 @@ function drawGroundTiles(rc: RenderContext, map: TerrainMap, camera: Camera, bud
         cache.tiles.set(key, tile);
       }
       tile.lastUsed = cache.frame;
-      if (tile.canvas) rc.ctx.drawImage(tile.canvas as CanvasImageSource, tx * tileWorld, ty * tileWorld, tileWorld, tileWorld);
-      else pending.push(tile);
+      (tile.canvas ? ready : pending).push(tile);
     }
   }
+  // The coarse raster only shows where a tile is still being shaded: once every tile of the
+  // view is done they cover all of its land, and drawing the raster under them is wasted fill.
+  if (pending.length > 0) base?.();
+  for (const tile of ready) rc.ctx.drawImage(tile.canvas as CanvasImageSource, tile.tx * tileWorld, tile.ty * tileWorld, tileWorld, tileWorld);
 
   // Shade pending tiles, the one nearest the screen centre first
   pending.sort((a, b) => Math.hypot((a.tx + 0.5) * tileWorld - camera.x, (a.ty + 0.5) * tileWorld - camera.y) - Math.hypot((b.tx + 0.5) * tileWorld - camera.x, (b.ty + 0.5) * tileWorld - camera.y));
@@ -335,6 +342,23 @@ function tracePolygon(ctx: CanvasRenderingContext2D, pts: { x: number; y: number
   ctx.closePath();
 }
 
+/** Bounding boxes of outlines, cached per points array (outlines are replaced, never mutated). */
+const BBOX = new WeakMap<object, { x0: number; y0: number; x1: number; y1: number }>();
+function bboxOf(pts: { x: number; y: number }[]) {
+  let b = BBOX.get(pts);
+  if (!b) {
+    b = { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+    for (const p of pts) {
+      if (p.x < b.x0) b.x0 = p.x;
+      if (p.y < b.y0) b.y0 = p.y;
+      if (p.x > b.x1) b.x1 = p.x;
+      if (p.y > b.y1) b.y1 = p.y;
+    }
+    BBOX.set(pts, b);
+  }
+  return b;
+}
+
 /** The baked ground raster, clipped to the coastlines (lagoons cut out). World transform must be set. */
 export function drawTerrainGround(rc: RenderContext, map: TerrainMap, islands: Island[], camera?: Camera): void {
   let baked = BAKED.get(map);
@@ -342,33 +366,57 @@ export function drawTerrainGround(rc: RenderContext, map: TerrainMap, islands: I
     baked = bake(map);
     BAKED.set(map, baked);
   }
+  // Only outlines that reach the view (plus the beach band) go into the clip and the stroke:
+  // the off-screen coastlines cost path work every frame and draw nothing.
+  const pad = 40;
+  let vx0 = 0, vy0 = 0, vx1 = map.worldSize, vy1 = map.worldSize;
+  if (camera) {
+    const hw = rc.width / 2 / camera.zoom;
+    const hh = rc.height / 2 / camera.zoom;
+    vx0 = camera.x - hw - pad;
+    vy0 = camera.y - hh - pad;
+    vx1 = camera.x + hw + pad;
+    vy1 = camera.y + hh + pad;
+  }
+  const inView = (pts: { x: number; y: number }[]) => {
+    const b = bboxOf(pts);
+    return b.x1 >= vx0 && b.x0 <= vx1 && b.y1 >= vy0 && b.y0 <= vy1;
+  };
+  const visible = islands.filter((isl) => inView(isl.points));
+  if (visible.length === 0) return;
   const ctx = rc.ctx;
   ctx.save();
   ctx.beginPath();
-  for (const isl of islands) {
+  for (const isl of visible) {
     tracePolygon(ctx, isl.points);
-    for (const lag of isl.lagoons ?? []) tracePolygon(ctx, lag.points);
+    for (const lag of isl.lagoons ?? []) if (inView(lag.points)) tracePolygon(ctx, lag.points);
   }
   ctx.clip('evenodd');
   ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(baked.canvas as CanvasImageSource, 0, 0, RASTER_PX, RASTER_PX, 0, 0, map.worldSize, map.worldSize);
+  // Just the part of the raster under the view
+  const k = RASTER_PX / map.worldSize;
+  const sx0 = Math.max(0, Math.floor(vx0 * k) - 1);
+  const sy0 = Math.max(0, Math.floor(vy0 * k) - 1);
+  const sx1 = Math.min(RASTER_PX, Math.ceil(vx1 * k) + 1);
+  const sy1 = Math.min(RASTER_PX, Math.ceil(vy1 * k) + 1);
+  const raster = baked.canvas as CanvasImageSource;
+  const drawBase = () => {
+    if (sx1 > sx0 && sy1 > sy0) ctx.drawImage(raster, sx0, sy0, sx1 - sx0, sy1 - sy0, sx0 / k, sy0 / k, (sx1 - sx0) / k, (sy1 - sy0) / k);
+  };
   // Sharper tiles over it when zoomed in
-  if (camera) drawGroundTiles(rc, map, camera);
+  if (camera) drawGroundTiles(rc, map, camera, FRAME_BUDGET_MS, drawBase);
+  else drawBase();
   // Smooth beach band just inside the coastline (still clipped to land)
   const sand = map.era === 'era4' ? 'rgba(120, 112, 84, 0.4)' : 'rgba(150, 140, 100, 0.5)';
   ctx.strokeStyle = sand;
   ctx.lineWidth = 34;
   ctx.lineJoin = 'round';
-  for (const isl of islands) {
-    ctx.beginPath();
+  ctx.beginPath();
+  for (const isl of visible) {
     tracePolygon(ctx, isl.points);
-    ctx.stroke();
-    for (const lag of isl.lagoons ?? []) {
-      ctx.beginPath();
-      tracePolygon(ctx, lag.points);
-      ctx.stroke();
-    }
+    for (const lag of isl.lagoons ?? []) if (inView(lag.points)) tracePolygon(ctx, lag.points);
   }
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -396,6 +444,25 @@ function lineVisible(rc: RenderContext, camera: Camera, pts: { x: number; y: num
 }
 
 /** Rivers, roads, bridges, town blocks and peaks over the ground raster. */
+/** Roof colour of a building, worked out once (thousands of blocks are drawn each frame). */
+const BLOCK_FILL = new WeakMap<object, string>();
+function blockFill(b: { tone: number }, camp: boolean): string {
+  if (camp) return 'rgba(240, 230, 190, 0.8)';
+  let f = BLOCK_FILL.get(b);
+  if (!f) {
+    if (b.tone < 0) {
+      // Thatch: straw roofs, darker on older huts; the meeting house (tone -1) darkest
+      const t = -b.tone;
+      f = `rgb(${Math.round(196 - t * 70)}, ${Math.round(168 - t * 62)}, ${Math.round(104 - t * 44)})`;
+    } else {
+      const v = Math.round(70 + b.tone * 70);
+      f = `rgb(${v}, ${v - 4}, ${v - 12})`;
+    }
+    BLOCK_FILL.set(b, f);
+  }
+  return f;
+}
+
 export function drawTerrainOverlays(rc: RenderContext, map: TerrainMap, camera: Camera): void {
   const ctx = rc.ctx;
   const zoom = camera.zoom;
@@ -539,8 +606,13 @@ export function drawTerrainOverlays(rc: RenderContext, map: TerrainMap, camera: 
         ctx.stroke();
       }
       const shadows = zoom >= 0.5 && d.kind !== 'camp';
+      // Only the buildings of a large town that are actually in view
+      const hw = rc.width / 2 / zoom + 30;
+      const hh = rc.height / 2 / zoom + 30;
+      const whole = Math.abs(d.center.x - camera.x) + d.radius < hw && Math.abs(d.center.y - camera.y) + d.radius < hh;
       for (const b of d.blocks) {
         const p = b.pts;
+        if (!whole && (Math.abs(p[0].x - camera.x) > hw || Math.abs(p[0].y - camera.y) > hh)) continue;
         if (shadows) {
           ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
           ctx.beginPath();
@@ -549,15 +621,7 @@ export function drawTerrainOverlays(rc: RenderContext, map: TerrainMap, camera: 
           ctx.closePath();
           ctx.fill();
         }
-        if (d.kind === 'camp') ctx.fillStyle = 'rgba(240, 230, 190, 0.8)';
-        else if (b.tone < 0) {
-          // Thatch: straw roofs, darker on older huts; the meeting house (tone -1) darkest
-          const t = -b.tone;
-          ctx.fillStyle = `rgb(${Math.round(196 - t * 70)}, ${Math.round(168 - t * 62)}, ${Math.round(104 - t * 44)})`;
-        } else {
-          const v = Math.round(70 + b.tone * 70);
-          ctx.fillStyle = `rgb(${v}, ${v - 4}, ${v - 12})`;
-        }
+        ctx.fillStyle = blockFill(b, d.kind === 'camp');
         ctx.beginPath();
         ctx.moveTo(p[0].x, p[0].y);
         for (let k = 1; k < 4; k++) ctx.lineTo(p[k].x, p[k].y);

@@ -108,6 +108,8 @@ export type GroundUnitType =
   | 'us_army_rifle_45'    // 時代二 美陸軍步兵排 (沖繩 · 第7/77/96步兵師)
   | 'usmc_m4a3r3_flame'   // 時代二 M4A3R3「打火機」噴火戰車排 (硫磺島 / 沖繩)
   | 'us_m24_chaffee'      // 時代三 M24 霞飛輕戰車排 (1950 年首批抵韓)
+  | 'usmc_90mm_aa_42'     // 時代一 USMC 第3防衛營 90mm M1 高射砲連 (牽引 · 瓜島韓德森機場防空)
+  | 'usmc_40mm_bofors_45' // 時代二 USMC 防空營 40mm M1 波佛斯高射砲 (牽引)
   | 'us_m16_quad50'       // 時代三 M16 四聯裝 .50 半履帶防空車「絞肉機」
   | 'us_m113_acav'        // 時代四 M113 ACAV 裝甲騎兵突擊車 (三挺機槍與防盾)
   | 'us_m107_175'         // 時代四 M107 175mm 自走加農砲 (32 km)
@@ -343,6 +345,8 @@ export interface UnitOrder {
   targetPos?: Vector2D;
   targetId?: string;
   patrolOrigin?: Vector2D;
+  /** CAP area dragged out by the player: the patrol flies its edge and engages only what enters it. */
+  patrolBox?: { x0: number; y0: number; x1: number; y1: number };
   waypoints?: Vector2D[];
   activeWaypointIndex?: number;
   pendingUnload?: boolean;
@@ -359,6 +363,12 @@ export interface ShipArmamentSpec {
   type: 'main' | 'secondary' | 'aa' | 'torpedo' | 'asw';
   caliber?: string;
   desc?: string;
+}
+
+export interface GunRoe {
+  ships: boolean;
+  installations: boolean;
+  ground: boolean;
 }
 
 export interface Ship {
@@ -394,6 +404,8 @@ export interface Ship {
   isFlagship?: boolean;
   isSunk: boolean;
   sinkProgress: number;
+  /** Seconds since the ship went down: fires die out once she is under, the oil slick lingers then thins. */
+  sunkTime?: number;
   wakePoints: { x: number; y: number; life: number; width: number }[];
   order: UnitOrder;
   flakCooldown: number;
@@ -438,6 +450,18 @@ export interface Ship {
     hangar: Record<string, number>;
     maxPerType: Record<string, number>;
   };
+  /**
+   * Main-battery rules of engagement (player ships): which targets entering gun range are engaged
+   * without an order. Absent = ships only (the default); an explicit attack order always fires.
+   */
+  gunRoe?: GunRoe;
+  /** Troops aboard a reinforcement run (Tokyo Express): landed on the nearest contested coast. */
+  troopLanding?: { units: { type: GroundUnitType; name: string }[]; landed?: boolean; beach?: Vector2D; islandId?: string };
+  /** A surface combatant's own aircraft: catapult floatplanes or a helicopter deck (see shipAviation.ts). */
+  flightDeck?: 'floatplane' | 'helicopter';
+  aviationFitted?: boolean;
+  /** AI: seconds until the ship next considers launching its aircraft. */
+  shipAirTimer?: number;
   embarkedUnitIds?: string[];
   /** Allied ships on a scripted task (beach landing) steer by AlliedOps, not the surface-action AI. */
   alliedTask?: 'landing';
@@ -564,6 +588,7 @@ export type AircraftPayloadType =
   | 'agm78_standard_arm'   // AGM-78 標準長程反輻射飛彈 (A-6B Weasel / F-105 3600m 防空壓制)
   | 'mer_iron_bombs'       // MER 多聯掛架 18-24枚 500lb 通用高爆彈群 (F-105 / A-6 / B-52 彈幕走廊)
   // 時代五海空現代戰術打擊載荷 (Era 5 Modern Guided Missiles & Standoff Weapons):
+  | 'heli_asm'             // 艦載直升機輕型反艦飛彈 (AGM-119 企鵝 / 海賊鷗 Sea Skua)
   | 'rgm84_harpoon'        // RGM-84 / AGM-84 魚叉主動雷達導引反艦巡弋飛彈 (掠海突防)
   | 'aim54_phoenix'        // AIM-54 鳳凰超遠程主動雷達空空飛彈 (F-14A 專屬超視距攔截超音速轟炸機與反艦飛彈)
   | 'p700_granit'          // P-700 花崗岩超音速重型反艦巡弋飛彈 (基洛夫/奧斯卡 飽和集體突防)
@@ -1351,6 +1376,22 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     cpCost: 0,
     visualTag: '[雙翼 MER 複式六聯掛架 18彈]',
   },
+  heli_asm: {
+    id: 'heli_asm',
+    role: 'attacker',
+    name: '艦載直升機輕型反艦飛彈 (AGM-119 企鵝 / Sea Skua 海賊鷗)',
+    desc: '反水面作戰 (ASuW) 掛載：直升機在艦隊雷達視距外以搜索雷達接觸敵艦，射出兩枚輕型反艦飛彈，專打快艇、巡邏艦與護衛艦的上層結構。',
+    badge: '輕型反艦飛彈',
+    era: 'era5',
+    damage: 1100,
+    speedModifier: 0.95,
+    ammoCount: '2x 輕型反艦飛彈',
+    pros: '直升機 ASuW · 約 25–34 km 射程 · 掠海紅外/半主動導引',
+    purposeBadge: '【直升機反水面作戰 ASuW】',
+    blastRadius: 30,
+    cpCost: 0,
+    visualTag: '[機身兩側 2x 輕型反艦飛彈]',
+  },
   rgm84_harpoon: {
     id: 'rgm84_harpoon',
     role: 'attacker',
@@ -1677,6 +1718,9 @@ export type AircraftModel =
   | 'canberra'    // English Electric Canberra B.20 坎培拉 (RAAF 第2中隊 · 越南)
   | 'buccaneer'   // Blackburn Buccaneer S.2B 海盜式 (英國低空海上打擊機)
   | 'sea_harrier' // BAe Sea Harrier FRS.1 海獵鷹 (福克蘭戰爭艦載戰鬥機)
+  | 'walrus' // Supermarine Walrus 海象式水陸兩用偵察機 (英國/澳洲巡洋艦與戰艦彈射機)
+  | 'lynx'   // Westland Lynx HAS.2 山貓艦載直升機 (北約巡防艦/驅逐艦 · Sea Skua / Mk 46)
+  | 'e13a'   // 愛知 E13A 零式水上偵察機 Jake (重巡/戰艦彈射水上偵察機 · 三座雙浮筒)
   | 'rufe'   // A6M2-N 二式水上戰鬥機 Rufe (所羅門群島水上戰鬥機隊)
   | 'ki84'   // Ki-84 四式戰鬥機 疾風 Frank (陸軍末期最強戰鬥機)
   | 'po2'    // Po-2 夜間騷擾雙翼機 Bedcheck Charlie (韓戰北韓夜襲)
@@ -1706,15 +1750,22 @@ export interface LifeRaft {
   id: string;
   side: 'player' | 'enemy';
   pos: Vector2D;
-  planeModel: AircraftModel;
+  /** The aircraft the crew came from; absent for a ship's raft. */
+  planeModel?: AircraftModel;
   planeName: string;
   pilotName: string;
+  /** Men aboard (aircrew who got out, or a ship's survivors). Default 1. */
+  crew?: number;
+  /** Raft from a sunk ship rather than a downed aircraft. */
+  fromShip?: boolean;
   timer: number;       // 存活倒數 (秒，預設 90s)
   maxTimer: number;    // 90s
   rescued: boolean;
   rescueProgress: number; // 0 to 3s when unit is in proximity
   isOnLand?: boolean;  // 降落於陸地島嶼/大陸之跳傘飛行員
   isCapturedPOW?: boolean; // 是否已被作為戰俘收押
+  /** A downed airman on land making for his own side's command post (its id / position). */
+  walkingTo?: { id: string; name: string; pos: Vector2D };
 }
 
 export type AircraftState =
@@ -1782,6 +1833,8 @@ export interface Aircraft {
   bombingPassedTargetDist?: number;
   missionType?: EnemyAirMissionType;
   nation?: AircraftNation; // 機徽覆寫：同一機型由不同國家操作時 (如日本航空自衛隊 F-15J)
+  /** Flown from a cruiser's / destroyer's own deck (AI recovers it to the same ship). */
+  shipDetachment?: boolean;
   homeBaseId?: string; // 母基地：返航降落的機場 (Installation id) 或航艦 (Ship id)
   ferryTo?: string; // 轉場目的地 (機場或航艦 id)：抵達後降落並計入該基地庫存
   sonobuoyDropTimer?: number; // 反潛巡邏自動布放聲納浮標計時
@@ -1827,6 +1880,10 @@ export interface Aircraft {
   isEvading?: boolean;
   evasionTimer?: number;
   evasionTurnSign?: number;
+  /** The missile being evaded, steered against every frame until the evasion ends. */
+  evadeMissileId?: string;
+  /** Player-assigned close escort: the friendly aircraft this fighter stays with and protects. */
+  escortTargetId?: string;
   evasionTactic?: 'notching' | 'breaking';
   lastSeadCounterfireTime?: number;
   // 時代四蘇越「一擊脫離」戰術狀態 (Era 4 Soviet Hit-and-Run Intercept AI)
@@ -1860,6 +1917,7 @@ export type InstallationType =
   | 'city'               // 城市/城鎮核心市區 (密集街區與混凝土建築，提供部隊城市戰掩體)
   | 'town'               // 城鎮市集 (提供部隊城市戰掩蔽)
   | 'settlement'         // 沿海漁村與定居點 (平民居住區)
+  | 'pow_camp'           // 戰俘營 (雙方皆有：我方構工建造、敵方預設於後方)
   | 'refugee_camp'       // 戰地難民收容營 (聯合國/紅十字帳篷區，遭受火力攻擊扣除 15 CP)
   // 時代四特種防空與前進雷達作戰設施 (Era 4 Cold War / Vietnam Installations)
   | 'sa2_sam_site'       // SA-2 導針 (Guideline) 地空防空飛彈發射營
@@ -1908,6 +1966,10 @@ export interface Installation {
   samMissilesReady?: number;   // 鷹式/SA-2 飛彈備射量
   samMaxMissiles?: number;
   captureProgress?: number;    // 陣地/設施佔領進度 (0~100)
+  /** Prisoners held (POW camps, at most 80 each). */
+  prisoners?: number;
+  /** Prisoners taken beyond the camps' room, waiting for a place. */
+  prisonersWaiting?: number;
 }
 
 export interface IslandStronghold {
@@ -2266,6 +2328,9 @@ export interface CasualtiesReport {
   directHitsScored: number;
   torpedoHitsScored: number;
   critsScored: number;
+  /** Aircrew killed when their aircraft went down (not counting those later captured). */
+  playerAircrewLost?: number;
+  enemyAircrewLost?: number;
 }
 
 export interface Sonobuoy {

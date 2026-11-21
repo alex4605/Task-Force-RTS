@@ -18,6 +18,12 @@ interface SelectedUnitsPanelProps {
   onUnloadAircraft?: () => void;
   isDesignatingCap: boolean;
   onStartCapDesignation?: () => void;
+  /** In-flight rebase of the selected aircraft (T). */
+  onStartRebase?: (ids: string[]) => void;
+  /** Close escort: the selected fighters protect a friendly aircraft picked on the map (V). */
+  onStartEscort?: (ids: string[]) => void;
+  /** Main-battery ROE switches of the selected ships. */
+  onSetGunRoe?: (key: 'ships' | 'installations' | 'ground', value: boolean) => void;
   onCancelCap?: () => void;
   isDesignatingSonobuoy: boolean;
   onStartSonobuoyDesignation?: () => void;
@@ -38,6 +44,9 @@ export const SelectedUnitsPanel: React.FC<SelectedUnitsPanelProps> = ({
   onUnloadAircraft,
   isDesignatingCap,
   onStartCapDesignation,
+  onStartRebase,
+  onStartEscort,
+  onSetGunRoe,
   onCancelCap,
   isDesignatingSonobuoy,
   onStartSonobuoyDesignation,
@@ -477,6 +486,40 @@ export const SelectedUnitsPanel: React.FC<SelectedUnitsPanelProps> = ({
         </div>
       )}
 
+      {/* Main-battery rules of engagement for the selected ships */}
+      {(() => {
+        const ships = selectedUnits.filter((u) => isShipUnit(u) && !u.isSunk && u.turrets.length > 0);
+        if (ships.length === 0) return null;
+        const roeOf = (u: (typeof ships)[number]) => (isShipUnit(u) ? u.gunRoe ?? { ships: true, installations: false, ground: false } : null);
+        const all = (k: 'ships' | 'installations' | 'ground') => ships.every((u) => roeOf(u)?.[k]);
+        const items: { k: 'ships' | 'installations' | 'ground'; label: string }[] = [
+          { k: 'ships', label: '船艦' },
+          { k: 'installations', label: '地面設施' },
+          { k: 'ground', label: '地面單位' },
+        ];
+        return (
+          <div className="pt-1 border-t border-[#1E3A5F]/60">
+            <div className="flex items-center gap-1 text-[10px] font-mono">
+              <span className="text-slate-400 shrink-0" title="主砲對進入射程的目標自動開火（攻擊指令一律開火）">主砲 ROE:</span>
+              {items.map(({ k, label }) => {
+                const on = all(k);
+                return (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => onSetGunRoe?.(k, !on)}
+                    className={`flex-1 py-1 rounded font-bold border transition-colors ${on ? 'bg-[#B71C1C] text-white border-[#FF8A80]' : 'bg-[#0B1E34] text-slate-400 border-[#1E3A5F] hover:text-white'}`}
+                    title={on ? `對進入射程的敵${label}自動射擊（點擊改為不主動射擊）` : `不主動射擊敵${label}（點擊改為自動射擊）`}
+                  >
+                    {on ? '🎯 ' : ''}{label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* CAP Patrol Designation */}
       <div className="pt-1 border-t border-[#1E3A5F]/60">
         <button
@@ -493,8 +536,28 @@ export const SelectedUnitsPanel: React.FC<SelectedUnitsPanelProps> = ({
           title="在地圖上點擊指定空域，在航戰鬥機將前往盤旋警戒"
         >
           <Shield className="w-3.5 h-3.5 text-cyan-200" />
-          <span>{isDesignatingCap ? ('⚡ 正在指定空巡空域 (點地圖)') : '指派空優巡邏空域 (CAP)'}</span>
+          <span>{isDesignatingCap ? ('⚡ 正在指定空巡空域 (拖曳/點地圖)') : '指派空優巡邏空域 (C)'}</span>
         </button>
+        {selectedUnits.some((u) => isAircraftUnit(u)) && (
+          <button
+            type="button"
+            onClick={() => onStartRebase?.(selectedUnits.filter((u) => isAircraftUnit(u)).map((u) => u.id))}
+            className="mt-1 w-full py-1.5 px-2 rounded text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all shadow-md whitespace-nowrap bg-gradient-to-r from-[#1B5E20] to-[#2E7D32] hover:from-[#2E7D32] hover:to-[#388E3C] text-[#E8F5E9] border border-[#81C784]/70"
+            title="選取的飛機中止任務，於空中轉降其他機場或航艦（再點地圖上的目的地）"
+          >
+            <span>🛬 空中轉降 Rebase (T)</span>
+          </button>
+        )}
+        {selectedUnits.some((u) => isAircraftUnit(u) && u.role === 'fighter') && (
+          <button
+            type="button"
+            onClick={() => onStartEscort?.(selectedUnits.filter((u) => isAircraftUnit(u)).map((u) => u.id))}
+            className="mt-1 w-full py-1.5 px-2 rounded text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all shadow-md whitespace-nowrap bg-gradient-to-r from-[#8D6E00] to-[#A67C00] hover:from-[#A67C00] hover:to-[#C79100] text-[#FFF8E1] border border-[#FFD54F]/70"
+            title="選取的戰鬥機貼身護航一架友機（再點地圖上要保護的飛機）"
+          >
+            <span>🛡️ 指定護航 Escort (V)</span>
+          </button>
+        )}
       </div>
 
       {/* Era 3-5 Air-Dropped Passive Sonobuoy Control */}

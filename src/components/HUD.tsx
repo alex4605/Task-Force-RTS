@@ -23,6 +23,7 @@ import {
   RequisitionCategory,
   CasualtiesReport,
   Sonobuoy,
+  Installation,
 } from '../types/game';
 import { getRequisitionCatalog } from '../game/requisition';
 import { BattleAlertBanner, RadarCoverage } from '../game/engine';
@@ -80,7 +81,6 @@ interface HUDProps {
   onStopUnits: () => void;
   onSetSpeed: (speed: number) => void;
   onSteer: (dir: 'port' | 'starboard') => void;
-  onTriggerFlak: () => void;
   intel: SectorIntel | null;
   score: GameScore;
   onOpenBriefing: () => void;
@@ -146,12 +146,15 @@ interface HUDProps {
     | null;
   isDesignatingCap?: boolean;
   onStartCapDesignation?: () => void;
+  /** Rebase mode for the given aircraft: the next map click picks the field or deck to divert to. */
+  onStartRebase?: (ids: string[]) => void;
+  onStartEscort?: (ids: string[]) => void;
+  onSetGunRoe?: (key: 'ships' | 'installations' | 'ground', value: boolean) => void;
   onCancelCap?: () => void;
   sonobuoys?: Sonobuoy[];
   isDesignatingSonobuoy?: boolean;
   onStartSonobuoyDesignation?: () => void;
   onCancelSonobuoy?: () => void;
-  onSelectUnitIds?: (ids: string[]) => void;
   onPurchaseRequisition?: (item: RequisitionItem, targetIslandId?: string, customPos?: Vector2D) => boolean;
 }
 
@@ -244,7 +247,6 @@ export const HUD: React.FC<HUDProps> = ({
   onLaunchModel,
   onOrderSelected,
   onStopUnits,
-  onTriggerFlak,
   intel: _intel,
   score,
   onOpenBriefing,
@@ -293,12 +295,14 @@ export const HUD: React.FC<HUDProps> = ({
   selectedAirfacility,
   isDesignatingCap = false,
   onStartCapDesignation,
+  onStartRebase,
+  onStartEscort,
+  onSetGunRoe,
   onCancelCap,
   sonobuoys = [],
   isDesignatingSonobuoy = false,
   onStartSonobuoyDesignation,
   onCancelSonobuoy,
-  onSelectUnitIds,
 }) => {
   const stock = stockOf(resources);
   // Every friendly deck with an air group: the flagship carrier, escort carriers and amphibious ships
@@ -341,7 +345,7 @@ export const HUD: React.FC<HUDProps> = ({
     () => ({})
   );
 
-  const [rightPanelTab, setRightPanelTab] = React.useState<'flights' | 'cps'>('flights');
+  const [rightPanelTab, setRightPanelTab] = React.useState<'none' | 'cps'>('none');
   const [isGuideCollapsed, setIsGuideCollapsed] = React.useState<boolean>(false);
 
   // Bottom Deck main tab: 'carrier' | 'airbase' | 'engineer_construction' | 'battalion_cp' | 'requisition'
@@ -351,22 +355,28 @@ export const HUD: React.FC<HUDProps> = ({
   const [requisitionTab, setRequisitionTab] = useState<RequisitionCategory>('ground');
   const [selectedBuildIslandId, setSelectedBuildIslandId] = useState<string>('');
 
-  // 取得當前活耀的營指揮所 (若有)
-  const activeBattalionCp = React.useMemo(() => {
-    if (selectedAirfacility && typeof selectedAirfacility === 'object' && selectedAirfacility.id) {
-      for (const isl of islands) {
-        const found = isl.installations.find((inst) => inst.id === selectedAirfacility.id);
-        if (found) return found;
+  // The command post reinforcements are called to: the one last picked (on the map or in the deck)
+  // stays the rally point until another is picked or it is lost. Clicking elsewhere on the map
+  // clears the map selection but must not send the next battalion back to the HQ island.
+  const playerCps = React.useMemo(() => {
+    const out: Installation[] = [];
+    for (const isl of islands) {
+      for (const inst of isl.installations) {
+        if ((inst.type === 'battalion_cp' || inst.type === 'command_post') && !inst.isDestroyed && inst.side === 'player') out.push(inst);
       }
     }
-    for (const isl of islands) {
-      const found = isl.installations.find(
-        (inst) => (inst.type === 'battalion_cp' || inst.type === 'command_post') && !inst.isDestroyed && inst.side === 'player'
-      );
-      if (found) return found;
+    return out;
+  }, [islands]);
+  const [chosenCpId, setChosenCpId] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (selectedAirfacility && typeof selectedAirfacility === 'object' && selectedAirfacility.id) {
+      if (playerCps.some((c) => c.id === selectedAirfacility.id)) setChosenCpId(selectedAirfacility.id);
     }
-    return null;
-  }, [islands, selectedAirfacility]);
+  }, [selectedAirfacility, playerCps]);
+  const activeBattalionCp = React.useMemo(
+    () => playerCps.find((c) => c.id === chosenCpId) ?? playerCps.find((c) => c.type === 'battalion_cp') ?? playerCps[0] ?? null,
+    [playerCps, chosenCpId]
+  );
 
   const hasPlayerCarrier = playerShips.some(
     (s) => !s.isSunk && (s.type === 'carrier' || s.type === 'cve' || s.type === 'cv63' || s.type === 'cvn' || s.type === 'lph' || s.type === 'lha_tarawa')
@@ -386,6 +396,14 @@ export const HUD: React.FC<HUDProps> = ({
       const targetTab = typeof selectedAirfacility === 'object' ? selectedAirfacility.type : selectedAirfacility;
       setBottomDeckTab(targetTab as BottomDeckMode);
       setIsBottomDeckExpanded(true);
+      // Clicking airfield A shows airfield A's own aircraft
+      if (targetTab === 'airbase' && typeof selectedAirfacility === 'object' && selectedAirfacility.id) {
+        if (airfields.some((a) => a.id === selectedAirfacility.id)) setSelectedAirfieldId(selectedAirfacility.id);
+      }
+      // Clicking a ship with its own aircraft (cruiser floatplanes, frigate helicopter) shows that deck
+      if (targetTab === 'carrier' && typeof selectedAirfacility === 'object' && selectedAirfacility.id) {
+        if (carriers.some((c) => c.id === selectedAirfacility.id)) setSelectedCarrierId(selectedAirfacility.id);
+      }
     }
   }, [selectedAirfacility]);
 
@@ -410,7 +428,7 @@ export const HUD: React.FC<HUDProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedUnitsKey, selectedAirfacility]);
 
-  // C / G / Esc 快捷鍵: CAP 空巡與被動聲納浮標投擲模式
+  // 快捷鍵: C CAP 空巡 · G 聲納浮標 · Q 增援選單 · E 設施構工 · A 機場 · T 轉降 (GameCanvas) · Esc 取消
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
@@ -425,6 +443,15 @@ export const HUD: React.FC<HUDProps> = ({
           onStartSonobuoyDesignation?.();
         } else {
           onCancelSonobuoy?.();
+        }
+      } else if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'q' || e.key === 'Q' || e.key === 'e' || e.key === 'E' || e.key === 'a' || e.key === 'A')) {
+        // Q: reinforcement (battalion CP) menu · E: 設施構工 · A: airfield deck; pressing again folds the deck
+        const k = e.key.toLowerCase();
+        const tab: BottomDeckMode = k === 'q' ? 'battalion_cp' : k === 'e' ? 'engineer_construction' : 'airbase';
+        if (isBottomDeckExpanded && bottomDeckTab === tab) setIsBottomDeckExpanded(false);
+        else {
+          setBottomDeckTab(tab);
+          setIsBottomDeckExpanded(true);
         }
       } else if (e.key === 'Escape') {
         setActiveArmamentTray(null);
@@ -441,6 +468,8 @@ export const HUD: React.FC<HUDProps> = ({
     isDesignatingSonobuoy,
     onStartSonobuoyDesignation,
     onCancelSonobuoy,
+    isBottomDeckExpanded,
+    bottomDeckTab,
   ]);
 
   // Land-Based Airbase (AFB) formation counts & payload selections
@@ -467,61 +496,10 @@ export const HUD: React.FC<HUDProps> = ({
   const capturedStrongholdsCount = allStrongholds.filter((sh) => sh.isCaptured).length;
   const remainingEnemyCarriers = enemyShips.filter((s) => !s.isSunk && (s.type === 'carrier' || s.type === 'cvhg_kiev')).length;
 
-  // Group player airborne aircraft into flight squadrons (一個Flight包含兩架飛機)
-  const playerFlights = React.useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        squadronId: string;
-        flightName: string;
-        model: AircraftModel;
-        role: AircraftRole;
-        planes: Aircraft[];
-        hasPayload: boolean;
-        payloadName: string;
-        ammoRemaining: number;
-        totalGunAmmo: number;
-        maxTotalGunAmmo: number;
-        state: string;
-        health: number;
-        maxHealth: number;
-      }
-    >();
-
-    for (const p of aircraft) {
-      if (p.side !== 'player' || p.state === 'shot_down') continue;
-      const key = p.squadronId || p.flightName || p.id;
-      if (!map.has(key)) {
-        map.set(key, {
-          squadronId: key,
-          flightName: p.flightName || `${p.name} Flight`,
-          model: p.model,
-          role: p.role,
-          planes: [],
-          hasPayload: p.hasPayload,
-          payloadName: p.payloadName || 'Clean Guns',
-          ammoRemaining: p.ammoRemaining ?? (p.hasPayload ? 1 : 0),
-          totalGunAmmo: 0,
-          maxTotalGunAmmo: 0,
-          state: p.state,
-          health: 0,
-          maxHealth: 0,
-        });
-      }
-      const group = map.get(key)!;
-      group.planes.push(p);
-      group.health += p.health;
-      group.maxHealth += p.maxHealth;
-      group.totalGunAmmo += p.gunAmmo ?? 1440;
-      group.maxTotalGunAmmo += p.maxGunAmmo ?? 1440;
-      if (p.hasPayload) group.hasPayload = true;
-      if ((p.ammoRemaining ?? 0) > group.ammoRemaining) group.ammoRemaining = p.ammoRemaining!;
-      group.state = p.state;
-    }
-    return Array.from(map.values());
-  }, [aircraft]);
 
   const afbModels = useMemo(() => getAfbModelsForEra(era), [era]);
+  /** Show only the types this airfield has aircraft of (default), the rest on demand. */
+  const [afbStockOnly, setAfbStockOnly] = useState(true);
 
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-3 pb-2 z-20 select-none overflow-hidden">
@@ -1024,6 +1002,9 @@ export const HUD: React.FC<HUDProps> = ({
           onUnloadAircraft={onUnloadAircraft}
           isDesignatingCap={isDesignatingCap}
           onStartCapDesignation={onStartCapDesignation}
+          onStartRebase={onStartRebase}
+          onStartEscort={onStartEscort}
+          onSetGunRoe={onSetGunRoe}
           onCancelCap={onCancelCap}
           isDesignatingSonobuoy={isDesignatingSonobuoy}
           onStartSonobuoyDesignation={onStartSonobuoyDesignation}
@@ -1046,30 +1027,17 @@ export const HUD: React.FC<HUDProps> = ({
             radarCoverage={radarCoverage}
           />
 
-          {/* Right Panel Tab Switcher */}
-          <div className="pointer-events-auto bg-[#071322]/95 backdrop-blur-md border border-[#1E3A5F] rounded-lg p-0.5 w-64 flex items-center justify-between text-[10px] font-mono shadow-md">
+          {/* Strongholds panel toggle (the flight list was dropped: aircraft are handled on the map) */}
+          <div className="pointer-events-auto bg-[#071322]/95 backdrop-blur-md border border-[#1E3A5F] rounded-lg p-0.5 w-64 flex items-center text-[10px] font-mono shadow-md">
             <button
-              onClick={() => setRightPanelTab('flights')}
+              onClick={() => setRightPanelTab((t) => (t === 'cps' ? 'none' : 'cps'))}
               className={`flex-1 py-1 rounded flex items-center justify-center gap-1 font-bold transition-all ${
-                rightPanelTab === 'flights'
-                  ? 'bg-[#1976D2] text-white shadow'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Plane className="w-3 h-3 text-[#80DEEA]" />
-              <span>機隊({playerFlights.length})</span>
-            </button>
-            <button
-              onClick={() => setRightPanelTab('cps')}
-              className={`flex-1 py-1 rounded flex items-center justify-center gap-1 font-bold transition-all ${
-                rightPanelTab === 'cps'
-                  ? 'bg-[#C2185B] text-white shadow'
-                  : 'text-slate-400 hover:text-slate-200'
+                rightPanelTab === 'cps' ? 'bg-[#C2185B] text-white shadow' : 'text-slate-400 hover:text-slate-200'
               }`}
               title="島嶼多據點指揮所與守軍狀況"
             >
               <Flag className="w-3 h-3 text-[#FF80AB]" />
-              <span>據點({capturedStrongholdsCount}/{allStrongholds.length})</span>
+              <span>據點({capturedStrongholdsCount}/{allStrongholds.length}) {rightPanelTab === 'cps' ? '▲' : '▼'}</span>
             </button>
           </div>
 
@@ -1177,121 +1145,6 @@ export const HUD: React.FC<HUDProps> = ({
             </div>
           )}
 
-          {/* 專用飛行單位欄 (AIR SQUADRONS STATUS PANEL) - 1 Flight 包含 2 架戰機 */}
-          {rightPanelTab === 'flights' && (
-            <div className="pointer-events-auto bg-[#071322]/90 backdrop-blur-md border border-[#1E3A5F] hover:border-[#80DEEA]/50 rounded-lg p-2 w-64 text-xs font-mono space-y-1.5 shadow-lg max-h-56 overflow-hidden flex flex-col">
-              <div className="flex justify-between items-center text-[#80DEEA] font-semibold border-b border-[#1E3A5F] pb-1 shrink-0">
-                <span className="flex items-center gap-1 font-bold text-[11px]">
-                  <Plane className="w-3.5 h-3.5 text-[#80DEEA]" />
-                  <span>飛行中隊欄 (FLIGHTS)</span>
-                </span>
-                <span className="tabular-nums font-bold text-emerald-400 text-[10px]">
-                  {playerFlights.length} 機隊在空
-                </span>
-              </div>
-
-              {playerFlights.length === 0 ? (
-                <div className="text-[10px] text-slate-500 py-1 text-center">
-                  暫無在空飛行中隊 · 可在下方甲板出擊
-                </div>
-              ) : (
-                <div className="space-y-1.5 overflow-y-auto pr-0.5 flex-1">
-                  {playerFlights.map((flight) => {
-                    const hpPct = Math.max(0, flight.health / Math.max(1, flight.maxHealth));
-                    const stateLabel =
-                      flight.state === 'patrolling'
-                        ? ('巡邏 PATROL')
-                        : flight.state === 'attacking'
-                        ? ('空襲 ATTACK')
-                        : flight.state === 'diving'
-                        ? ('俯衝 DIVING')
-                        : flight.state === 'returning'
-                        ? ('返航 RTB')
-                        : ('飛行 CRUISING');
-
-                    return (
-                      <div
-                        key={flight.squadronId}
-                        onClick={() => {
-                          if (flight.planes.length > 0) {
-                            onSelectUnitIds?.(flight.planes.map((p) => p.id));
-                            onMiniMapClick(flight.planes[0].pos);
-                          }
-                        }}
-                        className="p-1.5 bg-[#040C16] hover:bg-[#0A1E35] border border-[#1E3A5F]/70 hover:border-[#80DEEA]/60 rounded cursor-pointer transition-colors space-y-1"
-                        title="點擊選取此中隊並鎖定鏡頭"
-                      >
-                        <div className="flex justify-between items-center text-[10.5px]">
-                          <span className="font-bold text-[#E0F7FA] truncate max-w-[150px]">
-                            {flight.flightName}
-                          </span>
-                          <span className="text-[9px] px-1 py-0.2 rounded bg-[#0D2235] text-[#80DEEA] border border-[#1E3A5F]">
-                            {stateLabel}
-                          </span>
-                        </div>
-
-                        {/* 編隊內各單架飛機標示 (長機 / 僚機) */}
-                        <div className="text-[9px] text-[#80DEEA] flex items-center justify-between">
-                          <span className="truncate text-slate-400">
-                            {flight.planes.map((p) => p.name.split(' ')[0]).join(' · ')}
-                          </span>
-                          <span className="text-slate-400 tabular-nums">
-                            {flight.planes.length} 架/編隊
-                          </span>
-                        </div>
-
-                        {/* Health bar */}
-                        <div className="h-1 bg-[#0D2235] rounded overflow-hidden">
-                          <div
-                            className="h-full bg-emerald-400 transition-all duration-300"
-                            style={{ width: `${hpPct * 100}%` }}
-                          />
-                        </div>
-
-                        {/* 下面殘存彈藥判定 (戰鬥機計算機槍殘彈數量) */}
-                        <div className="flex justify-between items-center text-[9px]">
-                          {flight.role === 'fighter' && (!flight.hasPayload || flight.payloadName === 'Clean Guns') ? (
-                            <span className="text-amber-300 font-bold flex items-center gap-1 truncate">
-                              <span>💥 機槍殘彈:</span>
-                              <span className="text-[#FFE082] tabular-nums">{flight.totalGunAmmo} 發</span>
-                            </span>
-                          ) : flight.hasPayload && flight.ammoRemaining > 0 ? (
-                            <span className="text-amber-300 font-bold flex items-center gap-1 truncate">
-                              <span>💥 航彈:</span>
-                              <span className="text-[#FFE082]">[{flight.payloadName}] x{flight.ammoRemaining}</span>
-                              <span className="text-emerald-400 text-[8.5px]">· MG:{flight.totalGunAmmo}</span>
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 flex items-center gap-1">
-                              <span>⚠️ 彈藥已投罄 (返航中)</span>
-                            </span>
-                          )}
-                        </div>
-
-                        {/* 戰鬥機專屬 CAP 空巡快捷發動按鈕 */}
-                        {flight.role === 'fighter' && (
-                          <div className="pt-0.5 border-t border-[#1E3A5F]/40 flex justify-end">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onStartCapDesignation?.();
-                              }}
-                              className="px-2 py-0.5 rounded bg-cyan-950/80 hover:bg-cyan-800 border border-cyan-500/60 text-cyan-200 text-[8.5px] font-bold flex items-center gap-1 shadow-sm transition-colors active:scale-95"
-                              title="指派此戰鬥機編隊進行指定區域 CAP 戰鬥空巡"
-                            >
-                              <Shield className="w-2.5 h-2.5 text-cyan-300" />
-                              <span>設定 CAP 空巡 (C)</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </div>
 
@@ -1537,15 +1390,6 @@ export const HUD: React.FC<HUDProps> = ({
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                {/* Emergency Fleet Flak Barrage */}
-                <button
-                  onClick={onTriggerFlak}
-                  className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-[#D32F2F] to-[#C2185B] hover:from-[#E53935] hover:to-[#D81B60] border border-[#FF8A80] rounded text-xs font-mono font-bold text-white shadow-lg transition-transform active:scale-95 whitespace-nowrap"
-                  title="觸發艦隊周邊所有高射砲密集防空彈幕阻截敵機"
-                >
-                  <ShieldAlert className="w-3.5 h-3.5 text-white" />
-                  <span>防空全彈齊射 (SPACE)</span>
-                </button>
 
                 <button
                   type="button"
@@ -1602,7 +1446,7 @@ export const HUD: React.FC<HUDProps> = ({
                     <span>母艦全裝備庫</span>
                   </button>
                   <span className="text-[10px] text-slate-400">
-                    Backspace 暫停 · Space 防空
+                    Space 暫停 · Q 增援 · E 構工 · A 機場 · C CAP · T 轉降 · V 護航
                   </span>
                 </div>
               </div>
@@ -1819,7 +1663,7 @@ export const HUD: React.FC<HUDProps> = ({
               {/* Header Info & Category Filter Bar */}
               <div className="flex items-center justify-between text-xs font-mono text-[#80CBC4] bg-[#051A18] px-3 py-1.5 rounded border border-[#00695C]">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold">前進野戰陸基航空站 (FORWARD AIRBASE)</span>
+                  <span className="font-bold">{activeAirfield ? `${activeAirfield.isHQ ? '🏛️' : '🛬'} ${activeAirfield.name}` : '前進野戰陸基航空站 (FORWARD AIRBASE)'}</span>
                   <span className="text-[10px] text-slate-300">
                     {era === 'era5'
                         ? '支援 B-52G / F-111 現代長程戰轟、A-10A / AH-64A / F-15A / F-16A 陸空主力與海軍陸基戰備分隊！'
@@ -1888,6 +1732,14 @@ export const HUD: React.FC<HUDProps> = ({
                     </button>
                   );
                 })}
+                <button
+                  type="button"
+                  onClick={() => setAfbStockOnly((v) => !v)}
+                  className={`px-2 py-0.5 rounded font-bold border ${afbStockOnly ? 'bg-[#004D40] text-[#80CBC4] border-[#80CBC4]/60' : 'bg-[#051A18] text-slate-400 border-[#1E3A5F]'}`}
+                  title="只列出此機場有庫存的機型"
+                >
+                  {afbStockOnly ? '✔ 僅顯示在庫機型' : '顯示全部機型'}
+                </button>
                 <span className="text-slate-400 ml-auto">轉場至</span>
                 <select
                   value={afbFerryTo}
@@ -1901,9 +1753,16 @@ export const HUD: React.FC<HUDProps> = ({
                 </select>
               </div>
 
+              {afbStockOnly && afbModels.every((p) => (airbaseStock[p.id] || 0) === 0) && (
+                <div className="text-[10px] font-mono text-slate-400 bg-[#051A18] border border-[#1E3A5F] rounded px-3 py-2">
+                  此機場目前無在庫飛機：從其他機場「轉場至」此處，或點「顯示全部機型」查看全部機型。
+                </div>
+              )}
               {/* AFB Aircraft Cards with Draggable and Wheel Scroll */}
               <DraggableScrollContainer className="gap-2 pb-1">
                 {afbModels
+                  .filter((p) => !afbStockOnly || (airbaseStock[p.id] || 0) > 0)
+                  .sort((a, b) => ((airbaseStock[b.id] || 0) > 0 ? 1 : 0) - ((airbaseStock[a.id] || 0) > 0 ? 1 : 0))
                   .filter((p) => {
                     if (afbFilter === 'all') return true;
                     if (afbFilter === 'level_bomber') return p.role === 'level_bomber';
@@ -2274,7 +2133,7 @@ export const HUD: React.FC<HUDProps> = ({
                       return item.typeTag === 'dockyard' || item.typeTag === 'pontoon_pier' || item.typeTag === 'major_naval_port' || item.typeTag === 'coastal_gun' || item.typeTag === 'm1_240mm';
                     }
                     if (engineerTab === 'fortification') {
-                      return item.typeTag === 'fob' || item.typeTag === 'battalion_cp' || item.typeTag === 'command_post' || item.typeTag === 'radar' || item.typeTag === 'supply_depot' || item.typeTag === 'ammo_depot' || item.typeTag === 'field_hospital';
+                      return item.typeTag === 'fob' || item.typeTag === 'battalion_cp' || item.typeTag === 'command_post' || item.typeTag === 'radar' || item.typeTag === 'supply_depot' || item.typeTag === 'ammo_depot' || item.typeTag === 'field_hospital' || item.typeTag === 'pow_camp';
                     }
                     return true;
                   })
@@ -2414,10 +2273,31 @@ export const HUD: React.FC<HUDProps> = ({
 
                 <div className="flex items-center gap-2 text-[10px] text-emerald-300 font-mono">
                   <span className="bg-emerald-950/80 border border-emerald-700/60 px-2 py-0.5 rounded">
-                    增援規則：陸地單位自本營指揮所旁集結；海軍艦艇自地圖南緣入役；飛機進駐航空基地
+                    增援規則：陸地單位自選定的指揮所旁集結；海軍艦艇自地圖南緣入役；飛機進駐航空基地
                   </span>
                 </div>
               </div>
+
+              {/* Rally command post for ground reinforcements */}
+              {requisitionTab === 'ground' && playerCps.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
+                  <span className="text-slate-400">集結指揮所:</span>
+                  {playerCps.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        setChosenCpId(c.id);
+                        onMiniMapClick(c.pos);
+                      }}
+                      className={`px-2 py-0.5 rounded font-bold border ${activeBattalionCp?.id === c.id ? 'bg-emerald-700 text-white border-emerald-300' : 'bg-[#040C16] text-slate-300 border-[#1E3A5F] hover:text-white'}`}
+                      title="地面增援自此指揮所旁集結"
+                    >
+                      🎖️ {c.name.split(' (')[0]}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Items Catalog Cards for Battalion CP Support */}
               <DraggableScrollContainer className="gap-2 pb-1 max-w-full">

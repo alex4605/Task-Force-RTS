@@ -1,13 +1,17 @@
 import { ImpactEffect, ImpactSurface, impactFor, MAX_IMPACTS } from './impacts';
+import { snapOntoLand } from './coastline';
 import { resolveGroundRequisition } from './groundRequisition';
 import { AlliedHost, AlliedOps } from './allied/alliedOps';
 import { fitsInHold, formatHold, holdUsed, shipHold } from './naval/lift';
+import { rollBailout, shipRaftGroups } from './aircrew';
+import { deckAccepts, shipAviation } from './shipAviation';
+import { LIBERATE_CLEAR, LIBERATE_RADIUS, PLAYER_CAMP_NAME, POW_CAMP_CAPACITY, POW_RP_PER_SECOND } from './pow';
 import { AwardKind, Bundle, Economy, MOBILISATION, award, costOf, formatBundle, incomeRate, nuclearCost } from './economy';
 import { airCardDelivery } from './airRequisition';
 import { airliftCargo, isAirliftPayload, isHeloLift } from './airlift';
 import { SOF_CAPTURE_BONUS, SOF_REVEAL_S, SOF_SABOTAGE_MULT, canSpotUnit, isSof, sofReconRange } from './sof';
 import { CasualtyLedger, Outcome, attritionOutcome, defeatOutcome, victoryOutcome } from './outcome';
-import { Escalation, STAGE_FLAVOUR, TIER_NAME, airEscalation, alliedEscalation, computeEscalation, ingressRoute } from './escalation';
+import { Escalation, STAGE_FLAVOUR, TIER_NAME, airEscalation, alliedEscalation, computeEscalation, ingressRoute, navalEscalation } from './escalation';
 import { BuilderRequirement, BUILDER_RADIUS, builderRequirement, isEngineerType } from './construction';
 import {
   Ship,
@@ -45,6 +49,7 @@ import {
   AshmVariant,
   AshmFlightProfile,
   FleetUpgrades,
+  GunRoe,
 } from '../types/game';
 import { AlliedSagShipDef, getAlliedSagFleet } from './alliedSagFleets';
 import { getNavalGunPerformance, getNavalLauncherRange } from './navalGuns';
@@ -367,6 +372,26 @@ export class GameEngine {
     }
   }
 
+  /** A spawn point moved onto the island's dry land if it fell in its lagoon or the sea. */
+  private groundSpawnOnLand(p: Vector2D, island: Island): Vector2D {
+    const map = this.terrain;
+    const dry = (q: Vector2D) => {
+      const t = map.at(q.x, q.y);
+      return t !== TERRAIN.water && t !== TERRAIN.lagoon && t !== TERRAIN.lake && t !== TERRAIN.river;
+    };
+    if (dry(p) && isPointInPolygon(p, island.points)) return p;
+    // The terrain grid is the ground truth units move on: spiral out to the nearest dry cell
+    for (let r = 20; r <= 1600; r += 20) {
+      const n = Math.max(8, Math.round(r / 12));
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2;
+        const q = { x: p.x + Math.cos(a) * r, y: p.y + Math.sin(a) * r };
+        if (dry(q) && dry({ x: q.x + Math.cos(a) * 20, y: q.y + Math.sin(a) * 20 })) return q;
+      }
+    }
+    return snapOntoLand(island, p);
+  }
+
   /** Whether an observer can find this unit at all (special forces stay hidden until close or firing). */
   private canSpotGround(observer: Vector2D, u: GroundUnit): boolean {
     return canSpotUnit(observer, u, concealment(this.terrain, u.pos));
@@ -623,6 +648,11 @@ export class GameEngine {
   // 時代三搜救救生筏與全域預警 (Era 3 SAR Rafts & Global AEW)
   // ══════════════════════════════════════════════════════════
   public lifeRafts: LifeRaft[] = [];
+  /** Enemy prisoners we hold outside a camp (no room, or no camp built yet). */
+  public powsInField = 0;
+  /** Our men held by the enemy beyond its camps' room. */
+  public enemyPowsInField = 0;
+  private powCheckTimer = 0;
   public hasAD3WOnStation: boolean = false;
 
   // ══════════════════════════════════════════════════════════
@@ -942,7 +972,6 @@ export class GameEngine {
     return formatBundle(b);
   }
 
-  private flakBarrageTimer: number = 0;
   private enemyDiversionCooldown = 0;
   public opforSagTimer: number = 190; // 跨時代 OPFOR 水面打擊群 (SAG) 每 3 至 4 分鐘週期出擊
 
@@ -1086,6 +1115,14 @@ export class GameEngine {
     this.controlGroups = {};
     this.enemyBeringSeaCoordTimer = 26;
     this.navGrid = new NavalNavigationGrid(this.worldSize, this.islands, 110);
+    // Nobody walks on water: garrisons laid out round an atoll's centre stood in its lagoon
+    for (const u of this.groundUnits) {
+      if (u.embarkedInShipId || u.isDestroyed) continue;
+      const isl = this.islands.find((i) => isPointInPolygon(u.pos, i.points)) ?? this.islands.reduce((m, i) => (dist(i.center, u.pos) - i.radius < dist(m.center, u.pos) - m.radius ? i : m), this.islands[0]);
+      if (isl) u.pos = this.groundSpawnOnLand(u.pos, isl);
+    }
+    // Shipboard floatplanes and helicopters, ready on deck before the battle starts
+    for (const sh of [...this.playerShips, ...this.alliedShips, ...this.enemyShips]) this.fitShipAviation(sh);
     // The fleet starts hove to at its anchorage: ships only get under way when ordered (an idle
     // fleet used to keep steaming on its initial course straight into the enemy's shore guns)
     for (const sh of this.playerShips) {
@@ -1389,6 +1426,11 @@ export class GameEngine {
   // Issue RTS Order to Selected Units
   public issueOrderToSelected(order: UnitOrder) {
     if (this.selectedUnitIds.length === 0) return;
+    // A new order ends any close escort the selected fighters were flying
+    for (const a of this.aircraft) if (a.escortTargetId && this.selectedUnitIds.includes(a.id)) {
+      a.escortTargetId = undefined;
+      if (a.airMission === 'escort') a.airMission = undefined;
+    }
 
     // 友軍防誤擊保護 (Friendly Fire Prevention): 嚴禁鎖定友軍或盟軍單位為攻擊目標，若點擊則轉為護航/戰鬥巡邏
     if (order.type === 'attack' && order.targetId) {
@@ -1571,6 +1613,126 @@ export class GameEngine {
     }
 
     return null;
+  }
+
+  /** Escort mode: the next map click picks the friendly aircraft the selected fighters protect. */
+  public isDesignatingEscort = false;
+
+  /** The friendly aircraft nearest a map point (for picking an escort's charge). */
+  public findEscortCharge(p: Vector2D, exclude: string[] = this.selectedUnitIds): Aircraft | undefined {
+    let best: Aircraft | undefined;
+    let bestD = 90;
+    for (const a of this.aircraft) {
+      if (a.state === 'shot_down' || a.side === 'enemy' || exclude.includes(a.id)) continue;
+      const d = dist(a.pos, p);
+      if (d < bestD) {
+        bestD = d;
+        best = a;
+      }
+    }
+    return best;
+  }
+
+  /** The selected fighters fly close escort on the aircraft at `p` (a bomber, a tanker, an AEW...). */
+  public assignEscort(p: Vector2D, ids: string[] = this.selectedUnitIds): boolean {
+    const fighters = this.aircraft.filter(
+      (a) => a.side === 'player' && a.state !== 'shot_down' && ids.includes(a.id) && (a.role === 'fighter' || GUN_FIGHTER_MODELS.has(a.model))
+    );
+    if (fighters.length === 0) {
+      this.addBannerAlert('⚠️【護航】請先選取戰鬥機', 'player', 'alert', 3.5);
+      return false;
+    }
+    const charge = this.findEscortCharge(p, fighters.map((f) => f.id));
+    if (!charge) {
+      this.addBannerAlert('⚠️【護航】請點選要保護的友機', 'player', 'alert', 3.5);
+      return false;
+    }
+    fighters.forEach((f, i) => {
+      f.escortTargetId = charge.id;
+      f.airMission = 'escort';
+      f.ferryTo = undefined;
+      f.order = { type: 'patrol', patrolOrigin: { ...charge.pos } };
+      f.state = 'patrolling';
+      f.wingmanOffset = { x: (i % 2 === 0 ? 1 : -1) * (70 + Math.floor(i / 2) * 50), y: 0 };
+    });
+    soundEngine.playPlaneSortie();
+    const chargeName = charge.flightName || charge.name;
+    this.addBannerAlert(`🛡️【護航】${fighters.length} 架戰鬥機隨行保護「${chargeName}」`, 'player', 'capture', 4);
+    this.addCombatLog({
+      category: 'air',
+      sourceSide: 'player',
+      sourceName: '戰區防空指揮所 (TAC)',
+      targetName: chargeName,
+      actionType: 'recon_spotted',
+      text: `🛡️【指定護航】${fighters.length} 架戰鬥機（${Array.from(new Set(fighters.map((f) => f.flightName || f.name))).join('、')}）奉命貼身護航「${chargeName}」，攔截一切威脅該機的敵機；被護航機落地或被擊落後返航。`,
+    });
+    return true;
+  }
+
+  /** Rebase mode: the next map click picks the airfield or carrier the selected aircraft divert to. */
+  public isDesignatingRebase = false;
+
+  /** The friendly airfield or deck nearest a map point (within reach of the click), for rebasing. */
+  public findRebaseTarget(p: Vector2D, needDeck = false): { id: string; name: string; pos: Vector2D; isCarrier: boolean } | undefined {
+    const bases: { id: string; name: string; pos: Vector2D; isCarrier: boolean }[] = [
+      ...(needDeck ? [] : this.getFriendlyAirfields().map((a) => ({ id: a.id, name: a.name, pos: a.pos, isCarrier: false }))),
+      ...this.playerShips.filter((s) => !s.isSunk && s.carrierPlanes).map((s) => ({ id: s.id, name: s.codeName || s.name, pos: s.pos, isCarrier: true })),
+    ];
+    let best: (typeof bases)[number] | undefined;
+    let bestD = 450;
+    for (const b of bases) {
+      const d = dist(b.pos, p);
+      if (d < bestD) {
+        bestD = d;
+        best = b;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Rebase: the selected aircraft break off what they are doing and divert in flight to another
+   * airfield or carrier, landing into its stock. Land-based types cannot divert to a deck.
+   */
+  public rebaseSelectedAircraft(p: Vector2D, ids: string[] = this.selectedUnitIds): boolean {
+    const planes = this.aircraft.filter((a) => a.side === 'player' && a.state !== 'shot_down' && ids.includes(a.id) && a.model !== 'ohka');
+    if (planes.length === 0) return false;
+    const target = this.findRebaseTarget(p);
+    if (!target) {
+      this.addBannerAlert('⚠️【轉降】請點選友軍機場或航艦', 'player', 'alert', 3.5);
+      return false;
+    }
+    let sent = 0;
+    let refused = 0;
+    for (const plane of planes) {
+      const deck = target.isCarrier ? this.playerShips.find((sh) => sh.id === target.id) : undefined;
+      if (target.isCarrier && (!this.isCarrierCapable(plane.model) || (deck && !deckAccepts(deck, plane.model)))) {
+        refused++;
+        continue;
+      }
+      plane.ferryTo = target.id;
+      plane.homeBaseId = target.id;
+      plane.escortTargetId = undefined;
+      plane.order = { type: 'move', targetPos: { ...target.pos } };
+      plane.state = 'cruising';
+      plane.interceptTargetId = undefined;
+      sent++;
+    }
+    if (sent > 0) {
+      soundEngine.playPlaneSortie();
+      this.addBannerAlert(`🛬【轉降】${sent} 架轉降「${target.name}」`, 'player', 'capture', 4);
+      this.addCombatLog({
+        category: 'air',
+        sourceSide: 'player',
+        sourceName: '航空管制 (ATC)',
+        targetName: target.name,
+        actionType: 'recon_spotted',
+        text: `🛬【空中轉降】${sent} 架飛機中止任務，改降「${target.name}」，落地後計入該處庫存。${refused > 0 ? `另 ${refused} 架陸基機無法上艦，維持原任務。` : ''}`,
+      });
+    } else if (refused > 0) {
+      this.addBannerAlert('⚠️【轉降】陸基機無法降落航艦', 'player', 'alert', 3.5);
+    }
+    return sent > 0;
   }
 
   public unloadSelectedAircraft(targetPos?: Vector2D): boolean {
@@ -2108,7 +2270,7 @@ export class GameEngine {
   }
 
   // Issue Combat Air Patrol (CAP) Orbit Order to Fighters in a designated area
-  public issueCapPatrolOrder(origin: Vector2D, specificUnitIds?: string[]) {
+  public issueCapPatrolOrder(origin: Vector2D, specificUnitIds?: string[], box?: { x0: number; y0: number; x1: number; y1: number }) {
     const ids = specificUnitIds || this.selectedUnitIds;
     let targetFighters = this.aircraft.filter(
       (a) => a.side === 'player' && a.state !== 'shot_down' && ids.includes(a.id) &&
@@ -2129,11 +2291,14 @@ export class GameEngine {
     }
 
     targetFighters.forEach((plane) => {
+      plane.escortTargetId = undefined;
       plane.order = {
         type: 'patrol',
         patrolOrigin: { ...origin },
         targetPos: { ...origin },
+        patrolBox: box ? { ...box } : undefined,
       };
+      plane.airMission = 'cap';
       plane.state = 'patrolling';
       plane.targetHeading = Math.atan2(origin.y - plane.pos.y, origin.x - plane.pos.x);
     });
@@ -2148,7 +2313,7 @@ export class GameEngine {
       sourceName: '戰區防空指揮所 (TAC/CAP)',
       targetName: `空域 [${Math.round(origin.x)}, ${Math.round(origin.y)}]`,
       actionType: 'recon_spotted',
-      text: `🛡️【CAP 戰鬥空巡防區就位】${fCount} 架空優戰鬥機（${fNames}）奉命移防至指定海域 [X:${Math.round(origin.x)}, Y:${Math.round(origin.y)}]，於半徑 250m 盤旋警戒，自動攔截周邊 450m 內所有敵機！`,
+      text: `🛡️【CAP 戰鬥空巡防區就位】${fCount} 架空優戰鬥機（${fNames}）奉命移防至指定海域 [X:${Math.round(origin.x)}, Y:${Math.round(origin.y)}]，${box ? `沿 ${Math.round(box.x1 - box.x0)}×${Math.round(box.y1 - box.y0)}m 空域邊界巡邏，攔截進入空域的敵機。` : '於半徑 250m 盤旋警戒，自動攔截周邊敵機。'}`,
     });
   }
 
@@ -2309,6 +2474,7 @@ export class GameEngine {
         payloadType,
         payloadName,
         carrierId: flagship.id,
+        homeBaseId: flagship.id,
         shootCooldown: 0,
         wingmanOffset: { x: (i - (actualCount - 1) / 2) * 28, y: i * 20 },
         ...((): { sonobuoyAmmo?: number; maxSonobuoyAmmo?: number; sonobuoyModel?: string } => {
@@ -2337,12 +2503,6 @@ export class GameEngine {
     }
     soundEngine.playPlaneSortie();
     return true;
-  }
-
-  // Trigger Emergency Fleet Flak Barrage
-  public triggerFleetFlakBarrage() {
-    this.flakBarrageTimer = 8;
-    soundEngine.playKlaxon();
   }
 
   public setGameSpeed(speed: number) {
@@ -2386,8 +2546,6 @@ export class GameEngine {
     const effectiveDt = dt * this.gameSpeed;
     this.gameTime += effectiveDt;
 
-    if (this.flakBarrageTimer > 0)
-      this.flakBarrageTimer = Math.max(0, this.flakBarrageTimer - effectiveDt);
 
     // ══════════════════════════════════════════════════════════
     // 資源點數累積 (Command Points: Base + Islands Bonus)
@@ -2495,7 +2653,7 @@ export class GameEngine {
     this.opforSagTimer -= effectiveDt;
     if (this.opforSagTimer <= 0) {
       this.spawnOpforSagSortie();
-      this.opforSagTimer = 180 + Math.random() * 60; // 180 to 240s
+      this.opforSagTimer = (180 + Math.random() * 60) * navalEscalation(this.escalation.tier).intervalMul; // 180 to 240s at the start
     }
 
     // 獨立 OPFOR 潛艦狼群增援 (1-3 艘, 每 160-220s)
@@ -2575,6 +2733,7 @@ export class GameEngine {
     this.updateShips(effectiveDt);
     this.updateGroundUnits(effectiveDt);
     this.updateStrongholds(effectiveDt);
+    this.updateShipAviation(effectiveDt);
     this.updateAircraft(effectiveDt);
     this.updateInstallations(effectiveDt);
     this.updateEra3Mechanics(effectiveDt);
@@ -2584,6 +2743,7 @@ export class GameEngine {
     this.updateAntiShipMissilePointDefense(effectiveDt);
     this.updateModernNavalGunAA(effectiveDt);
     this.updateLifeRaftRescue(effectiveDt);
+    this.updatePowCamps(effectiveDt);
     this.updatePendingMissileLaunches(effectiveDt);
     this.updateProjectiles(effectiveDt);
     this.updateParticles(effectiveDt);
@@ -2985,6 +3145,9 @@ export class GameEngine {
   private updateSinkingShip(dt: number, ship: Ship): boolean {
     if (ship.isSunk) {
       ship.sinkProgress = Math.min(1, ship.sinkProgress + dt * 0.08);
+      ship.sunkTime = (ship.sunkTime ?? 0) + dt;
+      // Once the hull is under there is nothing left to burn: only the oil on the water remains
+      if (ship.sinkProgress >= 1) return true;
 
       if (ship.magazineFlashTimer && ship.magazineFlashTimer > 0) {
         ship.magazineFlashTimer -= dt;
@@ -3066,6 +3229,8 @@ export class GameEngine {
   }
 
   private updateEnemyShipAI(ship: Ship, _dt: number) {
+    // Reinforcement runs land their troops before joining the fight
+    if (this.updateTroopLanding(ship)) return;
     const flagship = this.getFlagship();
     const hostiles = [...this.playerShips, ...this.alliedShips].filter(
       (s) => !s.isSunk && (!this.isSubmarine(s) || Boolean(s.isSpottedByEnemy))
@@ -3264,6 +3429,21 @@ export class GameEngine {
             .sort((a, b) => dist(ship.pos, a.pos) - dist(ship.pos, b.pos))[0] || null;
       }
 
+      // Rules of engagement: a player ship told to hold fire at ships only shoots on order
+      const roe = ship.gunRoe;
+      if (roe && !roe.ships && target && !(ship.order.type === 'attack' && ship.order.targetId === target.id)) target = null;
+
+      // ROE: shore targets entering range (troops, then positions), never inside a civilian zone
+      if (!target && roe && (roe.ground || roe.installations) && !isRiverine(ship) && turret.cooldown <= 0 && wcsEfficiency >= 0.15) {
+        const shore = this.roeShoreTarget(ship, effectiveRange, roe);
+        if (shore) {
+          turret.angle = Math.atan2(shore.y - ship.pos.y, shore.x - ship.pos.x);
+          this.fireTurretSalvo(ship, turret, shore);
+          turret.cooldown = turret.reloadTime / Math.max(0.3, wcsEfficiency);
+          continue;
+        }
+      }
+
       // Brown-water craft rake the banks: hostile troops and positions in sight of the river
       if (!target && isRiverine(ship) && turret.cooldown <= 0 && wcsEfficiency >= 0.15) {
         const bank =
@@ -3310,7 +3490,7 @@ export class GameEngine {
     const isEra2Player = isPlayer && this.era === 'era2';
     const isEra3Player = isPlayer && this.era === 'era3';
     const baseFlakRate = isPlayer
-      ? (this.flakBarrageTimer > 0 ? 0.08 : (isEra3Player ? 0.20 : isEra2Player ? 0.35 : 0.65))
+      ? (isEra3Player ? 0.20 : isEra2Player ? 0.35 : 0.65)
       : (ship.type === 'carrier' ? 1.2 : ship.type === 'battleship' ? 0.85 : 0.95);
     const effectiveFlakRate = baseFlakRate / Math.max(0.2, wcsEfficiency);
 
@@ -3324,6 +3504,38 @@ export class GameEngine {
         this.fireFlakBurst(ship.pos, targetPlane, ship.side);
         ship.flakCooldown = effectiveFlakRate;
       }
+    }
+  }
+
+  /** Nearest shore target the ship's ROE allows: hostile troops first, then hostile positions. */
+  private roeShoreTarget(ship: Ship, range: number, roe: GunRoe): Vector2D | undefined {
+    const civilian = this.islands.flatMap((isl) => isl.installations).filter((i) => i.isCivilian && !i.isDestroyed);
+    const clearOfCivilians = (p: Vector2D) => civilian.every((c) => dist(c.pos, p) > (c.civilianZoneRadius || 160) + 60);
+    const byDist = (a: Vector2D, b: Vector2D) => dist(ship.pos, a) - dist(ship.pos, b);
+    if (roe.ground) {
+      const troops = this.groundUnits
+        .filter((u) => !u.isDestroyed && !u.embarkedInShipId && this.isHostile(ship.side, u.side) && this.canEngageGroundAt(ship.pos, range, u.pos, false) && clearOfCivilians(u.pos))
+        .map((u) => u.pos)
+        .sort(byDist)[0];
+      if (troops) return troops;
+    }
+    if (roe.installations) {
+      const pos = this.islands
+        .flatMap((isl) => isl.installations)
+        .filter((i) => !i.isDestroyed && !i.isCivilian && this.isHostile(ship.side, i.side) && this.canEngageGroundAt(ship.pos, range, i.pos, false) && clearOfCivilians(i.pos))
+        .map((i) => i.pos)
+        .sort(byDist)[0];
+      if (pos) return pos;
+    }
+    return undefined;
+  }
+
+  /** Sets one main-battery ROE switch on the selected player ships. */
+  public setGunRoe(key: keyof GunRoe, value: boolean, ids: string[] = this.selectedUnitIds): void {
+    for (const sh of this.playerShips) {
+      if (!ids.includes(sh.id) || sh.isSunk) continue;
+      const roe = sh.gunRoe ?? { ships: true, installations: false, ground: false };
+      sh.gunRoe = { ...roe, [key]: value };
     }
   }
 
@@ -3385,6 +3597,30 @@ export class GameEngine {
 
     for (const plane of this.aircraft) {
       if (plane.state === 'shot_down') continue;
+      if (plane.escortTargetId) {
+        // Close escort of one aircraft picked by the player
+        const charge = this.aircraft.find((a) => a.id === plane.escortTargetId && a.state !== 'shot_down');
+        if (!charge || !plane.hasPayload && (plane.gunAmmo ?? 0) <= 0) {
+          plane.escortTargetId = undefined;
+          plane.airMission = undefined;
+          plane.order = { type: 'rtb' };
+          plane.state = 'returning';
+          continue;
+        }
+        plane.airMission = 'escort';
+        if (plane.order.type !== 'patrol') plane.order = { type: 'patrol' };
+        plane.state = plane.state === 'returning' || plane.state === 'cruising' ? 'patrolling' : plane.state;
+        const cos = Math.cos(charge.heading);
+        const sin = Math.sin(charge.heading);
+        // Weave on the charge's beam, a little above and behind
+        plane.order.patrolOrigin = {
+          x: charge.pos.x - cos * 40 - sin * plane.wingmanOffset.x,
+          y: charge.pos.y - sin * 40 + cos * plane.wingmanOffset.x,
+        };
+        // Keep pace: never fall behind a faster charge
+        plane.speed = Math.max(plane.speed, Math.min(plane.maxSpeed, charge.speed * 1.05));
+        continue;
+      }
       if (plane.airMission === 'escort') {
         const strikers = plane.packageId ? packages.get(plane.packageId) : undefined;
         if (!strikers || strikers.length === 0) {
@@ -3575,6 +3811,124 @@ export class GameEngine {
     }
     this.coverageCache = { at: this.gameTime, data };
     return data;
+  }
+
+  /**
+   * Shipboard aviation: fits each surface combatant with its historical floatplanes or helicopter
+   * once, then flies the allied and enemy ships' aircraft (the player launches their own from the
+   * deck menu): helicopters go after submarines near their ship, or, with light anti-ship
+   * missiles, after small surface ships; floatplanes scout ahead. They come back to their own ship.
+   */
+  private updateShipAviation(dt: number): void {
+    const ships = [...this.playerShips, ...this.alliedShips, ...this.enemyShips];
+    for (const ship of ships) {
+      if (ship.isSunk) continue;
+      this.fitShipAviation(ship);
+      if (ship.side === 'player' || !ship.flightDeck || !ship.carrierPlanes) continue;
+      ship.shipAirTimer = (ship.shipAirTimer ?? 20 + Math.random() * 40) - dt;
+      if (ship.shipAirTimer > 0) continue;
+      ship.shipAirTimer = 50 + Math.random() * 60;
+      if (this.aircraft.some((a) => a.carrierId === ship.id && a.state !== 'shot_down')) continue;
+      const model = Object.keys(ship.carrierPlanes.ready).find((m) => (ship.carrierPlanes!.ready[m] ?? 0) > 0) as AircraftModel | undefined;
+      if (!model) continue;
+      const hostileShips = (ship.side === 'enemy' ? [...this.playerShips, ...this.alliedShips] : this.enemyShips).filter((h) => !h.isSunk);
+      const sub = hostileShips.find((h) => this.isSubmarine(h) && dist(h.pos, ship.pos) < 3600);
+      const surface = hostileShips
+        .filter((h) => !this.isSubmarine(h) && dist(h.pos, ship.pos) < 3200)
+        .sort((a, b) => dist(a.pos, ship.pos) - dist(b.pos, ship.pos))[0];
+      if (ship.flightDeck === 'helicopter') {
+        const canAsuw = model === 'lynx' || model === 'sh60b';
+        if (sub) this.launchShipFlight(ship, model, 'asw_acoustic_torpedo', { type: 'patrol', patrolOrigin: { ...sub.pos } });
+        else if (canAsuw && surface) this.launchShipFlight(ship, model, 'heli_asm', { type: 'attack', targetId: surface.id, targetPos: { ...surface.pos } });
+        else if (Math.random() < 0.35) this.launchShipFlight(ship, model, 'asw_acoustic_torpedo', { type: 'patrol', patrolOrigin: { ...ship.pos } });
+      } else if (Math.random() < 0.5) {
+        // Scouting ahead of the ship
+        const ahead = { x: ship.pos.x + Math.cos(ship.heading) * 1400, y: ship.pos.y + Math.sin(ship.heading) * 1400 };
+        this.launchShipFlight(ship, model, 'scout_fuel', { type: 'patrol', patrolOrigin: ahead });
+      }
+    }
+
+    // Recover AI detachments to their own ship when the sortie is over
+    for (let i = this.aircraft.length - 1; i >= 0; i--) {
+      const plane = this.aircraft[i];
+      if (!plane.shipDetachment || plane.side === 'player' || plane.state === 'shot_down') continue;
+      const home = ships.find((sh) => sh.id === plane.carrierId && !sh.isSunk);
+      if (!home) {
+        // Ship gone: the aircraft ditches when its fuel runs out
+        plane.missionTimer = (plane.missionTimer ?? 60) - dt;
+        if (plane.missionTimer < -60) this.aircraft.splice(i, 1);
+        continue;
+      }
+      plane.missionTimer = (plane.missionTimer ?? 90) - dt;
+      const done = plane.missionTimer <= 0 || plane.order.type === 'rtb' || (!plane.hasPayload && plane.payloadType !== 'scout_fuel');
+      if (!done) continue;
+      plane.order = { type: 'move', targetPos: { ...home.pos } };
+      plane.state = 'cruising';
+      plane.targetHeading = Math.atan2(home.pos.y - plane.pos.y, home.pos.x - plane.pos.x);
+      if (dist(plane.pos, home.pos) < 55) {
+        if (home.carrierPlanes) home.carrierPlanes.ready[plane.model] = (home.carrierPlanes.ready[plane.model] ?? 0) + 1;
+        this.aircraft.splice(i, 1);
+      }
+    }
+  }
+
+  /** Gives a surface combatant its historical floatplanes or helicopter (once). */
+  private fitShipAviation(ship: Ship): void {
+    if (ship.aviationFitted) return;
+    ship.aviationFitted = true;
+    const fit = shipAviation(ship, this.era);
+    if (fit) {
+      ship.flightDeck = fit.kind;
+      ship.carrierPlanes = { ready: { [fit.model]: fit.count }, hangar: {}, maxPerType: { [fit.model]: fit.count } };
+    }
+  }
+
+  /** One aircraft off an allied or enemy ship's deck. */
+  private launchShipFlight(ship: Ship, model: AircraftModel, payloadType: AircraftPayloadType, order: UnitOrder): void {
+    const cp = ship.carrierPlanes;
+    if (!cp || (cp.ready[model] ?? 0) <= 0) return;
+    cp.ready[model] -= 1;
+    const role: AircraftRole = getCatalogRole(model, 'carrier', this.era);
+    const speed = getAircraftBaseSpeed(model);
+    const health = getAircraftBaseHealth(model);
+    const gun = getAircraftGunRounds(model);
+    const sono = this.getSonobuoySpec(model);
+    const shipName = ship.codeName || ship.name;
+    const label = model === 'ka27' ? 'Ka-27 螺旋' : model === 'e13a' ? 'E13A 零式水偵' : model === 'walrus' ? 'Walrus 海象' : model === 'lynx' ? 'Lynx 山貓' : model === 'sh3f' ? 'HSS-2 海王' : model.toUpperCase();
+    this.aircraft.push({
+      id: `shipair-${ship.id}-${model}-${Date.now()}-${Math.floor(Math.random() * 1e5)}`,
+      squadronId: `sq-ship-${ship.id}-${Date.now()}`,
+      model,
+      role,
+      name: `${shipName} · ${label}`,
+      flightName: `${shipName} 艦載機`,
+      side: ship.side,
+      pos: { ...ship.pos },
+      vel: { x: Math.cos(ship.heading) * speed, y: Math.sin(ship.heading) * speed },
+      heading: ship.heading,
+      targetHeading: ship.heading,
+      speed,
+      maxSpeed: speed,
+      altitude: 0.6,
+      state: order.type === 'patrol' ? 'patrolling' : 'cruising',
+      health,
+      maxHealth: health,
+      order,
+      hasPayload: payloadType !== 'scout_fuel',
+      payloadType,
+      payloadName: PAYLOAD_CATALOG[payloadType]?.badge ?? '',
+      ammoRemaining: 2,
+      maxAmmo: 2,
+      gunAmmo: gun,
+      maxGunAmmo: gun,
+      carrierId: ship.id,
+      homeBaseId: ship.id,
+      shipDetachment: true,
+      missionTimer: 70 + Math.random() * 40,
+      shootCooldown: 0,
+      wingmanOffset: { x: 0, y: 0 },
+      ...(sono ? { sonobuoyAmmo: sono.count, maxSonobuoyAmmo: sono.count, sonobuoyModel: sono.label } : {}),
+    });
   }
 
   private updateAircraft(dt: number) {
@@ -4330,7 +4684,16 @@ export class GameEngine {
 
   // ════ 優先判定超視距/遠程導引飛彈（確保 B-52G / Tu-22 等戰略轟炸機掛載魚叉/暴風反艦飛彈時能在 4000m 外實施遠程獵殺，不誤入近距離地毯投彈）════
   private releasePayloadOnTarget(dt: number, plane: Aircraft, targetEntity: Aircraft | GroundUnit | Installation | Ship | undefined, targetPos: Vector2D, d: number): void {
-    if (plane.payloadType === 'rgm84_harpoon') {
+    if (plane.payloadType === 'heli_asm') {
+      // Helicopter ASuW: a pair of light anti-ship missiles from outside the target's gun range
+      if (d < AIR_WEAPON_RANGE.heliAsm) {
+        this.fireAirLaunchedHarpoon(plane, targetPos, targetEntity, { light: true });
+        plane.ammoRemaining = 0;
+        plane.hasPayload = false;
+        plane.order = { type: 'rtb' };
+        plane.state = 'returning';
+      }
+    } else if (plane.payloadType === 'rgm84_harpoon') {
       // ════ 魚叉超視距反艦飛彈 (AGM-84 Harpoon AShM): 4000m 掠海主動雷達導引 ════
       if (d < AIR_WEAPON_RANGE.harpoon) {
         this.fireAirLaunchedHarpoon(plane, targetPos, targetEntity);
@@ -4757,6 +5120,14 @@ export class GameEngine {
     }
   }
 
+  /** Inside the plane's CAP box (with a margin to meet raiders at its edge); always true without one. */
+  private inPatrolBox(plane: Aircraft, p: Vector2D): boolean {
+    const b = plane.order.patrolBox;
+    if (!b) return true;
+    const m = 300;
+    return p.x >= b.x0 - m && p.x <= b.x1 + m && p.y >= b.y0 - m && p.y <= b.y1 + m;
+  }
+
   /** CAP / patrol orbit with threat detection and interception. */
   private updatePatrolOrder(dt: number, flagship: Ship | undefined, plane: Aircraft): boolean {
     // Orbit patrol area & auto-intercept hostile planes entering perimeter
@@ -4784,9 +5155,9 @@ export class GameEngine {
     const hostile = selectAirTarget(
       plane,
       // Vectored only onto contacts in the side's air picture (GCI / AEW / own radar)
-      this.aircraft.filter((a) => this.isHostile(plane.side, a.side) && this.isAirTrackedBy(a, plane.side)),
+      this.aircraft.filter((a) => this.isHostile(plane.side, a.side) && this.isAirTrackedBy(a, plane.side) && this.inPatrolBox(plane, a.pos)),
       center,
-      radarPerimeter,
+      plane.order.patrolBox ? Math.max(radarPerimeter, 6000) : radarPerimeter,
       plane.airMission ?? 'cap'
     );
 
@@ -4931,6 +5302,32 @@ export class GameEngine {
         return false;
       }
 
+      // Box CAP: a racetrack along the inside of the area's edge, each flight at its own phase
+      const box = plane.order.patrolBox;
+      if (box) {
+        const inset = Math.min(150, (box.x1 - box.x0) / 4, (box.y1 - box.y0) / 4);
+        const w = box.x1 - box.x0 - inset * 2;
+        const h = box.y1 - box.y0 - inset * 2;
+        const per = 2 * (w + h);
+        const x0 = box.x0 + inset;
+        const y0 = box.y0 + inset;
+        // Where the plane is along the perimeter (clockwise from the top-left corner)...
+        const cx = Math.max(x0, Math.min(x0 + w, plane.pos.x));
+        const cy = Math.max(y0, Math.min(y0 + h, plane.pos.y));
+        const dTop = Math.abs(cy - y0), dRight = Math.abs(x0 + w - cx), dBottom = Math.abs(y0 + h - cy), dLeft = Math.abs(cx - x0);
+        const m = Math.min(dTop, dRight, dBottom, dLeft);
+        let t = m === dTop ? cx - x0 : m === dRight ? w + (cy - y0) : m === dBottom ? w + h + (x0 + w - cx) : 2 * w + h + (y0 + h - cy);
+        // ...and a point some way ahead of it
+        t = (t + 320) % per;
+        let px = x0;
+        let py = y0;
+        if (t < w) px += t;
+        else if ((t -= w) < h) { px += w; py += t; }
+        else if ((t -= h) < w) { px += w - t; py += h; }
+        else { py += h - (t - w); }
+        plane.targetHeading = Math.atan2(py + plane.wingmanOffset.y - plane.pos.y, px + plane.wingmanOffset.x - plane.pos.x);
+        return false;
+      }
       // Circular orbit (ASW planes sweep wider corridors)
       const orbitR = aswRange > 0 ? 520 : 250;
       const a = Date.now() * (aswRange > 0 ? 0.0009 : 0.0016);
@@ -5105,6 +5502,7 @@ export class GameEngine {
     const toPos = this.getAirBasePos(toId);
     if (!fromPos || !toPos) return fail('⚠️ 轉場基地不存在或已被摧毀。');
     const toCarrier = this.findFriendlyCarrier(toId);
+    if (toCarrier && !deckAccepts(toCarrier, model)) return fail(`⚠️「${toCarrier.name}」只能收容自己的艦載直升機 / 水上飛機。`);
     if (toCarrier && !this.isCarrierCapable(model)) return fail(`⚠️ ${model.toUpperCase()} 並非艦載機型，無法降落「${toCarrier.name}」。`);
 
     const fromCarrier = this.findFriendlyCarrier(fromId);
@@ -5332,6 +5730,7 @@ export class GameEngine {
   // ══════════════════════════════════════════════════════════
   /** Era 4/5 chaff, flares and high-G break against incoming missiles. */
   private updateCountermeasures(dt: number, plane: Aircraft): void {
+    this.updateMissileEvasion(dt, plane);
     if (this.era === 'era4' || this.era === 'era5') {
       if (plane.chaffCount === undefined) {
         plane.chaffCount = 36;
@@ -5374,6 +5773,7 @@ export class GameEngine {
             plane.evasionTactic = 'breaking';
             plane.evasionTimer = 2.6;
             plane.evasionTurnSign = Math.random() > 0.5 ? 1 : -1;
+            plane.evadeMissileId = incomingMissile.id;
 
             // High-G Break Slice: 猛烈大角度急轉切入飛彈追擊幾何並開啟加力燃燒室
             plane.targetHeading = plane.heading + (plane.evasionTurnSign || 1) * 1.85;
@@ -5422,6 +5822,7 @@ export class GameEngine {
             plane.evasionTactic = 'notching';
             plane.evasionTimer = 3.0;
             plane.evasionTurnSign = Math.random() > 0.5 ? 1 : -1;
+            plane.evadeMissileId = incomingMissile.id;
 
             // 3-9 Line Beam / Notching: 航向精確切至與來襲飛彈夾角 90°，落入都卜勒雷達盲區
             const missileHeading = incomingMissile.heading ?? Math.atan2(plane.pos.y - incomingMissile.pos.y, plane.pos.x - incomingMissile.pos.x);
@@ -5468,6 +5869,59 @@ export class GameEngine {
           }
         }
       }
+    }
+  }
+
+  /**
+   * Defensive manoeuvring against a missile, in every era and whether or not decoys are left:
+   * against a radar-guided missile the aircraft turns to put it on the beam (notch) and dives for
+   * the clutter, against a heat-seeker it pulls a hard break turn across the missile's path. The
+   * turn is held every frame (mission steering would otherwise straighten it out at once). Without
+   * decoys the manoeuvre alone sometimes makes the missile overshoot.
+   */
+  private updateMissileEvasion(dt: number, plane: Aircraft): void {
+    if (plane.state === 'shot_down' || plane.state === 'landing') return;
+    if (plane.isEvading && plane.evadeMissileId) {
+      const m = this.projectiles.find((pr) => pr.id === plane.evadeMissileId && !pr.isDead);
+      plane.evasionTimer = (plane.evasionTimer ?? 0) - (this.era === 'era4' || this.era === 'era5' ? 0 : dt);
+      if (!m || (plane.evasionTimer ?? 0) <= 0) {
+        plane.isEvading = false;
+        plane.evasionTactic = undefined;
+        plane.evadeMissileId = undefined;
+        return;
+      }
+      const bearingFromMissile = Math.atan2(plane.pos.y - m.pos.y, plane.pos.x - m.pos.x);
+      const sign = plane.evasionTurnSign || 1;
+      plane.targetHeading =
+        plane.evasionTactic === 'notching'
+          ? bearingFromMissile + (Math.PI / 2) * sign // missile on the beam: no closing Doppler
+          : bearingFromMissile + Math.PI * 0.62 * sign; // hard break across its path
+      return;
+    }
+    // A missile closing on this aircraft (guided at it, or about to pass close by)
+    const m = this.projectiles.find(
+      (pr) =>
+        !pr.isDead &&
+        (pr.type === 'missile_sam' || pr.type === 'missile_aam') &&
+        this.isHostile(plane.side, pr.side) &&
+        (pr.targetEntityId === plane.id || dist(pr.pos, plane.pos) < 600) &&
+        dist(pr.pos, plane.pos) < 1400
+    );
+    if (!m) return;
+    const hasDecoys = (this.era === 'era4' || this.era === 'era5') && ((plane.flareCount ?? 0) > 0 || (plane.chaffCount ?? 0) > 0) && (plane.cmCooldown ?? 0) <= 0;
+    if (hasDecoys) return; // the countermeasure logic below starts the manoeuvre with chaff / flares
+    const isIr = m.guidanceType === 'infrared' || m.guidanceType === 'ir';
+    plane.isEvading = true;
+    plane.evasionTactic = isIr ? 'breaking' : 'notching';
+    plane.evasionTimer = isIr ? 2.4 : 2.8;
+    plane.evasionTurnSign = Math.random() > 0.5 ? 1 : -1;
+    plane.evadeMissileId = m.id;
+    // A well-timed break alone defeats some shots (more often for agile fighters)
+    const agile = plane.role === 'fighter' ? 0.3 : 0.12;
+    if (m.targetEntityId === plane.id && Math.random() < agile) {
+      m.isDecoyed = true;
+      m.targetEntityId = undefined;
+      m.targetPos = { x: plane.pos.x + (Math.random() - 0.5) * 400, y: plane.pos.y + (Math.random() - 0.5) * 400 };
     }
   }
 
@@ -6828,8 +7282,10 @@ export class GameEngine {
         });
       }
 
-      // 敵方飛行員跳傘 (POW 戰俘機制 - 75% 機率跳傘落海或降落於陸地)
-      if (Math.random() < 0.75) {
+      // Enemy aircrew bail out by the historical odds of the type and era (see aircrew.ts)
+      const bail = rollBailout(plane.model, this.era);
+      this.casualties.enemyAircrewLost = (this.casualties.enemyAircrewLost ?? 0) + bail.killed;
+      if (bail.survivors > 0) {
         const raftId = `raft-enemy-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         const isOnLand = this.islands.some((isl) => isPointInPolygon(plane.pos, isl.points));
         this.lifeRafts.push({
@@ -6838,7 +7294,8 @@ export class GameEngine {
           pos: { ...plane.pos },
           planeModel: plane.model,
           planeName: plane.name,
-          pilotName: `OPFOR 飛行員 (${plane.name.split(' ')[0]})`,
+          pilotName: bail.crew > 1 ? `OPFOR 機組 ${bail.survivors}/${bail.crew} 人 (${plane.name.split(' ')[0]})` : `OPFOR 飛行員 (${plane.name.split(' ')[0]})`,
+          crew: bail.survivors,
           timer: 90,
           maxTimer: 90,
           rescued: false,
@@ -6852,12 +7309,25 @@ export class GameEngine {
           sourceName: '落難信號 (SOS)',
           targetName: pName,
           actionType: 'recon_spotted',
-          text: `🪂【敵機組員跳傘】「${pName}」被擊墜後飛行員跳傘（座標 [${Math.round(plane.pos.x)}, ${Math.round(plane.pos.y)}]）！派遣水面艦（<85-120m）或地面部隊（<85m）物理接近可將其捕獲為 POW (可獲政治值與人力值)！`,
+          text: `🪂【敵機組員跳傘】「${pName}」被擊墜，機組 ${bail.crew} 人中 ${bail.survivors} 人跳傘${bail.killed > 0 ? `、${bail.killed} 人陣亡` : ''}（座標 [${Math.round(plane.pos.x)}, ${Math.round(plane.pos.y)}]）。派水面艦（85–120m 內）或地面部隊（85m 內）接近即可俘虜。`,
         });
       }
     } else {
       this.casualties.playerPlanesLost++;
-      // 我方飛行員跳傘展開救生筏 (Life Raft, 90s 倒數窗口)
+      const bail = rollBailout(plane.model, this.era);
+      this.casualties.playerAircrewLost = (this.casualties.playerAircrewLost ?? 0) + bail.killed;
+      if (bail.survivors === 0) {
+        this.addCombatLog({
+          category: 'air',
+          sourceSide: 'enemy',
+          sourceName: '跳傘緊急頻道 (SAR Channel)',
+          targetName: pName,
+          actionType: 'aa_down',
+          text: `✝️【機組全員陣亡】「${pName}」遭擊落，未見降落傘，機組 ${bail.crew} 人全數陣亡。`,
+        });
+        return;
+      }
+      // Survivors in a life raft (90 s window)
       const raftId = `raft-player-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const isOnLand = this.islands.some((isl) => isPointInPolygon(plane.pos, isl.points));
       this.lifeRafts.push({
@@ -6866,7 +7336,8 @@ export class GameEngine {
         pos: { ...plane.pos },
         planeModel: plane.model,
         planeName: plane.name,
-        pilotName: pName,
+        pilotName: bail.crew > 1 ? `${pName} 機組 ${bail.survivors}/${bail.crew} 人` : pName,
+        crew: bail.survivors,
         timer: 90,
         maxTimer: 90,
         rescued: false,
@@ -6874,8 +7345,9 @@ export class GameEngine {
         isOnLand,
       });
 
+      const lostTxt = bail.killed > 0 ? `，${bail.killed} 人陣亡` : '';
       this.addBannerAlert(
-        `🛟【跳傘救生】我方「${pName}」飛行員跳傘！派遣船隻或地面部隊物理接近救起可補回戰機！`,
+        `🛟【跳傘救生】「${pName}」機組 ${bail.survivors} 人跳傘${lostTxt}！派船艦或地面部隊接近救起`,
         'player',
         'alert',
         6.0
@@ -6886,7 +7358,7 @@ export class GameEngine {
         sourceName: '跳傘緊急頻道 (SAR Channel)',
         targetName: pName,
         actionType: 'recon_spotted',
-        text: `🛟【飛行員跳傘】「${pName}」遭擊落後飛行員成功開啟救生筏（座標 [${Math.round(plane.pos.x)}, ${Math.round(plane.pos.y)}]，90秒窗口）！水面艦（<85-120m）、地面部隊（<85m）或搜救直升機物理接近即可救起補回 1 架該型戰機；若遭敵軍先接觸將損失政治值 PP -80！`,
+        text: `🛟【機組跳傘】「${pName}」遭擊落，機組 ${bail.crew} 人中 ${bail.survivors} 人登上救生筏${lostTxt}（座標 [${Math.round(plane.pos.x)}, ${Math.round(plane.pos.y)}]，90 秒窗口）。水面艦（85–120m）、地面部隊（85m）或搜救直升機接近即可救起，補回 1 架該型機；若先遭敵接觸，政治值 PP -80。`,
       });
     }
   }
@@ -9355,6 +9827,7 @@ export class GameEngine {
               this.era,
               { x: sh.cpPos.x + (a === 0 ? 60 : -60), y: sh.cpPos.y + (a === 0 ? -40 : 40) }
             );
+            ambushUnit.pos = this.groundSpawnOnLand(ambushUnit.pos, island);
             ambushUnit.order = { type: 'move', targetPos: friendlyTroopsNearCP[0].pos };
             this.groundUnits.push(ambushUnit);
           }
@@ -9390,6 +9863,7 @@ export class GameEngine {
             'era2',
             { x: sh.cpPos.x + 30, y: sh.cpPos.y + 30 }
           );
+          banzaiSquad.pos = this.groundSpawnOnLand(banzaiSquad.pos, island);
           banzaiSquad.isBanzaiCharging = true;
           banzaiSquad.order = { type: 'move', targetPos: friendlyTroopsNearCP[0].pos };
           this.groundUnits.push(banzaiSquad);
@@ -9704,12 +10178,13 @@ export class GameEngine {
   // 時代五反艦、防空與對地現代化導引飛彈發射系統 (Era 5 Precision Missiles)
   // ══════════════════════════════════════════════════════════
 
-  private fireAirLaunchedHarpoon(plane: Aircraft, targetPos: Vector2D, targetEntity?: CombatTargetEntity) {
+  private fireAirLaunchedHarpoon(plane: Aircraft, targetPos: Vector2D, targetEntity?: CombatTargetEntity, opts?: { light?: boolean }) {
+    const light = !!opts?.light;
     soundEngine.playRocketIgnition();
     const attackerName = `${plane.name} (戰機 #${plane.id.slice(-4)})`;
     const heading = plane.heading;
     const speed = MISSILE_SPEED.harpoon; // Mach 0.71 sea-skimming
-    const range = 4200;
+    const range = light ? AIR_WEAPON_RANGE.heliAsm * 1.3 : 4200;
 
     let targetShipId: string | undefined = undefined;
     if (targetEntity && 'isSunk' in targetEntity && !this.isSubmarine(targetEntity)) {
@@ -9730,7 +10205,7 @@ export class GameEngine {
     }
 
     // 依據機型決定魚叉齊射枚數 (B-52 現代化戰轟可掛 8~12 枚齊射 6 枚; A-6E / F-111 掛 4 枚齊射 4 枚; F/A-18 / S-3A 雙發齊射)
-    const salvoCount = plane.model === 'b52' ? 6 : (plane.model === 'a6e' || plane.model === 'f111') ? 4 : 2;
+    const salvoCount = light ? 2 : plane.model === 'b52' ? 6 : (plane.model === 'a6e' || plane.model === 'f111') ? 4 : 2;
     const allShips = [...this.playerShips, ...this.enemyShips, ...this.alliedShips];
     const hostileShips = allShips.filter((s) => !s.isSunk && this.isHostile(plane.side, s.side) && !this.isSubmarine(s));
 
@@ -9757,8 +10232,8 @@ export class GameEngine {
         flightProgress: 0,
         maxDistance: range,
         distanceTraveled: 0,
-        damage: 2600, // Heavy armor-piercing blast fragmentation warhead
-        blastRadius: 55,
+        damage: light ? 1100 : 2600, // Penguin 120 kg / Sea Skua 28 kg vs Harpoon 221 kg
+        blastRadius: light ? 30 : 55,
         speed,
         heading: mHeading,
         isDead: false,
@@ -9773,8 +10248,8 @@ export class GameEngine {
         ashmVariant: 'harpoon_agm84',
         ashmProfile: 'pop_up_dive',
         missileAltitude: 0.22,
-        missileHealth: 130,
-        maxMissileHealth: 130,
+        missileHealth: light ? 80 : 130,
+        maxMissileHealth: light ? 80 : 130,
       });
     }
 
@@ -9784,7 +10259,9 @@ export class GameEngine {
       sourceName: attackerName,
       targetName: '敵水面戰鬥群',
       actionType: 'recon_spotted',
-      text: `🚀【AGM-84 魚叉波次狼群齊射！】「${plane.name}」釋放 ${salvoCount} 枚 AGM-84 魚叉反艦飛彈飽和狼群！火箭助推點火掠海超低空突防！`,
+      text: light
+        ? `🚀【直升機反艦飛彈】「${plane.name}」以搜索雷達鎖定敵艦，射出 ${salvoCount} 枚輕型反艦飛彈。`
+        : `🚀【AGM-84 魚叉波次狼群齊射！】「${plane.name}」釋放 ${salvoCount} 枚 AGM-84 魚叉反艦飛彈飽和狼群！火箭助推點火掠海超低空突防！`,
     });
   }
 
@@ -10643,6 +11120,19 @@ export class GameEngine {
         health: 2000,
         armor: 0.4,
         angle: instAngle,
+      }));
+    } else if (item.typeTag === 'pow_camp') {
+      targetIsland.installations.push(makeInstallation({
+        id: instId,
+        type: 'pow_camp',
+        name: PLAYER_CAMP_NAME[this.era],
+        weaponDesc: `鐵絲網收容營區 · 容量 ${POW_CAMP_CAPACITY} 人 · 審訊戰俘產出研究點數 RP`,
+        side: 'player',
+        pos: instPos,
+        health: 1600,
+        armor: 0.3,
+        angle: instAngle,
+        prisoners: 0,
       }));
     } else if (item.typeTag === 'field_hospital') {
       // 戰地野戰醫院
@@ -11548,16 +12038,17 @@ export class GameEngine {
           this.fireChaparralSAM(gUnit, targetPlane);
           gUnit.cooldown = gUnit.type === 'usmc_lav_ad' ? 3.5 : gUnit.type === 'us_avenger' ? 3.0 : 4.0;
         }
-      } else if (gUnit.side !== 'enemy' && (gUnit.type === 'usmc_duster_m42' || gUnit.type === 'us_m16_quad50' || gUnit.type === 'frg_gepard')) {
-        // Gun air defence: twin 40mm Bofors (Duster), the quad .50 "meat chopper", radar-laid twin 35mm (Gepard)
-        const reach = gUnit.type === 'frg_gepard' ? 2000 : gUnit.type === 'usmc_duster_m42' ? 1400 : 1000;
+      } else if (gUnit.side !== 'enemy' && (gUnit.type === 'usmc_duster_m42' || gUnit.type === 'us_m16_quad50' || gUnit.type === 'frg_gepard' || gUnit.type === 'usmc_90mm_aa_42' || gUnit.type === 'usmc_40mm_bofors_45')) {
+        // Gun air defence: twin 40mm Bofors (Duster), the quad .50 "meat chopper", radar-laid twin 35mm (Gepard),
+        // the towed 90mm M1 and 40mm M1 of the Marine defense / AAA battalions
+        const reach = gUnit.type === 'frg_gepard' || gUnit.type === 'usmc_90mm_aa_42' ? 2000 : gUnit.type === 'usmc_duster_m42' || gUnit.type === 'usmc_40mm_bofors_45' ? 1400 : 1000;
         const targetPlane = this.aircraft.find(
           (a) => this.isHostile(gUnit.side, a.side) && a.state !== 'shot_down' && dist(gUnit.pos, a.pos) <= reach && this.aaCanSee(gUnit.pos, a)
         );
         if (targetPlane) {
           gUnit.heading = Math.atan2(targetPlane.pos.y - gUnit.pos.y, targetPlane.pos.x - gUnit.pos.x);
           this.fireFlakBurst(gUnit.pos, targetPlane, gUnit.side);
-          gUnit.cooldown = gUnit.type === 'frg_gepard' ? 0.7 : gUnit.type === 'usmc_duster_m42' ? 1.3 : 0.9;
+          gUnit.cooldown = gUnit.type === 'frg_gepard' ? 0.7 : gUnit.type === 'usmc_90mm_aa_42' ? 1.8 : gUnit.type === 'usmc_duster_m42' || gUnit.type === 'usmc_40mm_bofors_45' ? 1.3 : 0.9;
         }
       } else if (
         gUnit.side === 'enemy' &&
@@ -15217,6 +15708,143 @@ export class GameEngine {
   // 敵俘為戰俘: +100 CP, +100分
   // 友軍遭敵俘獲: -80 CP
   // ══════════════════════════════════════════════════════════
+  private powCamps(side: 'player' | 'enemy'): Installation[] {
+    const out: Installation[] = [];
+    for (const isl of this.islands) {
+      for (const i of isl.installations) {
+        if (i.type === 'pow_camp' && !i.isDestroyed && (side === 'enemy' ? i.side === 'enemy' : i.side !== 'enemy')) out.push(i);
+      }
+    }
+    return out;
+  }
+
+  /** Prisoners taken by `captor` go to its camps (ours: up to capacity, the rest held in the field). */
+  private takePrisoners(captor: 'player' | 'enemy', men: number): void {
+    // Captures are never turned away: each camp holds at most POW_CAMP_CAPACITY, the rest wait
+    // in holding pens until there is room (a new camp, or one freed up)
+    let left = men;
+    for (const camp of this.powCamps(captor)) {
+      const room = POW_CAMP_CAPACITY - (camp.prisoners ?? 0);
+      const n = Math.min(room, left);
+      if (n > 0) {
+        camp.prisoners = (camp.prisoners ?? 0) + n;
+        left -= n;
+      }
+    }
+    if (captor === 'player') this.powsInField += left;
+    else this.enemyPowsInField += left;
+  }
+
+  /**
+   * POW camps: ours turn the prisoners they hold into intelligence and take in those held in the
+   * field when room appears; the enemy's is freed when our ground troops hold its compound.
+   */
+  private updatePowCamps(dt: number): void {
+    const ours = this.powCamps('player');
+    let held = 0;
+    for (const c of ours) held += c.prisoners ?? 0;
+    if (held > 0) this.economy.add({ mp: 0, pp: 0, rp: held * POW_RP_PER_SECOND * dt, tp: 0 });
+
+    this.powCheckTimer -= dt;
+    if (this.powCheckTimer > 0) return;
+    this.powCheckTimer = 1;
+    if (this.powsInField > 0 && ours.length > 0) {
+      const n = this.powsInField;
+      this.powsInField = 0;
+      this.takePrisoners('player', n);
+    }
+    if (this.enemyPowsInField > 0 && this.powCamps('enemy').length > 0) {
+      const n = this.enemyPowsInField;
+      this.enemyPowsInField = 0;
+      this.takePrisoners('enemy', n);
+    }
+    // Camp labels show who is waiting outside
+    for (const c of ours) c.prisonersWaiting = this.powsInField;
+    for (const c of this.powCamps('enemy')) c.prisonersWaiting = this.enemyPowsInField;
+    for (const camp of this.powCamps('enemy')) {
+      const ground = this.groundUnits.filter((u) => !u.isDestroyed && !u.embarkedInShipId);
+      const liberator = ground.find((u) => u.side !== 'enemy' && u.side !== 'neutral' && dist(u.pos, camp.pos) < LIBERATE_RADIUS);
+      if (!liberator) continue;
+      if (ground.some((u) => u.side === 'enemy' && !u.isSurrendered && dist(u.pos, camp.pos) < LIBERATE_CLEAR)) continue;
+      // The camp and the holding pens round it
+      const freed = (camp.prisoners ?? 0) + this.enemyPowsInField;
+      this.enemyPowsInField = 0;
+      camp.prisonersWaiting = 0;
+      camp.side = 'player';
+      camp.isCivilian = false;
+      camp.civilianZoneRadius = 0;
+      camp.prisoners = 0;
+      camp.name = PLAYER_CAMP_NAME[this.era];
+      camp.weaponDesc = '已解放 · 改作我方戰俘營 · 收押戰俘並審訊產出 RP';
+      this.islandsVersion++;
+      const mp = freed * 4;
+      const pp = 40 + freed * 8;
+      this.economy.add({ mp, pp, rp: 0, tp: 0 });
+      this.score.totalScore += 300 + freed * 50;
+      this.score.stars += 2;
+      this.addBannerAlert(`⛓【戰俘營解放】「${liberator.name}」攻入敵戰俘營，${freed} 名被俘人員重獲自由！`, 'player', 'capture', 7);
+      this.addCombatLog({
+        category: 'sunk',
+        sourceSide: 'player',
+        sourceName: liberator.name,
+        targetName: camp.name,
+        actionType: 'recon_spotted',
+        text: `⛓【戰俘營解放】「${liberator.name}」肅清營區守軍，解放 ${freed} 名被俘人員（人力 MP +${mp}、政治值 PP +${pp}）。營區改作我方戰俘營。`,
+      });
+    }
+  }
+
+  /**
+   * Command posts a downed airman of `side` would make for: ours are battalion CPs, command posts,
+   * FOBs and captured strongholds; the enemy's are its command posts and the strongholds it holds.
+   */
+  private commandPostsOf(side: 'player' | 'enemy'): { id: string; name: string; pos: Vector2D }[] {
+    const out: { id: string; name: string; pos: Vector2D }[] = [];
+    for (const isl of this.islands) {
+      for (const i of isl.installations) {
+        if (i.isDestroyed || (i.type !== 'battalion_cp' && i.type !== 'command_post' && i.type !== 'forward_fob')) continue;
+        if ((side === 'enemy') === (i.side === 'enemy')) out.push({ id: i.id, name: i.name, pos: i.pos });
+      }
+      for (const sh of isl.strongholds ?? []) {
+        if (sh.isCaptured === (side === 'player')) out.push({ id: sh.id, name: sh.name, pos: sh.cpPos });
+      }
+    }
+    return out;
+  }
+
+  /** Walks an airman down on land toward his side's nearest command post; returns it once he is there. */
+  private walkToCommandPost(raft: LifeRaft, dt: number): { id: string; name: string; pos: Vector2D } | undefined {
+    if (!raft.isOnLand || raft.fromShip) return undefined;
+    const PILOT_WALK = 7; // world units per second, a man on foot across country
+    if (!raft.walkingTo) {
+      const near = this.commandPostsOf(raft.side)
+        .map((c) => ({ c, d: dist(c.pos, raft.pos) }))
+        .filter((x) => x.d < 1500)
+        .sort((a, b) => a.d - b.d)[0];
+      if (!near) return undefined;
+      raft.walkingTo = near.c;
+      // Long enough to make it there on foot
+      raft.timer = Math.max(raft.timer, near.d / PILOT_WALK + 30);
+      raft.maxTimer = Math.max(raft.maxTimer, raft.timer);
+      this.addCombatLog({
+        category: 'air',
+        sourceSide: raft.side,
+        sourceName: raft.pilotName,
+        targetName: near.c.name,
+        actionType: 'recon_spotted',
+        text: raft.side === 'player'
+          ? `🏃【跳傘人員自行脫困】「${raft.pilotName}」著陸後徒步前往我方「${near.c.name}」（約 ${Math.round(near.d)}m）。`
+          : `🏃【敵機組員逃竄】「${raft.pilotName}」著陸後正徒步逃往敵方「${near.c.name}」，派地面部隊攔截可俘虜。`,
+      });
+    }
+    const t = raft.walkingTo;
+    const d = dist(t.pos, raft.pos);
+    if (d < 45) return t;
+    const step = Math.min(d, PILOT_WALK * dt);
+    raft.pos = { x: raft.pos.x + ((t.pos.x - raft.pos.x) / d) * step, y: raft.pos.y + ((t.pos.y - raft.pos.y) / d) * step };
+    return undefined;
+  }
+
   private updateLifeRaftRescue(dt: number) {
     if (!this.lifeRafts || this.lifeRafts.length === 0) return;
 
@@ -15270,42 +15898,69 @@ export class GameEngine {
       // ══════════════════════════════════════════════════════════
       // 情況一: 我方單位率先物理接觸救生筏
       // ══════════════════════════════════════════════════════════
-      const playerUnit = nearPlayerShip || nearPlayerGround || rescueHeli;
+      // An airman down on land walks to his own side's nearest command post
+      const cpReached = this.walkToCommandPost(raft, dt);
+      if (cpReached && raft.side === 'enemy') {
+        this.addCombatLog({
+          category: 'air',
+          sourceSide: 'enemy',
+          sourceName: '敵軍陣地',
+          targetName: raft.pilotName,
+          actionType: 'recon_spotted',
+          text: `🏃【敵機組員脫逃】「${raft.pilotName}」徒步逃回敵方「${cpReached.name}」，未能俘獲。`,
+        });
+        this.lifeRafts.splice(i, 1);
+        continue;
+      }
+
+      const playerUnit = nearPlayerShip || nearPlayerGround || rescueHeli || (raft.side === 'player' ? cpReached : undefined);
       if (playerUnit) {
         const rescuerName = (playerUnit as Ship).codeName || playerUnit.name;
 
         if (raft.side === 'player') {
-          // 我方飛行員獲救！
           raft.rescued = true;
           soundEngine.playPlaneSortie();
-
-          this.addBannerAlert(
-            `🛟【飛行員打撈救援完成！】由「${rescuerName}」成功救起「${raft.pilotName}」！安全歸隊補回 1架「${raft.planeName.split(' ')[0]}」！`,
-            'player',
-            'capture',
-            6.0
-          );
-          this.addCombatLog({
-            category: 'air',
-            sourceSide: 'player',
-            sourceName: rescuerName,
-            targetName: raft.planeName,
-            actionType: 'recon_spotted',
-            text: `🛟【飛行員搜救成功】「${rescuerName}」物理接近跳傘地點救起落難飛行員「${raft.pilotName}」！機組員安全返回作戰序列，戰備庫存立即復原 1架 ${raft.planeName}！★+1星，+150分！`,
-          });
-
-          // 復原 1 架戰機至旗艦機庫或基地庫存
+          const men = raft.crew ?? 1;
           const flagship = this.getFlagship();
-          if (flagship && flagship.carrierPlanes) {
+          if (raft.fromShip) {
+            // A ship's survivors: trained sailors back in the manpower pool
+            const mp = men * 4;
+            this.economy.add({ mp, pp: 0, rp: 0, tp: 0 });
+            this.score.totalScore += 20 * men;
+            this.addBannerAlert(`🛟【艦員獲救】「${rescuerName}」救起「${raft.pilotName}」，人力 MP +${mp}`, 'player', 'capture', 5.0);
+            this.addCombatLog({
+              category: 'naval',
+              sourceSide: 'player',
+              sourceName: rescuerName,
+              targetName: raft.planeName,
+              actionType: 'recon_spotted',
+              text: `🛟【艦員獲救】「${rescuerName}」救起「${raft.pilotName}」，${men} 名艦員歸建，人力 MP +${mp}。`,
+            });
+          } else {
+            this.addBannerAlert(
+              `🛟【機組獲救】「${rescuerName}」救起「${raft.pilotName}」，補回 1 架「${raft.planeName.split(' ')[0]}」`,
+              'player',
+              'capture',
+              6.0
+            );
+            this.addCombatLog({
+              category: 'air',
+              sourceSide: 'player',
+              sourceName: rescuerName,
+              targetName: raft.planeName,
+              actionType: 'recon_spotted',
+              text: `🛟【機組獲救】「${rescuerName}」救起「${raft.pilotName}」（${men} 人），機組歸建，補回 1 架 ${raft.planeName}。★+1，+150 分。`,
+            });
+            // The crew returns to the flagship's hangar or the airbase pool
             const m = raft.planeModel;
-            flagship.carrierPlanes.ready[m] = (flagship.carrierPlanes.ready[m] || 0) + 1;
-          } else if (this.airbasePlanes) {
-            const m = raft.planeModel;
-            this.airbasePlanes[m] = (this.airbasePlanes[m] || 0) + 1;
+            if (m && flagship && flagship.carrierPlanes) {
+              flagship.carrierPlanes.ready[m] = (flagship.carrierPlanes.ready[m] || 0) + 1;
+            } else if (m && this.airbasePlanes) {
+              this.airbasePlanes[m] = (this.airbasePlanes[m] || 0) + 1;
+            }
+            this.score.totalScore += 150;
+            this.score.stars += 1;
           }
-
-          this.score.totalScore += 150;
-          this.score.stars += 1;
 
           if (rescueHeli && flagship) {
             rescueHeli.order = { type: 'rtb' };
@@ -15319,7 +15974,9 @@ export class GameEngine {
           raft.isCapturedPOW = true;
           soundEngine.playPlaneSortie();
 
-          const cpReward = 100;
+          const men = raft.crew ?? 1;
+          this.takePrisoners('player', men);
+          const cpReward = raft.fromShip ? Math.min(200, 30 + 5 * men) : Math.min(400, 70 + 30 * men);
           const gainTxt = this.grant(cpReward, 'pow');
           this.score.totalScore += 100;
           this.score.stars += 1;
@@ -15354,11 +16011,13 @@ export class GameEngine {
         if (raft.side === 'player') {
           // 我方飛行員遭敵俘獲！懲罰扣除 80 CP
           soundEngine.playKlaxon();
-          const penalty = 80;
+          const men = raft.crew ?? 1;
+          this.takePrisoners('enemy', men);
+          const penalty = raft.fromShip ? Math.min(120, 20 + 4 * men) : Math.min(240, 50 + 30 * men);
           this.economy.lose({ pp: penalty });
 
           this.addBannerAlert(
-            `⚠️【我方飛行員遭敵俘虜！】「${raft.pilotName}」遭敵「${captorName}」俘獲！情資外洩，政治值 PP -80！`,
+            `⚠️【我方飛行員遭敵俘虜！】「${raft.pilotName}」遭敵「${captorName}」俘獲！情資外洩，政治值 PP -${penalty}！`,
             'enemy',
             'sunk',
             6.5
@@ -15369,7 +16028,7 @@ export class GameEngine {
             sourceName: captorName,
             targetName: raft.pilotName,
             actionType: 'recon_spotted',
-            text: `⚠️【飛行員不幸被俘】我軍落難飛行員「${raft.pilotName}」未及時搜救，遭敵「${captorName}」捕獲！密碼本與戰術外洩，政治值 PP -80！`,
+            text: `⚠️【飛行員不幸被俘】我軍落難飛行員「${raft.pilotName}」未及時搜救，遭敵「${captorName}」捕獲！密碼本與戰術外洩，政治值 PP -${penalty}！`,
           });
 
           this.lifeRafts.splice(i, 1);
@@ -16387,11 +17046,99 @@ export class GameEngine {
   // 定期增援循環 (Replenishment & Scheduled Convoys)
   // ══════════════════════════════════════════════════════════
 
+  /**
+   * What a destroyer of the Tokyo Express ("rat transportation", 鼠輸送) brought to Guadalcanal,
+   * August–November 1942: the Ichiki Detachment (28th Infantry Regiment), the Kawaguchi Detachment
+   * (35th Infantry Brigade / 124th Infantry Regiment), the Sendai 2nd Division and the 38th Division,
+   * and the Yokosuka 5th and Maizuru 4th Special Naval Landing Forces; with their Type 92 heavy
+   * machine guns and Type 1 47 mm guns. A destroyer carried roughly a battalion's worth; the
+   * number of units grows with the campaign stage.
+   */
+  private tokyoExpressTroops(): { type: GroundUnitType; name: string }[] {
+    const pool: { type: GroundUnitType; name: string }[] = [
+      { type: 'opfor_infantry_42', name: '一木支隊 步兵第28聯隊 (第二梯團)' },
+      { type: 'opfor_infantry_42', name: '川口支隊 步兵第124聯隊 大隊' },
+      { type: 'opfor_infantry_42', name: '第2師團 (仙台) 步兵第29聯隊 大隊' },
+      { type: 'opfor_infantry_42', name: '第38師團 步兵第228聯隊 大隊' },
+      { type: 'opfor_infantry_42', name: '橫須賀第5特別陸戰隊 (SNLF)' },
+      { type: 'opfor_infantry_42', name: '舞鶴第4特別陸戰隊 (SNLF)' },
+      { type: 'opfor_ija_hmg_42', name: '川口支隊 九二式重機槍中隊' },
+      { type: 'opfor_ija_47mm_at', name: '第2師團 一式四十七粍速射砲中隊' },
+    ];
+    const n = navalEscalation(this.escalation.tier).troopUnits;
+    const out: { type: GroundUnitType; name: string }[] = [];
+    for (let k = 0; k < n; k++) out.push(pool[Math.floor(Math.random() * pool.length)]);
+    return out;
+  }
+
+  /**
+   * A troop-carrying destroyer heads for the island where its army is fighting (one with enemy
+   * strongholds still held, preferring where our troops are ashore), runs in to the nearest beach
+   * and puts its troops ashore, then rejoins the fight. Returns true while it is on that run.
+   */
+  private updateTroopLanding(ship: Ship): boolean {
+    const t = ship.troopLanding;
+    if (!t || t.landed || ship.isSunk) return false;
+    if (!t.beach) {
+      const candidates = this.islands.filter((isl) => !isl.isMainland && (isl.strongholds ?? []).some((sh) => !sh.isCaptured));
+      if (candidates.length === 0) {
+        t.landed = true;
+        return false;
+      }
+      const ours = (isl: Island) => this.groundUnits.some((u) => u.side === 'player' && !u.isDestroyed && !u.embarkedInShipId && isPointInPolygon(u.pos, isl.points));
+      const isl = candidates.sort((a, b) => (ours(b) ? 1 : 0) - (ours(a) ? 1 : 0) || dist(ship.pos, a.center) - dist(ship.pos, b.center))[0];
+      // Nearest coast to the ship, away from our troops where possible
+      let best = isl.points[0];
+      let bestScore = Infinity;
+      for (const p of isl.points) {
+        const nearPlayer = this.groundUnits.some((u) => u.side === 'player' && !u.isDestroyed && dist(u.pos, p) < 500);
+        const score = dist(ship.pos, p) + (nearPlayer ? 2500 : 0);
+        if (score < bestScore) {
+          bestScore = score;
+          best = p;
+        }
+      }
+      t.islandId = isl.id;
+      t.beach = this.navGrid ? this.navGrid.projectToWalkableWater({ ...best }, requiredDepth(ship)) : { ...best };
+    }
+    const beach = t.beach;
+    const d = dist(ship.pos, beach);
+    if (d > 140) {
+      const steer = this.getEnemySteerPoint(ship, beach);
+      ship.targetHeading = Math.atan2(steer.y - ship.pos.y, steer.x - ship.pos.x);
+      ship.targetSpeed = d > 600 ? ship.maxSpeed : ship.maxSpeed * 0.4;
+      return true;
+    }
+    // Off the beach: boats in, troops ashore
+    const isl = this.islands.find((i) => i.id === t.islandId);
+    t.landed = true;
+    if (!isl) return false;
+    const names: string[] = [];
+    t.units.forEach((u, k) => {
+      const a = (k / Math.max(1, t.units.length)) * Math.PI * 2;
+      const raw = { x: beach.x + (isl.center.x - beach.x) * 0.06 + Math.cos(a) * 40, y: beach.y + (isl.center.y - beach.y) * 0.06 + Math.sin(a) * 40 };
+      const unit = createGroundUnit(`tokyo-troops-${ship.id}-${k}-${Date.now()}`, u.type, u.name, 'enemy', this.era, this.groundSpawnOnLand(raw, isl));
+      this.groundUnits.push(unit);
+      names.push(u.name);
+    });
+    this.addBannerAlert(`🚨【東京快車揚陸】「${ship.name}」在「${isl.name.split(' (')[0]}」放下增援部隊！`, 'enemy', 'down', 5.5);
+    this.addCombatLog({
+      category: 'naval',
+      sourceSide: 'enemy',
+      sourceName: ship.name,
+      targetName: isl.name,
+      actionType: 'recon_spotted',
+      text: `🚨【鼠輸送揚陸】日軍驅逐艦「${ship.name}」趁夜駛近「${isl.name.split(' (')[0]}」海岸，以小艇送上：${names.join('、')}。`,
+    });
+    return false;
+  }
+
   private spawnTokyoExpressDD() {
     const spawnPos: Vector2D = { x: 8600, y: 1400 };
     const ddNames = ['IJN Kagero (陽炎號)', 'IJN Shigure (時雨號)', 'IJN Yukikaze (雪風號)', 'IJN Fubuki (吹雪號)'];
     const name = ddNames[Math.floor(Math.random() * ddNames.length)];
     const dd = createTokyoExpressDD(`tokyo-express-${Date.now()}`, name, spawnPos);
+    dd.troopLanding = { units: this.tokyoExpressTroops() };
     this.enemyShips.push(dd);
 
     soundEngine.playKlaxon();
@@ -16498,7 +17245,69 @@ export class GameEngine {
     }
 
     soundEngine.playKlaxon();
+    const firstNew = this.enemyShips.length;
+    this.spawnOpforSagShips(spawnPos);
+    this.scaleOpforSag(this.enemyShips.slice(firstNew), spawnPos);
+  }
 
+  /**
+   * Grows or trims a fresh enemy surface group to the campaign stage: escorts are added from the
+   * era's destroyer types as the fighting escalates, and the weakest leave at the final stage.
+   * The lead ship always sails.
+   */
+  private scaleOpforSag(group: Ship[], spawnPos: Vector2D): void {
+    if (group.length === 0) return;
+    const delta = navalEscalation(this.escalation.tier).escortDelta;
+    if (delta < 0) {
+      const escorts = group.slice(1).slice(delta);
+      for (const sh of escorts) {
+        const i = this.enemyShips.indexOf(sh);
+        if (i >= 0) this.enemyShips.splice(i, 1);
+      }
+      if (escorts.length) {
+        this.addCombatLog({
+          category: 'naval',
+          sourceSide: 'enemy',
+          sourceName: '海軍情報',
+          targetName: group[0].name,
+          actionType: 'recon_spotted',
+          text: this.escalation.tier >= 4
+            ? `📉【敵艦隊後繼無力】長期消耗下，敵水面打擊群只湊得出 ${group.length - escorts.length} 艘艦艇出擊。`
+            : `🔎【敵試探性出擊】敵水面打擊群規模較小（${group.length - escorts.length} 艘），意在試探我方防線。`,
+        });
+      }
+      return;
+    }
+    const ts = Date.now();
+    for (let k = 0; k < delta; k++) {
+      const a = Math.PI * 0.5 + k * 1.3;
+      const raw = { x: spawnPos.x + Math.cos(a) * (180 + k * 40), y: spawnPos.y + Math.sin(a) * (180 + k * 40) };
+      const pos = this.navGrid ? this.navGrid.projectToWalkableWater(raw, 8) : raw;
+      const n = k + 1;
+      const extra =
+        this.era === 'era1'
+          ? createTokyoExpressDD(`opfor-sag-x${n}-${ts}`, ['IJN Murasame (村雨號 驅逐艦)', 'IJN Amagiri (天霧號 驅逐艦)'][k % 2], pos)
+          : this.era === 'era2'
+          ? createAkizukiDD(`opfor-sag-x${n}-${ts}`, ['IJN Fuyutsuki (冬月號 防空驅逐艦)', 'IJN Suzutsuki (涼月號 防空驅逐艦)'][k % 2], pos)
+          : this.era === 'era3'
+          ? createKotlinDD(`opfor-sag-x${n}-${ts}`, `Soviet Kotlin (科特林級 驅逐艦 #${330 + n})`, pos)
+          : this.era === 'era4'
+          ? (k % 2 === 0 ? createPetyaFFG(`opfor-sag-x${n}-${ts}`, `Soviet Petya (佩佳級 反潛護衛艦 СКР-${10 + n})`, pos) : createOsaPTG(`opfor-sag-x${n}-${ts}`, `北越 Project 205 Osa 飛彈快艇 (#${2 + n})`, pos))
+          : (k % 2 === 0 ? createSovremennyDD(`opfor-sag-x${n}-${ts}`, `Project 956 Sovremenny (現代級 #${n + 1})`, pos) : createUdaloyDD(`opfor-sag-x${n}-${ts}`, `Project 1155 Udaloy (無畏級 #${n + 1})`, pos));
+      this.enemyShips.push(extra);
+    }
+    this.addCombatLog({
+      category: 'naval',
+      sourceSide: 'enemy',
+      sourceName: '海軍情報',
+      targetName: group[0].name,
+      actionType: 'recon_spotted',
+      text: `📈【敵水面兵力增強】戰事升級，敵水面打擊群加派 ${delta} 艘護航艦，共 ${group.length + delta} 艘。`,
+    });
+  }
+
+  /** The era's enemy surface action group at `spawnPos` (before scaling to the campaign stage). */
+  private spawnOpforSagShips(spawnPos: Vector2D): void {
     if (this.era === 'era1') {
       // Era 1 (1942): IJN Chōkai Heavy Cruiser + Sendai Light Cruiser + 2x Kagerō/Yūgumo DDs
       const chokai = createChokaiCA(`opfor-sag-chokai-${Date.now()}`, 'IJN Chōkai (鳥海號 重巡洋艦)', spawnPos);
@@ -16506,6 +17315,9 @@ export class GameEngine {
       const kagero1 = createTokyoExpressDD(`opfor-sag-dd1-${Date.now()}`, 'IJN Kagero (陽炎號 驅逐艦)', { x: spawnPos.x - 110, y: spawnPos.y - 60 });
       const kagero2 = createTokyoExpressDD(`opfor-sag-dd2-${Date.now()}`, 'IJN Yūgumo (夕雲號 驅逐艦)', { x: spawnPos.x - 130, y: spawnPos.y + 80 });
 
+      // The destroyers of the group run troops in as well ("rat transportation")
+      kagero1.troopLanding = { units: this.tokyoExpressTroops() };
+      kagero2.troopLanding = { units: this.tokyoExpressTroops() };
       this.enemyShips.push(chokai, sendai, kagero1, kagero2);
 
       this.addBannerAlert(
@@ -18854,6 +19666,7 @@ export class GameEngine {
 
     const shipName = ship.codeName || ship.name;
     const tonnage = FULL_LOAD_TONS[ship.type] ?? (this.isSubmarine(ship) ? 1850 : 3500);
+    this.spawnShipRafts(ship, shipName, tonnage);
 
     if (ship.side === 'enemy') {
       this.score.enemyShipsSunk++;
@@ -18904,6 +19717,41 @@ export class GameEngine {
           : `🚨【警報！友軍艦艇沉沒】我方主力艦艇「${shipName}」(${tonnage.toLocaleString()}噸) 遭受致命打擊沉沒！`,
       });
     }
+  }
+
+  /** Survivors of a sunk ship in rafts around the wreck, for either side to pick up. */
+  private spawnShipRafts(ship: Ship, shipName: string, tonnage: number): void {
+    if (this.isSubmarine(ship) && Math.random() < 0.85) return; // a submarine rarely leaves anyone
+    const side: 'player' | 'enemy' = ship.side === 'enemy' ? 'enemy' : 'player';
+    const groups = shipRaftGroups(tonnage);
+    groups.forEach((men, k) => {
+      const a = Math.random() * Math.PI * 2;
+      const r = 40 + Math.random() * 60;
+      this.lifeRafts.push({
+        id: `raft-ship-${ship.id}-${k}-${Math.random().toString(36).slice(2, 6)}`,
+        side,
+        pos: { x: ship.pos.x + Math.cos(a) * r, y: ship.pos.y + Math.sin(a) * r },
+        planeName: shipName,
+        pilotName: `${shipName} 生還艦員 ${men} 人`,
+        crew: men,
+        fromShip: true,
+        timer: 150,
+        maxTimer: 150,
+        rescued: false,
+        rescueProgress: 0,
+      });
+    });
+    const total = groups.reduce((a, b) => a + b, 0);
+    this.addCombatLog({
+      category: 'sunk',
+      sourceSide: side,
+      sourceName: '落難信號 (SOS)',
+      targetName: shipName,
+      actionType: 'recon_spotted',
+      text: side === 'player'
+        ? `🛟【艦員棄艦】「${shipName}」沉沒處有 ${groups.length} 艘救生筏、共 ${total} 名生還艦員待救（150 秒窗口）。派艦艇接近救起可補回人力。`
+        : `🛟【敵艦員落海】敵艦「${shipName}」沉沒處有 ${groups.length} 艘救生筏、共 ${total} 人。接近即可俘虜為戰俘。`,
+    });
   }
 
   private destroyInstallation(inst: Installation) {

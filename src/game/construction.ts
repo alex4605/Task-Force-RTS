@@ -14,6 +14,7 @@ const REQUIREMENT_BY_TAG: Record<string, BuilderRequirement> = {
   command_post: 'infantry',
   heavy_aa: 'infantry',
   field_hospital: 'infantry',
+  pow_camp: 'infantry',
   supply_depot: 'infantry',
   ammo_depot: 'infantry',
   radar: 'infantry',

@@ -109,6 +109,9 @@ export const AIRCRAFT_CRUISE_KMH: Record<AircraftModel, number> = {
   buccaneer: 900,
   sea_harrier: 850,
   rufe: 300, // A6M2-N cruise
+  e13a: 222, // E13A1 cruise
+  walrus: 178, // Walrus cruise
+  lynx: 230, // Lynx HAS.2 cruise
   ki84: 380, // Ki-84 cruise
   ac47: 257, // C-47 cruise; orbits at ~190 km/h when firing
   po2: 110,

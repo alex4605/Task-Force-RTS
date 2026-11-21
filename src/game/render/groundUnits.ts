@@ -1,6 +1,7 @@
 import { GroundUnit } from '../../types/game';
 import { drawGroundSilhouette, GROUND_SILHOUETTE_SCALE, groundSilhouetteClass } from '../unitPreviewRenderer';
-import { RenderContext, Camera } from './context';
+import { RenderContext, Camera, isWorldCircleVisible } from './context';
+import { blitSprite, blitText } from './spriteCache';
 import { drawUnitSelectionRing } from './ships';
 import { drawGroundDust } from './unitDetails';
 import { Affiliation, app6Function, app6Mobility, drawApp6, Echelon } from './app6';
@@ -15,8 +16,11 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
 
   for (const unit of groundUnits) {
     if (unit.isDestroyed || unit.embarkedInShipId) continue;
+    // Off-screen units draw nothing (the labels reach ~70 units above, range rings further)
+    const isSelectedEarly = selectedUnitIds.includes(unit.id);
+    if (!isSelectedEarly && !isWorldCircleVisible(rc, unit.pos.x, unit.pos.y, 90, camera)) continue;
 
-    const isSelected = selectedUnitIds.includes(unit.id);
+    const isSelected = isSelectedEarly;
     const isPlayer = unit.side !== 'enemy'; // allied formations use the friendly palette
 
     // Waypoint path if moving
@@ -57,7 +61,8 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
       ctx.fill();
     }
     drawGroundDust(rc, unit, scale);
-    drawGroundSilhouette(ctx, unit.type, isPlayer, scale);
+    const palette = unit.side === 'allied' ? 'allied' : isPlayer;
+    blitSprite(ctx, `G|${unit.type}|${palette}|${scale}`, 48, (c) => drawGroundSilhouette(c, unit.type, palette, scale));
     ctx.restore();
 
     // 1. NATO APP-6 Tactical Frame (藍色長方形 友軍 vs 紅色菱形 敵軍)
@@ -85,7 +90,10 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
     const echelon: Echelon = (unit.echelon as Echelon | undefined) ?? (unit.type.includes('bn') ? 'battalion' : unit.type.includes('company') ? 'company' : 'platoon');
     ctx.save();
     ctx.translate(0, midY);
-    drawApp6(ctx, { affiliation, fn, echelon, mobility: app6Mobility(unit.type, fn), dim: !!unit.isPinned });
+    const mobility = app6Mobility(unit.type, fn);
+    const dim = !!unit.isPinned;
+    const fill = unit.side === 'allied' ? '#8BE38B' : undefined;
+    blitSprite(ctx, `A|${affiliation}|${fn}|${echelon}|${mobility}|${dim}|${fill}`, 30, (c) => drawApp6(c, { affiliation, fn, echelon, mobility, dim, fill }));
     ctx.restore();
 
     // 5. 陸軍雙參數系統 (Dual Parameters): 組織度 (ORG 綠/黃/紅) 與 建制度 (STR 藍/橙)
@@ -117,32 +125,26 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
 
     // 6. Tactical Status Badges & Unit Name (保留純粹洗鍊 NATO 圖標，僅在選中或極端狀態下顯示戰術標籤)
     if (unit.isInUrbanCover) {
-      ctx.font = 'bold 7.5px monospace';
-      ctx.textAlign = 'center';
       ctx.fillStyle = '#00E5FF';
-      ctx.fillText('🛡️ [URBAN 掩體 -70%航彈 -50%直射]', 0, isSelected ? -46 : -36);
+      blitText(ctx, '🛡️ [URBAN 掩體 -70%航彈 -50%直射]', 'bold 7.5px monospace', ctx.fillStyle as string, 0, isSelected ? -46 : -36);
     }
 
     // 火力壓制警示標籤 (Progressive Suppression Badges)
     if (unit.suppression && unit.suppression >= 20) {
-      ctx.font = 'bold 8px monospace';
-      ctx.textAlign = 'center';
       const spdPenalty = Math.round((0.30 + (unit.suppression / 100) * 0.50) * 100);
       if (unit.suppression >= 50 || unit.isPinned) {
         ctx.fillStyle = '#FF1744';
-        ctx.fillText(`🛑【重度壓制 PINNED -${spdPenalty}% SPD】`, 0, isSelected ? -55 : -43);
+        blitText(ctx, `🛑【重度壓制 PINNED -${spdPenalty}% SPD】`, 'bold 8px monospace', ctx.fillStyle as string, 0, isSelected ? -55 : -43);
       } else {
         ctx.fillStyle = '#FF9100';
-        ctx.fillText(`⚠️【火力壓制 SUPPRESSED -${spdPenalty}% SPD】`, 0, isSelected ? -55 : -43);
+        blitText(ctx, `⚠️【火力壓制 SUPPRESSED -${spdPenalty}% SPD】`, 'bold 8px monospace', ctx.fillStyle as string, 0, isSelected ? -55 : -43);
       }
     }
 
     // 反砲擊雷達火控鎖定 (Counter-Battery Radar Lock)
     if (unit.isCounterBatteryFiring) {
-      ctx.font = 'bold 8.5px monospace';
-      ctx.textAlign = 'center';
       ctx.fillStyle = '#FF1744';
-      ctx.fillText('📡🎯【反砲擊火控雷達鎖定 COUNTER-BATTERY】', 0, isSelected ? -65 : -53);
+      blitText(ctx, '📡🎯【反砲擊火控雷達鎖定 COUNTER-BATTERY】', 'bold 8.5px monospace', ctx.fillStyle as string, 0, isSelected ? -65 : -53);
       const pingR = (Math.sin(rc.time * 10) + 1) * 6 + 14;
       ctx.strokeStyle = 'rgba(255, 23, 68, 0.75)';
       ctx.lineWidth = 1.4;
@@ -152,28 +154,25 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
     }
 
     if (isSelected || unit.isBanzaiCharging || unit.isSurrendered || unit.disorganized) {
-      ctx.font = 'bold 8.5px monospace';
-      ctx.textAlign = 'center';
 
       if (unit.isSurrendered) {
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillText('🏳️【已降 SURRENDER】', 0, -35);
+        blitText(ctx, '🏳️【已降 SURRENDER】', 'bold 8.5px monospace', ctx.fillStyle as string, 0, -35);
       } else if (unit.isBanzaiCharging) {
         ctx.fillStyle = '#FF1744';
-        ctx.fillText('🔥【萬歲衝鋒 BANZAI】', 0, -35);
+        blitText(ctx, '🔥【萬歲衝鋒 BANZAI】', 'bold 8.5px monospace', ctx.fillStyle as string, 0, -35);
       } else if (unit.disorganized) {
         ctx.fillStyle = '#FFD54F';
-        ctx.fillText('⚠️【混亂壓制 DISORGANIZED】', 0, -35);
+        blitText(ctx, '⚠️【混亂壓制 DISORGANIZED】', 'bold 8.5px monospace', ctx.fillStyle as string, 0, -35);
       } else {
-        ctx.fillStyle = isPlayer ? '#90CAF9' : '#FFAB91';
-        ctx.fillText(unit.name, 0, -35);
+        ctx.fillStyle = unit.side === 'allied' ? '#B9F6CA' : isPlayer ? '#90CAF9' : '#FFAB91';
+        blitText(ctx, unit.name, 'bold 8.5px monospace', ctx.fillStyle as string, 0, -35);
       }
 
       // 僅在選中時顯示詳細補給與數值，平時維持最高戰術地圖專業可讀性
       if (isSelected) {
-        ctx.font = 'bold 7px monospace';
         ctx.fillStyle = unit.isSupplied ? '#00E676' : '#FF5252';
-        ctx.fillText(`ORG ${Math.round(orgPct * 100)}% · STR ${Math.round(strPct * 100)}% ${unit.isSupplied ? '[補給通]' : '[斷補]'}`, 0, 32);
+        blitText(ctx, `ORG ${Math.round(orgPct * 100)}% · STR ${Math.round(strPct * 100)}% ${unit.isSupplied ? '[補給通]' : '[斷補]'}`, 'bold 7px monospace', ctx.fillStyle as string, 0, 32);
       }
     }
 
