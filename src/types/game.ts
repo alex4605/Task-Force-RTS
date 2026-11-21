@@ -535,7 +535,7 @@ export type AircraftPayloadType =
   | 'napalm_canister'     // 凝固汽油彈 (Napalm Canister - 灘頭陣地與坑道廣域焦土覆蓋)
   | 'asw_torpedo'         // Mk 24 / Mk 34 航空聲自導反潛魚雷
   | 'bomb_2000'           // 2,000磅重型低阻通用炸彈 (巨型打擊)
-  | 'tactical_nuke'       // ☢️ Mk 4 / Mk 6 戰術原子彈 (消耗 4500 CP · 全島要塞部隊瞬間汽化)
+  | 'tactical_nuke'       // ☢️ Mk 4 / Mk 6 戰術原子彈 (消耗 PP 1125 · 全島要塞部隊瞬間汽化)
   // 時代四導引飛彈與立體垂直突擊特遣武器 (Era 4 Guided Missiles & Heliborne Assault):
   | 'aim9_sidewinder'      // AIM-9 響尾蛇紅外線空空飛彈 (近戰格鬥攔截)
   | 'aim7_sparrow'         // AIM-7 麻雀半主動雷達導引空空飛彈 (超視距截擊/反飛彈)
@@ -553,8 +553,8 @@ export type AircraftPayloadType =
   | 'helo_sling_artillery'
   | 'helo_vehicle_lift'
   | 'asw_acoustic_torpedo' // Mk 44 / Mk 46 主動聲自導航空反潛魚雷 (SH-2 / P-3C)
-  | 'b52_megaton_nuke'     // ☢️ B-52 B28/B41 戰略百萬噸級熱核重彈 (消耗 6000 CP · 萬米平流層投擲)
-  | 'tactical_b61_nuke'    // ☢️ F-4 / A-6 / A-4 B61/B43 戰術核炸彈 (消耗 4000 CP · 減速傘低空突防)
+  | 'b52_megaton_nuke'     // ☢️ B-52 B28/B41 戰略百萬噸級熱核重彈 (消耗 PP 1500 · 萬米平流層投擲)
+  | 'tactical_b61_nuke'    // ☢️ F-4 / A-6 / A-4 B61/B43 戰術核炸彈 (消耗 PP 1000 · 減速傘低空突防)
   | 'opfor_tactical_nuke'  // ☢️ OPFOR 蘇聯顧問團 RDS-4 戰術核炸彈 (Il-28 絕望突擊)
   // 時代四 BLUFOR 升級自訂特化掛載 (Optimized Vietnam Era Loadouts):
   | 'aim7_aim9_combo'      // AIM-7 麻雀 + AIM-9 響尾蛇 雙重空優混編 (F-4 / F-8)
@@ -610,7 +610,7 @@ export interface PayloadOption {
   pros: string;
   purposeBadge?: string; // 作戰用途標籤, 如 【全島要塞汽化】 / 【地毯面狀毀滅】 / 【重甲穿甲破壞】
   blastRadius?: number;  // 殺傷爆炸半徑 (m)
-  cpCost?: number;       // 戰略CP授權成本 (如核彈 4500)
+  cpCost?: number;       // 政治授權成本 (舊 CP 數值，換算見 economy.nuclearCost) (如核彈 4500)
   visualTag?: string;    // 模型外觀特徵標籤, 如 [彈艙降落傘核彈] / [24枚連環掛架]
 }
 
@@ -938,14 +938,14 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   tactical_nuke: {
     id: 'tactical_nuke',
     role: 'level_bomber',
-    name: 'Mk 4 / Mk 6 戰術原子彈 (☢️ 4500 CP 戰略打擊)',
-    desc: '冷戰戰略威懾終極兵器。自 B-29 超高空彈艙投下，於目標島嶼上空引爆毀滅性核分裂反應，瞬間汽化全島要塞工事與守備部隊！伴隨極高政治代價（消耗 4,500 CP）。',
-    badge: '☢️ 4500 CP 戰術核武',
+    name: 'Mk 4 / Mk 6 戰術原子彈 (☢️ PP 1125 戰略打擊)',
+    desc: '冷戰戰略威懾終極兵器。自 B-29 超高空彈艙投下，於目標島嶼上空引爆毀滅性核分裂反應，瞬間汽化全島要塞工事與守備部隊！伴隨極高政治代價（消耗 PP 1125）。',
+    badge: '☢️ PP 1125 戰術核武',
     era: 'era3',
     damage: 120000,
     speedModifier: 0.88,
     ammoCount: '1x Mk 4 戰術核航彈 (毀滅半徑520m)',
-    pros: '整座島嶼瞬間汽化 · 摧毀全島要塞守軍 · 消耗 4,500 CP',
+    pros: '整座島嶼瞬間汽化 · 摧毀全島要塞守軍 · 消耗 PP 1125',
     purposeBadge: '【全島要塞瞬間汽化】',
     blastRadius: 520,
     cpCost: 4500,
@@ -1210,14 +1210,14 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   b52_megaton_nuke: {
     id: 'b52_megaton_nuke',
     role: 'level_bomber',
-    name: 'B28 / B41 戰略百萬噸級熱核重彈 (☢️ 900 CP)',
-    desc: 'B-52 巨型同溫層堡壘專屬平流層萬噸級熱核打擊武器。萬米高空投擲，產生毀滅性熱核反應與 EMP 電磁脈衝，瞬間汽化方圓 750m 內一切陣地！消耗 900 CP，將觸發 OPFOR 相互保證毀滅 (MAD) 核報復！',
-    badge: '☢️ 900 CP 戰略熱核',
+    name: 'B28 / B41 戰略百萬噸級熱核重彈 (☢️ PP 225)',
+    desc: 'B-52 巨型同溫層堡壘專屬平流層萬噸級熱核打擊武器。萬米高空投擲，產生毀滅性熱核反應與 EMP 電磁脈衝，瞬間汽化方圓 750m 內一切陣地！消耗 PP 225，將觸發 OPFOR 相互保證毀滅 (MAD) 核報復！',
+    badge: '☢️ PP 225 戰略熱核',
     era: 'era5',
     damage: 250000,
     speedModifier: 0.85,
     ammoCount: '1x 戰略熱核重彈',
-    pros: '萬米平流層投擲 · 毀滅半徑750m + EMP · 消耗 900 CP',
+    pros: '萬米平流層投擲 · 毀滅半徑750m + EMP · 消耗 PP 225',
     purposeBadge: '【平流層戰略熱核毀滅】',
     blastRadius: 750,
     cpCost: 900,
@@ -1226,14 +1226,14 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
   tactical_b61_nuke: {
     id: 'tactical_b61_nuke',
     role: 'attacker',
-    name: 'B61 / B43 戰術核炸彈 (☢️ 4000 CP 低空投擲)',
-    desc: 'F-4、A-6、A-4 戰轟機專用低空核武器。配備尼龍減速傘，可在極低高度高速投擲後安全拉升脫離，精準汽化要塞工事！消耗 4,000 CP。',
-    badge: '☢️ 4000 CP 戰術核武',
+    name: 'B61 / B43 戰術核炸彈 (☢️ PP 1000 低空投擲)',
+    desc: 'F-4、A-6、A-4 戰轟機專用低空核武器。配備尼龍減速傘，可在極低高度高速投擲後安全拉升脫離，精準汽化要塞工事！消耗 PP 1000。',
+    badge: '☢️ PP 1000 戰術核武',
     era: 'era4',
     damage: 90000,
     speedModifier: 0.92,
     ammoCount: '1x B61 戰術核航彈',
-    pros: '減速傘低空突防 · 毀滅半徑420m · 消耗 4,000 CP',
+    pros: '減速傘低空突防 · 毀滅半徑420m · 消耗 PP 1000',
     purposeBadge: '【戰術核突防打擊】',
     blastRadius: 420,
     cpCost: 4000,
@@ -2039,6 +2039,8 @@ export interface Projectile {
   trail: Vector2D[];
   fuseTimer?: number;
   attackerName?: string;
+  /** Fired by a unit the player does not command (AI frontline forces): no collateral penalty. */
+  autonomous?: boolean;
   sourceModel?: AircraftModel;
   bombType?: AircraftPayloadType;
   /** Warhead class deciding effect per target type (aircraftArmament.ts). */

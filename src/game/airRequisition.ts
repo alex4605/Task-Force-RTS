@@ -88,3 +88,58 @@ export function withAircraftRequisitions(items: RequisitionItem[], era: Era): Re
   all.splice(at < 0 ? all.length : at + 1, 0, ...extra);
   return all;
 }
+
+type Delivery = { airbase: [AircraftModel, number][]; carrier: [AircraftModel, number][] };
+
+/** Era-dependent pool cards of eras 1-3: which types a "fighter / dive bomber / ..." card brings. */
+const POOL_MODELS: Record<string, Partial<Record<Era, [AircraftModel, number][]>>> = {
+  // Two carrier and two land-based fighters: the card's "+4" in all
+  fighter_pool: { era1: [['f4f', 2], ['p40', 2]], era2: [['f6f', 2], ['p51', 2]], era3: [['f9f', 2], ['f86', 2]], era4: [['f4b', 2], ['f4e', 2]] },
+  dive_bomber_pool: { era1: [['sbd', 4]], era2: [['sb2c', 4]], era3: [['ad1', 4]], era4: [['a4', 4]] },
+  torpedo_bomber_pool: { era1: [['tbd', 4]], era2: [['tbf', 4]], era3: [['af_guardian', 4]], era4: [['a6a', 4]] },
+  heavy_bomber_pool: { era1: [['b17', 2]], era2: [['b24', 2]], era3: [['b29', 2]], era4: [['b52', 2]] },
+  attacker_pool: { era1: [['a20', 4]], era2: [['p47', 4]], era3: [['a26', 4]], era4: [['a7', 4]] },
+};
+
+/** Fixed cards whose tag does not name the model, or that deliver some airframes to the carrier deck. */
+const FIXED: Record<string, Delivery> = {
+  fighter_jet_f9f: { airbase: [['f9f', 4]], carrier: [] },
+  fighter_jet_f2h: { airbase: [['f2h', 4]], carrier: [] },
+  attacker_skyraider: { airbase: [['ad1', 4]], carrier: [] },
+  aew_ad3w: { airbase: [['ad3w', 1]], carrier: [] },
+  sar_ho3s1: { airbase: [['ho3s1', 1]], carrier: [] },
+  air_b52: { airbase: [['b52', 2]], carrier: [] },
+  air_c47: { airbase: [['c47', 2]], carrier: [] },
+  air_c1: { airbase: [['c1', 2]], carrier: [] },
+  air_sh2: { airbase: [['sh2', 2]], carrier: [['sh2', 2]] },
+  air_p3: { airbase: [['p3', 2]], carrier: [] },
+  air_f14a: { airbase: [['f14a', 4]], carrier: [['f14a', 2]] },
+  air_fa18a: { airbase: [['fa18a', 4]], carrier: [['fa18a', 2]] },
+  air_s3a: { airbase: [['s3a', 4]], carrier: [['s3a', 2]] },
+  air_a6e: { airbase: [['a6e', 4]], carrier: [['a6e', 2]] },
+  air_e2c: { airbase: [['e2c', 2]], carrier: [['e2c', 1]] },
+  air_ea6b: { airbase: [['ea6b', 2]], carrier: [['ea6b', 1]] },
+  air_sh3f: { airbase: [['sh3f', 4]], carrier: [['sh3f', 2]] },
+  air_c2a: { airbase: [['c2a', 2]], carrier: [] },
+  air_ch53: { airbase: [['ch53', 2]], carrier: [] },
+  air_e3a: { airbase: [['e3a', 1]], carrier: [] },
+  air_c130: { airbase: [['c130', 2]], carrier: [] },
+};
+
+/**
+ * What a reinforcement card delivers: era pools for the generic cards of eras 1-3, the fixed
+ * table above, and otherwise `air_<model>` with the card's airframe count (carrier-only types
+ * go to the flagship's deck).
+ */
+export function airCardDelivery(item: RequisitionItem, era: Era): Delivery {
+  const pool = POOL_MODELS[item.typeTag];
+  if (pool) return { airbase: pool[era] ?? pool.era4 ?? [], carrier: [] };
+  const fixed = FIXED[item.typeTag];
+  if (fixed) return fixed;
+  if (item.typeTag.startsWith('air_')) {
+    const model = item.typeTag.slice(4) as AircraftModel;
+    const n = item.airCount ?? 4;
+    return CARRIER_ONLY_AIR.has(model) ? { airbase: [], carrier: [[model, n]] } : { airbase: [[model, n]], carrier: [] };
+  }
+  return { airbase: [], carrier: [] };
+}

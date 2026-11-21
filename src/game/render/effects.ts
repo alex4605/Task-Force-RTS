@@ -132,8 +132,8 @@ export function drawLifeRafts(rc: RenderContext, lifeRafts: LifeRaft[], camera: 
         ctx.fillStyle = '#FFB74D';
         ctx.fillText(
           isOnLand
-            ? `🎖️【敵跳傘員·POW】${Math.round(raft.timer)}s · 靠近俘獲 +100 CP`
-            : `🎖️【敵救生筏·POW】${Math.round(raft.timer)}s · 靠近俘獲 +100 CP`,
+            ? `🎖️【敵跳傘員·POW】${Math.round(raft.timer)}s · 靠近俘獲 +PP`
+            : `🎖️【敵救生筏·POW】${Math.round(raft.timer)}s · 靠近俘獲 +PP`,
           0,
           bob - 22
         );

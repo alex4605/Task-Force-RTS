@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useMemo } from 'react';
+import { splitLogText } from '../game/logFormat';
 import { CostTag, ResourceBar, affords, itemCost, itemCostText, shortfallText, stockOf } from './hud/resources';
 import { nuclearCost } from '../game/economy';
 import { Escalation, TIER_NAME } from '../game/escalation';
@@ -345,7 +346,8 @@ export const HUD: React.FC<HUDProps> = ({
 
   // Bottom Deck main tab: 'carrier' | 'airbase' | 'engineer_construction' | 'battalion_cp' | 'requisition'
   const [bottomDeckTab, setBottomDeckTab] = useState<BottomDeckMode>('carrier');
-  const [isBottomDeckExpanded, setIsBottomDeckExpanded] = useState<boolean>(true);
+  // On short screens the deck starts folded so the battle stays in view (one click opens it)
+  const [isBottomDeckExpanded, setIsBottomDeckExpanded] = useState<boolean>(() => typeof window === 'undefined' || window.innerHeight >= 860);
   const [requisitionTab, setRequisitionTab] = useState<RequisitionCategory>('ground');
   const [selectedBuildIslandId, setSelectedBuildIslandId] = useState<string>('');
 
@@ -524,7 +526,7 @@ export const HUD: React.FC<HUDProps> = ({
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-3 pb-2 z-20 select-none overflow-hidden">
       {/* Top Bar (3 Zones) */}
-      <header className="shrink-0 z-30 pointer-events-auto bg-[#071322]/95 backdrop-blur-md border border-[#1E3A5F] rounded-lg px-4 py-2 flex items-center justify-between gap-3 sm:gap-4 shadow-2xl">
+      <header className="shrink-0 z-30 pointer-events-auto bg-[#071322]/95 backdrop-blur-md border border-[#1E3A5F] rounded-lg px-3 py-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 shadow-2xl">
         {/* Zone 1: Wordmark & Era Indicator */}
         <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
           <div className="flex items-center gap-2">
@@ -547,7 +549,7 @@ export const HUD: React.FC<HUDProps> = ({
               }`}
               title="時代一：二戰太平洋開戰 (珊瑚海／中途島／瓜達康納爾)"
             >
-              時代一 (1942)
+              時代一<span className="hidden min-[1800px]:inline"> (1942)</span>
             </button>
             <button
               onClick={() => onSetEra('era2')}
@@ -558,7 +560,7 @@ export const HUD: React.FC<HUDProps> = ({
               }`}
               title="時代二：快速航母特遣艦隊 (馬里亞納／雷伊泰灣／沖繩決戰)"
             >
-              時代二 (1944-45)
+              時代二<span className="hidden min-[1800px]:inline"> (1944-45)</span>
             </button>
             <button
               onClick={() => onSetEra('era3')}
@@ -569,7 +571,7 @@ export const HUD: React.FC<HUDProps> = ({
               }`}
               title="時代三：冷戰與噴射時代 (第七艦隊／米格走廊／興南撤退)"
             >
-              時代三 (1950-53)
+              時代三<span className="hidden min-[1800px]:inline"> (1950-53)</span>
             </button>
             <button
               onClick={() => onSetEra('era4')}
@@ -580,7 +582,7 @@ export const HUD: React.FC<HUDProps> = ({
               }`}
               title="時代四：冷戰超音速與越戰風暴 (東京灣／小鷹號超級航母／空空反輻射飛彈／直升機垂直包圍)"
             >
-              時代四 (1965-73)
+              時代四<span className="hidden min-[1800px]:inline"> (1965-73)</span>
             </button>
             <button
               onClick={() => onSetEra('era5')}
@@ -591,13 +593,13 @@ export const HUD: React.FC<HUDProps> = ({
               }`}
               title="時代五：冷戰終局與大洋決戰 (尼米茲核航母／神盾巡洋艦／CIWS近迫防禦／魚叉與花崗岩超音速反艦／反飛彈攔截)"
             >
-              時代五 (1973-91)
+              時代五<span className="hidden min-[1800px]:inline"> (1973-91)</span>
             </button>
           </div>
         </div>
 
         {/* Zone 2: Tactical Time Pacing & Navigation Controls */}
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
           {/* Tactical Time Speed Controller */}
           <div className="flex items-center bg-[#0B1E34] border border-[#1E3A5F] rounded p-0.5 text-xs font-mono">
             <button
@@ -716,7 +718,7 @@ export const HUD: React.FC<HUDProps> = ({
             title="重置艦載機掛載武裝 (HVAR火箭、穿甲航彈、凝固汽油彈、聲導魚雷)"
           >
             <Zap className="w-3.5 h-3.5 text-[#FFD54F]" />
-            <span>戰機掛載 (ARM)</span>
+            <span className="hidden min-[1800px]:inline">戰機掛載 (ARM)</span>
           </button>
 
           <button
@@ -725,7 +727,7 @@ export const HUD: React.FC<HUDProps> = ({
             title="調整戰鬥機、俯衝轟炸機與魚雷機數量比例"
           >
             <Sliders className="w-3.5 h-3.5 text-[#80DEEA]" />
-            <span>機隊編制</span>
+            <span className="hidden min-[1800px]:inline">機隊編制</span>
           </button>
 
           <button
@@ -736,7 +738,7 @@ export const HUD: React.FC<HUDProps> = ({
             title="顯示我方雷達與已知敵方雷達的覆蓋範圍：實線填色為低空 (~300m) 覆蓋含地形遮蔽，虛線圈為高空偵測距離"
           >
             <Radio className="w-3.5 h-3.5 text-[#80DEEA]" />
-            <span>雷達覆蓋 (R)</span>
+            <span className="hidden min-[1800px]:inline">雷達覆蓋 (R)</span>
           </button>
 
           <button
@@ -745,7 +747,7 @@ export const HUD: React.FC<HUDProps> = ({
             title="開啟全戰區大比例海圖與情報疊層"
           >
             <MapIcon className="w-3.5 h-3.5 text-[#80DEEA]" />
-            <span>戰區全圖 (M)</span>
+            <span className="hidden min-[1800px]:inline">戰區全圖 (M)</span>
           </button>
 
           <button
@@ -754,7 +756,7 @@ export const HUD: React.FC<HUDProps> = ({
             title="檢視司令部作戰訓令與戰術指引"
           >
             <HelpCircle className="w-3.5 h-3.5 text-[#80DEEA]" />
-            <span>作戰情報</span>
+            <span className="hidden min-[1800px]:inline">作戰情報</span>
           </button>
 
           {/* 戰地設施戳記模式快速開關 (Facility Stamping Toggle Button) */}
@@ -777,7 +779,7 @@ export const HUD: React.FC<HUDProps> = ({
             title="開啟/關閉設施自由建造戳記盤 (可在任意位置建造碼頭、船塢與要塞)"
           >
             <MapPin className="w-3.5 h-3.5 text-cyan-300" />
-            <span>{activePlacementItem ? '正在戳記中' : '工事建築 (F3)'}</span>
+            <span className="hidden min-[1800px]:inline">{activePlacementItem ? '正在戳記中' : '工事建築 (F3)'}</span>
           </button>
 
           <button
@@ -786,7 +788,7 @@ export const HUD: React.FC<HUDProps> = ({
             title="珍珠港海軍造船廠：艦隊大修、科技研發與時代跨越"
           >
             <Wrench className="w-3.5 h-3.5 text-[#FFD54F]" />
-            <span>艦隊修護改裝</span>
+            <span className="hidden min-[1800px]:inline">艦隊修護改裝</span>
           </button>
 
           {/* Tactical Battle Log Button with count badge */}
@@ -797,7 +799,7 @@ export const HUD: React.FC<HUDProps> = ({
               title="檢視全域交戰報告、擊沉紀錄與傷亡統計"
             >
               <ScrollText className="w-3.5 h-3.5 text-[#80DEEA]" />
-              <span>作戰日誌 (LOG)</span>
+              <span className="hidden min-[1800px]:inline">作戰日誌 (LOG)</span>
               {combatLogs.length > 0 && (
                 <span className="px-1.5 py-0.2 bg-[#1976D2] text-white rounded-full text-[10px] font-bold">
                   {combatLogs.length}
@@ -824,8 +826,6 @@ export const HUD: React.FC<HUDProps> = ({
             </span>
             <span className="text-[#90CAF9]/70 text-[10px]">空中在航</span>
           </div>
-
-          <ResourceBar state={resources} />
 
           <div className="flex items-center gap-1 text-[#FFD54F]">
             <span>★</span>
@@ -1309,10 +1309,10 @@ export const HUD: React.FC<HUDProps> = ({
             <div className="flex items-center justify-between text-[10px] text-[#90CAF9] font-mono border-b border-[#1E3A5F]/70 pb-0.5">
               <span className="flex items-center gap-1.5 font-bold text-[#80DEEA]">
                 <ScrollText className="w-3 h-3 text-[#80DEEA]" />
-                <span>最新即時戰報 (LIVE BATTLE FEED)</span>
+                <span>即時戰報</span>
               </span>
               <span className="text-[9.5px] text-slate-400 group-hover:text-white transition-colors">
-                展開完整戰報 ({combatLogs.length}) ➔
+                完整戰報 ({combatLogs.length}) ➔
               </span>
             </div>
             <div className="space-y-0.5">
@@ -1327,7 +1327,18 @@ export const HUD: React.FC<HUDProps> = ({
                       🎲 {log.diceRoll.dieType.toUpperCase()}:{log.diceRoll.roll}
                     </span>
                   )}
-                  <span className="truncate flex-1">{log.text}</span>
+                  {(() => {
+                    const part = splitLogText(log.text);
+                    const tone = log.sourceSide === 'enemy' ? 'text-rose-300' : log.sourceSide === 'allied' ? 'text-emerald-300' : 'text-sky-300';
+                    return (
+                      <span className="truncate flex-1">
+                        {part.icon && <span className="mr-1">{part.icon}</span>}
+                        {part.title && <span className={`font-bold ${tone}`}>{part.title}</span>}
+                        {part.title && part.body && <span className="text-slate-500"> — </span>}
+                        <span className="text-slate-300">{part.body}</span>
+                      </span>
+                    );
+                  })()}
                   {log.damage !== undefined && log.damage > 0 && (
                     <span className="font-mono font-bold text-[9px] text-amber-300 shrink-0">
                       -{log.damage} HP
@@ -1363,7 +1374,6 @@ export const HUD: React.FC<HUDProps> = ({
           </div>
         )}
 
-        {/* Bottom Pinned Multi-Tabbed Deck (Carrier / Land-Based AFB / Requisitions) */}
         {/* Bottom Pinned Context-Sensitive Deck */}
         {!activePlacementItem && isAirFacilityActive && (
           !isBottomDeckExpanded ? (
@@ -1427,7 +1437,7 @@ export const HUD: React.FC<HUDProps> = ({
             </span>
           </div>
         ) : (
-          <footer className="pointer-events-auto bg-[#071322]/95 backdrop-blur-md border border-[#1E3A5F] rounded-lg p-2.5 flex flex-col gap-2.5 shadow-2xl max-w-full">
+          <footer className="pointer-events-auto bg-[#071322]/95 backdrop-blur-md border border-[#1E3A5F] rounded-lg p-2.5 flex flex-col gap-2.5 shadow-2xl max-w-full max-h-[42vh] overflow-y-auto">
             {/* Deck Header Bar: Context-Specific Title & Emergency Actions */}
             <div className="flex items-center justify-between gap-3 border-b border-[#1E3A5F]/80 pb-2">
               <div className="flex items-center gap-1.5 overflow-x-auto">

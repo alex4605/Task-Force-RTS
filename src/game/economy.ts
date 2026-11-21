@@ -171,7 +171,7 @@ export type AwardKind = 'kill' | 'capture' | 'pow' | 'logistics';
 
 const AWARD_SPLIT: Record<AwardKind, Bundle> = {
   // Victories make headlines and leave salvage
-  kill: { mp: 0.05, rp: 0.3, pp: 0.6, tp: 0 },
+  kill: { mp: 0.15, rp: 0.55, pp: 0.3, tp: 0 },
   // Ground taken: local labour, captured stores, a communiqué
   capture: { mp: 0.25, rp: 0.45, pp: 0.3, tp: 0 },
   // Prisoners: intelligence, labour and a propaganda win

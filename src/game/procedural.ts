@@ -1192,6 +1192,8 @@ export function generateOrganicIsland(
       ? '野戰重型砲兵陣地 (D-30 122mm 榴彈砲)'
       : era === 'era2'
       ? '拖曳野戰砲兵陣地 (九〇式75mm野砲)'
+      : era === 'era5'
+      ? '野戰牽引砲兵連 (D-30 122mm 榴彈砲)'
       : '野戰砲兵陣地 (三十八式75mm野砲)';
   const art1Desc =
     era === 'era4'
@@ -5699,7 +5701,7 @@ function addNorthVietnamSites(continent: Island): void {
       id: 'neutral-plantation-1',
       type: 'rubber_plantation',
       name: '米芝蓮法式橡膠種植園莊園 [Michelin Plantation]',
-      weaponDesc: '密集橡膠林覆蓋之熱帶種植園 · 佔領提供戰術隱蔽與物資補給 (+15 CP)',
+      weaponDesc: '密集橡膠林覆蓋之熱帶種植園 · 佔領提供戰術隱蔽與物資補給 (+資源值)',
       pos: { x: 7800, y: 6200 },
       health: 3200,
       armor: 0.40,
@@ -5910,7 +5912,7 @@ function addNorthVietnamSites(continent: Island): void {
       id: 'neutral-clinic-1',
       type: 'settlement',
       name: '國際戰地平民診所與紅十字醫療站 [Civilian Field Clinic]',
-      weaponDesc: '中立戰地醫療院所 · 嚴禁實彈射擊 · 誤擊遭軍法懲處 -15 CP',
+      weaponDesc: '中立戰地醫療院所 · 嚴禁實彈射擊 · 誤擊扣政治值',
       pos: { x: 7400, y: 7700 },
       health: 2600,
       armor: 0.30,
@@ -6129,7 +6131,7 @@ function addWarsawPactSites(continent: Island): void {
       id: 'neutral-plantation-1',
       type: 'rubber_plantation',
       name: '北德平原農業集體農莊與糧食儲備倉 [Collective Granary]',
-      weaponDesc: '歐陸開闊農業合作社與糧庫 · 奪佔提供戰術補給 (+20 CP)',
+      weaponDesc: '歐陸開闊農業合作社與糧庫 · 奪佔提供戰術補給 (+資源值)',
       pos: { x: 7800, y: 6200 },
       health: 3800,
       armor: 0.45,
@@ -6193,7 +6195,7 @@ function addWarsawPactSites(continent: Island): void {
       id: 'neutral-clinic-1',
       type: 'settlement',
       name: '西德紅十字會戰地人道救護站 [Red Cross Field Hospital]',
-      weaponDesc: '中立戰地醫療院所 · 嚴禁實彈射擊 · 誤擊遭軍法懲處 -15 CP',
+      weaponDesc: '中立戰地醫療院所 · 嚴禁實彈射擊 · 誤擊扣政治值',
       pos: { x: 7400, y: 7700 },
       health: 3000,
       armor: 0.35,
@@ -6231,7 +6233,7 @@ function addWarsawPactSites(continent: Island): void {
 // ══════════════════════════════════════════════════════════
 // 大陸板塊城鎮、平民定居點與難民收容營 (Civilian Zones & Urban Terrain)
 // 進入城鎮市區戰鬥獲 +50% 直射掩護與 70% 空襲炸彈減傷；
-// 若我方砲火誤擊平民區或難民營，將遭受附帶損害懲處 (-15 CP)
+// 若我方砲火誤擊平民區或難民營，將遭受附帶損害懲處 (扣政治值)
 // ══════════════════════════════════════════════════════════
 /** Towns, villages and refugee camps that grant urban cover and carry collateral-damage penalties. */
 function addMainlandCivilianZones(era: Era, continent: Island): void {
@@ -6316,7 +6318,7 @@ function addMainlandCivilianZones(era: Era, continent: Island): void {
       id: 'refugee-hungnam',
       type: 'refugee_camp',
       name: '興南港聯合國戰地難民收容營 (UN Refugee Camp)',
-      weaponDesc: '聯合國與紅十字會人道救援帳篷區 · 嚴禁實彈射擊 · 誤擊遭軍法懲處 -15 CP',
+      weaponDesc: '聯合國與紅十字會人道救援帳篷區 · 嚴禁實彈射擊 · 誤擊扣政治值',
       pos: { x: 5900, y: 6600 },
       health: 2600,
       armor: 0.25,
@@ -6328,7 +6330,7 @@ function addMainlandCivilianZones(era: Era, continent: Island): void {
       id: 'refugee-chongjin',
       type: 'refugee_camp',
       name: '紅十字會前線戰地難民救濟站 (Red Cross Camp)',
-      weaponDesc: '國際人道救濟與醫療帳篷站 · 受擊將嚴重損害盟軍國際聲譽 (-15 CP)',
+      weaponDesc: '國際人道救濟與醫療帳篷站 · 受擊將嚴重損害盟軍國際聲譽 (扣政治值)',
       pos: { x: 7600, y: 8000 },
       health: 2400,
       armor: 0.25,
@@ -6393,7 +6395,7 @@ function addMainlandCivilianZones(era: Era, continent: Island): void {
       id: 'cont-hydroelectric-dam',
       type: 'radio_station',
       name: '中央河流石灰岩水力發電與水閘機房 [Hydroelectric Dam Station]',
-      weaponDesc: '混凝土堅固水壩樞紐 · 佔領掌控全區電力與戰術通訊中繼 (+20 CP)',
+      weaponDesc: '混凝土堅固水壩樞紐 · 佔領掌控全區電力與戰術通訊中繼 (+資源值)',
       pos: { x: 8500, y: 7100 },
       health: 4500,
       armor: 0.65,
@@ -6403,7 +6405,7 @@ function addMainlandCivilianZones(era: Era, continent: Island): void {
       id: 'cont-buddhist-pagoda',
       type: 'settlement',
       name: '山林避難古佛寺與僧侶禪院 [Mountain Pagoda Sanctuary]',
-      weaponDesc: '石砌高山避難古剎 · 嚴禁砲擊 · 誤擊遭軍法懲處 -15 CP',
+      weaponDesc: '石砌高山避難古剎 · 嚴禁砲擊 · 誤擊扣政治值',
       pos: { x: 9300, y: 6400 },
       health: 3200,
       armor: 0.40,
@@ -6606,7 +6608,7 @@ function addMainlandCivilianZones(era: Era, continent: Island): void {
       id: 'neutral-se-rice-hamlet',
       type: 'settlement',
       name: '東南部湄公河支流水稻農莊農舍群 [SE Delta Rice Farm Hamlet]',
-      weaponDesc: '阡陌水田與茅草農舍農莊 · 農業平民區 · 誤擊遭軍法懲處 -15 CP',
+      weaponDesc: '阡陌水田與茅草農舍農莊 · 農業平民區 · 誤擊扣政治值',
       pos: { x: 10600, y: 7200 },
       health: 3000,
       armor: 0.30,
@@ -7166,7 +7168,7 @@ function addMainlandCivilianZones(era: Era, continent: Island): void {
       id: 'cont-south-refugee',
       type: 'refugee_camp',
       name: '聯合國戰地難民臨時庇護營 [UN South Refugee Humanitarian Shelter]',
-      weaponDesc: '聯合國人道救援與戰地醫療帳篷群 · 嚴禁砲擊誤傷 -15 CP',
+      weaponDesc: '聯合國人道救援與戰地醫療帳篷群 · 嚴禁砲擊 · 誤擊扣政治值',
       pos: { x: 7300, y: 12400 },
       health: 2400,
       armor: 0.20,

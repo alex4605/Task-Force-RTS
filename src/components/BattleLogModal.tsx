@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { splitLogText } from '../game/logFormat';
 import { CombatLogEntry, CombatLogCategory, CasualtiesReport, ResourceState, Era } from '../types/game';
 import {
   X,
@@ -611,7 +612,17 @@ export const BattleLogModal: React.FC<BattleLogModalProps> = ({
 
                         {/* Description Text */}
                         <div className="text-slate-200 text-[11px] leading-relaxed break-words">
-                          {log.text}
+                          {(() => {
+                            const part = splitLogText(log.text);
+                            return (
+                              <>
+                                {part.icon && <span className="mr-1">{part.icon}</span>}
+                                {part.title && <span className={`font-bold ${isPlayerSource ? 'text-sky-200' : 'text-rose-200'}`}>{part.title}</span>}
+                                {part.title && part.body && <span className="text-slate-500"> — </span>}
+                                <span>{part.body}</span>
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
 

@@ -1,6 +1,7 @@
 import { Island, Vector2D, SelectionBox, RequisitionItem, Era } from '../../types/game';
 import { RenderContext, Camera, OrderMarker, isWorldCircleVisible } from './context';
 import type { RadarCoverage } from '../engine';
+import { costOf, formatBundle } from '../economy';
 
 // Draw Screen-space RTS Drag Selection Box
 export function drawSelectionBox(rc: RenderContext, box: SelectionBox) {
@@ -234,7 +235,7 @@ export function drawPlacementGhost(rc: RenderContext, item: RequisitionItem, wor
 
   ctx.textAlign = 'right';
   ctx.fillStyle = '#FFD54F';
-  ctx.fillText(`${item.cost} CP`, cardX + cardW - 8, cardY + 15);
+  ctx.fillText(formatBundle(costOf(item)), cardX + cardW - 8, cardY + 15);
 
   // Coordinate & Coastal info
   ctx.textAlign = 'left';
