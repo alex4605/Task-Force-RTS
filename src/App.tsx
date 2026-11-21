@@ -99,8 +99,8 @@ export default function App() {
     setIsDesignatingCap(true);
   };
 
-  const handleConfirmCapTarget = (worldPos: Vector2D) => {
-    engine.issueCapPatrolOrder(worldPos, selectedUnitIds);
+  const handleConfirmCapTarget = (worldPos: Vector2D, box?: { x0: number; y0: number; x1: number; y1: number }) => {
+    engine.issueCapPatrolOrder(worldPos, engine.selectedUnitIds, box);
     setAircraft([...engine.aircraft]);
     setCombatLogs([...engine.combatLogs]);
     setIsDesignatingCap(false);
@@ -463,6 +463,10 @@ export default function App() {
         selectedAirfacility={selectedAirfacility}
         isDesignatingCap={isDesignatingCap}
         onStartCapDesignation={handleStartCapDesignation}
+        onStartRebase={(ids) => {
+          engine.selectUnits(ids, false);
+          engine.isDesignatingRebase = true;
+        }}
         onCancelCap={handleCancelCap}
         sonobuoys={sonobuoys}
         isDesignatingSonobuoy={isDesignatingSonobuoy}

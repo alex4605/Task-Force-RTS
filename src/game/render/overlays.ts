@@ -1,4 +1,4 @@
-import { Island, Vector2D, SelectionBox, RequisitionItem, Era } from '../../types/game';
+import { Aircraft, Island, Vector2D, SelectionBox, RequisitionItem, Era } from '../../types/game';
 import { RenderContext, Camera, OrderMarker, isWorldCircleVisible } from './context';
 import type { RadarCoverage } from '../engine';
 import { costOf, formatBundle } from '../economy';
@@ -259,12 +259,33 @@ export function drawPlacementGhost(rc: RenderContext, item: RequisitionItem, wor
 }
 
 // Interactive Tactical CAP Area Designation Reticle
-export function drawCapPreview(rc: RenderContext, pos: Vector2D, camera: Camera) {
+export function drawCapPreview(rc: RenderContext, pos: Vector2D, camera: Camera, dragStart?: Vector2D | null) {
   const ctx = rc.ctx;
   ctx.save();
   ctx.translate(rc.width / 2, rc.height / 2);
   ctx.scale(camera.zoom, camera.zoom);
   ctx.translate(-camera.x, -camera.y);
+
+  // Dragging out a CAP box
+  if (dragStart) {
+    const x0 = Math.min(dragStart.x, pos.x);
+    const y0 = Math.min(dragStart.y, pos.y);
+    const w = Math.abs(pos.x - dragStart.x);
+    const h = Math.abs(pos.y - dragStart.y);
+    ctx.fillStyle = 'rgba(0, 229, 255, 0.1)';
+    ctx.fillRect(x0, y0, w, h);
+    ctx.strokeStyle = '#00E5FF';
+    ctx.lineWidth = 2 / camera.zoom;
+    ctx.setLineDash([10 / camera.zoom, 6 / camera.zoom]);
+    ctx.strokeRect(x0, y0, w, h);
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#E0F7FA';
+    ctx.font = `bold ${12 / camera.zoom}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillText(`🛡️ CAP 空域 ${Math.round(w)}×${Math.round(h)}m · 放開滑鼠確認`, x0 + w / 2, y0 - 8 / camera.zoom);
+    ctx.restore();
+    return;
+  }
 
   const orbitR = 250;
   const pulse = (Math.sin(rc.time * 6) + 1) * 0.5;
@@ -308,7 +329,7 @@ export function drawCapPreview(rc: RenderContext, pos: Vector2D, camera: Camera)
   ctx.textAlign = 'center';
   ctx.shadowColor = '#000000';
   ctx.shadowBlur = 6;
-  ctx.fillText('🛡️【設定 CAP 戰鬥空巡區域】點擊海圖建立盤旋空巡防線 (ESC 取消)', pos.x, pos.y - orbitR - 12);
+  ctx.fillText('🛡️【設定 CAP 空域】拖曳拉出方形空域，或點擊設定盤旋點 (右鍵/ESC 取消)', pos.x, pos.y - orbitR - 12);
   ctx.fillStyle = '#80DEEA';
   ctx.font = 'bold 9.5px monospace';
   ctx.fillText(`中心座標: [X: ${Math.round(pos.x)}, Y: ${Math.round(pos.y)}] · 盤旋半徑 250m · 自動截擊`, pos.x, pos.y - orbitR + 2);
@@ -467,4 +488,75 @@ export function drawRadarCoverage(rc: RenderContext, coverage: RadarCoverage[], 
     }
   }
   ctx.restore();
+}
+
+/** Rebase mode: the airfield or deck under the cursor, or a hint to pick one. */
+export function drawRebasePreview(
+  rc: RenderContext,
+  pos: Vector2D,
+  target: { name: string; pos: Vector2D; isCarrier: boolean } | undefined,
+  camera: Camera
+) {
+  const ctx = rc.ctx;
+  ctx.save();
+  ctx.translate(rc.width / 2, rc.height / 2);
+  ctx.scale(camera.zoom, camera.zoom);
+  ctx.translate(-camera.x, -camera.y);
+  const z = camera.zoom;
+  const pulse = (Math.sin(rc.time * 6) + 1) * 0.5;
+  ctx.font = `bold ${12 / z}px monospace`;
+  ctx.textAlign = 'center';
+  if (target) {
+    ctx.strokeStyle = `rgba(105, 240, 174, ${0.6 + pulse * 0.4})`;
+    ctx.lineWidth = 2.5 / z;
+    ctx.beginPath();
+    ctx.arc(target.pos.x, target.pos.y, 70, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([8 / z, 6 / z]);
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+    ctx.lineTo(target.pos.x, target.pos.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#B9F6CA';
+    ctx.fillText(`🛬 轉降「${target.name}」${target.isCarrier ? '（僅艦載機）' : ''} · 左鍵確認`, target.pos.x, target.pos.y - 80);
+  } else {
+    ctx.fillStyle = '#B9F6CA';
+    ctx.fillText('🛬【Rebase 轉降】點選友軍機場或航艦 (右鍵/ESC 取消)', pos.x, pos.y - 24 / z);
+  }
+  ctx.restore();
+}
+
+/** The CAP box each selected aircraft is patrolling. */
+export function drawCapBoxes(rc: RenderContext, aircraft: Aircraft[], selectedIds: string[], camera: Camera) {
+  if (selectedIds.length === 0) return;
+  const seen = new Set<string>();
+  const ctx = rc.ctx;
+  let started = false;
+  for (const a of aircraft) {
+    const b = a.order.patrolBox;
+    if (!b || a.side !== 'player' || !selectedIds.includes(a.id)) continue;
+    const key = `${b.x0}|${b.y0}|${b.x1}|${b.y1}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (!started) {
+      started = true;
+      ctx.save();
+      ctx.translate(rc.width / 2, rc.height / 2);
+      ctx.scale(camera.zoom, camera.zoom);
+      ctx.translate(-camera.x, -camera.y);
+    }
+    ctx.fillStyle = 'rgba(0, 229, 255, 0.05)';
+    ctx.fillRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
+    ctx.strokeStyle = 'rgba(0, 229, 255, 0.7)';
+    ctx.lineWidth = 1.5 / camera.zoom;
+    ctx.setLineDash([10 / camera.zoom, 6 / camera.zoom]);
+    ctx.strokeRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#80DEEA';
+    ctx.font = `bold ${10 / camera.zoom}px monospace`;
+    ctx.textAlign = 'left';
+    ctx.fillText('CAP 空域', b.x0 + 6 / camera.zoom, b.y0 + 14 / camera.zoom);
+  }
+  if (started) ctx.restore();
 }

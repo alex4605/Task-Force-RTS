@@ -145,6 +145,8 @@ interface HUDProps {
     | null;
   isDesignatingCap?: boolean;
   onStartCapDesignation?: () => void;
+  /** Rebase mode for the given aircraft: the next map click picks the field or deck to divert to. */
+  onStartRebase?: (ids: string[]) => void;
   onCancelCap?: () => void;
   sonobuoys?: Sonobuoy[];
   isDesignatingSonobuoy?: boolean;
@@ -291,6 +293,7 @@ export const HUD: React.FC<HUDProps> = ({
   selectedAirfacility,
   isDesignatingCap = false,
   onStartCapDesignation,
+  onStartRebase,
   onCancelCap,
   sonobuoys = [],
   isDesignatingSonobuoy = false,
@@ -353,7 +356,7 @@ export const HUD: React.FC<HUDProps> = ({
   const activeBattalionCp = React.useMemo(() => {
     if (selectedAirfacility && typeof selectedAirfacility === 'object' && selectedAirfacility.id) {
       for (const isl of islands) {
-        const found = isl.installations.find((inst) => inst.id === selectedAirfacility.id);
+        const found = isl.installations.find((inst) => inst.id === selectedAirfacility.id && (inst.type === 'battalion_cp' || inst.type === 'command_post'));
         if (found) return found;
       }
     }
@@ -384,6 +387,10 @@ export const HUD: React.FC<HUDProps> = ({
       const targetTab = typeof selectedAirfacility === 'object' ? selectedAirfacility.type : selectedAirfacility;
       setBottomDeckTab(targetTab as BottomDeckMode);
       setIsBottomDeckExpanded(true);
+      // Clicking airfield A shows airfield A's own aircraft
+      if (targetTab === 'airbase' && typeof selectedAirfacility === 'object' && selectedAirfacility.id) {
+        if (airfields.some((a) => a.id === selectedAirfacility.id)) setSelectedAirfieldId(selectedAirfacility.id);
+      }
     }
   }, [selectedAirfacility]);
 
@@ -408,7 +415,7 @@ export const HUD: React.FC<HUDProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedUnitsKey, selectedAirfacility]);
 
-  // 快捷鍵: C CAP 空巡 · G 聲納浮標 · Q 增援選單 · E 設施構工 · A 機場 · Esc 取消
+  // 快捷鍵: C CAP 空巡 · G 聲納浮標 · Q 增援選單 · E 設施構工 · A 機場 · T 轉降 (GameCanvas) · Esc 取消
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
@@ -531,6 +538,8 @@ export const HUD: React.FC<HUDProps> = ({
   }, [aircraft]);
 
   const afbModels = useMemo(() => getAfbModelsForEra(era), [era]);
+  /** Show only the types this airfield has aircraft of (default), the rest on demand. */
+  const [afbStockOnly, setAfbStockOnly] = useState(true);
 
   return (
     <div className="absolute inset-0 pointer-events-none flex flex-col justify-between p-3 pb-2 z-20 select-none overflow-hidden">
@@ -1277,23 +1286,36 @@ export const HUD: React.FC<HUDProps> = ({
                           )}
                         </div>
 
-                        {/* 戰鬥機專屬 CAP 空巡快捷發動按鈕 */}
-                        {flight.role === 'fighter' && (
-                          <div className="pt-0.5 border-t border-[#1E3A5F]/40 flex justify-end">
+                        {/* CAP (fighters) and in-flight rebase (all) for this flight */}
+                        <div className="pt-0.5 border-t border-[#1E3A5F]/40 flex justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectUnitIds?.(flight.planes.map((p) => p.id));
+                              onStartRebase?.(flight.planes.map((p) => p.id));
+                            }}
+                            className="px-2 py-0.5 rounded bg-emerald-950/80 hover:bg-emerald-800 border border-emerald-500/60 text-emerald-200 text-[8.5px] font-bold flex items-center gap-1 shadow-sm transition-colors active:scale-95"
+                            title="此編隊中止任務，於空中轉降其他機場或航艦（點地圖上的目的地）"
+                          >
+                            <span>🛬 轉降 Rebase (T)</span>
+                          </button>
+                          {flight.role === 'fighter' && (
                             <button
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
+                                onSelectUnitIds?.(flight.planes.map((p) => p.id));
                                 onStartCapDesignation?.();
                               }}
                               className="px-2 py-0.5 rounded bg-cyan-950/80 hover:bg-cyan-800 border border-cyan-500/60 text-cyan-200 text-[8.5px] font-bold flex items-center gap-1 shadow-sm transition-colors active:scale-95"
-                              title="指派此戰鬥機編隊進行指定區域 CAP 戰鬥空巡"
+                              title="指派此戰鬥機編隊 CAP：在地圖上拖曳拉出方形空域，或點擊設定盤旋點"
                             >
                               <Shield className="w-2.5 h-2.5 text-cyan-300" />
-                              <span>設定 CAP 空巡 (C)</span>
+                              <span>設定 CAP 空域 (C)</span>
                             </button>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                     );
                   })}
@@ -1602,7 +1624,7 @@ export const HUD: React.FC<HUDProps> = ({
                     <span>母艦全裝備庫</span>
                   </button>
                   <span className="text-[10px] text-slate-400">
-                    Space / Backspace 暫停
+                    Space 暫停 · Q 增援 · E 構工 · A 機場 · C CAP · T 轉降
                   </span>
                 </div>
               </div>
@@ -1620,6 +1642,14 @@ export const HUD: React.FC<HUDProps> = ({
                       ⚓ {c.name}
                     </button>
                   ))}
+                <button
+                  type="button"
+                  onClick={() => setAfbStockOnly((v) => !v)}
+                  className={`px-2 py-0.5 rounded font-bold border ${afbStockOnly ? 'bg-[#004D40] text-[#80CBC4] border-[#80CBC4]/60' : 'bg-[#051A18] text-slate-400 border-[#1E3A5F]'}`}
+                  title="只列出此機場有庫存的機型"
+                >
+                  {afbStockOnly ? '✔ 僅顯示在庫機型' : '顯示全部機型'}
+                </button>
                 <span className="text-slate-400 ml-auto">轉場至</span>
                 <select
                   value={carrierFerryTo}
@@ -1819,7 +1849,7 @@ export const HUD: React.FC<HUDProps> = ({
               {/* Header Info & Category Filter Bar */}
               <div className="flex items-center justify-between text-xs font-mono text-[#80CBC4] bg-[#051A18] px-3 py-1.5 rounded border border-[#00695C]">
                 <div className="flex items-center gap-2">
-                  <span className="font-bold">前進野戰陸基航空站 (FORWARD AIRBASE)</span>
+                  <span className="font-bold">{activeAirfield ? `${activeAirfield.isHQ ? '🏛️' : '🛬'} ${activeAirfield.name}` : '前進野戰陸基航空站 (FORWARD AIRBASE)'}</span>
                   <span className="text-[10px] text-slate-300">
                     {era === 'era5'
                         ? '支援 B-52G / F-111 現代長程戰轟、A-10A / AH-64A / F-15A / F-16A 陸空主力與海軍陸基戰備分隊！'
@@ -1901,9 +1931,16 @@ export const HUD: React.FC<HUDProps> = ({
                 </select>
               </div>
 
+              {afbStockOnly && afbModels.every((p) => (airbaseStock[p.id] || 0) === 0) && (
+                <div className="text-[10px] font-mono text-slate-400 bg-[#051A18] border border-[#1E3A5F] rounded px-3 py-2">
+                  此機場目前無在庫飛機：從其他機場「轉場至」此處，或點「顯示全部機型」查看全部機型。
+                </div>
+              )}
               {/* AFB Aircraft Cards with Draggable and Wheel Scroll */}
               <DraggableScrollContainer className="gap-2 pb-1">
                 {afbModels
+                  .filter((p) => !afbStockOnly || (airbaseStock[p.id] || 0) > 0)
+                  .sort((a, b) => ((airbaseStock[b.id] || 0) > 0 ? 1 : 0) - ((airbaseStock[a.id] || 0) > 0 ? 1 : 0))
                   .filter((p) => {
                     if (afbFilter === 'all') return true;
                     if (afbFilter === 'level_bomber') return p.role === 'level_bomber';

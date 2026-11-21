@@ -343,6 +343,8 @@ export interface UnitOrder {
   targetPos?: Vector2D;
   targetId?: string;
   patrolOrigin?: Vector2D;
+  /** CAP area dragged out by the player: the patrol flies its edge and engages only what enters it. */
+  patrolBox?: { x0: number; y0: number; x1: number; y1: number };
   waypoints?: Vector2D[];
   activeWaypointIndex?: number;
   pendingUnload?: boolean;

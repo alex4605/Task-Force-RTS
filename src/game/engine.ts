@@ -1604,6 +1604,70 @@ export class GameEngine {
     return null;
   }
 
+  /** Rebase mode: the next map click picks the airfield or carrier the selected aircraft divert to. */
+  public isDesignatingRebase = false;
+
+  /** The friendly airfield or deck nearest a map point (within reach of the click), for rebasing. */
+  public findRebaseTarget(p: Vector2D, needDeck = false): { id: string; name: string; pos: Vector2D; isCarrier: boolean } | undefined {
+    const bases: { id: string; name: string; pos: Vector2D; isCarrier: boolean }[] = [
+      ...(needDeck ? [] : this.getFriendlyAirfields().map((a) => ({ id: a.id, name: a.name, pos: a.pos, isCarrier: false }))),
+      ...this.playerShips.filter((s) => !s.isSunk && s.carrierPlanes).map((s) => ({ id: s.id, name: s.codeName || s.name, pos: s.pos, isCarrier: true })),
+    ];
+    let best: (typeof bases)[number] | undefined;
+    let bestD = 450;
+    for (const b of bases) {
+      const d = dist(b.pos, p);
+      if (d < bestD) {
+        bestD = d;
+        best = b;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Rebase: the selected aircraft break off what they are doing and divert in flight to another
+   * airfield or carrier, landing into its stock. Land-based types cannot divert to a deck.
+   */
+  public rebaseSelectedAircraft(p: Vector2D, ids: string[] = this.selectedUnitIds): boolean {
+    const planes = this.aircraft.filter((a) => a.side === 'player' && a.state !== 'shot_down' && ids.includes(a.id) && a.model !== 'ohka');
+    if (planes.length === 0) return false;
+    const target = this.findRebaseTarget(p);
+    if (!target) {
+      this.addBannerAlert('⚠️【轉降】請點選友軍機場或航艦', 'player', 'alert', 3.5);
+      return false;
+    }
+    let sent = 0;
+    let refused = 0;
+    for (const plane of planes) {
+      if (target.isCarrier && !this.isCarrierCapable(plane.model)) {
+        refused++;
+        continue;
+      }
+      plane.ferryTo = target.id;
+      plane.homeBaseId = target.id;
+      plane.order = { type: 'move', targetPos: { ...target.pos } };
+      plane.state = 'cruising';
+      plane.interceptTargetId = undefined;
+      sent++;
+    }
+    if (sent > 0) {
+      soundEngine.playPlaneSortie();
+      this.addBannerAlert(`🛬【轉降】${sent} 架轉降「${target.name}」`, 'player', 'capture', 4);
+      this.addCombatLog({
+        category: 'air',
+        sourceSide: 'player',
+        sourceName: '航空管制 (ATC)',
+        targetName: target.name,
+        actionType: 'recon_spotted',
+        text: `🛬【空中轉降】${sent} 架飛機中止任務，改降「${target.name}」，落地後計入該處庫存。${refused > 0 ? `另 ${refused} 架陸基機無法上艦，維持原任務。` : ''}`,
+      });
+    } else if (refused > 0) {
+      this.addBannerAlert('⚠️【轉降】陸基機無法降落航艦', 'player', 'alert', 3.5);
+    }
+    return sent > 0;
+  }
+
   public unloadSelectedAircraft(targetPos?: Vector2D): boolean {
     const troopPlanes = this.aircraft.filter(
       (a) =>
@@ -2139,7 +2203,7 @@ export class GameEngine {
   }
 
   // Issue Combat Air Patrol (CAP) Orbit Order to Fighters in a designated area
-  public issueCapPatrolOrder(origin: Vector2D, specificUnitIds?: string[]) {
+  public issueCapPatrolOrder(origin: Vector2D, specificUnitIds?: string[], box?: { x0: number; y0: number; x1: number; y1: number }) {
     const ids = specificUnitIds || this.selectedUnitIds;
     let targetFighters = this.aircraft.filter(
       (a) => a.side === 'player' && a.state !== 'shot_down' && ids.includes(a.id) &&
@@ -2164,7 +2228,9 @@ export class GameEngine {
         type: 'patrol',
         patrolOrigin: { ...origin },
         targetPos: { ...origin },
+        patrolBox: box ? { ...box } : undefined,
       };
+      plane.airMission = 'cap';
       plane.state = 'patrolling';
       plane.targetHeading = Math.atan2(origin.y - plane.pos.y, origin.x - plane.pos.x);
     });
@@ -2179,7 +2245,7 @@ export class GameEngine {
       sourceName: '戰區防空指揮所 (TAC/CAP)',
       targetName: `空域 [${Math.round(origin.x)}, ${Math.round(origin.y)}]`,
       actionType: 'recon_spotted',
-      text: `🛡️【CAP 戰鬥空巡防區就位】${fCount} 架空優戰鬥機（${fNames}）奉命移防至指定海域 [X:${Math.round(origin.x)}, Y:${Math.round(origin.y)}]，於半徑 250m 盤旋警戒，自動攔截周邊 450m 內所有敵機！`,
+      text: `🛡️【CAP 戰鬥空巡防區就位】${fCount} 架空優戰鬥機（${fNames}）奉命移防至指定海域 [X:${Math.round(origin.x)}, Y:${Math.round(origin.y)}]，${box ? `沿 ${Math.round(box.x1 - box.x0)}×${Math.round(box.y1 - box.y0)}m 空域邊界巡邏，攔截進入空域的敵機。` : '於半徑 250m 盤旋警戒，自動攔截周邊敵機。'}`,
     });
   }
 
@@ -4781,6 +4847,14 @@ export class GameEngine {
     }
   }
 
+  /** Inside the plane's CAP box (with a margin to meet raiders at its edge); always true without one. */
+  private inPatrolBox(plane: Aircraft, p: Vector2D): boolean {
+    const b = plane.order.patrolBox;
+    if (!b) return true;
+    const m = 300;
+    return p.x >= b.x0 - m && p.x <= b.x1 + m && p.y >= b.y0 - m && p.y <= b.y1 + m;
+  }
+
   /** CAP / patrol orbit with threat detection and interception. */
   private updatePatrolOrder(dt: number, flagship: Ship | undefined, plane: Aircraft): boolean {
     // Orbit patrol area & auto-intercept hostile planes entering perimeter
@@ -4808,9 +4882,9 @@ export class GameEngine {
     const hostile = selectAirTarget(
       plane,
       // Vectored only onto contacts in the side's air picture (GCI / AEW / own radar)
-      this.aircraft.filter((a) => this.isHostile(plane.side, a.side) && this.isAirTrackedBy(a, plane.side)),
+      this.aircraft.filter((a) => this.isHostile(plane.side, a.side) && this.isAirTrackedBy(a, plane.side) && this.inPatrolBox(plane, a.pos)),
       center,
-      radarPerimeter,
+      plane.order.patrolBox ? Math.max(radarPerimeter, 6000) : radarPerimeter,
       plane.airMission ?? 'cap'
     );
 
@@ -4955,6 +5029,32 @@ export class GameEngine {
         return false;
       }
 
+      // Box CAP: a racetrack along the inside of the area's edge, each flight at its own phase
+      const box = plane.order.patrolBox;
+      if (box) {
+        const inset = Math.min(150, (box.x1 - box.x0) / 4, (box.y1 - box.y0) / 4);
+        const w = box.x1 - box.x0 - inset * 2;
+        const h = box.y1 - box.y0 - inset * 2;
+        const per = 2 * (w + h);
+        const x0 = box.x0 + inset;
+        const y0 = box.y0 + inset;
+        // Where the plane is along the perimeter (clockwise from the top-left corner)...
+        const cx = Math.max(x0, Math.min(x0 + w, plane.pos.x));
+        const cy = Math.max(y0, Math.min(y0 + h, plane.pos.y));
+        const dTop = Math.abs(cy - y0), dRight = Math.abs(x0 + w - cx), dBottom = Math.abs(y0 + h - cy), dLeft = Math.abs(cx - x0);
+        const m = Math.min(dTop, dRight, dBottom, dLeft);
+        let t = m === dTop ? cx - x0 : m === dRight ? w + (cy - y0) : m === dBottom ? w + h + (x0 + w - cx) : 2 * w + h + (y0 + h - cy);
+        // ...and a point some way ahead of it
+        t = (t + 320) % per;
+        let px = x0;
+        let py = y0;
+        if (t < w) px += t;
+        else if ((t -= w) < h) { px += w; py += t; }
+        else if ((t -= h) < w) { px += w - t; py += h; }
+        else { py += h - (t - w); }
+        plane.targetHeading = Math.atan2(py + plane.wingmanOffset.y - plane.pos.y, px + plane.wingmanOffset.x - plane.pos.x);
+        return false;
+      }
       // Circular orbit (ASW planes sweep wider corridors)
       const orbitR = aswRange > 0 ? 520 : 250;
       const a = Date.now() * (aswRange > 0 ? 0.0009 : 0.0016);
