@@ -2,6 +2,7 @@ import { Aircraft, Island, Vector2D, SelectionBox, RequisitionItem, Era } from '
 import { RenderContext, Camera, OrderMarker, isWorldCircleVisible } from './context';
 import type { RadarCoverage } from '../engine';
 import { costOf, formatBundle } from '../economy';
+import { dippingSonarNominalRange } from '../asw';
 
 // Draw Screen-space RTS Drag Selection Box
 export function drawSelectionBox(rc: RenderContext, box: SelectionBox) {
@@ -607,4 +608,54 @@ export function drawEscortPreview(rc: RenderContext, pos: Vector2D, charge: Airc
     ctx.fillText('🛡️【護航 Escort】點選要保護的友機 (右鍵/ESC 取消)', pos.x, pos.y - 24 / z);
   }
   ctx.restore();
+}
+
+/** Helicopters in the dip: the cable spot under the hover and each ping spreading out to sonar range. */
+export function drawDippingSonar(rc: RenderContext, aircraft: Aircraft[], selectedIds: string[], camera: Camera) {
+  const ctx = rc.ctx;
+  let started = false;
+  for (const a of aircraft) {
+    const dip = a.dipping;
+    if (!dip || a.state === 'shot_down') continue;
+    const R = dippingSonarNominalRange(a.model);
+    if (!isWorldCircleVisible(rc, a.pos.x, a.pos.y, R, camera)) continue;
+    if (!started) {
+      started = true;
+      ctx.save();
+      ctx.translate(rc.width / 2, rc.height / 2);
+      ctx.scale(camera.zoom, camera.zoom);
+      ctx.translate(-camera.x, -camera.y);
+    }
+    const z = camera.zoom;
+    // Transducer in the water under the hover
+    ctx.fillStyle = 'rgba(129, 212, 250, 0.9)';
+    ctx.beginPath();
+    ctx.arc(a.pos.x, a.pos.y + 6, 2.5 / Math.max(0.5, z), 0, Math.PI * 2);
+    ctx.fill();
+    // Ping spreading out for two seconds after each transmission
+    const since = 6 - dip.pingTimer;
+    if (since >= 0 && since < 2) {
+      const k = since / 2;
+      ctx.strokeStyle = `rgba(129, 212, 250, ${0.75 * (1 - k)})`;
+      ctx.lineWidth = 2 / z;
+      ctx.beginPath();
+      ctx.arc(a.pos.x, a.pos.y, R * k, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    // Coverage when selected
+    if (selectedIds.includes(a.id)) {
+      ctx.strokeStyle = 'rgba(129, 212, 250, 0.35)';
+      ctx.lineWidth = 1.2 / z;
+      ctx.setLineDash([6 / z, 6 / z]);
+      ctx.beginPath();
+      ctx.arc(a.pos.x, a.pos.y, R, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#B3E5FC';
+      ctx.font = `bold ${10 / z}px monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillText('🎧 吊放聲納作業中', a.pos.x, a.pos.y - 26 / z);
+    }
+  }
+  if (started) ctx.restore();
 }

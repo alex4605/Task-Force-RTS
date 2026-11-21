@@ -333,6 +333,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (engine.isDesignatingEscort) {
         renderer.drawEscortPreview(hoverWorldPosRef.current, engine.findEscortCharge(hoverWorldPosRef.current), cameraRef.current);
       }
+      renderer.drawDippingSonar(engine.aircraft, engine.selectedUnitIds, cameraRef.current);
       // Selected aircraft's assigned CAP boxes and escort charges
       renderer.drawCapBoxes(engine.aircraft, engine.selectedUnitIds, cameraRef.current);
 
@@ -895,6 +896,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         // Radar coverage layer
         engine.showRadarCoverage = !engine.showRadarCoverage;
         onRadarLayerChangeRef.current?.(engine.showRadarCoverage);
+      } else if (e.key === 'd' || e.key === 'D') {
+        // Dipping sonar: hover and lower / raise the transducer
+        if (engine.aircraft.some((a) => a.side === 'player' && a.state !== 'shot_down' && engine.selectedUnitIds.includes(a.id))) {
+          engine.toggleDippingSonar();
+        }
       } else if (e.key === 'v' || e.key === 'V') {
         // Escort: pick the friendly aircraft the selected fighters protect
         if (engine.aircraft.some((a) => a.side === 'player' && a.state !== 'shot_down' && engine.selectedUnitIds.includes(a.id))) {

@@ -3,6 +3,7 @@ import { isAirliftPayload } from '../../game/airlift';
 import { Anchor, HelpCircle, Plane, Radio, Shield } from 'lucide-react';
 import { Era } from '../../types/game';
 import { SelectableUnit, isAircraftUnit, isGroundUnit, isShipUnit } from '../../game/airWingCatalog';
+import { canDipSonar } from '../../game/asw';
 
 interface SelectedUnitsPanelProps {
   era: Era;
@@ -23,6 +24,8 @@ interface SelectedUnitsPanelProps {
   /** Close escort: the selected fighters protect a friendly aircraft picked on the map (V). */
   onStartEscort?: (ids: string[]) => void;
   /** Main-battery ROE switches of the selected ships. */
+  /** Lower / raise the dipping sonar of the selected ASW helicopters (D). */
+  onToggleDipping?: () => void;
   onSetGunRoe?: (key: 'ships' | 'installations' | 'ground', value: boolean) => void;
   onCancelCap?: () => void;
   isDesignatingSonobuoy: boolean;
@@ -47,6 +50,7 @@ export const SelectedUnitsPanel: React.FC<SelectedUnitsPanelProps> = ({
   onStartRebase,
   onStartEscort,
   onSetGunRoe,
+  onToggleDipping,
   onCancelCap,
   isDesignatingSonobuoy,
   onStartSonobuoyDesignation,
@@ -548,6 +552,19 @@ export const SelectedUnitsPanel: React.FC<SelectedUnitsPanelProps> = ({
             <span>🛬 空中轉降 Rebase (T)</span>
           </button>
         )}
+        {selectedUnits.some((u) => isAircraftUnit(u) && canDipSonar(u.model)) && (() => {
+          const dipping = selectedUnits.some((u) => isAircraftUnit(u) && u.dipping);
+          return (
+            <button
+              type="button"
+              onClick={() => onToggleDipping?.()}
+              className={`mt-1 w-full py-1.5 px-2 rounded text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all shadow-md whitespace-nowrap border ${dipping ? 'bg-gradient-to-r from-sky-500 to-blue-700 text-white border-sky-200 ring-2 ring-sky-400' : 'bg-gradient-to-r from-[#01579B] to-[#0277BD] hover:from-[#0277BD] hover:to-[#0288D1] text-[#E1F5FE] border-[#81D4FA]/70'}`}
+              title="懸停並降下吊放聲納：主動聲納穿透溫躍層搜索潛艦（但會驚動目標）；再按一次收回"
+            >
+              <span>{dipping ? '🎧 收回吊放聲納 (D)' : '🎧 吊放聲納模式 Dipping (D)'}</span>
+            </button>
+          );
+        })()}
         {selectedUnits.some((u) => isAircraftUnit(u) && u.role === 'fighter') && (
           <button
             type="button"

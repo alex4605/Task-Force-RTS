@@ -5,6 +5,8 @@ import { AlliedHost, AlliedOps } from './allied/alliedOps';
 import { fitsInHold, formatHold, holdUsed, shipHold } from './naval/lift';
 import { rollBailout, shipRaftGroups } from './aircrew';
 import { deckAccepts, shipAviation } from './shipAviation';
+import { canDipSonar, dippingSonarRange } from './asw';
+import { buildRequisitionShip } from './requisitionShips';
 import { LIBERATE_CLEAR, LIBERATE_RADIUS, PLAYER_CAMP_NAME, POW_CAMP_CAPACITY, POW_RP_PER_SECOND } from './pow';
 import { AwardKind, Bundle, Economy, MOBILISATION, award, costOf, formatBundle, incomeRate, nuclearCost } from './economy';
 import { airCardDelivery } from './airRequisition';
@@ -91,19 +93,8 @@ import {
   dist,
   distToShipHull,
   createGroundUnit,
-  createLCVP,
-  createLST,
   createTokyoExpressDD,
-  createConvoyEscortShip,
-  createPlayerBattleship,
-  createCV63,
-  createBelknapCG,
-  createAdamsDDG,
-  createLPHIwoJima,
-  createLCM8,
   createKomarMissileBoat,
-  createForrestShermanDD,
-  createKnoxFFG,
   createChokaiCA,
   createSendaiCL,
   createKongoBB,
@@ -113,17 +104,6 @@ import {
   createKyndaCG,
   createPetyaFFG,
   createOsaPTG,
-  createCVNNimitz,
-  createTiconderogaCG,
-  createVirginiaCGN,
-  createIowaModernizedBB,
-  createSpruanceDD,
-  createKiddDDG,
-  createPerryFFG,
-  createLosAngelesSSN,
-  createAustinLPD,
-  createLCAC,
-  createNewportLST,
   createKirovCGN,
   createSovremennyDD,
   createUdaloyDD,
@@ -1426,7 +1406,8 @@ export class GameEngine {
   // Issue RTS Order to Selected Units
   public issueOrderToSelected(order: UnitOrder) {
     if (this.selectedUnitIds.length === 0) return;
-    // A new order ends any close escort the selected fighters were flying
+    // A new order raises any dipping sonar and ends any close escort of the selected aircraft
+    for (const a of this.aircraft) if (a.dipping && this.selectedUnitIds.includes(a.id)) a.dipping = undefined;
     for (const a of this.aircraft) if (a.escortTargetId && this.selectedUnitIds.includes(a.id)) {
       a.escortTargetId = undefined;
       if (a.airMission === 'escort') a.airMission = undefined;
@@ -1615,6 +1596,81 @@ export class GameEngine {
     return null;
   }
 
+  /**
+   * Dipping sonar: the selected ASW helicopters that carry one come to a hover where they are and
+   * lower the transducer; pressing again (or any new order) raises it. Returns how many dipped.
+   */
+  public toggleDippingSonar(ids: string[] = this.selectedUnitIds): number {
+    const helos = this.aircraft.filter((a) => a.side === 'player' && a.state !== 'shot_down' && ids.includes(a.id) && canDipSonar(a.model));
+    if (helos.length === 0) {
+      this.addBannerAlert('⚠️【吊放聲納】選取的機種沒有吊放聲納（SH-3 海王 / Lynx 才有）', 'player', 'alert', 4);
+      return 0;
+    }
+    const raise = helos.every((h) => h.dipping);
+    for (const h of helos) {
+      if (raise) {
+        h.dipping = undefined;
+        h.order = { type: 'patrol', patrolOrigin: { ...h.pos } };
+        h.state = 'patrolling';
+      } else {
+        h.escortTargetId = undefined;
+        h.ferryTo = undefined;
+        h.dipping = { pos: { ...h.pos }, time: 0, pingTimer: 2.5 };
+      }
+    }
+    this.addCombatLog({
+      category: 'air',
+      sourceSide: 'player',
+      sourceName: helos[0].flightName || helos[0].name,
+      targetName: '水下目標',
+      actionType: 'recon_spotted',
+      text: raise
+        ? `🚁【收回吊放聲納】${helos.length} 架反潛直升機收回聲納換能器，恢復巡邏。`
+        : `🎧【吊放聲納作業】${helos.length} 架反潛直升機懸停降下聲納換能器，主動聲納每 6 秒發射一次（穿透溫躍層，但也會驚動潛艦）。`,
+    });
+    return helos.length;
+  }
+
+  /**
+   * A helicopter in the dip: holds a low hover over the spot and pings; every submarine inside the
+   * sonar's range is located through the layer (and, hearing the ping, may try to slip away).
+   */
+  private updateDippingSonar(dt: number, plane: Aircraft): boolean {
+    const dip = plane.dipping!;
+    if (plane.order.type === 'rtb' || plane.state === 'returning') {
+      plane.dipping = undefined;
+      return false;
+    }
+    dip.time += dt;
+    // Transition to the hover: slow down onto the spot, then hold
+    const d = dist(plane.pos, dip.pos);
+    plane.speed = Math.max(0, plane.speed - dt * 160);
+    if (d > 4) {
+      plane.pos.x += ((dip.pos.x - plane.pos.x) / d) * Math.min(d, 40 * dt);
+      plane.pos.y += ((dip.pos.y - plane.pos.y) / d) * Math.min(d, 40 * dt);
+    }
+    plane.vel = { x: 0, y: 0 };
+    plane.altitude = Math.max(0.12, plane.altitude - dt * 0.4);
+    if (plane.speed > 20) return true; // still decelerating, sonar not yet in the water
+    dip.pingTimer -= dt;
+    if (dip.pingTimer <= 0) {
+      dip.pingTimer = 6;
+      dip.lastPingAt = this.gameTime;
+      soundEngine.playSonarPing();
+      const subs = plane.side === 'enemy' ? [...this.playerShips, ...this.alliedShips] : this.enemyShips;
+      for (const sub of subs) {
+        if (sub.isSunk || !this.isSubmarine(sub)) continue;
+        if (dist(sub.pos, plane.pos) <= dippingSonarRange(plane.model, sub)) this.revealSubmarine(sub, 9, 'sonar', `${plane.name} 吊放聲納`);
+      }
+      // AI crews lift and move on after a few pings
+      if (plane.side !== 'player' && dip.time > 40) {
+        plane.dipping = undefined;
+        return false;
+      }
+    }
+    return true;
+  }
+
   /** Escort mode: the next map click picks the friendly aircraft the selected fighters protect. */
   public isDesignatingEscort = false;
 
@@ -1713,6 +1769,7 @@ export class GameEngine {
       plane.ferryTo = target.id;
       plane.homeBaseId = target.id;
       plane.escortTargetId = undefined;
+      plane.dipping = undefined;
       plane.order = { type: 'move', targetPos: { ...target.pos } };
       plane.state = 'cruising';
       plane.interceptTargetId = undefined;
@@ -1874,7 +1931,7 @@ export class GameEngine {
           label: 'AN/SSQ-41 Jezebel LOFAR',
         };
       }
-      if (model === 'sh2' || model === 'uh2') {
+      if (model === 'sh2' || model === 'uh2' || model === 'sh3f') {
         return {
           count: 8,
           radius: 1600,
@@ -1906,6 +1963,17 @@ export class GameEngine {
         pingInterval: 3.6,
         revealDuration: 3.4,
         label: 'AN/SSQ-53 DIFAR 定向被動聲納',
+      };
+    }
+    if (model === 'sh60b') {
+      // LAMPS III: 25 sonobuoys from the port-side launcher, data-linked back to the ship
+      return {
+        count: 14,
+        radius: 2000,
+        lifetime: 180,
+        pingInterval: 3.6,
+        revealDuration: 3.4,
+        label: 'AN/SSQ-53 DIFAR (LAMPS III 數據鏈)',
       };
     }
     if (model === 'sh3f' || model === 'sh2') {
@@ -2292,6 +2360,7 @@ export class GameEngine {
 
     targetFighters.forEach((plane) => {
       plane.escortTargetId = undefined;
+      plane.dipping = undefined;
       plane.order = {
         type: 'patrol',
         patrolOrigin: { ...origin },
@@ -3859,6 +3928,10 @@ export class GameEngine {
         if (plane.missionTimer < -60) this.aircraft.splice(i, 1);
         continue;
       }
+      // Dipping-sonar helicopters on an ASW search come to a hover over the datum and ping
+      if (!plane.dipping && canDipSonar(plane.model) && plane.payloadType === 'asw_acoustic_torpedo' && plane.order.type === 'patrol' && plane.order.patrolOrigin && dist(plane.pos, plane.order.patrolOrigin) < 160 && (plane.missionTimer ?? 0) > 30) {
+        plane.dipping = { pos: { ...plane.pos }, time: 0, pingTimer: 2.5 };
+      }
       plane.missionTimer = (plane.missionTimer ?? 90) - dt;
       const done = plane.missionTimer <= 0 || plane.order.type === 'rtb' || (!plane.hasPayload && plane.payloadType !== 'scout_fuel');
       if (!done) continue;
@@ -3946,6 +4019,8 @@ export class GameEngine {
         if (this.updateFerryFlight(dt, i, plane)) continue;
         // still en route: fall through to steering and movement (no combat orders)
       }
+
+      if (plane.dipping && this.updateDippingSonar(dt, plane)) continue;
 
       if (this.updateOhkaRocket(dt, plane)) continue;
 
@@ -11388,82 +11463,8 @@ export class GameEngine {
       const targetPos = customPos || (this.enemyShips.find(s => !s.isSunk)?.pos) || { x: 9500, y: 4500 };
       this.fireOhioSSBNTridentStrike(targetPos);
       return true;
-    } else if (item.typeTag === 'bb' || item.typeTag === 'bb_missouri') {
-      const isMo = item.typeTag === 'bb_missouri' || this.era === 'era3';
-      newShip = createPlayerBattleship(
-        shipId,
-        isMo
-          ? 'USS Missouri (BB-63 密蘇里號主力戰艦)'
-          : this.era === 'era1'
-          ? 'USS North Carolina (BB-55)'
-          : 'USS Iowa (BB-61)',
-        warshipSpawnPos,
-        this.era
-      );
-    } else if (item.typeTag === 'ca' || item.typeTag === 'ca_desmoines') {
-      newShip = createConvoyEscortShip(shipId, 'ca', warshipSpawnPos, this.era);
-      if (item.typeTag === 'ca_desmoines' || this.era === 'era3') {
-        newShip.name = 'USS Des Moines (CA-134 得梅因號自動裝填重巡)';
-        newShip.health = 3600;
-        newShip.maxHealth = 3600;
-      }
-    } else if (item.typeTag === 'cl') {
-      newShip = createConvoyEscortShip(shipId, 'cl', warshipSpawnPos, this.era);
-    } else if (item.typeTag === 'dd' || item.typeTag === 'dd_gearing' || item.typeTag === 'dd_sherman') {
-      if (this.era === 'era4' || item.typeTag === 'dd_sherman') {
-        newShip = createForrestShermanDD(shipId, 'USS Forrest Sherman (DD-931 驅逐艦)', warshipSpawnPos);
-      } else {
-        newShip = createConvoyEscortShip(shipId, 'dd', warshipSpawnPos, this.era);
-        if (item.typeTag === 'dd_gearing' || this.era === 'era3') {
-          newShip.name = 'USS Gearing (DD-710 基靈級雷達糾察驅逐艦)';
-          newShip.health = 1850;
-          newShip.maxHealth = 1850;
-        }
-      }
-    } else if (item.typeTag === 'ffg') {
-      newShip = createKnoxFFG(shipId, 'USS Knox (FFG-1052 巡防艦)', warshipSpawnPos);
-    } else if (item.typeTag === 'ss') {
-      newShip = createConvoyEscortShip(shipId, 'ss', warshipSpawnPos, this.era);
-    } else if (item.typeTag === 'lst') {
-      newShip = (this.era === 'era4' || this.era === 'era5')
-        ? createNewportLST(shipId, this.era === 'era5' ? 'USS Newport (LST-1179 紐波特戰車登陸艦 現代化改型)' : 'USS Newport (LST-1179 紐波特級戰車登陸艦)', warshipSpawnPos, this.era)
-        : createLST(shipId, 'USS LST-491 戰車登陸艦', warshipSpawnPos, this.era);
-    } else if (item.typeTag === 'lcvp') {
-      newShip = this.era === 'era5'
-        ? createLCAC(shipId, 'LCAC-01 氣墊登陸艇', warshipSpawnPos)
-        : this.era === 'era4'
-        ? createLCM8(shipId, 'LCM-8 機械化登陸艇', warshipSpawnPos)
-        : createLCVP(shipId, 'LCVP 突擊登陸艇', warshipSpawnPos, this.era);
-    } else if (item.typeTag === 'cv63') {
-      newShip = createCV63(shipId, 'USS Kitty Hawk (CV-63 超級航空母艦)', warshipSpawnPos);
-    } else if (item.typeTag === 'cg') {
-      newShip = createBelknapCG(shipId, 'USS Belknap (CG-26 導彈巡洋艦)', warshipSpawnPos);
-    } else if (item.typeTag === 'ddg') {
-      newShip = createAdamsDDG(shipId, 'USS Charles F. Adams (DDG-2 導彈驅逐艦)', warshipSpawnPos);
-    } else if (item.typeTag === 'lph') {
-      newShip = createLPHIwoJima(shipId, 'USS Iwo Jima (LPH-2 兩棲突擊艦)', warshipSpawnPos);
-    } else if (item.typeTag === 'lcm8') {
-      newShip = createLCM8(shipId, 'LCM-8 機械化登陸艇', warshipSpawnPos);
-    } else if (item.typeTag === 'cvn') {
-      newShip = createCVNNimitz(shipId, 'USS Nimitz (CVN-68 超級核動力航空母艦)', warshipSpawnPos);
-    } else if (item.typeTag === 'cg_tico') {
-      newShip = createTiconderogaCG(shipId, 'USS Ticonderoga (CG-47 神盾巡洋艦)', warshipSpawnPos);
-    } else if (item.typeTag === 'cg_virginia') {
-      newShip = createVirginiaCGN(shipId, 'USS Virginia (CGN-38 核動力巡洋艦)', warshipSpawnPos);
-    } else if (item.typeTag === 'bb_iowa_mod') {
-      newShip = createIowaModernizedBB(shipId, 'USS Iowa (BB-61 近代化改裝主力戰艦)', warshipSpawnPos);
-    } else if (item.typeTag === 'dd_spruance') {
-      newShip = createSpruanceDD(shipId, 'USS Spruance (DD-963 反潛驅逐艦)', warshipSpawnPos);
-    } else if (item.typeTag === 'ddg_kidd') {
-      newShip = createKiddDDG(shipId, 'USS Kidd (DDG-993 飛彈驅逐艦)', warshipSpawnPos);
-    } else if (item.typeTag === 'ffg_ohp') {
-      newShip = createPerryFFG(shipId, 'USS Oliver Hazard Perry (FFG-7 巡防艦)', warshipSpawnPos);
-    } else if (item.typeTag === 'ssn_la') {
-      newShip = createLosAngelesSSN(shipId, 'USS Los Angeles (SSN-688 攻擊核潛艦)', warshipSpawnPos);
-    } else if (item.typeTag === 'lpd') {
-      newShip = createAustinLPD(shipId, 'USS Austin (LPD-4 兩棲船塢運輸艦)', warshipSpawnPos);
-    } else if (item.typeTag === 'lcac') {
-      newShip = createLCAC(shipId, 'LCAC-01 氣墊登陸艇', warshipSpawnPos);
+    } else {
+      newShip = buildRequisitionShip(item, this.era, shipId, warshipSpawnPos);
     }
 
     if (newShip) {
