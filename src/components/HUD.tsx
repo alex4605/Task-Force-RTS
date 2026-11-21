@@ -1646,14 +1646,6 @@ export const HUD: React.FC<HUDProps> = ({
                       ⚓ {c.name}
                     </button>
                   ))}
-                <button
-                  type="button"
-                  onClick={() => setAfbStockOnly((v) => !v)}
-                  className={`px-2 py-0.5 rounded font-bold border ${afbStockOnly ? 'bg-[#004D40] text-[#80CBC4] border-[#80CBC4]/60' : 'bg-[#051A18] text-slate-400 border-[#1E3A5F]'}`}
-                  title="只列出此機場有庫存的機型"
-                >
-                  {afbStockOnly ? '✔ 僅顯示在庫機型' : '顯示全部機型'}
-                </button>
                 <span className="text-slate-400 ml-auto">轉場至</span>
                 <select
                   value={carrierFerryTo}
@@ -1922,6 +1914,14 @@ export const HUD: React.FC<HUDProps> = ({
                     </button>
                   );
                 })}
+                <button
+                  type="button"
+                  onClick={() => setAfbStockOnly((v) => !v)}
+                  className={`px-2 py-0.5 rounded font-bold border ${afbStockOnly ? 'bg-[#004D40] text-[#80CBC4] border-[#80CBC4]/60' : 'bg-[#051A18] text-slate-400 border-[#1E3A5F]'}`}
+                  title="只列出此機場有庫存的機型"
+                >
+                  {afbStockOnly ? '✔ 僅顯示在庫機型' : '顯示全部機型'}
+                </button>
                 <span className="text-slate-400 ml-auto">轉場至</span>
                 <select
                   value={afbFerryTo}

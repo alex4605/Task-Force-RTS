@@ -1118,6 +1118,8 @@ export class GameEngine {
       const isl = this.islands.find((i) => isPointInPolygon(u.pos, i.points)) ?? this.islands.reduce((m, i) => (dist(i.center, u.pos) - i.radius < dist(m.center, u.pos) - m.radius ? i : m), this.islands[0]);
       if (isl) u.pos = this.groundSpawnOnLand(u.pos, isl);
     }
+    // Shipboard floatplanes and helicopters, ready on deck before the battle starts
+    for (const sh of [...this.playerShips, ...this.alliedShips, ...this.enemyShips]) this.fitShipAviation(sh);
     // The fleet starts hove to at its anchorage: ships only get under way when ordered (an idle
     // fleet used to keep steaming on its initial course straight into the enemy's shore guns)
     for (const sh of this.playerShips) {
@@ -3681,14 +3683,7 @@ export class GameEngine {
     const ships = [...this.playerShips, ...this.alliedShips, ...this.enemyShips];
     for (const ship of ships) {
       if (ship.isSunk) continue;
-      if (!ship.aviationFitted) {
-        ship.aviationFitted = true;
-        const fit = shipAviation(ship, this.era);
-        if (fit) {
-          ship.flightDeck = fit.kind;
-          ship.carrierPlanes = { ready: { [fit.model]: fit.count }, hangar: {}, maxPerType: { [fit.model]: fit.count } };
-        }
-      }
+      this.fitShipAviation(ship);
       if (ship.side === 'player' || !ship.flightDeck || !ship.carrierPlanes) continue;
       ship.shipAirTimer = (ship.shipAirTimer ?? 20 + Math.random() * 40) - dt;
       if (ship.shipAirTimer > 0) continue;
@@ -3734,6 +3729,17 @@ export class GameEngine {
         if (home.carrierPlanes) home.carrierPlanes.ready[plane.model] = (home.carrierPlanes.ready[plane.model] ?? 0) + 1;
         this.aircraft.splice(i, 1);
       }
+    }
+  }
+
+  /** Gives a surface combatant its historical floatplanes or helicopter (once). */
+  private fitShipAviation(ship: Ship): void {
+    if (ship.aviationFitted) return;
+    ship.aviationFitted = true;
+    const fit = shipAviation(ship, this.era);
+    if (fit) {
+      ship.flightDeck = fit.kind;
+      ship.carrierPlanes = { ready: { [fit.model]: fit.count }, hangar: {}, maxPerType: { [fit.model]: fit.count } };
     }
   }
 
