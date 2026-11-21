@@ -498,6 +498,7 @@ export default function App() {
           id: a.id,
           name: a.name,
           isHQ: a.id === engine.hqAirfieldId,
+          rotaryOnly: !!a.rotaryOnly,
           planes: engine.getAirfieldPool(a.id),
         }))}
         onTransferPlanes={(model, count, fromId, toId) => {

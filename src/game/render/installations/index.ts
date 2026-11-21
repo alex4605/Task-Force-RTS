@@ -80,6 +80,14 @@ export function drawInstallation(rc: RenderContext, inst: Installation, island?:
   // Type-specific body: see bodies.ts
   INSTALLATION_DRAWERS[inst.type]?.(rc, inst, style, island);
 
+  // Whose sphere a village or town is in (our troops holding the ground round it make it ours)
+  if (inst.controlledBy && (inst.type === 'settlement' || inst.type === 'town' || inst.type === 'city')) {
+    ctx.font = 'bold 8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = inst.controlledBy === 'player' ? '#81D4FA' : '#FF8A80';
+    ctx.fillText(inst.controlledBy === 'player' ? '🟦 我方勢力範圍 · 有產出' : '🟥 敵方勢力範圍', 0, 24);
+  }
+
   if (inst.health < inst.maxHealth) {
     const hpPct = Math.max(0, inst.health / inst.maxHealth);
     ctx.strokeStyle = '#37474F';

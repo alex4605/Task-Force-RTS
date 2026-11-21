@@ -694,6 +694,18 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
         typeTag: 'motor_pool',
         requiresIsland: true,
       },
+      {
+        id: 'req-fac-farp',
+        category: 'installations',
+        name: 'FARP 前進加油彈藥補給點',
+        cost: 150,
+        era: 'era5',
+        badge: '直升機 / 垂直起降機前進基地',
+        desc: '前進加油彈藥補給點：清出起降坪、鋪上油囊與彈藥架，讓武裝與運輸直升機（以及獵鷹式）在前線就地加油掛彈，不必飛回航艦或機場。',
+        statsDesc: '僅限直升機與垂直起降機 | 可轉場 / 轉降 / 出擊 | 需工兵',
+        typeTag: 'farp',
+        requiresIsland: true,
+      },
     ];
   }
 
@@ -1191,6 +1203,18 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
         desc: '工兵整平的車輛集結與整備場，有加油、維修與裝卸設備。戰車、裝甲車、自走砲、牽引火砲與防空車輛的增援只能在 HQ 或調車場集結。',
         statsDesc: '呼叫裝甲與車輛增援 | 需工兵在場構工',
         typeTag: 'motor_pool',
+        requiresIsland: true,
+      },
+      {
+        id: 'req-fac-farp',
+        category: 'installations',
+        name: 'FARP 前進加油彈藥補給點',
+        cost: 150,
+        era: 'era4',
+        badge: '直升機 / 垂直起降機前進基地',
+        desc: '前進加油彈藥補給點：清出起降坪、鋪上油囊與彈藥架，讓武裝與運輸直升機（以及獵鷹式）在前線就地加油掛彈，不必飛回航艦或機場。',
+        statsDesc: '僅限直升機與垂直起降機 | 可轉場 / 轉降 / 出擊 | 需工兵',
+        typeTag: 'farp',
         requiresIsland: true,
       },
     ];

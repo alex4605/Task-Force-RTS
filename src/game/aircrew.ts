@@ -60,6 +60,9 @@ export function crewOf(model: AircraftModel): number {
 
 export const isHelicopter = (model: AircraftModel) => HELICOPTERS.has(model);
 
+/** Can use a FARP: helicopters and the V/STOL jets. */
+export const isRotaryOrVstol = (model: AircraftModel) => HELICOPTERS.has(model) || model === 'av8b' || model === 'yak38' || model === 'sea_harrier';
+
 /** Chance the aircraft breaks up or burns with nobody getting out, and each man's odds otherwise. */
 function survivalOdds(model: AircraftModel, era: Era): { catastrophic: number; each: number } {
   if (SUICIDE.has(model)) return { catastrophic: 1, each: 0 };

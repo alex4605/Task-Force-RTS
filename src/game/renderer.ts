@@ -137,6 +137,10 @@ export class VectorRenderer {
     overlaysRender.drawEscortPreview(this.rc, pos, charge, camera);
   }
 
+  public drawConstructionSites(sites: Parameters<typeof overlaysRender.drawConstructionSites>[1], camera: Camera) {
+    overlaysRender.drawConstructionSites(this.rc, sites, camera);
+  }
+
   public drawDippingSonar(aircraft: Aircraft[], selectedIds: string[], camera: Camera) {
     overlaysRender.drawDippingSonar(this.rc, aircraft, selectedIds, camera);
   }

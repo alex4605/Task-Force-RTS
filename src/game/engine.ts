@@ -3,8 +3,9 @@ import { snapOntoLand } from './coastline';
 import { canCallFrom, isLightGroundUnit, rallyKind, resolveGroundRequisition } from './groundRequisition';
 import { AlliedHost, AlliedOps } from './allied/alliedOps';
 import { fitsInHold, formatHold, holdUsed, shipHold } from './naval/lift';
-import { rollBailout, shipRaftGroups } from './aircrew';
+import { isRotaryOrVstol, rollBailout, shipRaftGroups } from './aircrew';
 import { deckAccepts, shipAviation } from './shipAviation';
+import { addCivilTransport } from './civilSites';
 import { canDipSonar, dippingSonarRange } from './asw';
 import { buildRequisitionShip } from './requisitionShips';
 import { LIBERATE_CLEAR, LIBERATE_RADIUS, PLAYER_CAMP_NAME, POW_CAMP_CAPACITY, POW_RP_PER_SECOND } from './pow';
@@ -14,7 +15,7 @@ import { airliftCargo, isAirliftPayload, isHeloLift } from './airlift';
 import { SOF_CAPTURE_BONUS, SOF_REVEAL_S, SOF_SABOTAGE_MULT, canSpotUnit, isSof, sofReconRange } from './sof';
 import { CasualtyLedger, Outcome, attritionOutcome, defeatOutcome, victoryOutcome } from './outcome';
 import { Escalation, STAGE_FLAVOUR, TIER_NAME, airEscalation, alliedEscalation, computeEscalation, ingressRoute, navalEscalation } from './escalation';
-import { BuilderRequirement, BUILDER_RADIUS, builderRequirement, isEngineerType } from './construction';
+import { BUILD_PREREQ, BuilderRequirement, BUILDER_RADIUS, buildRate, buildTime, builderRequirement, isEngineerType } from './construction';
 import {
   Ship,
   Aircraft,
@@ -930,7 +931,82 @@ export class GameEngine {
         if (i.type === 'field_hospital') hospitals++;
       }
     }
-    return incomeRate({ era: this.era, tier: this.escalation.tier, islands, ports, hospitals, gameTime: this.gameTime });
+    const rate = incomeRate({ era: this.era, tier: this.escalation.tier, islands, ports, hospitals, gameTime: this.gameTime });
+    // Villages, towns and stations in our sphere: local labour, goods, goodwill and the railway
+    const CIVIL_YIELD: Partial<Record<string, Partial<Bundle>>> = {
+      settlement: { mp: 0.12, pp: 0.04 },
+      town: { mp: 0.25, rp: 0.08, pp: 0.06 },
+      city: { mp: 0.4, rp: 0.2, pp: 0.1 },
+      rail_station: { tp: 0.6, rp: 0.1 },
+    };
+    for (const isl of this.islands) {
+      for (const i of isl.installations) {
+        if (i.isDestroyed) continue;
+        const ours = i.type === 'rail_station' ? i.side === 'player' : i.controlledBy === 'player';
+        const y = ours ? CIVIL_YIELD[i.type] : undefined;
+        if (!y) continue;
+        rate.mp += y.mp ?? 0;
+        rate.rp += y.rp ?? 0;
+        rate.pp += y.pp ?? 0;
+        rate.tp += y.tp ?? 0;
+      }
+    }
+    return rate;
+  }
+
+  /**
+   * Who holds the civilian sites: our (or allied) troops round a village, town, station or
+   * airport with no enemy there make it ours, and the enemy's the other way; contested ground
+   * keeps its last owner. A station or airport changes sides outright; a held airport becomes a
+   * working airfield for its new owner.
+   */
+  private civilControlTimer = 0;
+  private updateCivilControl(dt: number): void {
+    this.civilControlTimer -= dt;
+    if (this.civilControlTimer > 0) return;
+    this.civilControlTimer = 1;
+    const ground = this.groundUnits.filter((u) => !u.isDestroyed && !u.embarkedInShipId);
+    for (const isl of this.islands) {
+      for (const inst of isl.installations) {
+        const isTransport = inst.type === 'rail_station' || (inst.type === 'airfield' && inst.wasCivil);
+        if (inst.isDestroyed || !(isTransport || inst.type === 'settlement' || inst.type === 'town' || inst.type === 'city')) continue;
+        const r = isTransport ? 300 : (inst.civilianZoneRadius ?? 120) + 220;
+        const friendly = ground.some((u) => (u.side === 'player' || u.side === 'allied') && dist(u.pos, inst.pos) < r);
+        const hostile = ground.some((u) => u.side === 'enemy' && dist(u.pos, inst.pos) < r);
+        const holder: 'player' | 'enemy' | undefined = friendly && !hostile ? 'player' : hostile && !friendly ? 'enemy' : undefined;
+        if (!holder || holder === inst.controlledBy) continue;
+        const first = inst.controlledBy === undefined;
+        inst.controlledBy = holder;
+        if (isTransport) {
+          inst.side = holder;
+          if (holder === 'player' && inst.type === 'airfield') this.airfieldPlanes[inst.id] ??= {};
+          this.islandsVersion++;
+          this.addBannerAlert(
+            holder === 'player' ? `🚩【控制】我軍進駐「${inst.name}」` : `⚠️【失守】「${inst.name}」落入敵手`,
+            holder === 'player' ? 'player' : 'enemy',
+            holder === 'player' ? 'capture' : 'alert',
+            5
+          );
+        }
+        if (isTransport || !first) {
+          this.addCombatLog({
+            category: 'naval',
+            sourceSide: holder,
+            sourceName: holder === 'player' ? '我軍地面部隊' : '敵軍地面部隊',
+            targetName: inst.name,
+            actionType: 'recon_spotted',
+            text:
+              holder === 'player'
+                ? inst.type === 'airfield'
+                  ? `🛫【民用機場易手】我軍控制「${inst.name}」，跑道可供我方飛機起降與轉場。`
+                  : inst.type === 'rail_station'
+                  ? `🚉【車站易手】我軍控制「${inst.name}」，鐵路運輸開始為我方提供運輸量 TP。`
+                  : `🏘️【勢力範圍】「${inst.name}」納入我方勢力範圍，開始提供人力與物資。`
+                : `⚠️【易手】「${inst.name}」落入敵方控制。`,
+          });
+        }
+      }
+    }
   }
 
   /** Accrue income; our own losses cost political support. */
@@ -1045,8 +1121,11 @@ export class GameEngine {
     this.sectorNumber = sectorNum;
     this.era = era;
     const generated = generateSector(sectorNum, era);
+    this.constructionSites = [];
     this.worldSize = generated.worldSize;
     this.islands = generated.islands;
+    // Civilian railway stations and the airport (eras with a mainland)
+    addCivilTransport(this.islands, getTerrainMap(this.islands, this.worldSize, era), era);
     this.applyHistoricalInstallationRanges();
     this.friendlyBase = generated.friendlyBase;
     this.playerShips = generated.playerShips;
@@ -1727,7 +1806,7 @@ export class GameEngine {
   /** The friendly airfield or deck nearest a map point (within reach of the click), for rebasing. */
   public findRebaseTarget(p: Vector2D, needDeck = false): { id: string; name: string; pos: Vector2D; isCarrier: boolean } | undefined {
     const bases: { id: string; name: string; pos: Vector2D; isCarrier: boolean }[] = [
-      ...(needDeck ? [] : this.getFriendlyAirfields().map((a) => ({ id: a.id, name: a.name, pos: a.pos, isCarrier: false }))),
+      ...(needDeck ? [] : this.getFriendlyAirfields().map((a) => ({ id: a.id, name: a.name, pos: a.pos, isCarrier: false, rotaryOnly: !!a.rotaryOnly }))),
       ...this.playerShips.filter((s) => !s.isSunk && s.carrierPlanes).map((s) => ({ id: s.id, name: s.codeName || s.name, pos: s.pos, isCarrier: true })),
     ];
     let best: (typeof bases)[number] | undefined;
@@ -1757,6 +1836,10 @@ export class GameEngine {
     let sent = 0;
     let refused = 0;
     for (const plane of planes) {
+      if (this.findFriendlyAirfield(target.id)?.rotaryOnly && !isRotaryOrVstol(plane.model)) {
+        refused++;
+        continue;
+      }
       const deck = target.isCarrier ? this.playerShips.find((sh) => sh.id === target.id) : undefined;
       if (target.isCarrier && (!this.isCarrierCapable(plane.model) || (deck && !deckAccepts(deck, plane.model)))) {
         refused++;
@@ -2799,6 +2882,8 @@ export class GameEngine {
     this.updateGroundUnits(effectiveDt);
     this.updateStrongholds(effectiveDt);
     this.updateShipAviation(effectiveDt);
+    this.updateConstruction(effectiveDt);
+    this.updateCivilControl(effectiveDt);
     this.updateAircraft(effectiveDt);
     this.updateInstallations(effectiveDt);
     this.updateEra3Mechanics(effectiveDt);
@@ -5523,7 +5608,9 @@ export class GameEngine {
       plane.homeBaseId = flagship.id;
       return flagship.id;
     }
-    const nearest = this.getFriendlyAirfields().sort((a, b) => dist(plane.pos, a.pos) - dist(plane.pos, b.pos))[0];
+    const nearest = this.getFriendlyAirfields()
+      .filter((a) => !a.rotaryOnly || isRotaryOrVstol(plane.model))
+      .sort((a, b) => dist(plane.pos, a.pos) - dist(plane.pos, b.pos))[0];
     plane.homeBaseId = nearest?.id;
     return plane.homeBaseId;
   }
@@ -5573,6 +5660,7 @@ export class GameEngine {
     const toPos = this.getAirBasePos(toId);
     if (!fromPos || !toPos) return fail('⚠️ 轉場基地不存在或已被摧毀。');
     const toCarrier = this.findFriendlyCarrier(toId);
+    if (this.findFriendlyAirfield(toId)?.rotaryOnly && !isRotaryOrVstol(model)) return fail(`⚠️ FARP 只能收容直升機與垂直起降機。`);
     if (toCarrier && !deckAccepts(toCarrier, model)) return fail(`⚠️「${toCarrier.name}」只能收容自己的艦載直升機 / 水上飛機。`);
     if (toCarrier && !this.isCarrierCapable(model)) return fail(`⚠️ ${model.toUpperCase()} 並非艦載機型，無法降落「${toCarrier.name}」。`);
 
@@ -11007,7 +11095,65 @@ export class GameEngine {
     return isEngineerType(u.type) || (need === 'infantry' && this.isFootUnit(u));
   }
 
+  /**
+   * Orders a facility. Engineer works are not there at once: the site is laid out and the work
+   * progresses only while engineers are on it (faster with more of them); the facility enters
+   * service when it is finished. Sandbox builds are instant.
+   */
   private purchaseInstallationRequisition(item: RequisitionItem, targetIslandId: string | undefined, customPos: Vector2D | undefined, freeSandbox: boolean): boolean {
+    const before = new Set(this.islands.flatMap((isl) => isl.installations.map((i) => i.id)));
+    const ok = this.placeInstallationRequisition(item, targetIslandId, customPos, freeSandbox);
+    const total = buildTime(item.typeTag ?? '');
+    if (!ok || freeSandbox || total <= 0) return ok;
+    for (const isl of this.islands) {
+      const fresh = isl.installations.filter((i) => !before.has(i.id));
+      for (const inst of fresh) {
+        isl.installations.splice(isl.installations.indexOf(inst), 1);
+        this.constructionSites.push({ inst, islandId: isl.id, progress: 0, total, itemName: item.name, builders: 0 });
+      }
+    }
+    this.islandsVersion++;
+    this.addCombatLog({
+      category: 'naval',
+      sourceSide: 'player',
+      sourceName: '海軍工兵團 (Seabees)',
+      targetName: item.name,
+      actionType: 'recon_spotted',
+      text: `🚧【開工】「${item.name}」工地已放樣，需工兵在場持續施工約 ${Math.round(total)} 秒（多個工兵排可加快，最多約 2 倍）。`,
+    });
+    return true;
+  }
+
+  /** Engineer works under way: progress while engineers are on site, then enter service. */
+  public constructionSites: { inst: Installation; islandId: string; progress: number; total: number; itemName: string; builders: number }[] = [];
+
+  private updateConstruction(dt: number): void {
+    for (let k = this.constructionSites.length - 1; k >= 0; k--) {
+      const site = this.constructionSites[k];
+      const n = this.groundUnits.filter((u) => this.canBuild(u, 'engineer') && dist(u.pos, site.inst.pos) <= BUILDER_RADIUS).length;
+      site.builders = n;
+      site.progress += (dt / site.total) * buildRate(n);
+      if (site.progress < 1) continue;
+      this.constructionSites.splice(k, 1);
+      const isl = this.islands.find((i) => i.id === site.islandId);
+      if (!isl) continue;
+      isl.installations.push(site.inst);
+      this.islandsVersion++;
+      this.applyHistoricalInstallationRanges();
+      soundEngine.playPlaneSortie();
+      this.addBannerAlert(`🏗️【竣工】「${site.inst.name}」完工並投入使用！`, 'player', 'capture', 5);
+      this.addCombatLog({
+        category: 'naval',
+        sourceSide: 'player',
+        sourceName: '海軍工兵團 (Seabees)',
+        targetName: site.inst.name,
+        actionType: 'recon_spotted',
+        text: `🏗️【竣工】「${site.itemName}」在「${isl.name.split(' (')[0]}」完工，即刻投入使用。`,
+      });
+    }
+  }
+
+  private placeInstallationRequisition(item: RequisitionItem, targetIslandId: string | undefined, customPos: Vector2D | undefined, freeSandbox: boolean): boolean {
     soundEngine.playPlaneSortie();
     let targetIsland = targetIslandId
       ? this.islands.find((i) => i.id === targetIslandId)
@@ -11074,6 +11220,20 @@ export class GameEngine {
       if (!builder) {
         const who = need === 'engineer' ? '工兵（Seabees 戰鬥工兵排）' : '步兵或工兵';
         this.addBannerAlert(`🏗️【設施構工受阻】「${item.name}」須有${who}在工地 ${BUILDER_RADIUS}m 內才能構工！`, 'player', 'alert', 5.0);
+        return false;
+      }
+      // Prerequisites of the bigger works
+      const hostileNear = (r: number) => this.groundUnits.some((u) => u.side === 'enemy' && !u.isDestroyed && !u.embarkedInShipId && dist(u.pos, instPos) < r);
+      const has = (types: string[]) =>
+        targetIsland!.installations.some((i) => !i.isDestroyed && i.side === 'player' && types.includes(i.type)) ||
+        this.constructionSites.some((c) => c.islandId === targetIsland!.id && types.includes(c.inst.type));
+      let blocked: string | null = null;
+      if (item.typeTag === 'major_naval_port' && (!has(['pontoon_pier']) || hostileNear(800))) blocked = BUILD_PREREQ.major_naval_port;
+      else if (item.typeTag === 'dockyard' && !has(['pontoon_pier', 'major_naval_port'])) blocked = BUILD_PREREQ.dockyard;
+      else if (item.typeTag === 'airfield' && hostileNear(700)) blocked = BUILD_PREREQ.airfield;
+      else if (item.typeTag === 'farp' && hostileNear(500)) blocked = BUILD_PREREQ.farp;
+      if (blocked) {
+        this.addBannerAlert(`🏗️【無法開工】「${item.name}」${blocked}`, 'player', 'alert', 5.0);
         return false;
       }
     }
@@ -11213,6 +11373,21 @@ export class GameEngine {
         health: 2000,
         armor: 0.4,
         angle: instAngle,
+      }));
+    } else if (item.typeTag === 'farp') {
+      // FARP: a helicopter / V/STOL airfield with its own (initially empty) stock
+      this.airfieldPlanes[instId] = {};
+      targetIsland.installations.push(makeInstallation({
+        id: instId,
+        type: 'airfield',
+        name: `FARP 前進加油彈藥補給點 (${targetIsland.name.split(' (')[0]})`,
+        weaponDesc: '直升機起降坪 · 油囊與彈藥架 · 僅限直升機與垂直起降機',
+        side: 'player',
+        pos: instPos,
+        health: 1400,
+        armor: 0.25,
+        angle: instAngle,
+        rotaryOnly: true,
       }));
     } else if (item.typeTag === 'motor_pool') {
       targetIsland.installations.push(makeInstallation({

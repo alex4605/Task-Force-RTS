@@ -41,6 +41,8 @@ import { ActiveArmamentTrayState, ArmamentTrayModal } from './hud/ArmamentTrayMo
 import { SelectedUnitsPanel } from './hud/SelectedUnitsPanel';
 import { BUILDER_LABEL, BUILDER_RADIUS, builderRequirement } from '../game/construction';
 import { UnitPreviewCanvas } from './hud/UnitPreviewCanvas';
+import { BUILD_PREREQ, buildTime } from '../game/construction';
+import { isRotaryOrVstol } from '../game/aircrew';
 import { RALLY_LABEL, canCallFrom, isLightGroundUnit, rallyKind, resolveGroundRequisition } from '../game/groundRequisition';
 import {
   ShieldAlert,
@@ -111,7 +113,7 @@ interface HUDProps {
   convoyReinforceTimer?: number;
   nextConvoyEscort?: 'ss' | 'dd' | 'cl' | 'ca';
   /** Friendly airfields with their own aircraft stock, HQ island first. */
-  airfields?: { id: string; name: string; isHQ: boolean; planes: Record<string, number> }[];
+  airfields?: { id: string; name: string; isHQ: boolean; rotaryOnly?: boolean; planes: Record<string, number> }[];
   onTransferPlanes?: (model: AircraftModel, count: number, fromId: string, toId: string) => void;
   onLaunchAirbaseSortie?: (model: AircraftModel, count: number, payload?: AircraftPayloadType, airfieldId?: string) => void;
   onToggleTransportEmbark?: (transportId: string) => void;
@@ -1733,7 +1735,7 @@ export const HUD: React.FC<HUDProps> = ({
                       className={`px-2 py-0.5 rounded font-bold border ${activeAirfield?.id === a.id ? 'bg-[#00897B] text-white border-[#80CBC4]' : 'bg-[#051A18] text-slate-300 border-[#1E3A5F] hover:text-white'}`}
                       title={a.isHQ ? 'HQ 島機場：所有增援與補充飛機先抵達此處' : '前進機場：獨立庫存，以轉場補充'}
                     >
-                      {a.isHQ ? '🏛️ HQ ' : '🛬 '}{a.name} · {total}機
+                      {a.isHQ ? '🏛️ HQ ' : a.rotaryOnly ? '🚁 ' : '🛬 '}{a.name} · {total}機
                     </button>
                   );
                 })}
@@ -1767,6 +1769,8 @@ export const HUD: React.FC<HUDProps> = ({
               <DraggableScrollContainer className="gap-2 pb-1">
                 {afbModels
                   .filter((p) => !afbStockOnly || (airbaseStock[p.id] || 0) > 0)
+                  // A FARP only handles helicopters and V/STOL jets
+                  .filter((p) => !activeAirfield?.rotaryOnly || isRotaryOrVstol(p.id as AircraftModel))
                   .sort((a, b) => ((airbaseStock[b.id] || 0) > 0 ? 1 : 0) - ((airbaseStock[a.id] || 0) > 0 ? 1 : 0))
                   .filter((p) => {
                     if (afbFilter === 'all') return true;
@@ -2129,7 +2133,7 @@ export const HUD: React.FC<HUDProps> = ({
 
                     if (engineerTab === 'all') return true;
                     if (engineerTab === 'aviation') {
-                      return item.typeTag === 'airfield' || item.id.includes('airfield');
+                      return item.typeTag === 'airfield' || item.typeTag === 'farp' || item.id.includes('airfield');
                     }
                     if (engineerTab === 'air_defense') {
                       return item.typeTag === 'heavy_aa' || item.typeTag === 'sam_hawk' || item.id.includes('aa') || item.id.includes('sam');
@@ -2189,6 +2193,15 @@ export const HUD: React.FC<HUDProps> = ({
                           <div className="text-[8.5px] text-[#80DEEA] mt-1 bg-[#040C16] px-1 py-0.5 rounded border border-[#1E3A5F]/50 truncate">
                             {item.statsDesc}
                           </div>
+                          {(buildTime(item.typeTag) > 0 || BUILD_PREREQ[item.typeTag]) && (
+                            <div
+                              className="text-[8.5px] text-amber-200 mt-0.5 bg-[#1A1206] px-1 py-0.5 rounded border border-amber-700/50 truncate"
+                              title={`${buildTime(item.typeTag) > 0 ? `工期約 ${buildTime(item.typeTag)} 秒（工兵在場才施工，2 個工兵排約 1.6 倍速）` : ''}${BUILD_PREREQ[item.typeTag] ? `；門檻：${BUILD_PREREQ[item.typeTag]}` : ''}`}
+                            >
+                              {buildTime(item.typeTag) > 0 ? `⏱ 工期 ${buildTime(item.typeTag)}s` : ''}
+                              {BUILD_PREREQ[item.typeTag] ? ` · ${BUILD_PREREQ[item.typeTag]}` : ''}
+                            </div>
+                          )}
                         </div>
 
                         <div className="mt-2 pt-1 border-t border-[#1E3A5F]/60 flex flex-col gap-1">

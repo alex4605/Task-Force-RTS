@@ -13,6 +13,10 @@ export function getInstallationStyle(inst: Installation, island?: Island): Insta
   // Colour by the installation's own side: a friendly airstrip on a contested island does not make
   // the enemy bunkers next to it friendly.
   const isPlayer = inst.side ? inst.side !== 'enemy' : island?.isFriendlyBase === true || inst.id.includes('friendly');
+  if (inst.side === 'neutral' && !inst.isCivilian) {
+    // An unclaimed civilian site (station, airport)
+    return { isPlayer: false, color: '#B0BEC5', frameFill: 'rgba(120, 130, 140, 0.4)', frameStroke: '#B0BEC5', labelColor: '#CFD8DC' };
+  }
   if (inst.side === 'allied') {
     // Allied works in green, so they are not taken for the player's own
     return { isPlayer, color: '#76FF03', frameFill: 'rgba(46, 125, 50, 0.55)', frameStroke: '#66BB6A', labelColor: '#B9F6CA' };

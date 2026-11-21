@@ -1,5 +1,6 @@
 // Per-type installation artwork. Each drawer runs with the canvas translated to the installation's position.
 import { Era, Installation, InstallationType, Island } from '../../../types/game';
+import { drawAirfieldSite, drawMajorPortSite, drawPontoonPierSite, drawRailStationSite, drawRepairDockSite } from './aviationPorts';
 import { drawAmmoDepotSite, drawBattalionCpSite, drawCommandPostSite, drawFieldHospitalSite, drawMotorPoolSite, drawSupplyDepotSite } from './support';
 import { RenderContext } from '../context';
 import { drawGroundSilhouette, GROUND_SILHOUETTE_SCALE, groundSilhouetteClass } from '../../unitPreviewRenderer';
@@ -8,52 +9,6 @@ import { InstallationStyle } from './style';
 /** Draws the type-specific body of one installation in its local frame. */
 export type InstallationDrawer = (rc: RenderContext, inst: Installation, style: InstallationStyle, island?: Island) => void;
 
-function drawAirfield(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-  const { isPlayer, color, labelColor } = style;
-
-  // Runway concrete apron & blast pad shadow
-  ctx.fillStyle = 'rgba(2, 8, 16, 0.55)';
-  ctx.fillRect(-67, -11, 134, 26);
-
-  ctx.lineWidth = 2;
-  ctx.fillStyle = '#0F1C2A';
-  ctx.fillRect(-65, -12, 130, 24);
-  ctx.strokeRect(-65, -12, 130, 24);
-
-  // Runway threshold piano keys
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
-  for (const tx of [-61, 55]) {
-    for (const ty of [-8, -3, 2, 7]) {
-      ctx.fillRect(tx, ty - 1, 6, 2);
-    }
-  }
-
-  // Centerline dashes
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
-  ctx.lineWidth = 1.5;
-  ctx.setLineDash([8, 8]);
-  ctx.beginPath();
-  ctx.moveTo(-48, 0);
-  ctx.lineTo(48, 0);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Hangar & control tower apron
-  ctx.fillStyle = '#182C3E';
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
-  ctx.fillRect(10, 15, 16, 13);
-  ctx.strokeRect(10, 15, 16, 13);
-  ctx.fillStyle = '#FFD54F';
-  ctx.fillRect(-6, 15, 7, 7);
-  ctx.strokeRect(-6, 15, 7, 7);
-
-  ctx.fillStyle = labelColor;
-  ctx.font = 'bold 8.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(isPlayer ? '✈️ [友軍航空基地 AFB]' : '✈️ [敵軍航空基地 AFB]', 0, -18);
-}
 
 function drawCoastalGun(rc: RenderContext, inst: Installation, style: InstallationStyle, _island?: Island): void {
   const ctx = rc.ctx;
@@ -409,76 +364,6 @@ function drawFlakBattery(rc: RenderContext, _inst: Installation, style: Installa
   ctx.fillText(emplacementLabel('flak_battery', isPlayer, rc.era), 0, -35);
 }
 
-function drawShipRepairDock(rc: RenderContext, _inst: Installation, _style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-
-  // ════ NATO 船舶維修設施 / 應急修船浮塢 (Ship Repair Facility & Floating Drydock) ════
-  // 1. NATO APP-6 Maintenance Tactical Box Frame (友軍藍戰術框 + 扳手維修符號)
-  ctx.fillStyle = 'rgba(21, 101, 192, 0.55)';
-  ctx.strokeStyle = '#42A5F5';
-  ctx.lineWidth = 2.2;
-  ctx.strokeRect(-18, -32, 36, 18);
-  ctx.fillRect(-18, -32, 36, 18);
-
-  // NATO 維修符號: 交叉工具
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 1.8;
-  ctx.beginPath();
-  ctx.moveTo(-9, -27);
-  ctx.lineTo(9, -15);
-  ctx.moveTo(9, -27);
-  ctx.lineTo(-9, -15);
-  ctx.stroke();
-
-  // "REP" 標記
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = 'bold 8px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('REP', 0, -18);
-
-  // 2. 地面與水域物理設施: 巨大浮動修船塢槽 (Floating U-Drydock Basin) + 起重機桁架 + 焊接閃光
-  ctx.fillStyle = '#1A2938';
-  ctx.strokeStyle = '#42A5F5';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(-24, -12, 10, 48);
-  ctx.fillRect(-24, -12, 10, 48);
-  ctx.strokeRect(14, -12, 10, 48);
-  ctx.fillRect(14, -12, 10, 48);
-
-  // 塢底基座
-  ctx.strokeStyle = '#90CAF9';
-  ctx.lineWidth = 2.4;
-  ctx.beginPath();
-  ctx.moveTo(-24, 36);
-  ctx.lineTo(24, 36);
-  ctx.stroke();
-
-  // 浮動船塢水槽
-  ctx.fillStyle = 'rgba(3, 169, 244, 0.2)';
-  ctx.fillRect(-14, -12, 28, 48);
-
-  // 旋臂造船起重機
-  const craneRot = rc.time * 0.8;
-  ctx.strokeStyle = '#FFD54F';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(-19, 0);
-  ctx.lineTo(-19 + Math.cos(craneRot) * 18, Math.sin(craneRot) * 18);
-  ctx.stroke();
-
-  // 電銲搶修動態火花
-  const weldFlash = (Math.sin(rc.time * 16) + 1) * 0.5;
-  ctx.fillStyle = `rgba(128, 222, 234, ${0.4 + weldFlash * 0.5})`;
-  ctx.beginPath();
-  ctx.arc(0, 12, 5 + weldFlash * 4, 0, Math.PI * 2);
-  ctx.fill();
-
-  // 標籤
-  ctx.fillStyle = '#80DEEA';
-  ctx.font = 'bold 8.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('⚓ [NATO 友軍船塢 REPAIR] 應急損管修船廠', 0, -38);
-}
 
 
 function drawHiddenTunnel(rc: RenderContext, _inst: Installation, _style: InstallationStyle, _island?: Island): void {
@@ -509,88 +394,7 @@ function drawHiddenTunnel(rc: RenderContext, _inst: Installation, _style: Instal
   ctx.fillText('[地下坑道網]', 0, -18);
 }
 
-function drawPontoonPier(rc: RenderContext, inst: Installation, _style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
 
-  // ════ 浮式人工棧橋港 (Expedient Pontoon Pier / 急造港口) ════
-  // 浮動突堤棧橋 (Modular Pontoon Pier) + 卸載吊桿
-  ctx.lineWidth = 2.2;
-  ctx.strokeStyle = '#4FC3F7';
-  ctx.fillStyle = 'rgba(2, 136, 209, 0.45)';
-  ctx.strokeRect(-28, -8, 56, 16);
-  ctx.fillRect(-28, -8, 56, 16);
-
-  // 突堤木質棧道橫條紋
-  ctx.strokeStyle = '#81D4FA';
-  ctx.lineWidth = 1.2;
-  for (let px = -24; px <= 24; px += 6) {
-    ctx.beginPath();
-    ctx.moveTo(px, -8);
-    ctx.lineTo(px, 8);
-    ctx.stroke();
-  }
-
-  // 吊運起重桁架桿
-  ctx.strokeStyle = '#FFD54F';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(15, 0);
-  ctx.lineTo(26, -14);
-  ctx.lineTo(32, -8);
-  ctx.stroke();
-
-  // 標籤與工兵升級進度
-  ctx.fillStyle = '#80D8FF';
-  ctx.font = 'bold 9px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('⚓ [浮式人工棧橋港] 急造港口 (補給線連通)', 0, -22);
-
-  if (inst.upgradeTimer && inst.upgradeTimer > 0) {
-    const upProg = Math.min(1, inst.upgradeTimer / 35.0);
-    ctx.fillStyle = '#FFD54F';
-    ctx.fillText(`🔨 工兵拓建中: ${Math.round(inst.upgradeTimer)}s / 35s`, 0, 26);
-    ctx.fillStyle = 'rgba(7, 19, 34, 0.9)';
-    ctx.fillRect(-20, 29, 40, 3.5);
-    ctx.fillStyle = '#FFD54F';
-    ctx.fillRect(-20, 29, 40 * upProg, 3.5);
-  }
-}
-
-function drawMajorNavalPort(rc: RenderContext, _inst: Installation, _style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-
-  // ════ 正規深水軍港 (Major Deepwater Naval Port) ════
-  // 現代化大型深水混凝土突堤碼頭 + 港埠起重機
-  ctx.lineWidth = 2.6;
-  ctx.strokeStyle = '#00E5FF';
-  ctx.fillStyle = 'rgba(0, 151, 167, 0.55)';
-  ctx.strokeRect(-42, -14, 84, 28);
-  ctx.fillRect(-42, -14, 84, 28);
-
-  // 大型龍門吊車架構
-  ctx.strokeStyle = '#FFE082';
-  ctx.lineWidth = 2.2;
-  ctx.beginPath();
-  ctx.moveTo(-20, -14);
-  ctx.lineTo(-20, -26);
-  ctx.lineTo(20, -26);
-  ctx.lineTo(20, -14);
-  ctx.stroke();
-
-  // 突堤泊靠繫纜樁
-  ctx.fillStyle = '#FFFFFF';
-  for (const bx of [-36, -18, 0, 18, 36]) {
-    ctx.beginPath();
-    ctx.arc(bx, -12, 2.2, 0, Math.PI * 2);
-    ctx.arc(bx, 12, 2.2, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  ctx.fillStyle = '#80DEEA';
-  ctx.font = 'bold 9.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('⚓【正規深水軍港】全島戰略樞紐 (+1.5 RP/s)', 0, -32);
-}
 
 
 function drawPowCamp(rc: RenderContext, inst: Installation, style: InstallationStyle, _island?: Island): void {
@@ -1731,7 +1535,7 @@ function drawForwardFob(rc: RenderContext, _inst: Installation, style: Installat
 
 /** Exhaustive: an InstallationType without artwork is a compile error (it used to render as nothing). */
 export const INSTALLATION_DRAWERS: Record<InstallationType, InstallationDrawer> = {
-  airfield: drawAirfield,
+  airfield: drawAirfieldSite,
   coastal_gun: drawCoastalGun,
   radar_station: drawRadarStation,
   ammo_depot: drawAmmoDepotSite,
@@ -1741,14 +1545,15 @@ export const INSTALLATION_DRAWERS: Record<InstallationType, InstallationDrawer> 
   tank_battalion: drawTankBattalion,
   towed_artillery: drawTowedArtillery,
   flak_battery: drawFlakBattery,
-  ship_repair_dock: drawShipRepairDock,
+  ship_repair_dock: drawRepairDockSite,
   command_post: drawCommandPostSite,
   hidden_tunnel: drawHiddenTunnel,
-  pontoon_pier: drawPontoonPier,
-  major_naval_port: drawMajorNavalPort,
+  pontoon_pier: drawPontoonPierSite,
+  major_naval_port: drawMajorPortSite,
   supply_depot: drawSupplyDepotSite,
   field_hospital: drawFieldHospitalSite,
   motor_pool: drawMotorPoolSite,
+  rail_station: drawRailStationSite,
   pow_camp: drawPowCamp,
   city: drawCity,
   town: drawTown,
