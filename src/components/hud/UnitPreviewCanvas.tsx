@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { AircraftPayloadType } from '../../types/game';
+import { AircraftPayloadType, Era } from '../../types/game';
 import { drawUnitPreview, UnitPreviewKind } from '../../game/unitPreviewRenderer';
 
 interface UnitPreviewCanvasProps {
@@ -8,12 +8,14 @@ interface UnitPreviewCanvasProps {
   width?: number;
   height?: number;
   payloadType?: AircraftPayloadType;
+  /** Card era (ships are drawn as the class delivered in that era). */
+  era?: Era;
   compact?: boolean;
   className?: string;
 }
 
 export const UnitPreviewCanvas: React.FC<UnitPreviewCanvasProps> = React.memo(
-  ({ kind, unitKey, width = 144, height = 46, payloadType, compact = false, className = '' }) => {
+  ({ kind, unitKey, width = 144, height = 46, payloadType, era, compact = false, className = '' }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
     useEffect(() => {
@@ -27,9 +29,9 @@ export const UnitPreviewCanvas: React.FC<UnitPreviewCanvasProps> = React.memo(
 
       ctx.save();
       ctx.scale(dpr, dpr);
-      drawUnitPreview(ctx, width, height, kind, unitKey, { payloadType, compact });
+      drawUnitPreview(ctx, width, height, kind, unitKey, { payloadType, compact, era });
       ctx.restore();
-    }, [kind, unitKey, width, height, payloadType, compact]);
+    }, [kind, unitKey, width, height, payloadType, compact, era]);
 
     return (
       <canvas

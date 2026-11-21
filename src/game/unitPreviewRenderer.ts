@@ -1,4 +1,8 @@
-import { AircraftPayloadType } from '../types/game';
+import { Aircraft, AircraftModel, AircraftPayloadType, Era, RequisitionItem } from '../types/game';
+import { drawShipIcon } from './render/ships';
+import { buildRequisitionShip } from './requisitionShips';
+import { drawSpecificAircraftModel } from './render/aircraft';
+import { AIRCRAFT_NATION } from './render/aircraft/nation';
 import { TANK_PLANS, drawTankPlan } from './render/groundPlan';
 import { SUPPORT_PLANS, drawRocketLauncherPlan, drawSupportPlan } from './render/groundPlanSupport';
 import { drawAtgmTeam, drawEngineerTeam, drawInfantryTeam, drawMortarSection } from './render/groundInfantry';
@@ -10,6 +14,8 @@ export interface UnitPreviewOptions {
   payloadType?: AircraftPayloadType;
   compact?: boolean;
   isPlayer?: boolean;
+  /** Era of the card (ships: draws the exact class the card delivers in that era). */
+  era?: Era;
 }
 
 /**
@@ -1787,6 +1793,149 @@ function drawShipPreview(ctx: CanvasRenderingContext2D, w: number, h: number, ra
   ctx.restore();
 }
 
+type Icon = { canvas: HTMLCanvasElement; w: number; h: number };
+
+/** Crops a rendered canvas to what was drawn on it. */
+function cropToContent(raw: HTMLCanvasElement): Icon | null {
+  const px = raw.width;
+  const py = raw.height;
+  const data = raw.getContext('2d')!.getImageData(0, 0, px, py).data;
+  let x0 = px, y0 = py, x1 = -1, y1 = -1;
+  for (let y = 0; y < py; y += 2) {
+    for (let x = 0; x < px; x += 2) {
+      if (data[(y * px + x) * 4 + 3] > 24) {
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+  }
+  if (x1 <= x0 || y1 <= y0) return null;
+  const cw = x1 - x0 + 4;
+  const ch = y1 - y0 + 4;
+  const c = document.createElement('canvas');
+  c.width = cw;
+  c.height = ch;
+  c.getContext('2d')!.drawImage(raw, x0 - 2, y0 - 2, cw, ch, 0, 0, cw, ch);
+  return { canvas: c, w: cw, h: ch };
+}
+
+function drawFittedIcon(ctx: CanvasRenderingContext2D, w: number, h: number, icon: Icon, fw: number, fh: number): void {
+  const fit = Math.min((w * fw) / icon.w, (h * fh) / icon.h);
+  const dw = icon.w * fit;
+  const dh = icon.h * fit;
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(icon.canvas, (w - dw) / 2, (h - dh) / 2, dw, dh);
+  ctx.restore();
+}
+
+/** The ship a naval card delivers in the era, drawn with its map artwork (bow to the right). */
+const SHIP_ICON_CACHE = new Map<string, Icon | null>();
+function shipIcon(typeTag: string, era: Era): Icon | null {
+  const key = `${typeTag}|${era}`;
+  if (SHIP_ICON_CACHE.has(key)) return SHIP_ICON_CACHE.get(key)!;
+  let icon: Icon | null = null;
+  if (typeof document !== 'undefined') {
+    const ship = buildRequisitionShip({ typeTag, id: typeTag } as RequisitionItem, era, 'preview', { x: 0, y: 0 });
+    if (ship) {
+      ship.heading = 0;
+      // Guns trained fore and aft, as in harbour
+      for (const t of ship.turrets) t.angle = t.relX < 0 ? Math.PI : 0;
+      const res = 4;
+      const span = Math.max(80, ship.length * 1.4);
+      const raw = document.createElement('canvas');
+      raw.width = Math.ceil(span * res);
+      raw.height = Math.ceil(Math.max(40, ship.width * 4) * res);
+      const rctx = raw.getContext('2d')!;
+      rctx.translate(raw.width / 2, raw.height / 2);
+      rctx.scale(res, res);
+      drawShipIcon({ ctx: rctx, width: raw.width, height: raw.height, time: 0.4, era }, ship);
+      icon = cropToContent(raw);
+    }
+  }
+  SHIP_ICON_CACHE.set(key, icon);
+  return icon;
+}
+
+/**
+ * The aircraft exactly as it is drawn on the map (its own planform, markings, rotor or props),
+ * rendered once at high resolution, cropped to its outline and cached per type and store.
+ */
+const AIRCRAFT_ICON_CACHE = new Map<string, { canvas: HTMLCanvasElement; w: number; h: number } | null>();
+const ICON_RES = 6;
+const ICON_SPAN = 120;
+
+function aircraftIcon(model: string, payloadType?: AircraftPayloadType): { canvas: HTMLCanvasElement; w: number; h: number } | null {
+  const key = `${model}|${payloadType ?? ''}`;
+  if (AIRCRAFT_ICON_CACHE.has(key)) return AIRCRAFT_ICON_CACHE.get(key)!;
+  let result: { canvas: HTMLCanvasElement; w: number; h: number } | null = null;
+  if (model in AIRCRAFT_NATION && typeof document !== 'undefined') {
+    const px = ICON_SPAN * ICON_RES;
+    const raw = document.createElement('canvas');
+    raw.width = px;
+    raw.height = px;
+    const rctx = raw.getContext('2d');
+    if (rctx) {
+      rctx.translate(px / 2, px / 2);
+      rctx.scale(ICON_RES, ICON_RES);
+      rctx.strokeStyle = '#4FC3F7';
+      rctx.fillStyle = '#06101E';
+      rctx.lineWidth = 1.5;
+      const plane = {
+        id: 'preview',
+        squadronId: 'preview',
+        model: model as AircraftModel,
+        role: 'fighter',
+        name: '',
+        side: 'player',
+        pos: { x: 0, y: 0 },
+        vel: { x: 0, y: 0 },
+        heading: 0,
+        targetHeading: 0,
+        speed: 0,
+        maxSpeed: 0,
+        altitude: 0.8,
+        state: 'cruising',
+        health: 1,
+        maxHealth: 1,
+        order: { type: 'idle' },
+        hasPayload: true,
+        payloadType,
+        shootCooldown: 0,
+        wingmanOffset: { x: 0, y: 0 },
+      } as unknown as Aircraft;
+      drawSpecificAircraftModel({ ctx: rctx, width: px, height: px, time: 0.37, era: 'era1' }, plane, '#4FC3F7');
+      // Crop to the drawn outline
+      const data = rctx.getImageData(0, 0, px, px).data;
+      let x0 = px, y0 = px, x1 = -1, y1 = -1;
+      for (let y = 0; y < px; y += 2) {
+        for (let x = 0; x < px; x += 2) {
+          if (data[(y * px + x) * 4 + 3] > 24) {
+            if (x < x0) x0 = x;
+            if (x > x1) x1 = x;
+            if (y < y0) y0 = y;
+            if (y > y1) y1 = y;
+          }
+        }
+      }
+      if (x1 > x0 && y1 > y0) {
+        const cw = x1 - x0 + 4;
+        const ch = y1 - y0 + 4;
+        const c = document.createElement('canvas');
+        c.width = cw;
+        c.height = ch;
+        c.getContext('2d')!.drawImage(raw, x0 - 2, y0 - 2, cw, ch, 0, 0, cw, ch);
+        result = { canvas: c, w: cw, h: ch };
+      }
+    }
+  }
+  AIRCRAFT_ICON_CACHE.set(key, result);
+  return result;
+}
+
 function drawAircraftPreview(
   ctx: CanvasRenderingContext2D,
   w: number,
@@ -1794,6 +1943,12 @@ function drawAircraftPreview(
   rawKey: string,
   payloadType?: AircraftPayloadType
 ) {
+  // The real map artwork of the type, fitted to the card (nose to the right)
+  const icon = aircraftIcon(rawKey, payloadType);
+  if (icon) {
+    drawFittedIcon(ctx, w, h, icon, 0.9, 0.9);
+    return;
+  }
   const m = normalizeKey(rawKey);
   const cx = w * 0.5;
   const cy = h * 0.52;
@@ -2533,7 +2688,9 @@ export function drawUnitPreview(
   }
 
   if (kind === 'ship') {
-    drawShipPreview(ctx, width, height, unitKey);
+    const icon = options.era ? shipIcon(unitKey, options.era) : null;
+    if (icon) drawFittedIcon(ctx, width, height, icon, 0.94, 0.8);
+    else drawShipPreview(ctx, width, height, unitKey);
   } else if (kind === 'aircraft') {
     drawAircraftPreview(ctx, width, height, unitKey, options.payloadType);
   } else if (kind === 'ground') {

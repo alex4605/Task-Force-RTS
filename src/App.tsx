@@ -468,6 +468,10 @@ export default function App() {
           engine.isDesignatingEscort = false;
           engine.isDesignatingRebase = true;
         }}
+        onToggleDipping={() => {
+          engine.toggleDippingSonar();
+          setAircraft([...engine.aircraft]);
+        }}
         onSetGunRoe={(key, value) => {
           engine.setGunRoe(key, value);
           setPlayerShips([...engine.playerShips]);

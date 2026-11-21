@@ -150,6 +150,7 @@ interface HUDProps {
   onStartRebase?: (ids: string[]) => void;
   onStartEscort?: (ids: string[]) => void;
   onSetGunRoe?: (key: 'ships' | 'installations' | 'ground', value: boolean) => void;
+  onToggleDipping?: () => void;
   onCancelCap?: () => void;
   sonobuoys?: Sonobuoy[];
   isDesignatingSonobuoy?: boolean;
@@ -298,6 +299,7 @@ export const HUD: React.FC<HUDProps> = ({
   onStartRebase,
   onStartEscort,
   onSetGunRoe,
+  onToggleDipping,
   onCancelCap,
   sonobuoys = [],
   isDesignatingSonobuoy = false,
@@ -1005,6 +1007,7 @@ export const HUD: React.FC<HUDProps> = ({
           onStartRebase={onStartRebase}
           onStartEscort={onStartEscort}
           onSetGunRoe={onSetGunRoe}
+          onToggleDipping={onToggleDipping}
           onCancelCap={onCancelCap}
           isDesignatingSonobuoy={isDesignatingSonobuoy}
           onStartSonobuoyDesignation={onStartSonobuoyDesignation}
@@ -1446,7 +1449,7 @@ export const HUD: React.FC<HUDProps> = ({
                     <span>母艦全裝備庫</span>
                   </button>
                   <span className="text-[10px] text-slate-400">
-                    Space 暫停 · Q 增援 · E 構工 · A 機場 · C CAP · T 轉降 · V 護航
+                    Space 暫停 · Q 增援 · E 構工 · A 機場 · C CAP · T 轉降 · V 護航 · D 吊放聲納
                   </span>
                 </div>
               </div>
@@ -2328,6 +2331,7 @@ export const HUD: React.FC<HUDProps> = ({
                           <UnitPreviewCanvas
                             kind={previewKind}
                             unitKey={item.unitType || item.typeTag || item.id}
+                            era={era}
                             width={148}
                             height={46}
                           />

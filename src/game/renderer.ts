@@ -137,6 +137,10 @@ export class VectorRenderer {
     overlaysRender.drawEscortPreview(this.rc, pos, charge, camera);
   }
 
+  public drawDippingSonar(aircraft: Aircraft[], selectedIds: string[], camera: Camera) {
+    overlaysRender.drawDippingSonar(this.rc, aircraft, selectedIds, camera);
+  }
+
   public drawCapBoxes(aircraft: Aircraft[], selectedIds: string[], camera: Camera) {
     overlaysRender.drawCapBoxes(this.rc, aircraft, selectedIds, camera);
   }

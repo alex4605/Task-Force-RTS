@@ -1884,6 +1884,8 @@ export interface Aircraft {
   evadeMissileId?: string;
   /** Player-assigned close escort: the friendly aircraft this fighter stays with and protects. */
   escortTargetId?: string;
+  /** Hovering with the dipping sonar lowered: where, seconds in the dip, next ping. */
+  dipping?: { pos: Vector2D; time: number; pingTimer: number; lastPingAt?: number };
   evasionTactic?: 'notching' | 'breaking';
   lastSeadCounterfireTime?: number;
   // 時代四蘇越「一擊脫離」戰術狀態 (Era 4 Soviet Hit-and-Run Intercept AI)

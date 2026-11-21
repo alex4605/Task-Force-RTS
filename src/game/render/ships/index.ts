@@ -1026,3 +1026,8 @@ function drawDatum(rc: RenderContext, ship: Ship): void {
   ctx.fillText(`DATUM +${Math.round(age)}s`, p.x, p.y - radius - 4);
   ctx.restore();
 }
+
+/** A ship's hull and deck artwork alone, at the current transform (for menu icons). */
+export function drawShipIcon(rc: RenderContext, ship: Ship): void {
+  drawHull(rc, planView(ship), '#E0F7FA', '#80DEEA');
+}

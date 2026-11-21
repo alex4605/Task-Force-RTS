@@ -114,7 +114,27 @@ export function sonarDeadZone(sonar: SonarSuite, era: Era): number {
 /** Patrol / ASW aircraft carrying a MAD boom (from 1944). */
 const MAD_MODELS: ReadonlySet<AircraftModel> = new Set<AircraftModel>(['pby', 'af_guardian', 's2', 'p3', 's3a', 'sh2', 'sh60b', 'lynx', 'il38', 'be12', 'ka27']);
 /** Helicopters with dipping sonar. */
-const DIPPING_SONAR: Partial<Record<AircraftModel, number>> = { sh3f: 8, ka27: 7, uh2: 0, sh60b: 0 };
+const DIPPING_SONAR: Partial<Record<AircraftModel, number>> = { sh3f: 8, ka27: 7, lynx: 6, uh2: 0, sh60b: 0 };
+
+/**
+ * Helicopters that can hover and lower a dipping sonar: SH-3 Sea King (AN/AQS-13), Ka-27 (VGS-3),
+ * Lynx (DUAV-4 / HELRAS on the French and Dutch aircraft). The SH-2 and SH-60B LAMPS helicopters
+ * worked with sonobuoys and the ship's sonar instead (the dipper came with the SH-60F).
+ */
+export function canDipSonar(model: AircraftModel): boolean {
+  return (DIPPING_SONAR[model] ?? 0) > 0;
+}
+
+/** Nominal range of a dipping sonar (map units), for drawing. */
+export function dippingSonarNominalRange(model: AircraftModel): number {
+  return gameRangeFromKm(DIPPING_SONAR[model] ?? 0);
+}
+
+/** Active range of a lowered dipping sonar against a submarine (map units); not blocked by the layer. */
+export function dippingSonarRange(model: AircraftModel, sub: Ship): number {
+  const km = DIPPING_SONAR[model] ?? 0;
+  return km > 0 ? gameRangeFromKm(km * (0.85 + 0.15 * Math.min(1.2, submarineNoise(sub)))) : 0;
+}
 /** Aircraft with a search radar able to pick up a snorkel or a surfaced boat (km). */
 const SEARCH_RADAR_KM: Partial<Record<AircraftModel, number>> = {
   pby: 15, os2u: 6, sc1: 10, tbf: 10, af_guardian: 20, ad3w: 30, s2: 25, p3: 40, s3a: 40, e2c: 40, sh2: 15, sh60b: 20,
