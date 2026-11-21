@@ -713,6 +713,44 @@ function drawSupplyDepot(rc: RenderContext, _inst: Installation, _style: Install
   ctx.fillText('📦 [戰地輜重樞紐] 建制度修整 +2.0%/s', 0, -20);
 }
 
+function drawPowCamp(rc: RenderContext, inst: Installation, style: InstallationStyle, _island?: Island): void {
+  const ctx = rc.ctx;
+  // ════ 戰俘營 (POW Camp): barbed-wire double fence, corner watchtowers, rows of huts ════
+  ctx.fillStyle = 'rgba(96, 84, 62, 0.75)';
+  ctx.fillRect(-30, -22, 60, 44);
+  // Double fence with the wire between
+  ctx.strokeStyle = 'rgba(200, 200, 190, 0.85)';
+  ctx.lineWidth = 0.9;
+  ctx.setLineDash([2, 1.5]);
+  ctx.strokeRect(-30, -22, 60, 44);
+  ctx.strokeRect(-26, -18, 52, 36);
+  ctx.setLineDash([]);
+  // Huts in two rows
+  ctx.fillStyle = '#5D4037';
+  ctx.strokeStyle = '#3E2723';
+  ctx.lineWidth = 0.6;
+  for (const y of [-14, 4]) {
+    for (const x of [-21, -9, 3, 15]) {
+      ctx.fillRect(x, y, 8, 10);
+      ctx.strokeRect(x, y, 8, 10);
+      ctx.beginPath();
+      ctx.moveTo(x + 4, y);
+      ctx.lineTo(x + 4, y + 10);
+      ctx.stroke();
+    }
+  }
+  // Watchtowers at the corners
+  ctx.fillStyle = style.isPlayer ? '#1565C0' : '#B71C1C';
+  for (const [x, y] of [[-30, -22], [30, -22], [-30, 22], [30, 22]]) {
+    ctx.fillRect(x - 3, y - 3, 6, 6);
+  }
+  ctx.fillStyle = style.labelColor;
+  ctx.font = 'bold 9px monospace';
+  ctx.textAlign = 'center';
+  const n = inst.prisoners ?? 0;
+  ctx.fillText(style.isPlayer ? `⛓ [戰俘營] 收押 ${n} 人` : `⛓ [敵戰俘營] 我方被俘 ${n} 人 · 禁止射擊`, 0, -28);
+}
+
 function drawFieldHospital(rc: RenderContext, _inst: Installation, _style: InstallationStyle, _island?: Island): void {
   const ctx = rc.ctx;
 
@@ -1902,6 +1940,7 @@ export const INSTALLATION_DRAWERS: Record<InstallationType, InstallationDrawer> 
   major_naval_port: drawMajorNavalPort,
   supply_depot: drawSupplyDepot,
   field_hospital: drawFieldHospital,
+  pow_camp: drawPowCamp,
   city: drawCity,
   town: drawTown,
   settlement: drawSettlement,

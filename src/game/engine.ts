@@ -3,6 +3,8 @@ import { snapOntoLand } from './coastline';
 import { resolveGroundRequisition } from './groundRequisition';
 import { AlliedHost, AlliedOps } from './allied/alliedOps';
 import { fitsInHold, formatHold, holdUsed, shipHold } from './naval/lift';
+import { rollBailout, shipRaftGroups } from './aircrew';
+import { LIBERATE_CLEAR, LIBERATE_RADIUS, PLAYER_CAMP_NAME, POW_CAMP_CAPACITY, POW_RP_PER_SECOND } from './pow';
 import { AwardKind, Bundle, Economy, MOBILISATION, award, costOf, formatBundle, incomeRate, nuclearCost } from './economy';
 import { airCardDelivery } from './airRequisition';
 import { airliftCargo, isAirliftPayload, isHeloLift } from './airlift';
@@ -644,6 +646,9 @@ export class GameEngine {
   // 時代三搜救救生筏與全域預警 (Era 3 SAR Rafts & Global AEW)
   // ══════════════════════════════════════════════════════════
   public lifeRafts: LifeRaft[] = [];
+  /** Enemy prisoners we hold outside a camp (no room, or no camp built yet). */
+  public powsInField = 0;
+  private powCheckTimer = 0;
   public hasAD3WOnStation: boolean = false;
 
   // ══════════════════════════════════════════════════════════
@@ -2602,6 +2607,7 @@ export class GameEngine {
     this.updateAntiShipMissilePointDefense(effectiveDt);
     this.updateModernNavalGunAA(effectiveDt);
     this.updateLifeRaftRescue(effectiveDt);
+    this.updatePowCamps(effectiveDt);
     this.updatePendingMissileLaunches(effectiveDt);
     this.updateProjectiles(effectiveDt);
     this.updateParticles(effectiveDt);
@@ -6846,8 +6852,10 @@ export class GameEngine {
         });
       }
 
-      // 敵方飛行員跳傘 (POW 戰俘機制 - 75% 機率跳傘落海或降落於陸地)
-      if (Math.random() < 0.75) {
+      // Enemy aircrew bail out by the historical odds of the type and era (see aircrew.ts)
+      const bail = rollBailout(plane.model, this.era);
+      this.casualties.enemyAircrewLost = (this.casualties.enemyAircrewLost ?? 0) + bail.killed;
+      if (bail.survivors > 0) {
         const raftId = `raft-enemy-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         const isOnLand = this.islands.some((isl) => isPointInPolygon(plane.pos, isl.points));
         this.lifeRafts.push({
@@ -6856,7 +6864,8 @@ export class GameEngine {
           pos: { ...plane.pos },
           planeModel: plane.model,
           planeName: plane.name,
-          pilotName: `OPFOR 飛行員 (${plane.name.split(' ')[0]})`,
+          pilotName: bail.crew > 1 ? `OPFOR 機組 ${bail.survivors}/${bail.crew} 人 (${plane.name.split(' ')[0]})` : `OPFOR 飛行員 (${plane.name.split(' ')[0]})`,
+          crew: bail.survivors,
           timer: 90,
           maxTimer: 90,
           rescued: false,
@@ -6870,12 +6879,25 @@ export class GameEngine {
           sourceName: '落難信號 (SOS)',
           targetName: pName,
           actionType: 'recon_spotted',
-          text: `🪂【敵機組員跳傘】「${pName}」被擊墜後飛行員跳傘（座標 [${Math.round(plane.pos.x)}, ${Math.round(plane.pos.y)}]）！派遣水面艦（<85-120m）或地面部隊（<85m）物理接近可將其捕獲為 POW (可獲政治值與人力值)！`,
+          text: `🪂【敵機組員跳傘】「${pName}」被擊墜，機組 ${bail.crew} 人中 ${bail.survivors} 人跳傘${bail.killed > 0 ? `、${bail.killed} 人陣亡` : ''}（座標 [${Math.round(plane.pos.x)}, ${Math.round(plane.pos.y)}]）。派水面艦（85–120m 內）或地面部隊（85m 內）接近即可俘虜。`,
         });
       }
     } else {
       this.casualties.playerPlanesLost++;
-      // 我方飛行員跳傘展開救生筏 (Life Raft, 90s 倒數窗口)
+      const bail = rollBailout(plane.model, this.era);
+      this.casualties.playerAircrewLost = (this.casualties.playerAircrewLost ?? 0) + bail.killed;
+      if (bail.survivors === 0) {
+        this.addCombatLog({
+          category: 'air',
+          sourceSide: 'enemy',
+          sourceName: '跳傘緊急頻道 (SAR Channel)',
+          targetName: pName,
+          actionType: 'aa_down',
+          text: `✝️【機組全員陣亡】「${pName}」遭擊落，未見降落傘，機組 ${bail.crew} 人全數陣亡。`,
+        });
+        return;
+      }
+      // Survivors in a life raft (90 s window)
       const raftId = `raft-player-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const isOnLand = this.islands.some((isl) => isPointInPolygon(plane.pos, isl.points));
       this.lifeRafts.push({
@@ -6884,7 +6906,8 @@ export class GameEngine {
         pos: { ...plane.pos },
         planeModel: plane.model,
         planeName: plane.name,
-        pilotName: pName,
+        pilotName: bail.crew > 1 ? `${pName} 機組 ${bail.survivors}/${bail.crew} 人` : pName,
+        crew: bail.survivors,
         timer: 90,
         maxTimer: 90,
         rescued: false,
@@ -6892,8 +6915,9 @@ export class GameEngine {
         isOnLand,
       });
 
+      const lostTxt = bail.killed > 0 ? `，${bail.killed} 人陣亡` : '';
       this.addBannerAlert(
-        `🛟【跳傘救生】我方「${pName}」飛行員跳傘！派遣船隻或地面部隊物理接近救起可補回戰機！`,
+        `🛟【跳傘救生】「${pName}」機組 ${bail.survivors} 人跳傘${lostTxt}！派船艦或地面部隊接近救起`,
         'player',
         'alert',
         6.0
@@ -6904,7 +6928,7 @@ export class GameEngine {
         sourceName: '跳傘緊急頻道 (SAR Channel)',
         targetName: pName,
         actionType: 'recon_spotted',
-        text: `🛟【飛行員跳傘】「${pName}」遭擊落後飛行員成功開啟救生筏（座標 [${Math.round(plane.pos.x)}, ${Math.round(plane.pos.y)}]，90秒窗口）！水面艦（<85-120m）、地面部隊（<85m）或搜救直升機物理接近即可救起補回 1 架該型戰機；若遭敵軍先接觸將損失政治值 PP -80！`,
+        text: `🛟【機組跳傘】「${pName}」遭擊落，機組 ${bail.crew} 人中 ${bail.survivors} 人登上救生筏${lostTxt}（座標 [${Math.round(plane.pos.x)}, ${Math.round(plane.pos.y)}]，90 秒窗口）。水面艦（85–120m）、地面部隊（85m）或搜救直升機接近即可救起，補回 1 架該型機；若先遭敵接觸，政治值 PP -80。`,
       });
     }
   }
@@ -10663,6 +10687,19 @@ export class GameEngine {
         health: 2000,
         armor: 0.4,
         angle: instAngle,
+      }));
+    } else if (item.typeTag === 'pow_camp') {
+      targetIsland.installations.push(makeInstallation({
+        id: instId,
+        type: 'pow_camp',
+        name: PLAYER_CAMP_NAME[this.era],
+        weaponDesc: `鐵絲網收容營區 · 容量 ${POW_CAMP_CAPACITY} 人 · 審訊戰俘產出研究點數 RP`,
+        side: 'player',
+        pos: instPos,
+        health: 1600,
+        armor: 0.3,
+        angle: instAngle,
+        prisoners: 0,
       }));
     } else if (item.typeTag === 'field_hospital') {
       // 戰地野戰醫院
@@ -15237,6 +15274,83 @@ export class GameEngine {
   // 敵俘為戰俘: +100 CP, +100分
   // 友軍遭敵俘獲: -80 CP
   // ══════════════════════════════════════════════════════════
+  private powCamps(side: 'player' | 'enemy'): Installation[] {
+    const out: Installation[] = [];
+    for (const isl of this.islands) {
+      for (const i of isl.installations) {
+        if (i.type === 'pow_camp' && !i.isDestroyed && (side === 'enemy' ? i.side === 'enemy' : i.side !== 'enemy')) out.push(i);
+      }
+    }
+    return out;
+  }
+
+  /** Prisoners taken by `captor` go to its camps (ours: up to capacity, the rest held in the field). */
+  private takePrisoners(captor: 'player' | 'enemy', men: number): void {
+    if (captor === 'enemy') {
+      const camp = this.powCamps('enemy')[0];
+      if (camp) camp.prisoners = (camp.prisoners ?? 0) + men;
+      return;
+    }
+    let left = men;
+    for (const camp of this.powCamps('player')) {
+      const room = POW_CAMP_CAPACITY - (camp.prisoners ?? 0);
+      const n = Math.min(room, left);
+      if (n > 0) {
+        camp.prisoners = (camp.prisoners ?? 0) + n;
+        left -= n;
+      }
+    }
+    this.powsInField += left;
+  }
+
+  /**
+   * POW camps: ours turn the prisoners they hold into intelligence and take in those held in the
+   * field when room appears; the enemy's is freed when our ground troops hold its compound.
+   */
+  private updatePowCamps(dt: number): void {
+    const ours = this.powCamps('player');
+    let held = 0;
+    for (const c of ours) held += c.prisoners ?? 0;
+    if (held > 0) this.economy.add({ mp: 0, pp: 0, rp: held * POW_RP_PER_SECOND * dt, tp: 0 });
+
+    this.powCheckTimer -= dt;
+    if (this.powCheckTimer > 0) return;
+    this.powCheckTimer = 1;
+    if (this.powsInField > 0 && ours.length > 0) {
+      const n = this.powsInField;
+      this.powsInField = 0;
+      this.takePrisoners('player', n);
+    }
+    for (const camp of this.powCamps('enemy')) {
+      const ground = this.groundUnits.filter((u) => !u.isDestroyed && !u.embarkedInShipId);
+      const liberator = ground.find((u) => u.side !== 'enemy' && u.side !== 'neutral' && dist(u.pos, camp.pos) < LIBERATE_RADIUS);
+      if (!liberator) continue;
+      if (ground.some((u) => u.side === 'enemy' && !u.isSurrendered && dist(u.pos, camp.pos) < LIBERATE_CLEAR)) continue;
+      const freed = camp.prisoners ?? 0;
+      camp.side = 'player';
+      camp.isCivilian = false;
+      camp.civilianZoneRadius = 0;
+      camp.prisoners = 0;
+      camp.name = PLAYER_CAMP_NAME[this.era];
+      camp.weaponDesc = '已解放 · 改作我方戰俘營 · 收押戰俘並審訊產出 RP';
+      this.islandsVersion++;
+      const mp = freed * 4;
+      const pp = 40 + freed * 8;
+      this.economy.add({ mp, pp, rp: 0, tp: 0 });
+      this.score.totalScore += 300 + freed * 50;
+      this.score.stars += 2;
+      this.addBannerAlert(`⛓【戰俘營解放】「${liberator.name}」攻入敵戰俘營，${freed} 名被俘人員重獲自由！`, 'player', 'capture', 7);
+      this.addCombatLog({
+        category: 'sunk',
+        sourceSide: 'player',
+        sourceName: liberator.name,
+        targetName: camp.name,
+        actionType: 'recon_spotted',
+        text: `⛓【戰俘營解放】「${liberator.name}」肅清營區守軍，解放 ${freed} 名被俘人員（人力 MP +${mp}、政治值 PP +${pp}）。營區改作我方戰俘營。`,
+      });
+    }
+  }
+
   private updateLifeRaftRescue(dt: number) {
     if (!this.lifeRafts || this.lifeRafts.length === 0) return;
 
@@ -15295,37 +15409,49 @@ export class GameEngine {
         const rescuerName = (playerUnit as Ship).codeName || playerUnit.name;
 
         if (raft.side === 'player') {
-          // 我方飛行員獲救！
           raft.rescued = true;
           soundEngine.playPlaneSortie();
-
-          this.addBannerAlert(
-            `🛟【飛行員打撈救援完成！】由「${rescuerName}」成功救起「${raft.pilotName}」！安全歸隊補回 1架「${raft.planeName.split(' ')[0]}」！`,
-            'player',
-            'capture',
-            6.0
-          );
-          this.addCombatLog({
-            category: 'air',
-            sourceSide: 'player',
-            sourceName: rescuerName,
-            targetName: raft.planeName,
-            actionType: 'recon_spotted',
-            text: `🛟【飛行員搜救成功】「${rescuerName}」物理接近跳傘地點救起落難飛行員「${raft.pilotName}」！機組員安全返回作戰序列，戰備庫存立即復原 1架 ${raft.planeName}！★+1星，+150分！`,
-          });
-
-          // 復原 1 架戰機至旗艦機庫或基地庫存
+          const men = raft.crew ?? 1;
           const flagship = this.getFlagship();
-          if (flagship && flagship.carrierPlanes) {
+          if (raft.fromShip) {
+            // A ship's survivors: trained sailors back in the manpower pool
+            const mp = men * 4;
+            this.economy.add({ mp, pp: 0, rp: 0, tp: 0 });
+            this.score.totalScore += 20 * men;
+            this.addBannerAlert(`🛟【艦員獲救】「${rescuerName}」救起「${raft.pilotName}」，人力 MP +${mp}`, 'player', 'capture', 5.0);
+            this.addCombatLog({
+              category: 'naval',
+              sourceSide: 'player',
+              sourceName: rescuerName,
+              targetName: raft.planeName,
+              actionType: 'recon_spotted',
+              text: `🛟【艦員獲救】「${rescuerName}」救起「${raft.pilotName}」，${men} 名艦員歸建，人力 MP +${mp}。`,
+            });
+          } else {
+            this.addBannerAlert(
+              `🛟【機組獲救】「${rescuerName}」救起「${raft.pilotName}」，補回 1 架「${raft.planeName.split(' ')[0]}」`,
+              'player',
+              'capture',
+              6.0
+            );
+            this.addCombatLog({
+              category: 'air',
+              sourceSide: 'player',
+              sourceName: rescuerName,
+              targetName: raft.planeName,
+              actionType: 'recon_spotted',
+              text: `🛟【機組獲救】「${rescuerName}」救起「${raft.pilotName}」（${men} 人），機組歸建，補回 1 架 ${raft.planeName}。★+1，+150 分。`,
+            });
+            // The crew returns to the flagship's hangar or the airbase pool
             const m = raft.planeModel;
-            flagship.carrierPlanes.ready[m] = (flagship.carrierPlanes.ready[m] || 0) + 1;
-          } else if (this.airbasePlanes) {
-            const m = raft.planeModel;
-            this.airbasePlanes[m] = (this.airbasePlanes[m] || 0) + 1;
+            if (m && flagship && flagship.carrierPlanes) {
+              flagship.carrierPlanes.ready[m] = (flagship.carrierPlanes.ready[m] || 0) + 1;
+            } else if (m && this.airbasePlanes) {
+              this.airbasePlanes[m] = (this.airbasePlanes[m] || 0) + 1;
+            }
+            this.score.totalScore += 150;
+            this.score.stars += 1;
           }
-
-          this.score.totalScore += 150;
-          this.score.stars += 1;
 
           if (rescueHeli && flagship) {
             rescueHeli.order = { type: 'rtb' };
@@ -15339,7 +15465,9 @@ export class GameEngine {
           raft.isCapturedPOW = true;
           soundEngine.playPlaneSortie();
 
-          const cpReward = 100;
+          const men = raft.crew ?? 1;
+          this.takePrisoners('player', men);
+          const cpReward = raft.fromShip ? Math.min(200, 30 + 5 * men) : Math.min(400, 70 + 30 * men);
           const gainTxt = this.grant(cpReward, 'pow');
           this.score.totalScore += 100;
           this.score.stars += 1;
@@ -15374,11 +15502,13 @@ export class GameEngine {
         if (raft.side === 'player') {
           // 我方飛行員遭敵俘獲！懲罰扣除 80 CP
           soundEngine.playKlaxon();
-          const penalty = 80;
+          const men = raft.crew ?? 1;
+          this.takePrisoners('enemy', men);
+          const penalty = raft.fromShip ? Math.min(120, 20 + 4 * men) : Math.min(240, 50 + 30 * men);
           this.economy.lose({ pp: penalty });
 
           this.addBannerAlert(
-            `⚠️【我方飛行員遭敵俘虜！】「${raft.pilotName}」遭敵「${captorName}」俘獲！情資外洩，政治值 PP -80！`,
+            `⚠️【我方飛行員遭敵俘虜！】「${raft.pilotName}」遭敵「${captorName}」俘獲！情資外洩，政治值 PP -${penalty}！`,
             'enemy',
             'sunk',
             6.5
@@ -15389,7 +15519,7 @@ export class GameEngine {
             sourceName: captorName,
             targetName: raft.pilotName,
             actionType: 'recon_spotted',
-            text: `⚠️【飛行員不幸被俘】我軍落難飛行員「${raft.pilotName}」未及時搜救，遭敵「${captorName}」捕獲！密碼本與戰術外洩，政治值 PP -80！`,
+            text: `⚠️【飛行員不幸被俘】我軍落難飛行員「${raft.pilotName}」未及時搜救，遭敵「${captorName}」捕獲！密碼本與戰術外洩，政治值 PP -${penalty}！`,
           });
 
           this.lifeRafts.splice(i, 1);
@@ -18874,6 +19004,7 @@ export class GameEngine {
 
     const shipName = ship.codeName || ship.name;
     const tonnage = FULL_LOAD_TONS[ship.type] ?? (this.isSubmarine(ship) ? 1850 : 3500);
+    this.spawnShipRafts(ship, shipName, tonnage);
 
     if (ship.side === 'enemy') {
       this.score.enemyShipsSunk++;
@@ -18924,6 +19055,41 @@ export class GameEngine {
           : `🚨【警報！友軍艦艇沉沒】我方主力艦艇「${shipName}」(${tonnage.toLocaleString()}噸) 遭受致命打擊沉沒！`,
       });
     }
+  }
+
+  /** Survivors of a sunk ship in rafts around the wreck, for either side to pick up. */
+  private spawnShipRafts(ship: Ship, shipName: string, tonnage: number): void {
+    if (this.isSubmarine(ship) && Math.random() < 0.85) return; // a submarine rarely leaves anyone
+    const side: 'player' | 'enemy' = ship.side === 'enemy' ? 'enemy' : 'player';
+    const groups = shipRaftGroups(tonnage);
+    groups.forEach((men, k) => {
+      const a = Math.random() * Math.PI * 2;
+      const r = 40 + Math.random() * 60;
+      this.lifeRafts.push({
+        id: `raft-ship-${ship.id}-${k}-${Math.random().toString(36).slice(2, 6)}`,
+        side,
+        pos: { x: ship.pos.x + Math.cos(a) * r, y: ship.pos.y + Math.sin(a) * r },
+        planeName: shipName,
+        pilotName: `${shipName} 生還艦員 ${men} 人`,
+        crew: men,
+        fromShip: true,
+        timer: 150,
+        maxTimer: 150,
+        rescued: false,
+        rescueProgress: 0,
+      });
+    });
+    const total = groups.reduce((a, b) => a + b, 0);
+    this.addCombatLog({
+      category: 'sunk',
+      sourceSide: side,
+      sourceName: '落難信號 (SOS)',
+      targetName: shipName,
+      actionType: 'recon_spotted',
+      text: side === 'player'
+        ? `🛟【艦員棄艦】「${shipName}」沉沒處有 ${groups.length} 艘救生筏、共 ${total} 名生還艦員待救（150 秒窗口）。派艦艇接近救起可補回人力。`
+        : `🛟【敵艦員落海】敵艦「${shipName}」沉沒處有 ${groups.length} 艘救生筏、共 ${total} 人。接近即可俘虜為戰俘。`,
+    });
   }
 
   private destroyInstallation(inst: Installation) {

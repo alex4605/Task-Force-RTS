@@ -2274,7 +2274,7 @@ export const HUD: React.FC<HUDProps> = ({
                       return item.typeTag === 'dockyard' || item.typeTag === 'pontoon_pier' || item.typeTag === 'major_naval_port' || item.typeTag === 'coastal_gun' || item.typeTag === 'm1_240mm';
                     }
                     if (engineerTab === 'fortification') {
-                      return item.typeTag === 'fob' || item.typeTag === 'battalion_cp' || item.typeTag === 'command_post' || item.typeTag === 'radar' || item.typeTag === 'supply_depot' || item.typeTag === 'ammo_depot' || item.typeTag === 'field_hospital';
+                      return item.typeTag === 'fob' || item.typeTag === 'battalion_cp' || item.typeTag === 'command_post' || item.typeTag === 'radar' || item.typeTag === 'supply_depot' || item.typeTag === 'ammo_depot' || item.typeTag === 'field_hospital' || item.typeTag === 'pow_camp';
                     }
                     return true;
                   })

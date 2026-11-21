@@ -82,6 +82,13 @@ export function drawLifeRafts(rc: RenderContext, lifeRafts: LifeRaft[], camera: 
     ctx.beginPath();
     ctx.arc(0, isOnLand ? 3 : bob - 1, 2.2, 0, Math.PI * 2);
     ctx.fill();
+    // Headcount when more than one man is aboard (multi-seat aircrew, a ship's survivors)
+    if ((raft.crew ?? 1) > 1) {
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 8px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`×${raft.crew}`, 0, (isOnLand ? 3 : bob) + 14);
+    }
 
     // 求救煙霧信號 (Emergency Smoke Flare Plume)
     const flareColor = isFriendly ? '255, 109, 0' : '229, 57, 53';

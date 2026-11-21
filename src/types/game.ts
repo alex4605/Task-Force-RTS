@@ -1706,9 +1706,14 @@ export interface LifeRaft {
   id: string;
   side: 'player' | 'enemy';
   pos: Vector2D;
-  planeModel: AircraftModel;
+  /** The aircraft the crew came from; absent for a ship's raft. */
+  planeModel?: AircraftModel;
   planeName: string;
   pilotName: string;
+  /** Men aboard (aircrew who got out, or a ship's survivors). Default 1. */
+  crew?: number;
+  /** Raft from a sunk ship rather than a downed aircraft. */
+  fromShip?: boolean;
   timer: number;       // 存活倒數 (秒，預設 90s)
   maxTimer: number;    // 90s
   rescued: boolean;
@@ -1860,6 +1865,7 @@ export type InstallationType =
   | 'city'               // 城市/城鎮核心市區 (密集街區與混凝土建築，提供部隊城市戰掩體)
   | 'town'               // 城鎮市集 (提供部隊城市戰掩蔽)
   | 'settlement'         // 沿海漁村與定居點 (平民居住區)
+  | 'pow_camp'           // 戰俘營 (雙方皆有：我方構工建造、敵方預設於後方)
   | 'refugee_camp'       // 戰地難民收容營 (聯合國/紅十字帳篷區，遭受火力攻擊扣除 15 CP)
   // 時代四特種防空與前進雷達作戰設施 (Era 4 Cold War / Vietnam Installations)
   | 'sa2_sam_site'       // SA-2 導針 (Guideline) 地空防空飛彈發射營
@@ -1908,6 +1914,8 @@ export interface Installation {
   samMissilesReady?: number;   // 鷹式/SA-2 飛彈備射量
   samMaxMissiles?: number;
   captureProgress?: number;    // 陣地/設施佔領進度 (0~100)
+  /** Prisoners held (POW camps). */
+  prisoners?: number;
 }
 
 export interface IslandStronghold {
@@ -2266,6 +2274,9 @@ export interface CasualtiesReport {
   directHitsScored: number;
   torpedoHitsScored: number;
   critsScored: number;
+  /** Aircrew killed when their aircraft went down (not counting those later captured). */
+  playerAircrewLost?: number;
+  enemyAircrewLost?: number;
 }
 
 export interface Sonobuoy {
