@@ -2,6 +2,7 @@ import { Installation, Island } from '../../../types/game';
 import { RenderContext } from '../context';
 import { InstallationStyle } from './style';
 import { AIRFIELD_SCALE } from '../../airfieldLayout';
+import { aircraftIcon } from '../../unitPreviewRenderer';
 
 /**
  * Top-down artwork of airfields and harbour works:
@@ -37,23 +38,99 @@ function scaled(ctx: Ctx, k: number, draw: () => void): void {
   ctx.restore();
 }
 
-/** A parked aircraft outline (cross shape) at map scale. */
-function parkedPlane(ctx: Ctx, x: number, y: number, a: number, span: number, color: string): void {
+/** Aircraft types parked at a field, by era and side (drawn from the map artwork). */
+const PARKED: Record<string, { player: string[]; enemy: string[] }> = {
+  era1: { player: ['f4f', 'sbd', 'p40', 'b17'], enemy: ['zero_a6m2', 'val', 'g4m', 'kate'] },
+  era2: { player: ['f6f', 'f4u', 'tbf', 'p51'], enemy: ['zero_a6m5', 'judy', 'ki84', 'jill'] },
+  era3: { player: ['f86', 'f9f', 'ad1', 'f84'], enemy: ['mig15', 'yak9', 'il10', 'tu14'] },
+  era4: { player: ['f4e', 'f105', 'a1h', 'a4'], enemy: ['mig21', 'mig17', 'mig19', 'il28'] },
+  era5: { player: ['f16a', 'f15a', 'a10a', 'fa18a'], enemy: ['mig29a', 'su27', 'su25', 'mig23'] },
+};
+
+/** Field being drawn: picks which types stand on its stands. */
+let PARK_ERA = 'era1';
+let PARK_ENEMY = false;
+let PARK_IDX = 0;
+
+/**
+ * A parked aircraft at its stand: the type's own map artwork (cached icon), nose along `a`,
+ * `span` long. Falls back to a simple airframe shape if no icon is available.
+ */
+function parkedPlane(ctx: Ctx, x: number, y: number, a: number, span: number, _color: string): void {
+  const list = PARKED[PARK_ERA]?.[PARK_ENEMY ? 'enemy' : 'player'];
+  const model = list ? list[PARK_IDX++ % list.length] : undefined;
+  const icon = model ? aircraftIcon(model) : null;
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(a);
-  ctx.strokeStyle = color;
-  ctx.fillStyle = 'rgba(20, 30, 40, 0.85)';
-  ctx.lineWidth = 0.6;
+  // Shadow on the hardstand
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
   ctx.beginPath();
-  ctx.moveTo(span * 0.5, 0);
-  ctx.lineTo(-span * 0.45, 0);
-  ctx.moveTo(span * 0.05, -span * 0.5);
-  ctx.lineTo(span * 0.05, span * 0.5);
-  ctx.moveTo(-span * 0.38, -span * 0.18);
-  ctx.lineTo(-span * 0.38, span * 0.18);
-  ctx.lineWidth = 1.6;
+  ctx.ellipse(0.6, 0.6, span * 0.45, span * 0.35, 0, 0, Math.PI * 2);
+  ctx.fill();
+  if (icon) {
+    const k = span / Math.max(icon.w, icon.h);
+    ctx.drawImage(icon.canvas, (-icon.w * k) / 2, (-icon.h * k) / 2, icon.w * k, icon.h * k);
+  } else {
+    airframeShape(ctx, span, '#B0BEC5');
+  }
+  ctx.restore();
+}
+
+/** A plain airframe (fuselage, swept wings, tailplane): airliners and fallbacks. */
+function airframeShape(ctx: Ctx, span: number, fill: string): void {
+  const L = span;
+  ctx.fillStyle = fill;
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+  ctx.lineWidth = Math.max(0.15, span * 0.02);
+  // Fuselage
+  ctx.beginPath();
+  ctx.ellipse(0, 0, L * 0.5, L * 0.055, 0, 0, Math.PI * 2);
+  ctx.fill();
   ctx.stroke();
+  // Swept wings
+  ctx.beginPath();
+  ctx.moveTo(L * 0.08, 0);
+  ctx.lineTo(-L * 0.12, -L * 0.46);
+  ctx.lineTo(-L * 0.2, -L * 0.46);
+  ctx.lineTo(-L * 0.1, 0);
+  ctx.lineTo(-L * 0.2, L * 0.46);
+  ctx.lineTo(-L * 0.12, L * 0.46);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // Tailplane
+  ctx.beginPath();
+  ctx.moveTo(-L * 0.38, 0);
+  ctx.lineTo(-L * 0.46, -L * 0.16);
+  ctx.lineTo(-L * 0.5, -L * 0.16);
+  ctx.lineTo(-L * 0.47, 0);
+  ctx.lineTo(-L * 0.5, L * 0.16);
+  ctx.lineTo(-L * 0.46, L * 0.16);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // Engines under the wings
+  ctx.fillStyle = '#78909C';
+  for (const sgn of [-1, 1]) {
+    ctx.beginPath();
+    ctx.ellipse(-L * 0.04, sgn * L * 0.18, L * 0.05, L * 0.02, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+/** An airliner at its gate (civilian airport), in airline white with a coloured tail. */
+function parkedAirliner(ctx: Ctx, x: number, y: number, a: number, span: number): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(a);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+  ctx.beginPath();
+  ctx.ellipse(0.6, 0.6, span * 0.48, span * 0.3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  airframeShape(ctx, span, '#ECEFF1');
+  ctx.fillStyle = '#1565C0';
+  ctx.fillRect(-span * 0.5, -span * 0.03, span * 0.08, span * 0.06);
   ctx.restore();
 }
 
@@ -78,6 +155,9 @@ function revetment(ctx: Ctx, x: number, y: number, a: number, s: number): void {
 
 export function drawAirfieldSite(rc: RenderContext, inst: Installation, style: InstallationStyle, island?: Island): void {
   const ctx = rc.ctx;
+  PARK_ERA = rc.era;
+  PARK_ENEMY = inst.side === 'enemy';
+  PARK_IDX = inst.id.length;
   if (inst.rotaryOnly) return scaled(ctx, AIRFIELD_SCALE.farp, () => drawFarp(rc, inst, style));
   if (inst.wasCivil) return scaled(ctx, AIRFIELD_SCALE.civil, () => drawCivilAirport(rc, inst, style));
   if (inst.id.startsWith('inst-built-')) return scaled(ctx, AIRFIELD_SCALE.expedient, () => drawExpedientStrip(rc, inst, style));
@@ -470,7 +550,7 @@ function drawCivilAirport(rc: RenderContext, inst: Installation, style: Installa
     ctx.moveTo(x, 16);
     ctx.lineTo(x, 22);
     ctx.stroke();
-    parkedPlane(ctx, x, 19.5, Math.PI / 2, 10, '#ECEFF1');
+    parkedAirliner(ctx, x, 19.5, -Math.PI / 2, 11);
   }
   tower(ctx, 22, 20);
   // Cargo shed and fuel farm

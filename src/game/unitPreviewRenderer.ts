@@ -1872,7 +1872,7 @@ const AIRCRAFT_ICON_CACHE = new Map<string, { canvas: HTMLCanvasElement; w: numb
 const ICON_RES = 6;
 const ICON_SPAN = 120;
 
-function aircraftIcon(model: string, payloadType?: AircraftPayloadType): { canvas: HTMLCanvasElement; w: number; h: number } | null {
+export function aircraftIcon(model: string, payloadType?: AircraftPayloadType): { canvas: HTMLCanvasElement; w: number; h: number } | null {
   const key = `${model}|${payloadType ?? ''}`;
   if (AIRCRAFT_ICON_CACHE.has(key)) return AIRCRAFT_ICON_CACHE.get(key)!;
   let result: { canvas: HTMLCanvasElement; w: number; h: number } | null = null;
