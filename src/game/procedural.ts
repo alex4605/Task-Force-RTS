@@ -1,4 +1,5 @@
 import { applyHistoricalAswFit } from './asw';
+import { addIslandSettlements, naturalizeCoast, naturalizeIslands } from './coastline';
 import { applyMainlandTemplate } from './terrain/theaters';
 import {
   Island,
@@ -742,7 +743,10 @@ export function generateCoralAtoll(
 
   // Reef passes: the lagoon opens to the sea through one or two channels cut in the ring,
   // placed where no position or stronghold stands
-  const outline = solid ? points : cutReefPasses(points, center, lagoon, installations, strongholds, seed);
+  // Natural coasts: bays and points on the ring and along the lagoon shore (the passes stay straight-sided)
+  const coast = naturalizeCoast(points, seed, baseRadius * 0.07);
+  if (!solid) lagoon.points = naturalizeCoast(lagoon.points, seed + 5, baseRadius * 0.035);
+  const outline = solid ? coast : cutReefPasses(coast, center, lagoon, installations, strongholds, seed);
 
   const island: Island = {
     id,
@@ -819,39 +823,51 @@ function cutReefPasses(
   if (second && Math.abs(seed) % 3 !== 0) passes.push(second.a);
 
   let out = [...ring];
+  const channels: Vector2D[][] = [];
   // Wide enough for a column of open navigation cells (real passes run 200-500 m)
   const width = 300;
   for (const a of passes) {
     const n = out.length;
     let idx = 0;
     for (let i = 1; i < n; i++) if (diff(angOf(out[i]), a) < diff(angOf(out[idx]), a)) idx = i;
-    const p = out[idx];
     const ux = Math.cos(a);
     const uy = Math.sin(a);
     // Perpendicular, pointing the way the ring runs (increasing angle)
     const vx = -uy;
     const vy = ux;
+    const side = (pt: Vector2D) => (pt.x - center.x) * vx + (pt.y - center.y) * vy;
+    // Mouth corners: the first coastline points either side that lie half a pass-width off the axis
+    let lo = idx;
+    for (let k = 0; k < n / 4 && side(out[lo]) > -width * 0.5; k++) lo = (lo - 1 + n) % n;
+    let hi = idx;
+    for (let k = 0; k < n / 4 && side(out[hi]) < width * 0.5; k++) hi = (hi + 1) % n;
+    const mouthA = out[lo];
+    const mouthB = out[hi];
     // Lagoon shore on this bearing
     let q = lagoon.points[0];
     for (const lp of lagoon.points) if (diff(angOf(lp, lagoon.center), a) < diff(angOf(q, lagoon.center), a)) q = lp;
     const inner = { x: q.x - ux * 40, y: q.y - uy * 40 };
-    const notch = [
-      { x: p.x - vx * width * 0.5, y: p.y - vy * width * 0.5 },
-      { x: inner.x - vx * width * 0.5, y: inner.y - vy * width * 0.5 },
-      { x: inner.x + vx * width * 0.5, y: inner.y + vy * width * 0.5 },
-      { x: p.x + vx * width * 0.5, y: p.y + vy * width * 0.5 },
-    ];
-    // Replace the ring point at the pass and its two neighbours with the notch
-    const before = idx - 1 < 0 ? n - 1 : idx - 1;
-    const after = (idx + 1) % n;
+    const innerA = { x: inner.x - vx * width * 0.5, y: inner.y - vy * width * 0.5 };
+    const innerB = { x: inner.x + vx * width * 0.5, y: inner.y + vy * width * 0.5 };
+    // Channel walls: coral banks that only ever widen the pass, never narrow it
+    const wall = (from: Vector2D, to: Vector2D, outward: number, s2: number): Vector2D[] => {
+      const pts: Vector2D[] = [];
+      for (let t = 1; t <= 3; t++) {
+        const f = t / 4;
+        const bulge = (0.5 + 0.5 * Math.sin(s2 + t * 2.3)) * 45;
+        pts.push({ x: from.x + (to.x - from.x) * f + vx * outward * bulge, y: from.y + (to.y - from.y) * f + vy * outward * bulge });
+      }
+      return pts;
+    };
+    const notch = [mouthA, ...wall(mouthA, innerA, -1, seed + a), innerA, innerB, ...wall(innerB, mouthB, 1, seed - a), mouthB];
+    channels.push(notch.map((p2) => ({ ...p2 })));
+    // Replace the coastline between the two mouth corners with the pass
     const keep: Vector2D[] = [];
-    for (let i = 0; i < n; i++) {
-      if (i === idx) keep.push(...notch);
-      else if (i !== before && i !== after) keep.push(out[i]);
-    }
-    out = keep;
+    for (let k = (hi + 1) % n; k !== lo; k = (k + 1) % n) keep.push(out[k]);
+    out = [...keep, ...notch];
   }
   lagoon.channelBreaches = passes.map((a) => ({ angle: a, width }));
+  lagoon.channels = channels;
   return out;
 }
 
@@ -5073,6 +5089,10 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
   const friendlyBasePos: Vector2D = { x: 2000, y: 12400 };
   const friendlyBase = generateFriendlyBaseIsland(friendlyBasePos, seedBase + 999, era);
   islands.unshift(friendlyBase);
+
+  // Natural coastlines (atolls did theirs before their reef passes were cut) and island villages
+  naturalizeIslands(islands, seedBase, (isl) => isl.id.startsWith('atoll-'), worldSize);
+  addIslandSettlements(islands, era, seedBase * 31 + 7);
 
   // 初始友軍地面部隊
   const groundUnits: GroundUnit[] = [];

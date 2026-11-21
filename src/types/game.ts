@@ -1942,6 +1942,8 @@ export interface LagoonWater {
   points: Vector2D[]; // Lagoon interior water polygon
   depth?: number;
   channelBreaches?: { angle: number; width: number }[];
+  /** Reef-pass water polygons (mouth corners first and last, the lagoon edge in the middle), for drawing. */
+  channels?: Vector2D[][];
 }
 
 export interface TerrainZone {
