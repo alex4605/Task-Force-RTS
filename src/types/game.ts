@@ -1923,7 +1923,7 @@ export type InstallationType =
   | 'city'               // 城市/城鎮核心市區 (密集街區與混凝土建築，提供部隊城市戰掩體)
   | 'town'               // 城鎮市集 (提供部隊城市戰掩蔽)
   | 'settlement'         // 沿海漁村與定居點 (平民居住區)
-  | 'rail_station'       // (原)民用鐵路車站 (地面部隊進駐即可控制 · 我方控制時提供運輸量 TP)
+  | 'rail_station'       // (原)民用鐵路車站 (地面部隊進駐即可控制 · 我方控制時鐵路縮短運補時程 · 提供時間值 TP)
   | 'motor_pool'         // 調車場 (車輛集結整備場 · 呼叫裝甲/車輛/火砲增援)
   | 'pow_camp'           // 戰俘營 (雙方皆有：我方構工建造、敵方預設於後方)
   | 'refugee_camp'       // 戰地難民收容營 (聯合國/紅十字帳篷區，遭受火力攻擊扣除 15 CP)
@@ -1976,6 +1976,12 @@ export interface Installation {
   captureProgress?: number;    // 陣地/設施佔領進度 (0~100)
   /** Whose troops hold the ground round a civilian site (villages, towns, stations, airports). */
   controlledBy?: 'player' | 'enemy';
+  /** Airfield knocked out by conventional attack: runway cratered, repair progress 0..1. */
+  cratered?: { progress: number };
+  /** Destroyed outright by a nuclear burst (only rebuilding by engineers brings it back). */
+  nuclearDestroyed?: boolean;
+  /** Rebuild progress of a nuclear-destroyed airfield, 0..1. */
+  rebuildProgress?: number;
   /** A FARP: an airfield for helicopters and V/STOL jets only. */
   rotaryOnly?: boolean;
   /** Built on what was a civilian site (airport, station): drawn as such. */

@@ -175,6 +175,26 @@ export function drawCommandPostSite(rc: RenderContext, inst: Installation, style
   mast(ctx, 5, -7, 9);
   mast(ctx, -16, -10, 7);
   flag(ctx, 0, -7, color);
+  if (rc.era === 'era5') {
+    // SATCOM terminal
+    ctx.fillStyle = '#ECEFF1';
+    ctx.beginPath();
+    ctx.ellipse(16, 2, 3.4, 2.2, -0.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#90A4AE';
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
+  } else if (rc.era === 'era1' || rc.era === 'era2') {
+    // Field telephone wire runs out to the units
+    ctx.strokeStyle = 'rgba(30, 30, 30, 0.6)';
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(-10, 0);
+    ctx.quadraticCurveTo(-24, 4, -30, 14);
+    ctx.moveTo(10, 0);
+    ctx.quadraticCurveTo(24, -6, 30, -16);
+    ctx.stroke();
+  }
   const hq = !inst.id.startsWith('inst-built-');
   label(ctx, isPlayer ? (hq ? '🎖️ [HQ 指揮所] 全類型增援' : '🎖️ [前線指揮所 CP] 輕裝增援') : '🚩 [敵指揮所 CP]', -26, labelColor);
 }
@@ -229,22 +249,27 @@ export function drawFieldHospitalSite(rc: RenderContext, _inst: Installation, st
     tent(ctx, x, y, w, h, '#E0E0D8');
     redCross(ctx, x, y, 2);
   }
-  // Casualty helipad
-  ctx.fillStyle = '#37474F';
-  ctx.beginPath();
-  ctx.arc(13, 6, 7, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 0.8;
-  ctx.stroke();
-  redCross(ctx, 13, 6, 3);
+  // Casualty helipad from Korea on (the MASH and its H-13s); before that a third ward tent
+  if (rc.era === 'era1' || rc.era === 'era2') {
+    tent(ctx, 13, 6, 12, 7, '#E0E0D8');
+    redCross(ctx, 13, 6, 2);
+  } else {
+    ctx.fillStyle = '#37474F';
+    ctx.beginPath();
+    ctx.arc(13, 6, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    redCross(ctx, 13, 6, 3);
+  }
   // Ambulances
   for (const [x, y] of [[-20, 12], [-6, 12]] as const) {
     vehicle(ctx, x, y, 0, 5.5, 3, color);
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(x - 1.5, y - 1, 2, 2);
   }
-  label(ctx, '🏥 [戰地野戰醫院] 組織度恢復', -20, labelColor);
+  label(ctx, rc.era === 'era3' ? '🏥 [MASH 陸軍機動外科醫院] 組織度恢復' : '🏥 [戰地野戰醫院] 組織度恢復', -20, labelColor);
 }
 
 // ════ Supply dump: pallet stacks under tarps, fuel drum lines, a fork-lift track and trucks ════

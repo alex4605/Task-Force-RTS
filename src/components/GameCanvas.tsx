@@ -1,3 +1,4 @@
+import { onAirfield } from '../game/airfieldLayout';
 import React, { useRef, useEffect, useCallback } from 'react';
 import { GameEngine } from '../game/engine';
 import { VectorRenderer, Camera, OrderMarker } from '../game/renderer';
@@ -733,7 +734,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
 
           const hitAirfieldInst = isl.installations.find(
-            (inst) => (inst.type === 'airfield' || inst.type === 'radar_station') && !inst.isDestroyed && dist(worldPos, inst.pos) < 65
+            (inst) =>
+              !inst.isDestroyed &&
+              (inst.type === 'airfield' ? onAirfield(inst, worldPos) : inst.type === 'radar_station' && dist(worldPos, inst.pos) < 65)
           );
           const hasAirfield = isl.installations.some((i) => i.type === 'airfield' && !i.isDestroyed);
           if (hitAirfieldInst || ((isl.isFriendlyBase || hasAirfield) && isPointInPolygon(worldPos, isl.points))) {

@@ -9650,7 +9650,23 @@ export function createTurret(
   };
 }
 
+/** Bounding boxes of polygons, cached per array (recomputed if its length changes). */
+const POLY_BOX = new WeakMap<Vector2D[], { n: number; x0: number; y0: number; x1: number; y1: number }>();
+
 export function isPointInPolygon(point: Vector2D, polygon: Vector2D[]): boolean {
+  // Most calls test a point far outside the polygon (another island): reject on the box first
+  let box = POLY_BOX.get(polygon);
+  if (!box || box.n !== polygon.length) {
+    box = { n: polygon.length, x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+    for (const p of polygon) {
+      if (p.x < box.x0) box.x0 = p.x;
+      if (p.y < box.y0) box.y0 = p.y;
+      if (p.x > box.x1) box.x1 = p.x;
+      if (p.y > box.y1) box.y1 = p.y;
+    }
+    POLY_BOX.set(polygon, box);
+  }
+  if (point.x < box.x0 || point.x > box.x1 || point.y < box.y0 || point.y > box.y1) return false;
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
     const xi = polygon[i].x;

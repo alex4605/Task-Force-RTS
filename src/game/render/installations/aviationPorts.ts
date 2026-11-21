@@ -1,6 +1,7 @@
 import { Installation, Island } from '../../../types/game';
 import { RenderContext } from '../context';
 import { InstallationStyle } from './style';
+import { AIRFIELD_SCALE } from '../../airfieldLayout';
 
 /**
  * Top-down artwork of airfields and harbour works:
@@ -14,11 +15,26 @@ import { InstallationStyle } from './style';
 
 type Ctx = CanvasRenderingContext2D;
 
+/** Drawing scale of the current airfield body (labels stay at their normal size). */
+let BODY_SCALE = 1;
+
 function label(ctx: Ctx, text: string, y: number, color: string): void {
+  ctx.save();
+  ctx.scale(1 / BODY_SCALE, 1 / BODY_SCALE);
   ctx.fillStyle = color;
   ctx.font = 'bold 8.5px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(text, 0, y);
+  ctx.fillText(text, 0, y * BODY_SCALE);
+  ctx.restore();
+}
+
+function scaled(ctx: Ctx, k: number, draw: () => void): void {
+  ctx.save();
+  ctx.scale(k, k);
+  BODY_SCALE = k;
+  draw();
+  BODY_SCALE = 1;
+  ctx.restore();
 }
 
 /** A parked aircraft outline (cross shape) at map scale. */
@@ -73,10 +89,11 @@ function runwayMarkings(ctx: Ctx, len: number, wid: number): void {
 // ── Air bases ─────────────────────────────────────────────────────────────
 
 export function drawAirfieldSite(rc: RenderContext, inst: Installation, style: InstallationStyle, island?: Island): void {
-  if (inst.rotaryOnly) return drawFarp(rc, inst, style);
-  if (inst.wasCivil) return drawCivilAirport(rc, inst, style);
-  if (inst.id.startsWith('inst-built-')) return drawExpedientStrip(rc, inst, style);
-  return drawAirBase(rc, inst, style, island);
+  const ctx = rc.ctx;
+  if (inst.rotaryOnly) return scaled(ctx, AIRFIELD_SCALE.farp, () => drawFarp(rc, inst, style));
+  if (inst.wasCivil) return scaled(ctx, AIRFIELD_SCALE.civil, () => drawCivilAirport(rc, inst, style));
+  if (inst.id.startsWith('inst-built-')) return scaled(ctx, AIRFIELD_SCALE.expedient, () => drawExpedientStrip(rc, inst, style));
+  scaled(ctx, AIRFIELD_SCALE.base, () => drawAirBase(rc, inst, style, island));
 }
 
 /** Permanent air base: paved runway, parallel taxiway, apron with hangars and tower, revetments. */
@@ -100,29 +117,66 @@ function drawAirBase(rc: RenderContext, _inst: Installation, style: Installation
   // Apron, hangars, tower
   ctx.fillStyle = pale ? '#A79F86' : '#3B4246';
   ctx.fillRect(-20, 18, 44, 12);
-  ctx.fillStyle = '#546E7A';
   ctx.strokeStyle = color;
   ctx.lineWidth = 0.8;
   for (const hx of [-18, -4]) {
-    ctx.fillRect(hx, 30, 12, 9);
-    ctx.strokeRect(hx, 30, 12, 9);
-    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
-    for (let k = 1; k < 4; k++) {
+    if (pale) {
+      // Quonset huts: corrugated half-cylinders
+      ctx.fillStyle = '#78909C';
       ctx.beginPath();
-      ctx.moveTo(hx + k * 3, 30);
-      ctx.lineTo(hx + k * 3, 39);
+      ctx.roundRect(hx, 31, 12, 7, 3.5);
+      ctx.fill();
       ctx.stroke();
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      for (let k = 1; k < 6; k++) {
+        ctx.beginPath();
+        ctx.moveTo(hx + k * 2, 31);
+        ctx.lineTo(hx + k * 2, 38);
+        ctx.stroke();
+      }
+    } else {
+      // Steel hangars with sliding doors
+      ctx.fillStyle = '#546E7A';
+      ctx.fillRect(hx, 30, 12, 9);
+      ctx.strokeRect(hx, 30, 12, 9);
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+      for (let k = 1; k < 4; k++) {
+        ctx.beginPath();
+        ctx.moveTo(hx + k * 3, 30);
+        ctx.lineTo(hx + k * 3, 39);
+        ctx.stroke();
+      }
     }
     ctx.strokeStyle = color;
+  }
+  // From Korea on: a GCA / approach radar beside the runway
+  if (!pale) {
+    ctx.fillStyle = '#ECEFF1';
+    ctx.beginPath();
+    ctx.arc(30, 22, 3, 0, Math.PI * 2);
+    ctx.fill();
   }
   ctx.fillStyle = '#ECEFF1';
   ctx.fillRect(14, 31, 5, 5);
   ctx.fillStyle = '#4FC3F7';
   ctx.fillRect(14.8, 31.8, 3.4, 1.4);
-  // Revetments with parked aircraft along the far side
+  // Dispersal: earth revetments, or (from the late 1970s) hardened aircraft shelters
   for (const x of [-50, -36, 36, 50]) {
-    revetment(ctx, x, -20, 0, 5);
-    parkedPlane(ctx, x, -18, -Math.PI / 2, 8, color);
+    if (rc.era === 'era5') {
+      ctx.fillStyle = '#78807A';
+      ctx.beginPath();
+      ctx.ellipse(x, -21, 6, 5, 0, Math.PI, 0);
+      ctx.lineTo(x + 6, -16);
+      ctx.lineTo(x - 6, -16);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+    } else {
+      revetment(ctx, x, -20, 0, 5);
+      parkedPlane(ctx, x, -18, -Math.PI / 2, 8, color);
+    }
   }
   for (const x of [-12, 0, 12]) parkedPlane(ctx, x, 24, Math.PI / 2, 8, color);
   label(ctx, isPlayer ? '✈️ [友軍航空基地]' : '✈️ [敵軍航空基地]', -30, labelColor);
@@ -135,7 +189,9 @@ function drawExpedientStrip(rc: RenderContext, _inst: Installation, style: Insta
   // Graded strip with PSP (Marston) matting
   ctx.fillStyle = 'rgba(141, 110, 80, 0.55)';
   ctx.fillRect(-62, -13, 124, 26);
-  ctx.fillStyle = '#6F7A70';
+  // PSP (Marston) steel planking to Korea; AM-2 aluminium matting in Vietnam and after
+  const am2 = rc.era === 'era4' || rc.era === 'era5';
+  ctx.fillStyle = am2 ? '#9AA3A6' : '#6F7A70';
   ctx.fillRect(-56, -8, 112, 16);
   ctx.strokeStyle = 'rgba(30, 35, 30, 0.55)';
   ctx.lineWidth = 0.5;
@@ -170,7 +226,7 @@ function drawExpedientStrip(rc: RenderContext, _inst: Installation, style: Insta
     ctx.arc(44 + (k % 4) * 2.4, 18 + Math.floor(k / 4) * 2.4, 1, 0, Math.PI * 2);
     ctx.fill();
   }
-  label(ctx, '🛬 [急造前進機場] PSP 鋼板跑道', -18, labelColor);
+  label(ctx, am2 ? '🛬 [急造前進機場] AM-2 鋁板跑道' : '🛬 [急造前進機場] PSP 鋼板跑道', -18, labelColor);
 }
 
 /** FARP: three cleared landing pads, fuel bladders and ammunition racks, a few tents. */
@@ -259,7 +315,6 @@ export function drawPontoonPierSite(rc: RenderContext, inst: Installation, style
   const ctx = rc.ctx;
   const { color } = style;
   ctx.save();
-  ctx.rotate(inst.angle || 0);
   // Causeway: two ranks of pontoon cells
   for (let x = -26; x < 30; x += 4.6) {
     for (const y of [-4.4, 0]) {
@@ -308,11 +363,10 @@ export function drawPontoonPierSite(rc: RenderContext, inst: Installation, style
 }
 
 /** Deep-water port: concrete quays and finger piers, warehouses, gantry cranes, a breakwater. */
-export function drawMajorPortSite(rc: RenderContext, inst: Installation, style: InstallationStyle, _island?: Island): void {
+export function drawMajorPortSite(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
   const ctx = rc.ctx;
   const { color } = style;
   ctx.save();
-  ctx.rotate(inst.angle || 0);
   // Quay apron along the shore
   ctx.fillStyle = '#8A8F91';
   ctx.fillRect(-30, -34, 22, 68);
@@ -340,15 +394,24 @@ export function drawMajorPortSite(rc: RenderContext, inst: Installation, style: 
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
-  // Gantry cranes on the piers
+  // Cranes: derricks and travelling cranes before the container age, gantries after
   ctx.strokeStyle = '#FFD54F';
   ctx.lineWidth = 1.4;
+  const gantries = rc.era === 'era4' || rc.era === 'era5';
   for (const [x, y] of [[4, -24], [18, -24], [10, 10]] as const) {
-    ctx.strokeRect(x, y - 2, 5, 11);
-    ctx.beginPath();
-    ctx.moveTo(x + 2.5, y + 4);
-    ctx.lineTo(x + 2.5, y + 14);
-    ctx.stroke();
+    if (gantries) {
+      ctx.strokeRect(x, y - 2, 5, 11);
+      ctx.beginPath();
+      ctx.moveTo(x + 2.5, y + 4);
+      ctx.lineTo(x + 2.5, y + 14);
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(x + 2.5, y + 3, 1.6, 0, Math.PI * 2);
+      ctx.moveTo(x + 2.5, y + 3);
+      ctx.lineTo(x + 9, y + 9);
+      ctx.stroke();
+    }
   }
   // Breakwater
   ctx.strokeStyle = '#B0BEC5';
@@ -365,11 +428,10 @@ export function drawMajorPortSite(rc: RenderContext, inst: Installation, style: 
 }
 
 /** Floating dry dock: U-shaped hull with wing walls and cranes, a ship on the blocks inside. */
-export function drawRepairDockSite(rc: RenderContext, inst: Installation, style: InstallationStyle, _island?: Island): void {
+export function drawRepairDockSite(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
   const ctx = rc.ctx;
   const { color } = style;
   ctx.save();
-  ctx.rotate(inst.angle || 0);
   // Dock floor and wing walls
   ctx.fillStyle = '#455A64';
   ctx.fillRect(-30, -12, 60, 24);
@@ -424,7 +486,6 @@ export function drawRailStationSite(rc: RenderContext, inst: Installation, style
   const ctx = rc.ctx;
   const { labelColor } = style;
   ctx.save();
-  ctx.rotate(inst.angle || 0);
   // Tracks: main line and two sidings
   ctx.strokeStyle = 'rgba(30, 30, 34, 0.9)';
   ctx.lineWidth = 1.2;

@@ -6,6 +6,7 @@ import { fitsInHold, formatHold, holdUsed, shipHold } from './naval/lift';
 import { isRotaryOrVstol, rollBailout, shipRaftGroups } from './aircrew';
 import { deckAccepts, shipAviation } from './shipAviation';
 import { addCivilTransport } from './civilSites';
+import { onAirfield } from './airfieldLayout';
 import { canDipSonar, dippingSonarRange } from './asw';
 import { buildRequisitionShip } from './requisitionShips';
 import { LIBERATE_CLEAR, LIBERATE_RADIUS, PLAYER_CAMP_NAME, POW_CAMP_CAPACITY, POW_RP_PER_SECOND } from './pow';
@@ -1000,7 +1001,7 @@ export class GameEngine {
                 ? inst.type === 'airfield'
                   ? `🛫【民用機場易手】我軍控制「${inst.name}」，跑道可供我方飛機起降與轉場。`
                   : inst.type === 'rail_station'
-                  ? `🚉【車站易手】我軍控制「${inst.name}」，鐵路運輸開始為我方提供運輸量 TP。`
+                  ? `🚉【車站易手】我軍控制「${inst.name}」，鐵路運補縮短部隊與物資的到位時間，開始為我方提供時間值 TP。`
                   : `🏘️【勢力範圍】「${inst.name}」納入我方勢力範圍，開始提供人力與物資。`
                 : `⚠️【易手】「${inst.name}」落入敵方控制。`,
           });
@@ -1806,7 +1807,7 @@ export class GameEngine {
   /** The friendly airfield or deck nearest a map point (within reach of the click), for rebasing. */
   public findRebaseTarget(p: Vector2D, needDeck = false): { id: string; name: string; pos: Vector2D; isCarrier: boolean } | undefined {
     const bases: { id: string; name: string; pos: Vector2D; isCarrier: boolean }[] = [
-      ...(needDeck ? [] : this.getFriendlyAirfields().map((a) => ({ id: a.id, name: a.name, pos: a.pos, isCarrier: false, rotaryOnly: !!a.rotaryOnly }))),
+      ...(needDeck ? [] : this.getFriendlyAirfields().filter((a) => !a.cratered).map((a) => ({ id: a.id, name: a.name, pos: a.pos, isCarrier: false, rotaryOnly: !!a.rotaryOnly }))),
       ...this.playerShips.filter((s) => !s.isSunk && s.carrierPlanes).map((s) => ({ id: s.id, name: s.codeName || s.name, pos: s.pos, isCarrier: true })),
     ];
     let best: (typeof bases)[number] | undefined;
@@ -2883,6 +2884,7 @@ export class GameEngine {
     this.updateStrongholds(effectiveDt);
     this.updateShipAviation(effectiveDt);
     this.updateConstruction(effectiveDt);
+    this.updateAirfieldDamage(effectiveDt);
     this.updateCivilControl(effectiveDt);
     this.updateAircraft(effectiveDt);
     this.updateInstallations(effectiveDt);
@@ -3225,11 +3227,21 @@ export class GameEngine {
   // ══════════════════════════════════════════════════════════
   // 友軍船舶維修設施 (Ship Repair Docks) 緊急搶修至綠色安全生命值
   // ══════════════════════════════════════════════════════════
+  /** The player's working repair docks, listed once per tick (every ship asks every frame). */
+  private dockCache: { t: number; docks: Installation[] } = { t: -1, docks: [] };
+  private playerRepairDocks(): Installation[] {
+    if (this.dockCache.t !== this.gameTime) {
+      this.dockCache = {
+        t: this.gameTime,
+        docks: this.islands.flatMap((i) => i.installations).filter((inst) => inst.type === 'ship_repair_dock' && !inst.isDestroyed && inst.side === 'player'),
+      };
+    }
+    return this.dockCache.docks;
+  }
+
   private updateShipRepairAtDocks(dt: number, ship: Ship): void {
     if (ship.side === 'player') {
-      const repairDocks = this.islands
-        .flatMap((i) => i.installations)
-        .filter((inst) => inst.type === 'ship_repair_dock' && !inst.isDestroyed && inst.side === 'player');
+      const repairDocks = this.playerRepairDocks();
 
       for (const dock of repairDocks) {
         const d = dist(ship.pos, dock.pos);
@@ -3701,7 +3713,7 @@ export class GameEngine {
   private getEnemyAirThreatAxis(): Vector2D | undefined {
     const airfield = this.islands
       .flatMap((i) => i.installations)
-      .find((inst) => inst.type === 'airfield' && inst.side === 'enemy' && !inst.isDestroyed);
+      .find((inst) => inst.type === 'airfield' && inst.side === 'enemy' && !inst.isDestroyed && !inst.cratered);
     if (airfield) return airfield.pos;
     return this.enemyShips.find((s) => !s.isSunk && (s.type === 'carrier' || s.type === 'cvhg_kiev'))?.pos;
   }
@@ -5559,7 +5571,7 @@ export class GameEngine {
   /** Intact friendly airfield by id. */
   public findFriendlyAirfield(id: string): Installation | undefined {
     for (const isl of this.islands) {
-      const inst = isl.installations.find((x) => x.id === id && x.type === 'airfield' && x.side === 'player' && !x.isDestroyed);
+      const inst = isl.installations.find((x) => x.id === id && x.type === 'airfield' && x.side === 'player' && !x.isDestroyed && !x.cratered);
       if (inst) return inst;
     }
     return undefined;
@@ -5609,7 +5621,7 @@ export class GameEngine {
       return flagship.id;
     }
     const nearest = this.getFriendlyAirfields()
-      .filter((a) => !a.rotaryOnly || isRotaryOrVstol(plane.model))
+      .filter((a) => !a.cratered && (!a.rotaryOnly || isRotaryOrVstol(plane.model)))
       .sort((a, b) => dist(plane.pos, a.pos) - dist(plane.pos, b.pos))[0];
     plane.homeBaseId = nearest?.id;
     return plane.homeBaseId;
@@ -7682,7 +7694,7 @@ export class GameEngine {
     const enemyAirfield = this.islands
       .filter((island) => !island.isFriendlyBase && !island.isFullyCaptured)
       .flatMap((i) => i.installations)
-      .find((inst) => inst.type === 'airfield' && inst.side === 'enemy' && !inst.isDestroyed);
+      .find((inst) => inst.type === 'airfield' && inst.side === 'enemy' && !inst.isDestroyed && !inst.cratered);
 
     const enemyCarrier = this.enemyShips.find((s) => s.type === 'carrier' && !s.isSunk);
 
@@ -7713,7 +7725,7 @@ export class GameEngine {
     const operationalAirfields = this.islands
       .filter((i) => !i.isFriendlyBase && !i.isFullyCaptured)
       .flatMap((i) => i.installations)
-      .filter((inst) => inst.type === 'airfield' && inst.side === 'enemy' && !inst.isDestroyed).length;
+      .filter((inst) => inst.type === 'airfield' && inst.side === 'enemy' && !inst.isDestroyed && !inst.cratered).length;
     const hasCarrier = this.enemyShips.some((s) => s.type === 'carrier' && !s.isSunk);
     let size = baseCount + Math.min(2, Math.floor((this.sectorNumber - 1) / 2));
     if (operationalAirfields >= 2) size += 2;
@@ -8740,7 +8752,7 @@ export class GameEngine {
     const enemyAirfield = this.islands
       .filter((i) => !i.isFriendlyBase && !i.isFullyCaptured)
       .flatMap((i) => i.installations)
-      .find((inst) => inst.type === 'airfield' && inst.side === 'enemy' && !inst.isDestroyed);
+      .find((inst) => inst.type === 'airfield' && inst.side === 'enemy' && !inst.isDestroyed && !inst.cratered);
 
     if (this.enemyDcaCooldown <= 0 && (enemyCarrier || enemyAirfield)) {
       const threatBasePos = enemyCarrier ? enemyCarrier.pos : enemyAirfield!.pos;
@@ -10758,7 +10770,12 @@ export class GameEngine {
     airfieldId: string = this.hqAirfieldId
   ) {
     const airfield = this.findFriendlyAirfield(airfieldId);
-    if (!airfield) return;
+    if (!airfield) {
+      const knocked = this.islands.flatMap((i) => i.installations).find((i) => i.id === airfieldId);
+      if (knocked?.cratered) this.addBannerAlert(`⚠️【跑道癱瘓】「${knocked.name}」跑道彈坑搶修中（${Math.floor(knocked.cratered.progress * 100)}%），暫時無法起飛`, 'player', 'alert', 4);
+      else if (knocked?.nuclearDestroyed) this.addBannerAlert(`☢️【機場全毀】「${knocked.name}」已被核爆摧毀，需工兵重建`, 'player', 'alert', 4);
+      return;
+    }
     const pool = this.getAirfieldPool(airfieldId);
     const available = pool[model] || 0;
     if (available < count) return;
@@ -11122,6 +11139,76 @@ export class GameEngine {
       text: `🚧【開工】「${item.name}」工地已放樣，需工兵在場持續施工約 ${Math.round(total)} 秒（多個工兵排可加快，最多約 2 倍）。`,
     });
     return true;
+  }
+
+  /**
+   * Airfield damage: conventional bombs and shells crater the runway and wreck the hangars but do
+   * not erase a field. At zero strength it is knocked out (no take-offs or landings, returning
+   * aircraft divert) and the base crews start filling craters and relaying matting; engineers on
+   * site work much faster. Only a nuclear burst destroys a field outright, and then engineers
+   * can rebuild it from scratch.
+   */
+  private updateAirfieldDamage(dt: number): void {
+    for (const isl of this.islands) {
+      for (const inst of isl.installations) {
+        if (inst.type !== 'airfield') continue;
+        if (inst.isDestroyed && !inst.nuclearDestroyed) {
+          // Conventional: knocked out, not gone
+          inst.isDestroyed = false;
+          inst.health = Math.max(1, inst.maxHealth * 0.08);
+          inst.cratered = { progress: 0 };
+          this.islandsVersion++;
+          this.addCombatLog({
+            category: 'air',
+            sourceSide: inst.side === 'enemy' ? 'player' : 'enemy',
+            sourceName: '航空情報',
+            targetName: inst.name,
+            actionType: 'installation_down',
+            text: `💥【機場癱瘓】「${inst.name}」跑道彈坑密布、機庫起火，暫時無法起降；地勤正搶修${inst.side === 'player' ? '（工兵在場可大幅加快）' : ''}。`,
+          });
+          continue;
+        }
+        const engineers = inst.side === 'player' || inst.side === 'allied'
+          ? this.groundUnits.filter((u) => this.canBuild(u, 'engineer') && dist(u.pos, inst.pos) <= BUILDER_RADIUS + 150).length
+          : 0;
+        if (inst.cratered) {
+          // Base crews alone: about 2.5 min (the enemy's labour battalions about 1.5 min); each engineer platoon adds a lot
+          const crews = inst.side === 'enemy' ? 1 / 90 : 1 / 150;
+          inst.cratered.progress += dt * (crews + engineers * (1 / 45));
+          if (inst.cratered.progress >= 1) {
+            inst.cratered = undefined;
+            inst.health = Math.max(inst.health, inst.maxHealth * 0.6);
+            this.islandsVersion++;
+            this.addCombatLog({
+              category: 'air',
+              sourceSide: inst.side === 'enemy' ? 'enemy' : 'player',
+              sourceName: '地勤搶修',
+              targetName: inst.name,
+              actionType: 'recon_spotted',
+              text: `🛠️【跑道修復】「${inst.name}」彈坑填平、跑道恢復起降。`,
+            });
+          }
+        } else if (inst.isDestroyed && inst.nuclearDestroyed && engineers > 0) {
+          inst.rebuildProgress = (inst.rebuildProgress ?? 0) + (dt / 240) * buildRate(engineers);
+          if (inst.rebuildProgress >= 1) {
+            inst.isDestroyed = false;
+            inst.nuclearDestroyed = false;
+            inst.rebuildProgress = undefined;
+            inst.health = inst.maxHealth * 0.35;
+            this.airfieldPlanes[inst.id] ??= {};
+            this.islandsVersion++;
+            this.addCombatLog({
+              category: 'air',
+              sourceSide: 'player',
+              sourceName: '海軍工兵團 (Seabees)',
+              targetName: inst.name,
+              actionType: 'recon_spotted',
+              text: `🏗️【機場重建】工兵在核爆廢墟上重新鋪設跑道，「${inst.name}」恢復作業。`,
+            });
+          }
+        }
+      }
+    }
   }
 
   /** Engineer works under way: progress while engineers are on site, then enter service. */
@@ -19423,7 +19510,9 @@ export class GameEngine {
         if (inst.isDestroyed) continue;
         if (!this.isHostile(proj.side, inst.side)) continue; // 僅攻擊敵對陣地設施
 
-        if (dist(proj.pos, inst.pos) <= proj.blastRadius + 26) {
+        // Airfields are hit anywhere on the strip, other works near their centre
+        const onTarget = inst.type === 'airfield' ? onAirfield(inst, proj.pos, proj.blastRadius) : dist(proj.pos, inst.pos) <= proj.blastRadius + 26;
+        if (onTarget) {
           const attacker = proj.attackerName || (proj.side === 'player' ? '特遣航空隊' : '敵空襲機隊');
           const isBomb = proj.type === 'bomb';
 
@@ -19783,6 +19872,7 @@ export class GameEngine {
               hqDamaged = true;
               if (inst.health <= 0) {
                 inst.isDestroyed = true;
+              inst.nuclearDestroyed = true;
                 vaporizedInst++;
                 if (inst.side === 'enemy') {
                   this.casualties.enemyInstallationsLost++;
@@ -19794,6 +19884,7 @@ export class GameEngine {
             } else {
               inst.health = 0;
               inst.isDestroyed = true;
+              inst.nuclearDestroyed = true;
               vaporizedInst++;
               if (inst.side === 'enemy') {
                 this.casualties.enemyInstallationsLost++;
@@ -20043,6 +20134,11 @@ export class GameEngine {
   }
 
   private destroyInstallation(inst: Installation) {
+    // Re-bombing an airfield that is already out of action only sets its repairs back
+    if (inst.type === 'airfield' && inst.cratered) {
+      inst.isDestroyed = true;
+      return;
+    }
     inst.isDestroyed = true;
     soundEngine.playExplosion(true);
     this.score.installationsDestroyed++;

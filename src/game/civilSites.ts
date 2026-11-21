@@ -61,7 +61,7 @@ export function addCivilTransport(islands: Island[], map: TerrainMap, era: Era):
         id: `civil-station-${n}`,
         type: 'rail_station',
         name: names.shift()!,
-        weaponDesc: '原民用鐵路車站 · 我方控制時提供運輸量 TP · 由地面部隊進駐即可控制',
+        weaponDesc: '原民用鐵路車站 · 我方控制時鐵路縮短運補時程 · 提供時間值 TP · 由地面部隊進駐即可控制',
         pos,
         angle: best.a,
         health: 2600,
