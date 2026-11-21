@@ -164,6 +164,8 @@ export function drawIslands(rc: RenderContext, islands: Island[], camera: Camera
     ctx.textAlign = 'center';
     if (!island.isMainland) ctx.fillText(island.name.toUpperCase(), island.center.x, island.center.y - island.radius - 12);
     for (const inst of island.installations) {
+      // The mainland is always "visible", so cull its many positions one by one
+      if (!isWorldCircleVisible(rc, inst.pos.x, inst.pos.y, 260 + (inst.civilianZoneRadius ?? 0), camera)) continue;
       drawInstallation(rc, inst, island);
     }
   }

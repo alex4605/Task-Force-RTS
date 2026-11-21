@@ -132,6 +132,34 @@ export function leavesWreck(type: GroundUnitType): boolean {
 }
 
 /** Scorched ground, the charred hulk and a smoke column thinning over the wreck's lifetime. */
+/** World units covered by a cached hulk sprite, and its pixels per world unit. */
+const HULK_SPAN = 96;
+const HULK_RES = 4;
+const HULK_CACHE = new Map<string, HTMLCanvasElement>();
+
+function charredHulk(type: GroundWreck['type'], friendly: boolean, scale: number): HTMLCanvasElement {
+  const key = `${type}|${friendly}|${scale}`;
+  let c = HULK_CACHE.get(key);
+  if (c) return c;
+  const px = HULK_SPAN * HULK_RES;
+  // The silhouette at full colour, then soot-toned through the filter once
+  const raw = document.createElement('canvas');
+  raw.width = px;
+  raw.height = px;
+  const rctx = raw.getContext('2d')!;
+  rctx.translate(px / 2, px / 2);
+  rctx.scale(HULK_RES, HULK_RES);
+  drawGroundSilhouette(rctx, type, friendly, scale);
+  c = document.createElement('canvas');
+  c.width = px;
+  c.height = px;
+  const cctx = c.getContext('2d')!;
+  cctx.filter = 'grayscale(1) brightness(0.28)';
+  cctx.drawImage(raw, 0, 0);
+  HULK_CACHE.set(key, c);
+  return c;
+}
+
 export function drawGroundWrecks(rc: RenderContext, wrecks: GroundWreck[], camera: Camera): void {
   if (wrecks.length === 0) return;
   const ctx = rc.ctx;
@@ -153,14 +181,14 @@ export function drawGroundWrecks(rc: RenderContext, wrecks: GroundWreck[], camer
     ctx.beginPath();
     ctx.ellipse(0, 0, 20, 14, w.heading, 0, Math.PI * 2);
     ctx.fill();
-    // Charred hulk: the vehicle's silhouette in soot
+    // Charred hulk: the vehicle's silhouette in soot (pre-rendered once per type; a canvas filter
+    // applied per frame costs a full-canvas offscreen pass for every wreck)
     ctx.save();
     ctx.rotate(w.heading);
-    ctx.filter = 'grayscale(1) brightness(0.28)';
     ctx.globalAlpha = 0.9;
-    drawGroundSilhouette(ctx, w.type, w.side === 'player', scale);
+    const hulk = charredHulk(w.type, w.side === 'player', scale);
+    ctx.drawImage(hulk, -HULK_SPAN / 2, -HULK_SPAN / 2, HULK_SPAN, HULK_SPAN);
     ctx.restore();
-    ctx.filter = 'none';
     ctx.globalAlpha = 1;
     // Embers for the first half-minute
     if (w.age < 30) {

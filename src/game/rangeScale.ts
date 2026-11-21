@@ -248,7 +248,8 @@ const GARRISON_KM: Record<Era, { rifle: number; tank: number; gun: number; flak:
 };
 
 /** Coastal gun range from the bore parsed out of its name (240mm "Black Dragon", 15cm, 14", ...). */
-function coastalGunKm(name: string): number {
+function coastalGunKm(rawName: string | undefined): number {
+  const name = rawName ?? '';
   const mm = name.match(/(\d+(?:\.\d+)?)\s*mm/);
   const inch = name.match(/(\d+(?:\.\d+)?)\s*(?:-inch|吋|")/);
   const cm = name.match(/(\d+(?:\.\d+)?)\s*cm/);

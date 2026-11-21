@@ -80,7 +80,6 @@ interface HUDProps {
   onStopUnits: () => void;
   onSetSpeed: (speed: number) => void;
   onSteer: (dir: 'port' | 'starboard') => void;
-  onTriggerFlak: () => void;
   intel: SectorIntel | null;
   score: GameScore;
   onOpenBriefing: () => void;
@@ -244,7 +243,6 @@ export const HUD: React.FC<HUDProps> = ({
   onLaunchModel,
   onOrderSelected,
   onStopUnits,
-  onTriggerFlak,
   intel: _intel,
   score,
   onOpenBriefing,
@@ -410,7 +408,7 @@ export const HUD: React.FC<HUDProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedUnitsKey, selectedAirfacility]);
 
-  // C / G / Esc 快捷鍵: CAP 空巡與被動聲納浮標投擲模式
+  // 快捷鍵: C CAP 空巡 · G 聲納浮標 · Q 增援選單 · E 設施構工 · A 機場 · Esc 取消
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
@@ -425,6 +423,15 @@ export const HUD: React.FC<HUDProps> = ({
           onStartSonobuoyDesignation?.();
         } else {
           onCancelSonobuoy?.();
+        }
+      } else if (!e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'q' || e.key === 'Q' || e.key === 'e' || e.key === 'E' || e.key === 'a' || e.key === 'A')) {
+        // Q: reinforcement (battalion CP) menu · E: 設施構工 · A: airfield deck; pressing again folds the deck
+        const k = e.key.toLowerCase();
+        const tab: BottomDeckMode = k === 'q' ? 'battalion_cp' : k === 'e' ? 'engineer_construction' : 'airbase';
+        if (isBottomDeckExpanded && bottomDeckTab === tab) setIsBottomDeckExpanded(false);
+        else {
+          setBottomDeckTab(tab);
+          setIsBottomDeckExpanded(true);
         }
       } else if (e.key === 'Escape') {
         setActiveArmamentTray(null);
@@ -441,6 +448,8 @@ export const HUD: React.FC<HUDProps> = ({
     isDesignatingSonobuoy,
     onStartSonobuoyDesignation,
     onCancelSonobuoy,
+    isBottomDeckExpanded,
+    bottomDeckTab,
   ]);
 
   // Land-Based Airbase (AFB) formation counts & payload selections
@@ -1537,15 +1546,6 @@ export const HUD: React.FC<HUDProps> = ({
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
-                {/* Emergency Fleet Flak Barrage */}
-                <button
-                  onClick={onTriggerFlak}
-                  className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-[#D32F2F] to-[#C2185B] hover:from-[#E53935] hover:to-[#D81B60] border border-[#FF8A80] rounded text-xs font-mono font-bold text-white shadow-lg transition-transform active:scale-95 whitespace-nowrap"
-                  title="觸發艦隊周邊所有高射砲密集防空彈幕阻截敵機"
-                >
-                  <ShieldAlert className="w-3.5 h-3.5 text-white" />
-                  <span>防空全彈齊射 (SPACE)</span>
-                </button>
 
                 <button
                   type="button"
@@ -1602,7 +1602,7 @@ export const HUD: React.FC<HUDProps> = ({
                     <span>母艦全裝備庫</span>
                   </button>
                   <span className="text-[10px] text-slate-400">
-                    Backspace 暫停 · Space 防空
+                    Space / Backspace 暫停
                   </span>
                 </div>
               </div>

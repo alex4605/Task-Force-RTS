@@ -1,4 +1,5 @@
 import { ImpactEffect, ImpactSurface, impactFor, MAX_IMPACTS } from './impacts';
+import { snapOntoLand } from './coastline';
 import { resolveGroundRequisition } from './groundRequisition';
 import { AlliedHost, AlliedOps } from './allied/alliedOps';
 import { fitsInHold, formatHold, holdUsed, shipHold } from './naval/lift';
@@ -365,6 +366,26 @@ export class GameEngine {
         return;
       }
     }
+  }
+
+  /** A spawn point moved onto the island's dry land if it fell in its lagoon or the sea. */
+  private groundSpawnOnLand(p: Vector2D, island: Island): Vector2D {
+    const map = this.terrain;
+    const dry = (q: Vector2D) => {
+      const t = map.at(q.x, q.y);
+      return t !== TERRAIN.water && t !== TERRAIN.lagoon && t !== TERRAIN.lake && t !== TERRAIN.river;
+    };
+    if (dry(p) && isPointInPolygon(p, island.points)) return p;
+    // The terrain grid is the ground truth units move on: spiral out to the nearest dry cell
+    for (let r = 20; r <= 1600; r += 20) {
+      const n = Math.max(8, Math.round(r / 12));
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2;
+        const q = { x: p.x + Math.cos(a) * r, y: p.y + Math.sin(a) * r };
+        if (dry(q) && dry({ x: q.x + Math.cos(a) * 20, y: q.y + Math.sin(a) * 20 })) return q;
+      }
+    }
+    return snapOntoLand(island, p);
   }
 
   /** Whether an observer can find this unit at all (special forces stay hidden until close or firing). */
@@ -942,7 +963,6 @@ export class GameEngine {
     return formatBundle(b);
   }
 
-  private flakBarrageTimer: number = 0;
   private enemyDiversionCooldown = 0;
   public opforSagTimer: number = 190; // 跨時代 OPFOR 水面打擊群 (SAG) 每 3 至 4 分鐘週期出擊
 
@@ -1086,6 +1106,12 @@ export class GameEngine {
     this.controlGroups = {};
     this.enemyBeringSeaCoordTimer = 26;
     this.navGrid = new NavalNavigationGrid(this.worldSize, this.islands, 110);
+    // Nobody walks on water: garrisons laid out round an atoll's centre stood in its lagoon
+    for (const u of this.groundUnits) {
+      if (u.embarkedInShipId || u.isDestroyed) continue;
+      const isl = this.islands.find((i) => isPointInPolygon(u.pos, i.points)) ?? this.islands.reduce((m, i) => (dist(i.center, u.pos) - i.radius < dist(m.center, u.pos) - m.radius ? i : m), this.islands[0]);
+      if (isl) u.pos = this.groundSpawnOnLand(u.pos, isl);
+    }
     // The fleet starts hove to at its anchorage: ships only get under way when ordered (an idle
     // fleet used to keep steaming on its initial course straight into the enemy's shore guns)
     for (const sh of this.playerShips) {
@@ -2339,12 +2365,6 @@ export class GameEngine {
     return true;
   }
 
-  // Trigger Emergency Fleet Flak Barrage
-  public triggerFleetFlakBarrage() {
-    this.flakBarrageTimer = 8;
-    soundEngine.playKlaxon();
-  }
-
   public setGameSpeed(speed: number) {
     this.gameSpeed = speed;
     if (speed > 0 && this.isPaused) {
@@ -2386,8 +2406,6 @@ export class GameEngine {
     const effectiveDt = dt * this.gameSpeed;
     this.gameTime += effectiveDt;
 
-    if (this.flakBarrageTimer > 0)
-      this.flakBarrageTimer = Math.max(0, this.flakBarrageTimer - effectiveDt);
 
     // ══════════════════════════════════════════════════════════
     // 資源點數累積 (Command Points: Base + Islands Bonus)
@@ -3310,7 +3328,7 @@ export class GameEngine {
     const isEra2Player = isPlayer && this.era === 'era2';
     const isEra3Player = isPlayer && this.era === 'era3';
     const baseFlakRate = isPlayer
-      ? (this.flakBarrageTimer > 0 ? 0.08 : (isEra3Player ? 0.20 : isEra2Player ? 0.35 : 0.65))
+      ? (isEra3Player ? 0.20 : isEra2Player ? 0.35 : 0.65)
       : (ship.type === 'carrier' ? 1.2 : ship.type === 'battleship' ? 0.85 : 0.95);
     const effectiveFlakRate = baseFlakRate / Math.max(0.2, wcsEfficiency);
 
@@ -9355,6 +9373,7 @@ export class GameEngine {
               this.era,
               { x: sh.cpPos.x + (a === 0 ? 60 : -60), y: sh.cpPos.y + (a === 0 ? -40 : 40) }
             );
+            ambushUnit.pos = this.groundSpawnOnLand(ambushUnit.pos, island);
             ambushUnit.order = { type: 'move', targetPos: friendlyTroopsNearCP[0].pos };
             this.groundUnits.push(ambushUnit);
           }
@@ -9390,6 +9409,7 @@ export class GameEngine {
             'era2',
             { x: sh.cpPos.x + 30, y: sh.cpPos.y + 30 }
           );
+          banzaiSquad.pos = this.groundSpawnOnLand(banzaiSquad.pos, island);
           banzaiSquad.isBanzaiCharging = true;
           banzaiSquad.order = { type: 'move', targetPos: friendlyTroopsNearCP[0].pos };
           this.groundUnits.push(banzaiSquad);

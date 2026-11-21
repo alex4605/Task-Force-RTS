@@ -266,10 +266,6 @@ export default function App() {
     engine.steerRudder(dir);
   };
 
-  const handleTriggerFlak = () => {
-    engine.triggerFleetFlakBarrage();
-  };
-
   const handleToggleMute = () => {
     const muted = soundEngine.toggleMute();
     setIsMuted(muted);
@@ -398,6 +394,14 @@ export default function App() {
       }),
   ];
 
+  // Dev builds only: hooks for the automated playtest and profiling scripts
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const w = window as unknown as { __engine?: unknown; __camera?: (p: Vector2D) => void };
+    w.__engine = engine;
+    w.__camera = (p: Vector2D) => setExternalCameraTarget({ ...p });
+  }, [engine]);
+
   return (
     <div className="relative w-screen h-screen overflow-hidden bg-[#06101E] text-slate-100 select-none">
       {/* 2D HTML5 Vector RTS Game Canvas */}
@@ -483,7 +487,6 @@ export default function App() {
         onStopUnits={handleStopUnits}
         onSetSpeed={handleSetSpeed}
         onSteer={handleSteer}
-        onTriggerFlak={handleTriggerFlak}
         intel={intel}
         score={score}
         onOpenBriefing={() => setIsBriefingOpen(true)}
