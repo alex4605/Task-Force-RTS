@@ -357,6 +357,8 @@ export interface App6Options {
   condition?: number;
   /** Dim the whole symbol (suppressed / pinned). */
   dim?: boolean;
+  /** Frame fill override (allied formations: green, to tell them from the player's own blue). */
+  fill?: string;
 }
 
 /** Draw the full symbol centred at (0, 0). */
@@ -368,7 +370,7 @@ export function drawApp6(ctx: CanvasRenderingContext2D, o: App6Options): void {
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
   ctx.lineWidth = 2.4;
   ctx.stroke();
-  ctx.fillStyle = FILL[o.affiliation];
+  ctx.fillStyle = o.fill ?? FILL[o.affiliation];
   ctx.fill();
   ctx.save();
   traceFrame(ctx, o.affiliation);
@@ -405,6 +407,8 @@ const EXPLICIT_FUNCTION: Record<string, App6Function> = {
   usmc_m4a3r3_flame: 'armour',
   us_m24_chaffee: 'armour',
   us_m16_quad50: 'air_defence_gun',
+  usmc_90mm_aa_42: 'air_defence_gun',
+  usmc_40mm_bofors_45: 'air_defence_gun',
   us_m113_acav: 'armoured_recon',
   us_m107_175: 'field_artillery',
   us_hmmwv_tow: 'anti_armour',
@@ -488,6 +492,8 @@ const EXPLICIT_FUNCTION: Record<string, App6Function> = {
 const EXPLICIT_MOBILITY: Record<string, Mobility> = {
   usmc_37mm_at: 'towed',
   us_m16_quad50: 'wheeled_tracked',
+  usmc_90mm_aa_42: 'towed',
+  usmc_40mm_bofors_45: 'towed',
   us_m107_175: 'tracked',
   us_hmmwv_tow: 'wheeled',
   us_avenger: 'wheeled',

@@ -127,6 +127,8 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   us_army_rifle_45: 0.5,
   usmc_m4a3r3_flame: 0.15, // flame gun
   us_m24_chaffee: 1.3, // M6 75mm
+  usmc_90mm_aa_42: 1.8, // 90mm M1 (slant range engaged)
+  usmc_40mm_bofors_45: 1.3, // 40mm M1
   us_m16_quad50: 1.2, // M45 quad .50, effective AA
   us_m113_acav: 1.5, // M2 .50 cal
   us_m107_175: 32.7, // M113 175mm

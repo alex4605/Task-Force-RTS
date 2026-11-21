@@ -108,6 +108,8 @@ export type GroundUnitType =
   | 'us_army_rifle_45'    // 時代二 美陸軍步兵排 (沖繩 · 第7/77/96步兵師)
   | 'usmc_m4a3r3_flame'   // 時代二 M4A3R3「打火機」噴火戰車排 (硫磺島 / 沖繩)
   | 'us_m24_chaffee'      // 時代三 M24 霞飛輕戰車排 (1950 年首批抵韓)
+  | 'usmc_90mm_aa_42'     // 時代一 USMC 第3防衛營 90mm M1 高射砲連 (牽引 · 瓜島韓德森機場防空)
+  | 'usmc_40mm_bofors_45' // 時代二 USMC 防空營 40mm M1 波佛斯高射砲 (牽引)
   | 'us_m16_quad50'       // 時代三 M16 四聯裝 .50 半履帶防空車「絞肉機」
   | 'us_m113_acav'        // 時代四 M113 ACAV 裝甲騎兵突擊車 (三挺機槍與防盾)
   | 'us_m107_175'         // 時代四 M107 175mm 自走加農砲 (32 km)
@@ -363,6 +365,12 @@ export interface ShipArmamentSpec {
   desc?: string;
 }
 
+export interface GunRoe {
+  ships: boolean;
+  installations: boolean;
+  ground: boolean;
+}
+
 export interface Ship {
   id: string;
   name: string;
@@ -396,6 +404,8 @@ export interface Ship {
   isFlagship?: boolean;
   isSunk: boolean;
   sinkProgress: number;
+  /** Seconds since the ship went down: fires die out once she is under, the oil slick lingers then thins. */
+  sunkTime?: number;
   wakePoints: { x: number; y: number; life: number; width: number }[];
   order: UnitOrder;
   flakCooldown: number;
@@ -440,6 +450,13 @@ export interface Ship {
     hangar: Record<string, number>;
     maxPerType: Record<string, number>;
   };
+  /**
+   * Main-battery rules of engagement (player ships): which targets entering gun range are engaged
+   * without an order. Absent = ships only (the default); an explicit attack order always fires.
+   */
+  gunRoe?: GunRoe;
+  /** Troops aboard a reinforcement run (Tokyo Express): landed on the nearest contested coast. */
+  troopLanding?: { units: { type: GroundUnitType; name: string }[]; landed?: boolean; beach?: Vector2D; islandId?: string };
   /** A surface combatant's own aircraft: catapult floatplanes or a helicopter deck (see shipAviation.ts). */
   flightDeck?: 'floatplane' | 'helicopter';
   aviationFitted?: boolean;
@@ -1863,6 +1880,10 @@ export interface Aircraft {
   isEvading?: boolean;
   evasionTimer?: number;
   evasionTurnSign?: number;
+  /** The missile being evaded, steered against every frame until the evasion ends. */
+  evadeMissileId?: string;
+  /** Player-assigned close escort: the friendly aircraft this fighter stays with and protects. */
+  escortTargetId?: string;
   evasionTactic?: 'notching' | 'breaking';
   lastSeadCounterfireTime?: number;
   // 時代四蘇越「一擊脫離」戰術狀態 (Era 4 Soviet Hit-and-Run Intercept AI)

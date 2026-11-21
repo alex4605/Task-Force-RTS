@@ -7291,7 +7291,8 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
       createGroundUnit('usmc-tank-1', 'usmc_armor_m3', 'USMC 1st Tank Bn Stuart Plt (M3輕戰車)', 'player', 'era1', { x: 2040, y: 12450 }),
       createGroundUnit('usmc-art-1', 'usmc_artillery_105', 'USMC 10th Artillery Btry (M2A1 105mm)', 'player', 'era1', { x: 2060, y: 12470 }),
       createGroundUnit('usmc-eng-1', 'usmc_engineer', 'USN 133rd Seabees Combat Engr Plt', 'player', 'era1', { x: 2060, y: 12430 }),
-      createGroundUnit('usmc-eng-2', 'usmc_engineer', 'USMC 第1工兵營 (野戰機場工兵隊)', 'player', 'era1', { x: 2090, y: 12460 })
+      createGroundUnit('usmc-eng-2', 'usmc_engineer', 'USMC 第1工兵營 (野戰機場工兵隊)', 'player', 'era1', { x: 2090, y: 12460 }),
+      createGroundUnit('usmc-aa-1', 'usmc_90mm_aa_42', 'USMC 3rd Defense Bn 90mm AA Btry (M1 牽引高射砲)', 'player', 'era1', { x: 2010, y: 12430 })
     );
   } else if (era === 'era2') {
     groundUnits.push(
@@ -7300,7 +7301,9 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
       createGroundUnit('usmc-tank-1', 'usmc_armor_m4', 'USMC 4th Tank Bn Sherman Plt (M4A2薛曼)', 'player', 'era2', { x: 2040, y: 12450 }),
       createGroundUnit('usmc-art-1', 'usmc_artillery_105', 'USMC 10th Artillery Btry (M2A1 105mm)', 'player', 'era2', { x: 2060, y: 12470 }),
       createGroundUnit('usmc-eng-1', 'usmc_engineer', 'USN 133rd Seabees Combat Engr Plt', 'player', 'era2', { x: 2060, y: 12430 }),
-      createGroundUnit('usmc-eng-2', 'usmc_engineer', 'USMC 第1工兵營 (野戰機場工兵隊)', 'player', 'era2', { x: 2090, y: 12460 })
+      createGroundUnit('usmc-eng-2', 'usmc_engineer', 'USMC 第1工兵營 (野戰機場工兵隊)', 'player', 'era2', { x: 2090, y: 12460 }),
+      createGroundUnit('usmc-aa-1', 'usmc_40mm_bofors_45', 'USMC 2nd AAA Bn Bofors Plt (40mm M1 牽引)', 'player', 'era2', { x: 2010, y: 12430 }),
+      createGroundUnit('usmc-aa-2', 'us_m16_quad50', 'US Army 96th Inf Div AAA Plt (M16 四聯裝 .50 半履帶車)', 'player', 'era2', { x: 2110, y: 12420 })
     );
   } else if (era === 'era3') {
     // 時代三 (1950-1953):

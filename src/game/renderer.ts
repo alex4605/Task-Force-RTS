@@ -133,6 +133,10 @@ export class VectorRenderer {
     overlaysRender.drawRebasePreview(this.rc, pos, target, camera);
   }
 
+  public drawEscortPreview(pos: Vector2D, charge: Aircraft | undefined, camera: Camera) {
+    overlaysRender.drawEscortPreview(this.rc, pos, charge, camera);
+  }
+
   public drawCapBoxes(aircraft: Aircraft[], selectedIds: string[], camera: Camera) {
     overlaysRender.drawCapBoxes(this.rc, aircraft, selectedIds, camera);
   }

@@ -23,6 +23,7 @@ import {
   RequisitionCategory,
   CasualtiesReport,
   Sonobuoy,
+  Installation,
 } from '../types/game';
 import { getRequisitionCatalog } from '../game/requisition';
 import { BattleAlertBanner, RadarCoverage } from '../game/engine';
@@ -147,6 +148,8 @@ interface HUDProps {
   onStartCapDesignation?: () => void;
   /** Rebase mode for the given aircraft: the next map click picks the field or deck to divert to. */
   onStartRebase?: (ids: string[]) => void;
+  onStartEscort?: (ids: string[]) => void;
+  onSetGunRoe?: (key: 'ships' | 'installations' | 'ground', value: boolean) => void;
   onCancelCap?: () => void;
   sonobuoys?: Sonobuoy[];
   isDesignatingSonobuoy?: boolean;
@@ -293,6 +296,8 @@ export const HUD: React.FC<HUDProps> = ({
   isDesignatingCap = false,
   onStartCapDesignation,
   onStartRebase,
+  onStartEscort,
+  onSetGunRoe,
   onCancelCap,
   sonobuoys = [],
   isDesignatingSonobuoy = false,
@@ -350,22 +355,28 @@ export const HUD: React.FC<HUDProps> = ({
   const [requisitionTab, setRequisitionTab] = useState<RequisitionCategory>('ground');
   const [selectedBuildIslandId, setSelectedBuildIslandId] = useState<string>('');
 
-  // 取得當前活耀的營指揮所 (若有)
-  const activeBattalionCp = React.useMemo(() => {
-    if (selectedAirfacility && typeof selectedAirfacility === 'object' && selectedAirfacility.id) {
-      for (const isl of islands) {
-        const found = isl.installations.find((inst) => inst.id === selectedAirfacility.id && (inst.type === 'battalion_cp' || inst.type === 'command_post'));
-        if (found) return found;
+  // The command post reinforcements are called to: the one last picked (on the map or in the deck)
+  // stays the rally point until another is picked or it is lost. Clicking elsewhere on the map
+  // clears the map selection but must not send the next battalion back to the HQ island.
+  const playerCps = React.useMemo(() => {
+    const out: Installation[] = [];
+    for (const isl of islands) {
+      for (const inst of isl.installations) {
+        if ((inst.type === 'battalion_cp' || inst.type === 'command_post') && !inst.isDestroyed && inst.side === 'player') out.push(inst);
       }
     }
-    for (const isl of islands) {
-      const found = isl.installations.find(
-        (inst) => (inst.type === 'battalion_cp' || inst.type === 'command_post') && !inst.isDestroyed && inst.side === 'player'
-      );
-      if (found) return found;
+    return out;
+  }, [islands]);
+  const [chosenCpId, setChosenCpId] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (selectedAirfacility && typeof selectedAirfacility === 'object' && selectedAirfacility.id) {
+      if (playerCps.some((c) => c.id === selectedAirfacility.id)) setChosenCpId(selectedAirfacility.id);
     }
-    return null;
-  }, [islands, selectedAirfacility]);
+  }, [selectedAirfacility, playerCps]);
+  const activeBattalionCp = React.useMemo(
+    () => playerCps.find((c) => c.id === chosenCpId) ?? playerCps.find((c) => c.type === 'battalion_cp') ?? playerCps[0] ?? null,
+    [playerCps, chosenCpId]
+  );
 
   const hasPlayerCarrier = playerShips.some(
     (s) => !s.isSunk && (s.type === 'carrier' || s.type === 'cve' || s.type === 'cv63' || s.type === 'cvn' || s.type === 'lph' || s.type === 'lha_tarawa')
@@ -992,6 +1003,8 @@ export const HUD: React.FC<HUDProps> = ({
           isDesignatingCap={isDesignatingCap}
           onStartCapDesignation={onStartCapDesignation}
           onStartRebase={onStartRebase}
+          onStartEscort={onStartEscort}
+          onSetGunRoe={onSetGunRoe}
           onCancelCap={onCancelCap}
           isDesignatingSonobuoy={isDesignatingSonobuoy}
           onStartSonobuoyDesignation={onStartSonobuoyDesignation}
@@ -1433,7 +1446,7 @@ export const HUD: React.FC<HUDProps> = ({
                     <span>母艦全裝備庫</span>
                   </button>
                   <span className="text-[10px] text-slate-400">
-                    Space 暫停 · Q 增援 · E 構工 · A 機場 · C CAP · T 轉降
+                    Space 暫停 · Q 增援 · E 構工 · A 機場 · C CAP · T 轉降 · V 護航
                   </span>
                 </div>
               </div>
@@ -2260,10 +2273,31 @@ export const HUD: React.FC<HUDProps> = ({
 
                 <div className="flex items-center gap-2 text-[10px] text-emerald-300 font-mono">
                   <span className="bg-emerald-950/80 border border-emerald-700/60 px-2 py-0.5 rounded">
-                    增援規則：陸地單位自本營指揮所旁集結；海軍艦艇自地圖南緣入役；飛機進駐航空基地
+                    增援規則：陸地單位自選定的指揮所旁集結；海軍艦艇自地圖南緣入役；飛機進駐航空基地
                   </span>
                 </div>
               </div>
+
+              {/* Rally command post for ground reinforcements */}
+              {requisitionTab === 'ground' && playerCps.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-mono">
+                  <span className="text-slate-400">集結指揮所:</span>
+                  {playerCps.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        setChosenCpId(c.id);
+                        onMiniMapClick(c.pos);
+                      }}
+                      className={`px-2 py-0.5 rounded font-bold border ${activeBattalionCp?.id === c.id ? 'bg-emerald-700 text-white border-emerald-300' : 'bg-[#040C16] text-slate-300 border-[#1E3A5F] hover:text-white'}`}
+                      title="地面增援自此指揮所旁集結"
+                    >
+                      🎖️ {c.name.split(' (')[0]}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Items Catalog Cards for Battalion CP Support */}
               <DraggableScrollContainer className="gap-2 pb-1 max-w-full">

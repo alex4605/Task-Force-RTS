@@ -330,7 +330,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (engine.isDesignatingRebase) {
         renderer.drawRebasePreview(hoverWorldPosRef.current, engine.findRebaseTarget(hoverWorldPosRef.current), cameraRef.current);
       }
-      // Selected aircraft's assigned CAP boxes
+      if (engine.isDesignatingEscort) {
+        renderer.drawEscortPreview(hoverWorldPosRef.current, engine.findEscortCharge(hoverWorldPosRef.current), cameraRef.current);
+      }
+      // Selected aircraft's assigned CAP boxes and escort charges
       renderer.drawCapBoxes(engine.aircraft, engine.selectedUnitIds, cameraRef.current);
 
       // Draw Interactive Passive Sonobuoy Drop Preview
@@ -391,6 +394,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         onCancelSonobuoyRef.current?.();
         return;
       }
+    }
+
+    // Escort charge pick
+    if (engine.isDesignatingEscort) {
+      e.preventDefault();
+      if (e.button === 0) engine.assignEscort(screenToWorld(e.clientX, e.clientY));
+      engine.isDesignatingEscort = false;
+      return;
     }
 
     // Rebase destination pick
@@ -779,9 +790,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       keysDownRef.current[e.key] = true;
 
       if (e.key === 'Escape') {
-        if (engine.isDesignatingRebase) {
+        if (engine.isDesignatingRebase || engine.isDesignatingEscort) {
           e.preventDefault();
           engine.isDesignatingRebase = false;
+          engine.isDesignatingEscort = false;
           return;
         }
         if (isDesignatingSonobuoyRef.current) {
@@ -883,10 +895,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         // Radar coverage layer
         engine.showRadarCoverage = !engine.showRadarCoverage;
         onRadarLayerChangeRef.current?.(engine.showRadarCoverage);
+      } else if (e.key === 'v' || e.key === 'V') {
+        // Escort: pick the friendly aircraft the selected fighters protect
+        if (engine.aircraft.some((a) => a.side === 'player' && a.state !== 'shot_down' && engine.selectedUnitIds.includes(a.id))) {
+          engine.isDesignatingEscort = !engine.isDesignatingEscort;
+          engine.isDesignatingRebase = false;
+        }
       } else if (e.key === 't' || e.key === 'T') {
         // Rebase: pick the airfield or carrier the selected aircraft divert to
         if (engine.aircraft.some((a) => a.side === 'player' && a.state !== 'shot_down' && engine.selectedUnitIds.includes(a.id))) {
           engine.isDesignatingRebase = !engine.isDesignatingRebase;
+          engine.isDesignatingEscort = false;
         }
       } else if (e.key === 'p' || e.key === 'P') {
         engine.issueOrderToSelected({ type: 'patrol' });

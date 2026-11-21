@@ -170,6 +170,15 @@ const BASE_ROSTER: Partial<Record<Era, { base: string; forward: string; units: C
   },
 };
 
+/** Allied light AA dug in beside the works, by era. */
+const AA_WORK_NAME: Record<Era, string> = {
+  era1: '澳軍 40mm 波佛斯防空砲陣地',
+  era2: '澳軍 40mm 波佛斯防空砲陣地',
+  era3: '盟軍 40mm 波佛斯 / M55 四聯裝防空陣地',
+  era4: '盟軍 M42 / M163 防空砲陣地',
+  era5: '北約 Gepard / Rapier 野戰防空陣地',
+};
+
 /** Field works allied infantry dig on ground they hold, by era. */
 const FIELD_WORK_NAME: Record<Era, string> = {
   era1: '澳軍沙包機槍掩體 (維克斯重機槍)',
@@ -203,8 +212,8 @@ export class AlliedOps {
     }
     this.fortTimer -= dt;
     if (this.fortTimer <= 0) {
-      this.fortTimer = 20 + Math.random() * 10;
-      this.digIn();
+      // A failed attempt (nobody free to dig) is tried again soon, not given up on
+      this.fortTimer = this.digIn() ? 20 + Math.random() * 10 : 6 + Math.random() * 4;
     }
   }
 
@@ -528,22 +537,28 @@ export class AlliedOps {
    * captured stronghold or covering the approach to the allied base. Works keep firing for the
    * allies at enemy troops that come back.
    */
-  private digIn(): void {
+  private digIn(): boolean {
     const h = this.host;
     const esc = h.escalation();
-    if (!esc.fortify) return;
+    if (!esc.fortify) return true;
     const works: Installation[] = [];
     for (const isl of h.islands) for (const i of isl.installations) if (!i.isDestroyed && i.id.startsWith('allied-work-')) works.push(i);
-    if (works.length >= esc.maxWorks) return;
+    // Every third work is a light AA position, so the ground held is not left open from the air
+    const aaWorks = works.filter((w) => w.type === 'flak_battery').length;
+    const wantAA = aaWorks < Math.floor((works.length + 1) / 3) + (works.length >= 2 && aaWorks === 0 ? 1 : 0);
+    if (works.length >= esc.maxWorks + Math.ceil(esc.maxWorks / 2)) return true;
+    if (!wantAA && works.filter((w) => w.type !== 'flak_battery').length >= esc.maxWorks) return true;
     const enemies = h.groundUnits.filter((u) => u.side === 'enemy' && !u.isDestroyed && !u.embarkedInShipId);
     const captured: Vector2D[] = [];
     for (const isl of h.islands) for (const sh of isl.strongholds ?? []) if (sh.isCaptured) captured.push(sh.cpPos);
     let best: { unit: GroundUnit; island: Island; score: number } | null = null;
     for (const u of h.groundUnits) {
-      if (u.side !== 'allied' || u.isDestroyed || u.embarkedInShipId || u.order.type !== 'idle') continue;
+      if (u.side !== 'allied' || u.isDestroyed || u.embarkedInShipId) continue;
+      // Troops holding ground (idle, or on a hold / defend order) can dig; units on the move cannot
+      if (u.order.type === 'move' || u.order.type === 'attack') continue;
       const kind = groundSilhouetteClass(u.type);
       if (kind !== 'infantry' && kind !== 'engineer') continue;
-      if (works.some((w) => dist(w.pos, u.pos) < 320)) continue;
+      if (works.some((w) => dist(w.pos, u.pos) < (wantAA ? (w.type === 'flak_battery' ? 450 : 90) : 320))) continue;
       if (enemies.some((e) => dist(e.pos, u.pos) < 260)) continue; // not under direct fire
       const island = h.islands.find((isl) => isPointInPolygon(u.pos, isl.points));
       if (!island) continue;
@@ -552,7 +567,7 @@ export class AlliedOps {
       score += Math.random() * 200;
       if (!best || score > best.score) best = { unit: u, island, score };
     }
-    if (!best) return;
+    if (!best) return false;
     const { unit, island } = best;
     // Face the nearest enemy, or away from the island centre (the likely counter-landing coast)
     const threat = enemies.reduce<GroundUnit | null>((m, e) => (!m || dist(e.pos, unit.pos) < dist(m.pos, unit.pos) ? e : m), null);
@@ -560,22 +575,38 @@ export class AlliedOps {
       ? Math.atan2(threat.pos.y - unit.pos.y, threat.pos.x - unit.pos.x)
       : Math.atan2(unit.pos.y - island.center.y, unit.pos.x - island.center.x);
     const pos = { x: unit.pos.x + Math.cos(facing) * 35, y: unit.pos.y + Math.sin(facing) * 35 };
-    const work = makeInstallation({
-      id: `allied-work-${++this.serial}`,
-      type: 'bunker_nest',
-      name: FIELD_WORK_NAME[h.era],
-      weaponDesc: '盟軍步兵就地構築之沙包機槍掩體 · 扼守已奪取的陣地',
-      side: 'allied',
-      pos,
-      angle: facing,
-      health: 1100,
-      armor: 0.45,
-      range: 520,
-      reloadTime: 1.6,
-    });
+    const work = wantAA
+      ? makeInstallation({
+          id: `allied-work-${++this.serial}`,
+          type: 'flak_battery',
+          name: AA_WORK_NAME[h.era],
+          weaponDesc: '盟軍就地構築之防空砲陣地 · 掩護已奪取的陣地不受空襲',
+          side: 'allied',
+          pos,
+          angle: facing,
+          health: 1000,
+          armor: 0.35,
+          range: h.era === 'era5' ? 1300 : 1000,
+          cooldown: 0.5,
+          reloadTime: 1.6,
+        })
+      : makeInstallation({
+          id: `allied-work-${++this.serial}`,
+          type: 'bunker_nest',
+          name: FIELD_WORK_NAME[h.era],
+          weaponDesc: '盟軍步兵就地構築之沙包機槍掩體 · 扼守已奪取的陣地',
+          side: 'allied',
+          pos,
+          angle: facing,
+          health: 1100,
+          armor: 0.45,
+          range: 520,
+          reloadTime: 1.6,
+        });
     island.installations.push(work);
     h.islandsChanged();
     h.log(`🛠️【盟軍就地構工】「${unit.name}」在${island.isMainland ? '前線' : `「${island.name.split(' (')[0]}」`}構築${work.name}，鞏固已奪取的陣地。`);
+    return true;
   }
 
   /**

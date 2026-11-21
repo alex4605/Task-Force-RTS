@@ -530,6 +530,29 @@ export function drawRebasePreview(
 /** The CAP box each selected aircraft is patrolling. */
 export function drawCapBoxes(rc: RenderContext, aircraft: Aircraft[], selectedIds: string[], camera: Camera) {
   if (selectedIds.length === 0) return;
+  // Selected escorts: a tether to the aircraft they protect
+  for (const a of aircraft) {
+    if (!a.escortTargetId || !selectedIds.includes(a.id)) continue;
+    const c = aircraft.find((x) => x.id === a.escortTargetId);
+    if (!c) continue;
+    const ctx = rc.ctx;
+    ctx.save();
+    ctx.translate(rc.width / 2, rc.height / 2);
+    ctx.scale(camera.zoom, camera.zoom);
+    ctx.translate(-camera.x, -camera.y);
+    ctx.strokeStyle = 'rgba(255, 213, 79, 0.7)';
+    ctx.lineWidth = 1.4 / camera.zoom;
+    ctx.setLineDash([6 / camera.zoom, 5 / camera.zoom]);
+    ctx.beginPath();
+    ctx.moveTo(a.pos.x, a.pos.y);
+    ctx.lineTo(c.pos.x, c.pos.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.arc(c.pos.x, c.pos.y, 30, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
   const seen = new Set<string>();
   const ctx = rc.ctx;
   let started = false;
@@ -559,4 +582,29 @@ export function drawCapBoxes(rc: RenderContext, aircraft: Aircraft[], selectedId
     ctx.fillText('CAP 空域', b.x0 + 6 / camera.zoom, b.y0 + 14 / camera.zoom);
   }
   if (started) ctx.restore();
+}
+
+/** Escort mode: the friendly aircraft under the cursor, or a hint to pick one. */
+export function drawEscortPreview(rc: RenderContext, pos: Vector2D, charge: Aircraft | undefined, camera: Camera) {
+  const ctx = rc.ctx;
+  ctx.save();
+  ctx.translate(rc.width / 2, rc.height / 2);
+  ctx.scale(camera.zoom, camera.zoom);
+  ctx.translate(-camera.x, -camera.y);
+  const z = camera.zoom;
+  const pulse = (Math.sin(rc.time * 6) + 1) * 0.5;
+  ctx.font = `bold ${12 / z}px monospace`;
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#FFE082';
+  if (charge) {
+    ctx.strokeStyle = `rgba(255, 213, 79, ${0.6 + pulse * 0.4})`;
+    ctx.lineWidth = 2.2 / z;
+    ctx.beginPath();
+    ctx.arc(charge.pos.x, charge.pos.y, 40, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillText(`🛡️ 護航「${charge.flightName || charge.name}」· 左鍵確認`, charge.pos.x, charge.pos.y - 50);
+  } else {
+    ctx.fillText('🛡️【護航 Escort】點選要保護的友機 (右鍵/ESC 取消)', pos.x, pos.y - 24 / z);
+  }
+  ctx.restore();
 }

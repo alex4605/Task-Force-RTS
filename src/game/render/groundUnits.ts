@@ -61,7 +61,8 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
       ctx.fill();
     }
     drawGroundDust(rc, unit, scale);
-    blitSprite(ctx, `G|${unit.type}|${isPlayer}|${scale}`, 48, (c) => drawGroundSilhouette(c, unit.type, isPlayer, scale));
+    const palette = unit.side === 'allied' ? 'allied' : isPlayer;
+    blitSprite(ctx, `G|${unit.type}|${palette}|${scale}`, 48, (c) => drawGroundSilhouette(c, unit.type, palette, scale));
     ctx.restore();
 
     // 1. NATO APP-6 Tactical Frame (藍色長方形 友軍 vs 紅色菱形 敵軍)
@@ -91,7 +92,8 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
     ctx.translate(0, midY);
     const mobility = app6Mobility(unit.type, fn);
     const dim = !!unit.isPinned;
-    blitSprite(ctx, `A|${affiliation}|${fn}|${echelon}|${mobility}|${dim}`, 30, (c) => drawApp6(c, { affiliation, fn, echelon, mobility, dim }));
+    const fill = unit.side === 'allied' ? '#8BE38B' : undefined;
+    blitSprite(ctx, `A|${affiliation}|${fn}|${echelon}|${mobility}|${dim}|${fill}`, 30, (c) => drawApp6(c, { affiliation, fn, echelon, mobility, dim, fill }));
     ctx.restore();
 
     // 5. 陸軍雙參數系統 (Dual Parameters): 組織度 (ORG 綠/黃/紅) 與 建制度 (STR 藍/橙)
@@ -163,7 +165,7 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
         ctx.fillStyle = '#FFD54F';
         blitText(ctx, '⚠️【混亂壓制 DISORGANIZED】', 'bold 8.5px monospace', ctx.fillStyle as string, 0, -35);
       } else {
-        ctx.fillStyle = isPlayer ? '#90CAF9' : '#FFAB91';
+        ctx.fillStyle = unit.side === 'allied' ? '#B9F6CA' : isPlayer ? '#90CAF9' : '#FFAB91';
         blitText(ctx, unit.name, 'bold 8.5px monospace', ctx.fillStyle as string, 0, -35);
       }
 

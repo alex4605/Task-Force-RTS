@@ -465,7 +465,17 @@ export default function App() {
         onStartCapDesignation={handleStartCapDesignation}
         onStartRebase={(ids) => {
           engine.selectUnits(ids, false);
+          engine.isDesignatingEscort = false;
           engine.isDesignatingRebase = true;
+        }}
+        onSetGunRoe={(key, value) => {
+          engine.setGunRoe(key, value);
+          setPlayerShips([...engine.playerShips]);
+        }}
+        onStartEscort={(ids) => {
+          engine.selectUnits(ids, false);
+          engine.isDesignatingRebase = false;
+          engine.isDesignatingEscort = true;
         }}
         onCancelCap={handleCancelCap}
         sonobuoys={sonobuoys}

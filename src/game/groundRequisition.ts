@@ -79,6 +79,8 @@ const GROUND_REQUISITIONS: Record<string, Resolver> = {
   us_army_rifle_45: fixed('us_army_rifle_45', '美陸軍步兵排 (1945 沖繩)'),
   usmc_m4a3r3_flame: fixed('usmc_m4a3r3_flame', 'USMC M4A3R3「打火機」噴火戰車排'),
   us_m24_chaffee: fixed('us_m24_chaffee', 'US Army M24 霞飛輕戰車排'),
+  usmc_90mm_aa_42: fixed('usmc_90mm_aa_42', 'USMC 90mm M1 高射砲連 (第3防衛營)'),
+  usmc_40mm_bofors_45: fixed('usmc_40mm_bofors_45', 'USMC 40mm 波佛斯高射砲排'),
   us_m16_quad50: fixed('us_m16_quad50', 'M16 四聯裝 .50 防空半履帶車'),
   us_m113_acav: fixed('us_m113_acav', 'M113 ACAV 裝甲騎兵突擊車排'),
   us_m107_175: fixed('us_m107_175', 'M107 175mm 自走加農砲連'),
@@ -106,12 +108,15 @@ const ADDITIONAL_GROUND_ITEMS: Partial<Record<Era, Omit<RequisitionItem, 'catego
   era1: [
     { id: 'req-ground-raiders', name: 'USMC 陸戰隊突擊營步兵排 (Raiders)', cost: 140, badge: '湯普森+BAR+詹森機槍', desc: '卡爾森與艾森突擊營的精銳步兵，以大量湯普森衝鋒槍與 BAR 組成火力小組，擅長夜間滲透與叢林突襲（馬金島、瓜島長征）。', statsDesc: '近戰火力強 | 移動快 | 400m', typeTag: 'usmc_raider_42' },
     { id: 'req-sof-coastwatcher', name: '【SOF】澳紐海岸監視員偵搜組', cost: 160, badge: '敵後無線電預警', desc: '潛伏在所羅門群島山區的澳洲海岸監視員，以無線電通報日軍艦隊與機群動向，讓韓德森機場提早升空攔截。', statsDesc: '隱蔽 | 偵察：艦船 3000m・機群 4200m | 戰鬥力弱', typeTag: 'sof_coastwatcher_42' },
+    { id: 'req-ground-90mm-aa', name: 'USMC 90mm M1 高射砲連 (牽引)', cost: 190, badge: '90mm 高射砲 · 防空', desc: '陸戰隊第3防衛營的 90mm 高射砲連，1942 年 8 月隨首波登陸瓜島，架設在韓德森機場周邊迎擊日軍一式陸攻的高空轟炸；當年陸戰隊尚無自走防空砲。', statsDesc: '牽引式 | 中高空防空 | 1800m | 移動緩慢', typeTag: 'usmc_90mm_aa_42' },
     { id: 'req-ground-37mm-at', name: 'USMC M3 37mm 反戰車砲班', cost: 130, badge: '37mm 穿甲/霰彈', desc: '瓜島泰納魯河口以 37mm 霰彈擊退一木支隊衝鋒的經典火砲；對九五式、九七式戰車有效。', statsDesc: '反裝甲 | 牽引 | 1000m', typeTag: 'usmc_37mm_at' },
   ],
   era2: [
     { id: 'req-ground-army-45', name: '美陸軍步兵排 (1945 沖繩)', cost: 110, badge: '加蘭德+BAR+巴祖卡', desc: '第7、77、96步兵師的步兵排，與陸戰隊並肩攻打沖繩首里防線。', statsDesc: '標準步兵 | 500m', typeTag: 'us_army_rifle_45' },
     { id: 'req-sof-alamo', name: '【SOF】第6軍阿拉莫偵察隊', cost: 200, badge: '敵後偵察 · 突襲營救', desc: '克魯格將軍的精銳偵察隊，深入呂宋敵後偵察，並引導遊騎兵突襲卡巴納圖安戰俘營。', statsDesc: '隱蔽 | 偵察 | 據點奪取加速 | 爆破設施 ×3', typeTag: 'sof_alamo_scouts_45' },
     { id: 'req-sof-udt-45', name: '【SOF】海軍水下爆破隊 (UDT)', cost: 180, badge: '泳渡 · 灘頭爆破', desc: '「赤裸戰士」在登陸前泳渡至灘頭，以炸藥清除珊瑚礁與水中障礙，沖繩與硫磺島登陸的先鋒。', statsDesc: '兩棲泳渡 | 隱蔽 | 爆破設施 ×3', typeTag: 'sof_udt_45' },
+    { id: 'req-ground-40mm-bofors', name: 'USMC 40mm 波佛斯高射砲排 (牽引)', cost: 150, badge: '40mm M1 · 低空防空', desc: '陸戰隊防空營的 40mm M1 波佛斯砲，硫磺島與沖繩灘頭對抗神風機與夜間空襲的主力輕防空砲。', statsDesc: '牽引式 | 低空防空 | 1300m', typeTag: 'usmc_40mm_bofors_45' },
+    { id: 'req-ground-quad50-45', name: 'M16 四聯裝 .50 防空半履帶車', cost: 200, badge: 'M45 四聯 .50 · 自走', desc: '1943 年起服役的自走防空車，1945 年隨陸軍各師登上沖繩，對低空神風機與步兵衝鋒都極具威力。', statsDesc: '自走防空 + 對步兵壓制 | 1000m', typeTag: 'us_m16_quad50' },
     { id: 'req-ground-zippo', name: 'USMC M4A3R3「打火機」噴火戰車排', cost: 300, badge: '主砲換裝噴火器', desc: '以 POA-CWS-H1 噴火器取代 75mm 主砲的薛曼，硫磺島與沖繩清除洞窟碉堡的關鍵武器。', statsDesc: '噴火射程 150m | 對碉堡/步兵極強', typeTag: 'usmc_m4a3r3_flame' },
   ],
   era3: [
