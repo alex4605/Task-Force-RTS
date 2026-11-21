@@ -5,7 +5,9 @@ import { AlliedHost, AlliedOps } from './allied/alliedOps';
 import { fitsInHold, formatHold, holdUsed, shipHold } from './naval/lift';
 import { isRotaryOrVstol, rollBailout, shipRaftGroups } from './aircrew';
 import { deckAccepts, shipAviation } from './shipAviation';
-import { addCivilTransport } from './civilSites';
+import { CIVIL_HOSPITAL_RADIUS, addCivilHospitals, addCivilTransport } from './civilSites';
+import { FOXHOLE_DIG_S, SPOT_RANGE, insideFieldWork, isFieldWorkTag, makeFieldWork, placeEnemyFieldWorks } from './fieldWorks';
+import { WHALE_NAME, spawnWhales, updateWhales } from './whales';
 import { clearAirfieldFootprints, findAirfieldSite, nudgeOffAirfield, onAirfield } from './airfieldLayout';
 import { canDipSonar, dippingSonarRange } from './asw';
 import { buildRequisitionShip } from './requisitionShips';
@@ -28,6 +30,9 @@ import {
   AirWingLoadout,
   Island,
   Installation,
+  FieldWork,
+  FieldWorkKind,
+  WhalePod,
   InstallationType,
   Projectile,
   Particle,
@@ -939,6 +944,7 @@ export class GameEngine {
       town: { mp: 0.25, rp: 0.08, pp: 0.06 },
       city: { mp: 0.4, rp: 0.2, pp: 0.1 },
       rail_station: { tp: 0.6, rp: 0.1 },
+      civil_hospital: { pp: 0.12 },
     };
     for (const isl of this.islands) {
       for (const i of isl.installations) {
@@ -970,7 +976,7 @@ export class GameEngine {
     for (const isl of this.islands) {
       for (const inst of isl.installations) {
         const isTransport = inst.type === 'rail_station';
-        if (inst.isDestroyed || !(isTransport || inst.type === 'settlement' || inst.type === 'town' || inst.type === 'city')) continue;
+        if (inst.isDestroyed || !(isTransport || inst.type === 'settlement' || inst.type === 'town' || inst.type === 'city' || inst.type === 'civil_hospital')) continue;
         const r = isTransport ? 300 : (inst.civilianZoneRadius ?? 120) + 220;
         const friendly = ground.some((u) => (u.side === 'player' || u.side === 'allied') && dist(u.pos, inst.pos) < r);
         const hostile = ground.some((u) => u.side === 'enemy' && dist(u.pos, inst.pos) < r);
@@ -1002,6 +1008,8 @@ export class GameEngine {
                   ? `🛫【民用機場易手】我軍控制「${inst.name}」，跑道可供我方飛機起降與轉場。`
                   : inst.type === 'rail_station'
                   ? `🚉【車站易手】我軍控制「${inst.name}」，鐵路運補縮短部隊與物資的到位時間，開始為我方提供時間值 TP。`
+                  : inst.type === 'civil_hospital'
+                  ? `🏥【民間醫院】「${inst.name}」納入我方勢力範圍：附近部隊可就醫休整，地方民心提供政治值 PP。`
                   : `🏘️【勢力範圍】「${inst.name}」納入我方勢力範圍，開始提供人力與物資。`
                 : `⚠️【易手】「${inst.name}」落入敵方控制。`,
           });
@@ -1126,9 +1134,14 @@ export class GameEngine {
     this.worldSize = generated.worldSize;
     this.islands = generated.islands;
     // Civilian railway stations and the airport (eras with a mainland)
-    addCivilTransport(this.islands, getTerrainMap(this.islands, this.worldSize, era), era);
+    const sectorMap = getTerrainMap(this.islands, this.worldSize, era);
+    addCivilTransport(this.islands, sectorMap, era);
+    addCivilHospitals(this.islands, sectorMap, era);
     // Nothing stands on a runway
     clearAirfieldFootprints(this.islands);
+    // The defenders' wire, trenches, traps and mines; whales out in the deep water
+    this.fieldWorks = placeEnemyFieldWorks(this.islands, era);
+    this.whales = spawnWhales(this.islands, this.worldSize, era, sectorNum);
     this.applyHistoricalInstallationRanges();
     this.friendlyBase = generated.friendlyBase;
     this.playerShips = generated.playerShips;
@@ -2889,6 +2902,9 @@ export class GameEngine {
     this.updateAirfieldDamage(effectiveDt);
     this.updateAirfieldControl(effectiveDt);
     this.updateCivilControl(effectiveDt);
+    this.updateFieldWorks(effectiveDt);
+    this.updateCivilHospitals(effectiveDt);
+    this.updateWhalePods(effectiveDt);
     this.updateAircraft(effectiveDt);
     this.updateInstallations(effectiveDt);
     this.updateEra3Mechanics(effectiveDt);
@@ -9308,8 +9324,10 @@ export class GameEngine {
         }
         if (inUrban) break;
       }
-      unit.isInUrbanCover = inUrban;
-      unit.urbanCoverFactor = inUrban ? 0.5 : 1.0;
+      // 散兵坑 / 壕溝: field cover counts as hard cover like a built-up area
+      this.updateFoxhole(unit, dt, inUrban);
+      unit.isInUrbanCover = inUrban || unit.fieldCover !== undefined;
+      unit.urbanCoverFactor = unit.isInUrbanCover ? 0.5 : 1.0;
 
       this.refreshGroundTerrainInfo(unit);
 
@@ -9369,6 +9387,8 @@ export class GameEngine {
           const terrainMod = this.terrain.moveFactor(unit.pos.x, unit.pos.y, !onFoot);
           // Amphibians swim rivers; everyone else crawls (never fully stuck, so a unit can back out)
           moveSpeed *= amphib && this.terrain.at(unit.pos.x, unit.pos.y) === 14 ? 0.5 : Math.max(0.08, terrainMod);
+          // Crossing a hostile wire belt or obstacle line
+          moveSpeed *= unit.obstacleSlow ?? 1;
           // Crawling through a river or swamp for a while: plan a better way round from here
           if (!amphib && terrainMod < 0.15) {
             unit.routeStuck = (unit.routeStuck ?? 0) + dt;
@@ -11121,6 +11141,7 @@ export class GameEngine {
    * service when it is finished. Sandbox builds are instant.
    */
   private purchaseInstallationRequisition(item: RequisitionItem, targetIslandId: string | undefined, customPos: Vector2D | undefined, freeSandbox: boolean): boolean {
+    if (isFieldWorkTag(item.typeTag)) return this.orderFieldWork(item, targetIslandId, customPos, freeSandbox);
     const before = new Set(this.islands.flatMap((isl) => isl.installations.map((i) => i.id)));
     const ok = this.placeInstallationRequisition(item, targetIslandId, customPos, freeSandbox);
     const total = buildTime(item.typeTag ?? '');
@@ -11306,6 +11327,281 @@ export class GameEngine {
         targetName: site.inst.name,
         actionType: 'recon_spotted',
         text: `🏗️【竣工】「${site.itemName}」在「${isl.name.split(' (')[0]}」完工，即刻投入使用。`,
+      });
+    }
+  }
+
+  // ── 防禦構工: obstacle belts, trenches, traps, minefields; foxholes ───────────
+  public fieldWorks: FieldWork[] = [];
+  private fieldWorkTimer = 0;
+  /** Neutral sea life (see whales.ts). */
+  public whales: WhalePod[] = [];
+
+  /** Lay out a field work: it goes up while the right troops work on it. */
+  private orderFieldWork(item: RequisitionItem, targetIslandId: string | undefined, customPos: Vector2D | undefined, freeSandbox: boolean): boolean {
+    const kind = item.typeTag as FieldWorkKind;
+    let isl =
+      (customPos && this.islands.find((i) => isPointInPolygon(customPos, i.points))) ||
+      (targetIslandId ? this.islands.find((i) => i.id === targetIslandId) : undefined);
+    const need = builderRequirement(kind);
+    let pos = customPos ? { ...customPos } : undefined;
+    let builder = pos ? this.findBuilderNear(pos, need) : undefined;
+    if (!pos) {
+      // Quick order without a site: in front of a qualifying unit on the island
+      builder = isl ? this.findBuilderOnIsland(isl, need) : this.groundUnits.find((u) => this.canBuild(u, need));
+      if (builder) pos = { x: builder.pos.x + Math.cos(builder.heading) * 90, y: builder.pos.y + Math.sin(builder.heading) * 90 };
+    }
+    if (!pos) {
+      this.addBannerAlert(`🪖【無法構工】「${item.name}」${need === 'engineer' ? '需有工兵在場' : '需有步兵或工兵在場'}`, 'player', 'alert', 5);
+      return false;
+    }
+    isl ??= this.islands.find((i) => isPointInPolygon(pos!, i.points));
+    if (!isl || !isPointInPolygon(pos, isl.points)) {
+      this.addBannerAlert(`🪖【無法構工】「${item.name}」必須構築在陸地上`, 'player', 'alert', 5);
+      return false;
+    }
+    if (!freeSandbox && !builder) {
+      const who = need === 'engineer' ? '工兵' : '步兵或工兵';
+      this.addBannerAlert(`🪖【構工受阻】「${item.name}」須有${who}在工地 ${BUILDER_RADIUS}m 內才能構工！`, 'player', 'alert', 5);
+      return false;
+    }
+    // Belts and trenches run across the line of advance from the coast
+    const angle = builder && !customPos ? builder.heading + Math.PI / 2 : Math.atan2(pos.y - isl.center.y, pos.x - isl.center.x) + Math.PI / 2;
+    const w = makeFieldWork(kind, this.era, 'player', pos, angle, `fw-${Date.now()}-${this.fieldWorks.length}`, freeSandbox);
+    this.fieldWorks.push(w);
+    if (!freeSandbox) {
+      this.addCombatLog({
+        category: 'naval',
+        sourceSide: 'player',
+        sourceName: need === 'engineer' ? '戰鬥工兵' : '步兵',
+        targetName: w.name,
+        actionType: 'recon_spotted',
+        text: `🪖【構工】「${w.name}」開始構築，需${need === 'engineer' ? '工兵' : '步兵'}在場約 ${buildTime(kind)} 秒。`,
+      });
+    }
+    return true;
+  }
+
+  /** Infantry dig in where they stand (or climb out of their foxholes). */
+  public toggleFoxholes(unitIds?: string[]): void {
+    const ids = unitIds || this.selectedUnitIds;
+    const troops = this.groundUnits.filter((u) => ids.includes(u.id) && u.side === 'player' && !u.isDestroyed && !u.embarkedInShipId && this.isFootUnit(u));
+    if (troops.length === 0) return;
+    const dig = troops.some((u) => u.foxhole === undefined);
+    for (const u of troops) {
+      if (dig) {
+        u.foxhole ??= 0;
+        u.order = { type: 'idle' };
+        u.speed = 0;
+      } else {
+        u.foxhole = undefined;
+        if (u.fieldCover === 'foxhole') u.fieldCover = undefined;
+      }
+    }
+    this.addBannerAlert(dig ? `🪖【散兵坑】${troops.length} 支步兵部隊就地構築散兵坑 (約 ${FOXHOLE_DIG_S} 秒)` : `🪖 ${troops.length} 支步兵部隊離開散兵坑`, 'player', 'capture', 3);
+  }
+
+  /** Foxholes: digging, staying put, and AI troops digging in when they halt. */
+  private updateFoxhole(unit: GroundUnit, dt: number, inUrban: boolean): void {
+    if (unit.foxhole !== undefined) {
+      if (unit.order.type !== 'idle' || unit.embarkedInShipId) {
+        unit.foxhole = undefined;
+        if (unit.fieldCover === 'foxhole') unit.fieldCover = undefined;
+        return;
+      }
+      unit.foxhole = Math.min(1, unit.foxhole + dt / FOXHOLE_DIG_S);
+      if (unit.foxhole >= 1) unit.fieldCover = 'foxhole';
+    } else if (unit.side !== 'player' && unit.order.type === 'idle' && !inUrban && !unit.embarkedInShipId && this.isFootUnit(unit)) {
+      unit.foxhole = 0;
+    }
+  }
+
+  private fieldWorkStrike(w: FieldWork, u: GroundUnit, frac: number, supp: number, org: number): void {
+    const foot = this.isFootUnit(u);
+    const dmg = Math.round(u.maxHealth * frac * (foot ? 1 : 1 - (u.armor ?? 0) * 0.35));
+    u.health = Math.max(0, u.health - dmg);
+    u.strength = Math.max(0, Math.round((u.health / u.maxHealth) * 100));
+    u.suppression = Math.min(100, (u.suppression ?? 0) + supp);
+    u.suppressionTimer = 5;
+    u.isSuppressed = u.suppression >= 30;
+    u.isPinned = u.suppression >= 75;
+    u.organization = Math.max(0, (u.organization ?? 100) - org);
+    if (u.organization < 20) u.disorganized = true;
+    for (let i = 0; i < 8; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const v = 20 + Math.random() * 40;
+      this.particles.push({
+        id: `fw-blast-${Date.now()}-${i}-${Math.random()}`,
+        x: u.pos.x,
+        y: u.pos.y,
+        vx: Math.cos(a) * v,
+        vy: Math.sin(a) * v,
+        life: 0.6 + Math.random() * 0.6,
+        maxLife: 1.2,
+        radius: i < 3 ? 7 : 3,
+        color: i < 3 ? '#FFB74D' : '#6D4C41',
+        type: i < 3 ? 'fire' : 'smoke',
+      });
+    }
+    soundEngine.playExplosion(false);
+    const what = w.kind === 'trap' ? '觸發詭雷' : foot ? '誤入雷區觸發反人員雷' : '輾上反戰車地雷';
+    this.addCombatLog({
+      category: 'naval',
+      sourceSide: w.side,
+      sourceName: w.name,
+      targetName: u.name,
+      actionType: 'gun_hit',
+      damage: dmg,
+      text: `💥【${w.kind === 'trap' ? '陷阱' : '雷區'}】「${u.name}」${what}！(-${dmg} HP / 建制度 ${u.strength}%)`,
+    });
+    if (u.health <= 0) {
+      u.isDestroyed = true;
+      if (u.side === 'enemy') {
+        this.casualties.enemyGroundLost++;
+        this.grant(40, 'kill');
+      } else {
+        this.casualties.playerGroundLost++;
+      }
+    }
+  }
+
+  private updateFieldWorks(dt: number): void {
+    this.fieldWorkTimer -= dt;
+    if (this.fieldWorkTimer > 0) return;
+    const T = 0.25;
+    this.fieldWorkTimer = T;
+    const ground = this.groundUnits.filter((u) => !u.isDestroyed && !u.embarkedInShipId);
+    for (const u of ground) {
+      u.obstacleSlow = 1;
+      if (u.fieldCover === 'trench') u.fieldCover = undefined;
+    }
+    for (let k = this.fieldWorks.length - 1; k >= 0; k--) {
+      const w = this.fieldWorks[k];
+      if (w.isDestroyed) {
+        this.fieldWorks.splice(k, 1);
+        continue;
+      }
+      if (w.progress < 1) {
+        const need = builderRequirement(w.kind);
+        const n = ground.filter((u) => this.canBuild(u, need) && dist(u.pos, w.pos) <= BUILDER_RADIUS).length;
+        w.builders = n;
+        w.progress = Math.min(1, w.progress + (T / Math.max(1, buildTime(w.kind))) * buildRate(n));
+        if (w.progress >= 1) this.addBannerAlert(`🪖【構工完成】「${w.name}」`, 'player', 'capture', 3.5);
+        continue;
+      }
+      // Our troops find the enemy's works by walking up to them
+      if (w.side === 'enemy' && !w.revealed && ground.some((u) => (u.side === 'player' || u.side === 'allied') && insideFieldWork(w, u.pos, SPOT_RANGE[w.kind]))) {
+        w.revealed = true;
+        this.addCombatLog({
+          category: 'naval',
+          sourceSide: 'player',
+          sourceName: '前線偵察',
+          targetName: w.name,
+          actionType: 'recon_spotted',
+          text: `🔎【發現敵方工事】前線部隊發現「${w.name}」！`,
+        });
+      }
+      for (const u of ground) {
+        if (!insideFieldWork(w, u.pos, 8)) continue;
+        const hostile = this.isHostile(u.side, w.side);
+        const foot = this.isFootUnit(u);
+        const sapper = isEngineerType(u.type);
+        if (w.kind === 'trench') {
+          if (!hostile && foot) u.fieldCover = 'trench';
+        } else if (w.kind === 'obstacle') {
+          if (!hostile) continue;
+          u.obstacleSlow = Math.min(u.obstacleSlow ?? 1, foot ? 0.45 : 0.3);
+          // Tanks flatten wire, engineers cut and blow lanes
+          w.health -= (sapper ? 140 : !foot && u.armor >= 0.5 ? 45 : 4) * T;
+        } else if (w.kind === 'trap') {
+          if (!hostile || !foot) continue;
+          if (sapper && w.revealed) w.mines = 0;
+          else if (Math.random() < (w.revealed ? 0.1 : 0.55)) {
+            w.mines = 0;
+            this.fieldWorkStrike(w, u, 0.12, 60, 20);
+          }
+          if (w.mines === 0) break;
+        } else if (w.kind === 'minefield') {
+          if (!hostile) continue;
+          if (sapper) {
+            // Probing and lifting mines; a cleared lane shows the field
+            w.mines = (w.mines ?? 0) - T / 2.5;
+            w.revealed = true;
+            continue;
+          }
+          if (Math.random() < (foot ? 0.05 : 0.08) * (w.revealed ? 0.5 : 1)) {
+            w.mines = (w.mines ?? 0) - 1;
+            w.revealed = true;
+            this.fieldWorkStrike(w, u, foot ? 0.1 : 0.22, 50, 15);
+          }
+        }
+      }
+      if (w.health <= 0 || (w.mines !== undefined && w.mines <= 0)) {
+        w.isDestroyed = true;
+        if (w.kind !== 'trap' || w.side === 'player' || w.revealed) {
+          this.addCombatLog({
+            category: 'naval',
+            sourceSide: w.side === 'enemy' ? 'player' : 'enemy',
+            sourceName: '前線部隊',
+            targetName: w.name,
+            actionType: 'recon_spotted',
+            text:
+              w.kind === 'minefield'
+                ? `🧹【雷區清除】「${w.name}」已被${w.side === 'enemy' ? '我軍' : '敵軍'}排除或引爆殆盡。`
+                : w.kind === 'obstacle'
+                ? `🚧【阻絕突破】「${w.name}」已被${w.side === 'enemy' ? '我軍' : '敵軍'}開闢通路。`
+                : `💥「${w.name}」已失效。`,
+          });
+        }
+      }
+    }
+  }
+
+  /** Bombs and shells cut wire, set off mines and cave in trenches. */
+  private blastFieldWorks(pos: Vector2D, radius: number, damage: number): void {
+    for (const w of this.fieldWorks) {
+      if (w.isDestroyed || w.progress < 1 || !insideFieldWork(w, pos, radius)) continue;
+      if (w.kind === 'minefield') w.mines = (w.mines ?? 0) - Math.min(3, damage / 250);
+      else if (w.kind === 'trap') w.mines = 0;
+      else w.health -= damage * (w.kind === 'trench' ? 0.15 : 0.5);
+      if (w.health <= 0 || (w.mines !== undefined && w.mines <= 0)) w.isDestroyed = true;
+    }
+  }
+
+  /** Civilian hospitals in our sphere treat nearby troops (and win the town's goodwill). */
+  private updateCivilHospitals(dt: number): void {
+    for (const isl of this.islands) {
+      for (const h of isl.installations) {
+        if (h.type !== 'civil_hospital' || h.isDestroyed || !h.controlledBy) continue;
+        const own = h.controlledBy;
+        for (const u of this.groundUnits) {
+          if (u.isDestroyed || u.embarkedInShipId || this.isHostile(u.side, own === 'player' ? 'player' : 'enemy') || dist(u.pos, h.pos) > CIVIL_HOSPITAL_RADIUS) continue;
+          u.organization = Math.min(u.maxOrganization ?? 100, (u.organization ?? 100) + 1.2 * dt);
+          if (u.health < u.maxHealth) {
+            u.health = Math.min(u.maxHealth, u.health + u.maxHealth * 0.004 * dt);
+            u.strength = Math.round((u.health / u.maxHealth) * 100);
+          }
+        }
+      }
+    }
+  }
+
+  /** Whale pods: swim, breathe and dive; a sounding pod near a sonar ship is logged as biologics. */
+  private updateWhalePods(dt: number): void {
+    if (this.whales.length === 0) return;
+    updateWhales(this.whales, dt, this.islands, this.worldSize);
+    for (const w of this.whales) {
+      if (w.surfaced || w.reported) continue;
+      const ship = this.playerShips.find((s) => !s.isSunk && (s.sonarRange ?? 0) > 0 && dist(s.pos, w.pos) < (s.sonarRange ?? 0));
+      if (!ship) continue;
+      w.reported = true;
+      this.addCombatLog({
+        category: 'naval',
+        sourceSide: 'player',
+        sourceName: ship.name,
+        targetName: WHALE_NAME[w.species],
+        actionType: 'recon_spotted',
+        text: `🐋【聲納接觸 · 判定生物回波】「${ship.name}」聲納接獲水下目標，經聲紋判讀為${WHALE_NAME[w.species]}群 (${w.count} 頭)，非潛艦。`,
       });
     }
   }
@@ -19747,6 +20043,7 @@ export class GameEngine {
   // 2. 組織度 (ORG / Morale): 猛烈航彈爆震與破片引發嚴重震盪恐慌、通信中斷與士氣受挫
   // ══════════════════════════════════════════════════════════
   private applyBlastToGroundUnits(proj: Projectile): void {
+    this.blastFieldWorks(proj.pos, proj.blastRadius + 10, proj.damage);
     for (const unit of this.groundUnits) {
       if (unit.isDestroyed || unit.embarkedInShipId) continue;
       if (this.isHostile(proj.side, unit.side) && dist(proj.pos, unit.pos) <= proj.blastRadius + 24) {

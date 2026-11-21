@@ -292,6 +292,12 @@ export interface GroundUnit {
   echelon?: 'platoon' | 'company' | 'battery' | 'battalion'; // NATO APP-6 編制階級標記
   isInUrbanCover?: boolean; // 處於城市/城鎮/定居點掩體內 (空襲減傷70%、步火減傷50%)
   urbanCoverFactor?: number; // 掩蔽防護乘數
+  /** 散兵坑: dig-in progress 0..1 (1 = dug in, cannot move until it climbs out). */
+  foxhole?: number;
+  /** Cover from field works this tick: inside a friendly trench or dug into its own foxhole. */
+  fieldCover?: 'trench' | 'foxhole';
+  /** Speed factor from a hostile obstacle belt it is crossing (1 = clear). */
+  obstacleSlow?: number;
   // 漸進式火力壓制系統 (Progressive Suppression System: 0~100%, 30%~80% 移速懲罰)
   suppression?: number; // 0 to 100%
   suppressionTimer?: number; // 遭火力射擊倒數
@@ -1926,6 +1932,7 @@ export type InstallationType =
   | 'rail_station'       // (原)民用鐵路車站 (地面部隊進駐即可控制 · 我方控制時鐵路縮短運補時程 · 提供時間值 TP)
   | 'motor_pool'         // 調車場 (車輛集結整備場 · 呼叫裝甲/車輛/火砲增援)
   | 'pow_camp'           // 戰俘營 (雙方皆有：我方構工建造、敵方預設於後方)
+  | 'civil_hospital'     // 中立民間醫院 (教會醫院 / 市立醫院 · 我方勢力範圍時救治附近部隊並提供政治值 PP)
   | 'refugee_camp'       // 戰地難民收容營 (聯合國/紅十字帳篷區，遭受火力攻擊扣除 15 CP)
   // 時代四特種防空與前進雷達作戰設施 (Era 4 Cold War / Vietnam Installations)
   | 'sa2_sam_site'       // SA-2 導針 (Guideline) 地空防空飛彈發射營
@@ -2353,6 +2360,47 @@ export interface CasualtiesReport {
   /** Aircrew killed when their aircraft went down (not counting those later captured). */
   playerAircrewLost?: number;
   enemyAircrewLost?: number;
+}
+
+/** 防禦構工: obstacle belts, trenches, booby traps and minefields (see game/fieldWorks.ts). */
+export type FieldWorkKind = 'obstacle' | 'trench' | 'trap' | 'minefield';
+
+export interface FieldWork {
+  id: string;
+  kind: FieldWorkKind;
+  side: ShipSide;
+  name: string;
+  era: Era;
+  pos: Vector2D;
+  angle: number;
+  health: number;
+  maxHealth: number;
+  /** Work done, 0..1; it takes effect at 1. */
+  progress: number;
+  builders: number;
+  /** Minefield charges left (a trap has one). */
+  mines?: number;
+  maxMines?: number;
+  /** An enemy work our troops have found (hidden works are not drawn). */
+  revealed?: boolean;
+  isDestroyed?: boolean;
+}
+
+/** Neutral sea life: a whale pod that surfaces to breathe and sounds again. */
+export interface WhalePod {
+  id: string;
+  species: 'humpback' | 'sperm' | 'fin';
+  pos: Vector2D;
+  heading: number;
+  speed: number;
+  count: number;
+  /** Seconds left in the current surfacing or dive. */
+  phaseT: number;
+  surfaced: boolean;
+  /** Time since the last blow, for the spout effect. */
+  spoutT: number;
+  /** Already reported as a sonar false contact this dive. */
+  reported?: boolean;
 }
 
 export interface Sonobuoy {

@@ -1,5 +1,5 @@
 import { Era, Island, Vector2D } from '../types/game';
-import { dist, makeInstallation } from './procedural';
+import { dist, isPointInPolygon, makeInstallation } from './procedural';
 import { TERRAIN, TerrainMap } from './terrain/terrainMap';
 
 /**
@@ -99,6 +99,58 @@ export function addCivilTransport(islands: Island[], map: TerrainMap, era: Era):
         })
       );
       return;
+    }
+  }
+}
+
+/** Troops within this distance of a civilian hospital in their side's sphere are treated there. */
+export const CIVIL_HOSPITAL_RADIUS = 520;
+
+const HOSPITAL_NAMES: Record<Era, string[]> = {
+  era1: ['(中立) 瑪利斯會教會醫院 (Marist Mission)', '(中立) 衛理公會教會醫院 (Methodist Mission)'],
+  era2: ['(中立) 南洋廳立醫院', '(中立) 天主教會診療所'],
+  era3: ['(中立) 塞弗蘭斯紀念醫院 (Severance)', '(中立) 道立病院'],
+  era4: ['(中立) 順化中央醫院 (Huế Central)', '(中立) 省立醫院'],
+  era5: ['(中立) 漢諾威醫學院附設醫院 (MHH)', '(中立) 市立綜合醫院 (Klinikum)'],
+};
+
+/**
+ * Civilian hospitals in the biggest towns: mission hospitals on the Pacific islands, city and
+ * provincial hospitals on the mainland. Neutral and protected; whichever side holds the
+ * surrounding ground has its wounded treated there.
+ */
+export function addCivilHospitals(islands: Island[], map: TerrainMap, era: Era): void {
+  const names = [...HOSPITAL_NAMES[era]];
+  const towns = map.districts
+    .filter((d) => d.kind === 'city' || d.kind === 'town' || d.kind === 'settlement' || d.kind === 'village')
+    .sort((a, b) => b.radius - a.radius);
+  let n = 0;
+  for (const town of towns) {
+    if (names.length === 0) break;
+    const isl = islands.find((i) => isPointInPolygon(town.center, i.points));
+    if (!isl) continue;
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2 + 0.4;
+      const r = Math.min(120, town.radius * 0.45);
+      const pos = { x: town.center.x + Math.cos(a) * r, y: town.center.y + Math.sin(a) * r };
+      if (!dryLand(map, pos) || !isPointInPolygon(pos, isl.points)) continue;
+      if (isl.installations.some((i) => !i.isCivilian && dist(i.pos, pos) < 160)) continue;
+      if (islands.some((il) => il.installations.some((i) => i.type === 'civil_hospital' && dist(i.pos, pos) < 1500))) continue;
+      isl.installations.push(
+        makeInstallation({
+          id: `civil-hospital-${n++}`,
+          type: 'civil_hospital',
+          name: names.shift()!,
+          weaponDesc: '中立民間醫院 · 受國際法保護 (攻擊將造成附帶損害) · 我方勢力範圍時救治 520m 內部隊並提供政治值 PP',
+          pos,
+          angle: a,
+          health: 2200,
+          armor: 0.3,
+          side: 'neutral',
+          isCivilian: true,
+        })
+      );
+      break;
     }
   }
 }

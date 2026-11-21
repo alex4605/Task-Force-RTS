@@ -378,3 +378,104 @@ export function drawMotorPoolSite(rc: RenderContext, _inst: Installation, style:
   flag(ctx, 21, -12, color);
   label(ctx, '🛠️ [調車場 Motor Pool] 裝甲 / 車輛增援', -20, labelColor);
 }
+
+// ════ Civilian hospital: a mission hospital on the islands, a city hospital on the mainland ════
+export function drawCivilHospitalSite(rc: RenderContext, inst: Installation, _style: InstallationStyle, _island?: Island): void {
+  const ctx = rc.ctx;
+  const early = rc.era === 'era1' || rc.era === 'era2';
+  const name = inst.name.replace('(中立) ', '').split(' (')[0];
+  // Grounds
+  ctx.fillStyle = early ? 'rgba(104, 132, 72, 0.45)' : 'rgba(150, 146, 136, 0.5)';
+  ctx.beginPath();
+  ctx.roundRect(-30, -22, 60, 44, 4);
+  ctx.fill();
+  ctx.strokeStyle = early ? 'rgba(93, 64, 55, 0.8)' : 'rgba(200, 200, 200, 0.8)';
+  ctx.lineWidth = 0.8;
+  ctx.setLineDash(early ? [2, 1.5] : []);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  const roof = (x: number, y: number, w: number, h: number, fill: string, ridge: boolean) => {
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(x - w / 2 + 1.5, y - h / 2 + 1.5, w, h);
+    ctx.fillStyle = fill;
+    ctx.fillRect(x - w / 2, y - h / 2, w, h);
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+    ctx.lineWidth = 0.6;
+    ctx.strokeRect(x - w / 2, y - h / 2, w, h);
+    if (ridge) {
+      ctx.beginPath();
+      ctx.moveTo(x - w / 2, y);
+      ctx.lineTo(x + w / 2, y);
+      ctx.stroke();
+    }
+  };
+  if (early) {
+    // Long ward blocks on stilts (corrugated iron roofs), the mission chapel and the doctor's house
+    roof(-8, -10, 34, 8, '#9E9E9E', true);
+    roof(-8, 4, 34, 8, '#A8A8A0', true);
+    // Covered walkway joining the wards
+    ctx.fillStyle = '#8D6E63';
+    ctx.fillRect(-1.5, -6, 3, 6);
+    // Chapel with its cross
+    roof(19, -9, 9, 13, '#BCAAA4', true);
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(19, -18);
+    ctx.lineTo(19, -12);
+    ctx.moveTo(16.8, -16);
+    ctx.lineTo(21.2, -16);
+    ctx.stroke();
+    roof(20, 9, 9, 8, '#A1887F', true);
+    // Red cross painted on the ward roof, and on a flag
+    redCross(ctx, -8, -10, 3.2);
+    redCross(ctx, -8, 4, 3.2);
+    // Palms round the compound
+    ctx.fillStyle = 'rgba(46, 94, 40, 0.85)';
+    for (const [x, y] of [[-27, -18], [-26, 17], [27, 18], [3, 18]] as const) {
+      ctx.beginPath();
+      ctx.arc(x, y, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else {
+    // Concrete blocks round a court: main wing, two side wings and the boiler house
+    roof(0, -12, 46, 10, '#CFCFC8', false);
+    roof(-18, 4, 10, 22, '#C4C4BC', false);
+    roof(18, 4, 10, 22, '#C4C4BC', false);
+    roof(0, 14, 8, 6, '#8D8D86', false);
+    // Roof plant and the big red cross for the airmen
+    ctx.fillStyle = '#9E9E96';
+    ctx.fillRect(-14, -15, 4, 3);
+    ctx.fillRect(10, -15, 4, 3);
+    redCross(ctx, 0, -12, 4.2);
+    // Courtyard trees
+    ctx.fillStyle = 'rgba(56, 102, 48, 0.8)';
+    for (const [x, y] of [[-5, 2], [5, 2], [0, 7]] as const) {
+      ctx.beginPath();
+      ctx.arc(x, y, 2.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // Ambulance bay; from the 1960s a helicopter pad on the lawn
+    for (const [x, y] of [[24, -18], [27, -18]] as const) {
+      ctx.fillStyle = '#F5F5F5';
+      ctx.fillRect(x - 1.2, y - 2.5, 2.4, 5);
+      ctx.fillStyle = '#D32F2F';
+      ctx.fillRect(x - 1.2, y - 0.4, 2.4, 0.8);
+    }
+    if (rc.era === 'era4' || rc.era === 'era5') {
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.arc(-22, -17, 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 6px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('H', -22, -15);
+    }
+  }
+  ctx.fillStyle = '#FFCDD2';
+  ctx.font = 'bold 8.5px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(`🏥 [${name}] 中立民間醫院`, 0, -27);
+}

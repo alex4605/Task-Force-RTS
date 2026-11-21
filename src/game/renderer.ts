@@ -1,8 +1,9 @@
-import { Vector2D, Island, Ship, Aircraft, Projectile, Particle, SelectionBox, GroundUnit, RequisitionItem, LifeRaft, NuclearDetonation, Sonobuoy, Era } from '../types/game';
+import { Vector2D, Island, Ship, Aircraft, Projectile, Particle, SelectionBox, GroundUnit, RequisitionItem, LifeRaft, NuclearDetonation, Sonobuoy, Era, FieldWork, WhalePod } from '../types/game';
 import { RenderContext } from './render/context';
 import * as aircraftRender from './render/aircraft';
 import * as effectsRender from './render/effects';
 import * as groundUnitsRender from './render/groundUnits';
+import * as fieldWorksRender from './render/fieldWorks';
 import { drawGroundWrecks, GroundWreck } from './render/unitDetails';
 import * as islandsRender from './render/islands';
 import * as oceanRender from './render/ocean';
@@ -135,6 +136,14 @@ export class VectorRenderer {
 
   public drawEscortPreview(pos: Vector2D, charge: Aircraft | undefined, camera: Camera) {
     overlaysRender.drawEscortPreview(this.rc, pos, charge, camera);
+  }
+
+  public drawFieldWorks(works: FieldWork[], camera: Camera) {
+    fieldWorksRender.drawFieldWorks(this.rc, works, camera);
+  }
+
+  public drawWhales(pods: WhalePod[], camera: Camera) {
+    fieldWorksRender.drawWhales(this.rc, pods, camera);
   }
 
   public drawConstructionSites(sites: Parameters<typeof overlaysRender.drawConstructionSites>[1], camera: Camera) {

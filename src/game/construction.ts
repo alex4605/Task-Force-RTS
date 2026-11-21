@@ -18,6 +18,11 @@ const REQUIREMENT_BY_TAG: Record<string, BuilderRequirement> = {
   supply_depot: 'infantry',
   ammo_depot: 'infantry',
   radar: 'infantry',
+  // 防禦構工: wire, trenches and traps the riflemen put in themselves; mines need sappers
+  obstacle: 'infantry',
+  trench: 'infantry',
+  trap: 'infantry',
+  minefield: 'engineer',
   // Engineering works: graders, cranes, concrete and pile drivers
   airfield: 'engineer',
   fob: 'engineer',
@@ -55,9 +60,16 @@ export function isEngineerType(type: string): boolean {
  * graded hardstand, berms and wire (a day or two); a gun or missile battery its pits and
  * revetments; a pontoon causeway pier a few days; a PSP-matted expedient airstrip a week or more
  * (Seabees at Guadalcanal, Munda, Tinian); a floating dry dock or a deep-water port weeks.
- * Field works the infantry dig themselves go up at once.
+ * Command posts and depots the infantry dig themselves go up at once; field defences take a
+ * little time (see the top of the table).
  */
 const BUILD_TIME_S: Record<string, number> = {
+  // Field defences: a rifle platoon strings a wire belt or digs a fire trench in a few hours,
+  // rigs a trip wire in minutes; an engineer platoon lays a minefield in an afternoon
+  trap: 10,
+  obstacle: 25,
+  trench: 35,
+  minefield: 40,
   farp: 40,
   motor_pool: 60,
   fob: 90,

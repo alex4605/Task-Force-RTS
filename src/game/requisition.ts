@@ -1,10 +1,11 @@
 import { withGroundRequisitions } from './groundRequisition';
 import { withAircraftRequisitions } from './airRequisition';
 import { RequisitionItem, Era } from '../types/game';
+import { FIELD_WORK_DESC, fieldWorkName } from './fieldWorks';
 
 /** Reinforcement menu for an era, with every ground entry tagged with the unit it raises. */
 export function getRequisitionCatalog(era: Era): RequisitionItem[] {
-  return withAircraftRequisitions(withMissingWorks(withGroundRequisitions(buildRequisitionCatalog(era), era), era), era);
+  return withFieldWorks(withAircraftRequisitions(withMissingWorks(withGroundRequisitions(buildRequisitionCatalog(era), era), era), era), era);
 }
 
 function buildRequisitionCatalog(era: Era): RequisitionItem[] {
@@ -2023,4 +2024,27 @@ function withMissingWorks(items: RequisitionItem[], era: Era): RequisitionItem[]
   ];
   const have = new Set(items.filter((i) => i.category === 'installations').map((i) => i.typeTag));
   return [...items, ...works.filter((w) => !have.has(w.typeTag))];
+}
+
+/** 防禦構工 cards, every era: wire, trenches and traps by the infantry, minefields by engineers. */
+function withFieldWorks(items: RequisitionItem[], era: Era): RequisitionItem[] {
+  const card = (typeTag: 'obstacle' | 'trench' | 'trap' | 'minefield', label: string, cost: number, badge: string, statsDesc: string): RequisitionItem => ({
+    id: `req-fw-${typeTag}`,
+    category: 'installations',
+    name: `${label} · ${fieldWorkName(typeTag, era, 'player')}`,
+    cost,
+    era,
+    badge,
+    desc: FIELD_WORK_DESC[typeTag],
+    statsDesc,
+    typeTag,
+    requiresIsland: true,
+  });
+  return [
+    ...items,
+    card('obstacle', '阻絕施設', 60, '遲滯敵軍突擊', '長 170m 阻絕帶 | 敵軍穿越減速 55~70% | 需步兵在場構工 (約 25 秒)'),
+    card('trench', '壕溝', 80, '步兵掩體', '長 140m 射擊壕 | 壕內步兵空襲減傷 70% · 直射掩護 50% | 需步兵在場構工 (約 35 秒)'),
+    card('trap', '陷阱', 40, '一次性詭雷', '敵步兵觸發: 傷亡 12% · 重度壓制 | 需步兵在場構工 (約 10 秒)'),
+    card('minefield', '雷區', 140, '反戰車 / 反人員', `150×90m 雷區 · 14 枚 | 敵軍觸雷: 車輛重創 · 步兵殺傷 | 需工兵在場佈雷 (約 40 秒)`),
+  ];
 }

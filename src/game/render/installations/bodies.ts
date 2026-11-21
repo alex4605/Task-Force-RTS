@@ -2,7 +2,7 @@
 import { Era, Installation, InstallationType, Island } from '../../../types/game';
 import { drawBunkerSite, drawCacheSite, drawCoastalGunSite, drawFanSongSite, drawFerrySite, drawRadarSite, drawRadioSite, drawSamBatterySite, drawTunnelSite, drawWatchtowerSite } from './groundSites';
 import { drawAirfieldSite, drawMajorPortSite, drawPontoonPierSite, drawRailStationSite, drawRepairDockSite } from './aviationPorts';
-import { drawAmmoDepotSite, drawBattalionCpSite, drawCommandPostSite, drawFieldHospitalSite, drawMotorPoolSite, drawSupplyDepotSite } from './support';
+import { drawAmmoDepotSite, drawBattalionCpSite, drawCivilHospitalSite, drawCommandPostSite, drawFieldHospitalSite, drawMotorPoolSite, drawSupplyDepotSite } from './support';
 import { RenderContext } from '../context';
 import { drawGroundSilhouette, GROUND_SILHOUETTE_SCALE, groundSilhouetteClass } from '../../unitPreviewRenderer';
 import { InstallationStyle } from './style';
@@ -1096,6 +1096,7 @@ export const INSTALLATION_DRAWERS: Record<InstallationType, InstallationDrawer> 
   major_naval_port: drawMajorPortSite,
   supply_depot: drawSupplyDepotSite,
   field_hospital: drawFieldHospitalSite,
+  civil_hospital: drawCivilHospitalSite,
   motor_pool: drawMotorPoolSite,
   rail_station: drawRailStationSite,
   pow_camp: drawPowCamp,

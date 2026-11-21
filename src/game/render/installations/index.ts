@@ -101,11 +101,12 @@ export function drawInstallation(rc: RenderContext, inst: Installation, island?:
   }
 
   // Whose sphere a village or town is in (our troops holding the ground round it make it ours)
-  if (inst.controlledBy && (inst.type === 'settlement' || inst.type === 'town' || inst.type === 'city')) {
+  if (inst.controlledBy && (inst.type === 'settlement' || inst.type === 'town' || inst.type === 'city' || inst.type === 'civil_hospital')) {
     ctx.font = 'bold 8px monospace';
     ctx.textAlign = 'center';
     ctx.fillStyle = inst.controlledBy === 'player' ? '#81D4FA' : '#FF8A80';
-    ctx.fillText(inst.controlledBy === 'player' ? '🟦 我方勢力範圍 · 有產出' : '🟥 敵方勢力範圍', 0, 24);
+    const ours = inst.type === 'civil_hospital' ? '🟦 我方勢力範圍 · 收治傷患' : '🟦 我方勢力範圍 · 有產出';
+    ctx.fillText(inst.controlledBy === 'player' ? ours : '🟥 敵方勢力範圍', 0, 24);
   }
 
   if (inst.health < inst.maxHealth) {

@@ -417,6 +417,10 @@ export default function App() {
           engine.toggleDippingSonar();
           setAircraft([...engine.aircraft]);
         }}
+        onToggleFoxhole={() => {
+          engine.toggleFoxholes();
+          setGroundUnits([...engine.groundUnits]);
+        }}
         onSetGunRoe={(key, value) => {
           engine.setGunRoe(key, value);
           setPlayerShips([...engine.playerShips]);

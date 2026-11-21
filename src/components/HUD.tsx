@@ -155,6 +155,7 @@ interface HUDProps {
   onStartEscort?: (ids: string[]) => void;
   onSetGunRoe?: (key: 'ships' | 'installations' | 'ground', value: boolean) => void;
   onToggleDipping?: () => void;
+  onToggleFoxhole?: () => void;
   onCancelCap?: () => void;
   sonobuoys?: Sonobuoy[];
   isDesignatingSonobuoy?: boolean;
@@ -304,6 +305,7 @@ export const HUD: React.FC<HUDProps> = ({
   onStartEscort,
   onSetGunRoe,
   onToggleDipping,
+  onToggleFoxhole,
   onCancelCap,
   sonobuoys = [],
   isDesignatingSonobuoy = false,
@@ -487,7 +489,7 @@ export const HUD: React.FC<HUDProps> = ({
   // Bottom Deck Filters & Tactical Armament Selector Tray State
   const [carrierFilter, setCarrierFilter] = useState<'all' | 'fighter' | 'dive_bomber' | 'torpedo_bomber' | 'attacker' | 'special'>('all');
   const [afbFilter, setAfbFilter] = useState<'all' | 'level_bomber' | 'fighter' | 'attacker' | 'navy'>('all');
-  const [engineerTab, setEngineerTab] = useState<'all' | 'aviation' | 'air_defense' | 'naval' | 'fortification'>('all');
+  const [engineerTab, setEngineerTab] = useState<'all' | 'aviation' | 'air_defense' | 'naval' | 'fortification' | 'fieldworks'>('all');
   const [activeArmamentTray, setActiveArmamentTray] = useState<ActiveArmamentTrayState | null>(null);
 
   // Flatten all island strongholds with island context
@@ -1012,6 +1014,7 @@ export const HUD: React.FC<HUDProps> = ({
           onStartEscort={onStartEscort}
           onSetGunRoe={onSetGunRoe}
           onToggleDipping={onToggleDipping}
+          onToggleFoxhole={onToggleFoxhole}
           onCancelCap={onCancelCap}
           isDesignatingSonobuoy={isDesignatingSonobuoy}
           onStartSonobuoyDesignation={onStartSonobuoyDesignation}
@@ -1453,7 +1456,7 @@ export const HUD: React.FC<HUDProps> = ({
                     <span>母艦全裝備庫</span>
                   </button>
                   <span className="text-[10px] text-slate-400">
-                    Space 暫停 · Q 增援 · E 構工 · A 機場 · C CAP · T 轉降 · V 護航 · D 吊放聲納
+                    Space 暫停 · Q 增援 · E 構工 · A 機場 · C CAP · T 轉降 · V 護航 · D 吊放聲納 · Z 散兵坑
                   </span>
                 </div>
               </div>
@@ -2026,6 +2029,7 @@ export const HUD: React.FC<HUDProps> = ({
                     { id: 'air_defense', label: '🛡️ 防空飛彈/火砲' },
                     { id: 'naval', label: '⚓ 海軍軍港浮塢' },
                     { id: 'fortification', label: '🏰 防衛堡壘/指揮所' },
+                    { id: 'fieldworks', label: '🪖 防禦構工' },
                   ].map((tab) => (
                     <button
                       key={tab.id}
@@ -2140,6 +2144,9 @@ export const HUD: React.FC<HUDProps> = ({
                     }
                     if (engineerTab === 'naval') {
                       return item.typeTag === 'dockyard' || item.typeTag === 'pontoon_pier' || item.typeTag === 'major_naval_port' || item.typeTag === 'coastal_gun' || item.typeTag === 'm1_240mm';
+                    }
+                    if (engineerTab === 'fieldworks') {
+                      return item.typeTag === 'obstacle' || item.typeTag === 'trench' || item.typeTag === 'trap' || item.typeTag === 'minefield';
                     }
                     if (engineerTab === 'fortification') {
                       return item.typeTag === 'fob' || item.typeTag === 'battalion_cp' || item.typeTag === 'command_post' || item.typeTag === 'radar' || item.typeTag === 'supply_depot' || item.typeTag === 'ammo_depot' || item.typeTag === 'field_hospital' || item.typeTag === 'pow_camp' || item.typeTag === 'motor_pool';

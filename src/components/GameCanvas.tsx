@@ -292,7 +292,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       renderer.drawOcean(cameraRef.current, engine.worldSize, flagship ? flagship.pos : undefined);
       renderer.drawIslands(engine.islands, cameraRef.current, engine.worldSize);
       renderer.drawStrongholds(engine.islands, cameraRef.current);
+      renderer.drawWhales(engine.whales, cameraRef.current);
       renderer.drawImpactScars(engine.impacts, cameraRef.current);
+      renderer.drawFieldWorks(engine.fieldWorks, cameraRef.current);
       if (engine.showRadarCoverage) renderer.drawRadarCoverage(engine.getRadarCoverage(), cameraRef.current);
       renderer.drawSonobuoys(engine.sonobuoys, cameraRef.current);
       renderer.drawShips(
@@ -905,6 +907,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         if (engine.aircraft.some((a) => a.side === 'player' && a.state !== 'shot_down' && engine.selectedUnitIds.includes(a.id))) {
           engine.toggleDippingSonar();
         }
+      } else if (e.key === 'z' || e.key === 'Z') {
+        // Foxholes: the selected infantry dig in where they stand (or climb out)
+        engine.toggleFoxholes();
       } else if (e.key === 'v' || e.key === 'V') {
         // Escort: pick the friendly aircraft the selected fighters protect
         if (engine.aircraft.some((a) => a.side === 'player' && a.state !== 'shot_down' && engine.selectedUnitIds.includes(a.id))) {
