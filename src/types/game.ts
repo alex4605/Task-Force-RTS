@@ -1747,6 +1747,8 @@ export interface LifeRaft {
   rescueProgress: number; // 0 to 3s when unit is in proximity
   isOnLand?: boolean;  // 降落於陸地島嶼/大陸之跳傘飛行員
   isCapturedPOW?: boolean; // 是否已被作為戰俘收押
+  /** A downed airman on land making for his own side's command post (its id / position). */
+  walkingTo?: { id: string; name: string; pos: Vector2D };
 }
 
 export type AircraftState =
@@ -1943,8 +1945,10 @@ export interface Installation {
   samMissilesReady?: number;   // 鷹式/SA-2 飛彈備射量
   samMaxMissiles?: number;
   captureProgress?: number;    // 陣地/設施佔領進度 (0~100)
-  /** Prisoners held (POW camps). */
+  /** Prisoners held (POW camps, at most 80 each). */
   prisoners?: number;
+  /** Prisoners taken beyond the camps' room, waiting for a place. */
+  prisonersWaiting?: number;
 }
 
 export interface IslandStronghold {

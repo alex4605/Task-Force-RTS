@@ -472,10 +472,6 @@ export default function App() {
         isDesignatingSonobuoy={isDesignatingSonobuoy}
         onStartSonobuoyDesignation={handleStartSonobuoyDesignation}
         onCancelSonobuoy={handleCancelSonobuoy}
-        onSelectUnitIds={(ids) => {
-          engine.selectUnits(ids);
-          setSelectedUnitIds([...engine.selectedUnitIds]);
-        }}
         flagship={flagship}
         playerShips={playerShips}
         enemyShips={enemyShips}

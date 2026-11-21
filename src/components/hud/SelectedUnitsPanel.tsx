@@ -18,6 +18,8 @@ interface SelectedUnitsPanelProps {
   onUnloadAircraft?: () => void;
   isDesignatingCap: boolean;
   onStartCapDesignation?: () => void;
+  /** In-flight rebase of the selected aircraft (T). */
+  onStartRebase?: (ids: string[]) => void;
   onCancelCap?: () => void;
   isDesignatingSonobuoy: boolean;
   onStartSonobuoyDesignation?: () => void;
@@ -38,6 +40,7 @@ export const SelectedUnitsPanel: React.FC<SelectedUnitsPanelProps> = ({
   onUnloadAircraft,
   isDesignatingCap,
   onStartCapDesignation,
+  onStartRebase,
   onCancelCap,
   isDesignatingSonobuoy,
   onStartSonobuoyDesignation,
@@ -493,8 +496,18 @@ export const SelectedUnitsPanel: React.FC<SelectedUnitsPanelProps> = ({
           title="在地圖上點擊指定空域，在航戰鬥機將前往盤旋警戒"
         >
           <Shield className="w-3.5 h-3.5 text-cyan-200" />
-          <span>{isDesignatingCap ? ('⚡ 正在指定空巡空域 (點地圖)') : '指派空優巡邏空域 (CAP)'}</span>
+          <span>{isDesignatingCap ? ('⚡ 正在指定空巡空域 (拖曳/點地圖)') : '指派空優巡邏空域 (C)'}</span>
         </button>
+        {selectedUnits.some((u) => isAircraftUnit(u)) && (
+          <button
+            type="button"
+            onClick={() => onStartRebase?.(selectedUnits.filter((u) => isAircraftUnit(u)).map((u) => u.id))}
+            className="mt-1 w-full py-1.5 px-2 rounded text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all shadow-md whitespace-nowrap bg-gradient-to-r from-[#1B5E20] to-[#2E7D32] hover:from-[#2E7D32] hover:to-[#388E3C] text-[#E8F5E9] border border-[#81C784]/70"
+            title="選取的飛機中止任務，於空中轉降其他機場或航艦（再點地圖上的目的地）"
+          >
+            <span>🛬 空中轉降 Rebase (T)</span>
+          </button>
+        )}
       </div>
 
       {/* Era 3-5 Air-Dropped Passive Sonobuoy Control */}

@@ -748,7 +748,8 @@ function drawPowCamp(rc: RenderContext, inst: Installation, style: InstallationS
   ctx.font = 'bold 9px monospace';
   ctx.textAlign = 'center';
   const n = inst.prisoners ?? 0;
-  ctx.fillText(style.isPlayer ? `⛓ [戰俘營] 收押 ${n} 人` : `⛓ [敵戰俘營] 我方被俘 ${n} 人 · 禁止射擊`, 0, -28);
+  const wait = inst.prisonersWaiting ? ` (+${inst.prisonersWaiting} 待收容)` : '';
+  ctx.fillText(style.isPlayer ? `⛓ [戰俘營] 收押 ${n}/80${wait}` : `⛓ [敵戰俘營] 我方被俘 ${n}/80${wait} · 禁止射擊`, 0, -28);
 }
 
 function drawFieldHospital(rc: RenderContext, _inst: Installation, _style: InstallationStyle, _island?: Island): void {

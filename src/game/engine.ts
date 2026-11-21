@@ -649,6 +649,8 @@ export class GameEngine {
   public lifeRafts: LifeRaft[] = [];
   /** Enemy prisoners we hold outside a camp (no room, or no camp built yet). */
   public powsInField = 0;
+  /** Our men held by the enemy beyond its camps' room. */
+  public enemyPowsInField = 0;
   private powCheckTimer = 0;
   public hasAD3WOnStation: boolean = false;
 
@@ -15523,13 +15525,10 @@ export class GameEngine {
 
   /** Prisoners taken by `captor` go to its camps (ours: up to capacity, the rest held in the field). */
   private takePrisoners(captor: 'player' | 'enemy', men: number): void {
-    if (captor === 'enemy') {
-      const camp = this.powCamps('enemy')[0];
-      if (camp) camp.prisoners = (camp.prisoners ?? 0) + men;
-      return;
-    }
+    // Captures are never turned away: each camp holds at most POW_CAMP_CAPACITY, the rest wait
+    // in holding pens until there is room (a new camp, or one freed up)
     let left = men;
-    for (const camp of this.powCamps('player')) {
+    for (const camp of this.powCamps(captor)) {
       const room = POW_CAMP_CAPACITY - (camp.prisoners ?? 0);
       const n = Math.min(room, left);
       if (n > 0) {
@@ -15537,7 +15536,8 @@ export class GameEngine {
         left -= n;
       }
     }
-    this.powsInField += left;
+    if (captor === 'player') this.powsInField += left;
+    else this.enemyPowsInField += left;
   }
 
   /**
@@ -15558,12 +15558,23 @@ export class GameEngine {
       this.powsInField = 0;
       this.takePrisoners('player', n);
     }
+    if (this.enemyPowsInField > 0 && this.powCamps('enemy').length > 0) {
+      const n = this.enemyPowsInField;
+      this.enemyPowsInField = 0;
+      this.takePrisoners('enemy', n);
+    }
+    // Camp labels show who is waiting outside
+    for (const c of ours) c.prisonersWaiting = this.powsInField;
+    for (const c of this.powCamps('enemy')) c.prisonersWaiting = this.enemyPowsInField;
     for (const camp of this.powCamps('enemy')) {
       const ground = this.groundUnits.filter((u) => !u.isDestroyed && !u.embarkedInShipId);
       const liberator = ground.find((u) => u.side !== 'enemy' && u.side !== 'neutral' && dist(u.pos, camp.pos) < LIBERATE_RADIUS);
       if (!liberator) continue;
       if (ground.some((u) => u.side === 'enemy' && !u.isSurrendered && dist(u.pos, camp.pos) < LIBERATE_CLEAR)) continue;
-      const freed = camp.prisoners ?? 0;
+      // The camp and the holding pens round it
+      const freed = (camp.prisoners ?? 0) + this.enemyPowsInField;
+      this.enemyPowsInField = 0;
+      camp.prisonersWaiting = 0;
       camp.side = 'player';
       camp.isCivilian = false;
       camp.civilianZoneRadius = 0;
@@ -15586,6 +15597,57 @@ export class GameEngine {
         text: `⛓【戰俘營解放】「${liberator.name}」肅清營區守軍，解放 ${freed} 名被俘人員（人力 MP +${mp}、政治值 PP +${pp}）。營區改作我方戰俘營。`,
       });
     }
+  }
+
+  /**
+   * Command posts a downed airman of `side` would make for: ours are battalion CPs, command posts,
+   * FOBs and captured strongholds; the enemy's are its command posts and the strongholds it holds.
+   */
+  private commandPostsOf(side: 'player' | 'enemy'): { id: string; name: string; pos: Vector2D }[] {
+    const out: { id: string; name: string; pos: Vector2D }[] = [];
+    for (const isl of this.islands) {
+      for (const i of isl.installations) {
+        if (i.isDestroyed || (i.type !== 'battalion_cp' && i.type !== 'command_post' && i.type !== 'forward_fob')) continue;
+        if ((side === 'enemy') === (i.side === 'enemy')) out.push({ id: i.id, name: i.name, pos: i.pos });
+      }
+      for (const sh of isl.strongholds ?? []) {
+        if (sh.isCaptured === (side === 'player')) out.push({ id: sh.id, name: sh.name, pos: sh.cpPos });
+      }
+    }
+    return out;
+  }
+
+  /** Walks an airman down on land toward his side's nearest command post; returns it once he is there. */
+  private walkToCommandPost(raft: LifeRaft, dt: number): { id: string; name: string; pos: Vector2D } | undefined {
+    if (!raft.isOnLand || raft.fromShip) return undefined;
+    const PILOT_WALK = 7; // world units per second, a man on foot across country
+    if (!raft.walkingTo) {
+      const near = this.commandPostsOf(raft.side)
+        .map((c) => ({ c, d: dist(c.pos, raft.pos) }))
+        .filter((x) => x.d < 1500)
+        .sort((a, b) => a.d - b.d)[0];
+      if (!near) return undefined;
+      raft.walkingTo = near.c;
+      // Long enough to make it there on foot
+      raft.timer = Math.max(raft.timer, near.d / PILOT_WALK + 30);
+      raft.maxTimer = Math.max(raft.maxTimer, raft.timer);
+      this.addCombatLog({
+        category: 'air',
+        sourceSide: raft.side,
+        sourceName: raft.pilotName,
+        targetName: near.c.name,
+        actionType: 'recon_spotted',
+        text: raft.side === 'player'
+          ? `🏃【跳傘人員自行脫困】「${raft.pilotName}」著陸後徒步前往我方「${near.c.name}」（約 ${Math.round(near.d)}m）。`
+          : `🏃【敵機組員逃竄】「${raft.pilotName}」著陸後正徒步逃往敵方「${near.c.name}」，派地面部隊攔截可俘虜。`,
+      });
+    }
+    const t = raft.walkingTo;
+    const d = dist(t.pos, raft.pos);
+    if (d < 45) return t;
+    const step = Math.min(d, PILOT_WALK * dt);
+    raft.pos = { x: raft.pos.x + ((t.pos.x - raft.pos.x) / d) * step, y: raft.pos.y + ((t.pos.y - raft.pos.y) / d) * step };
+    return undefined;
   }
 
   private updateLifeRaftRescue(dt: number) {
@@ -15641,7 +15703,22 @@ export class GameEngine {
       // ══════════════════════════════════════════════════════════
       // 情況一: 我方單位率先物理接觸救生筏
       // ══════════════════════════════════════════════════════════
-      const playerUnit = nearPlayerShip || nearPlayerGround || rescueHeli;
+      // An airman down on land walks to his own side's nearest command post
+      const cpReached = this.walkToCommandPost(raft, dt);
+      if (cpReached && raft.side === 'enemy') {
+        this.addCombatLog({
+          category: 'air',
+          sourceSide: 'enemy',
+          sourceName: '敵軍陣地',
+          targetName: raft.pilotName,
+          actionType: 'recon_spotted',
+          text: `🏃【敵機組員脫逃】「${raft.pilotName}」徒步逃回敵方「${cpReached.name}」，未能俘獲。`,
+        });
+        this.lifeRafts.splice(i, 1);
+        continue;
+      }
+
+      const playerUnit = nearPlayerShip || nearPlayerGround || rescueHeli || (raft.side === 'player' ? cpReached : undefined);
       if (playerUnit) {
         const rescuerName = (playerUnit as Ship).codeName || playerUnit.name;
 

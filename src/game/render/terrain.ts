@@ -444,6 +444,25 @@ function lineVisible(rc: RenderContext, camera: Camera, pts: { x: number; y: num
 }
 
 /** Rivers, roads, bridges, town blocks and peaks over the ground raster. */
+/** Roof colour of a building, worked out once (thousands of blocks are drawn each frame). */
+const BLOCK_FILL = new WeakMap<object, string>();
+function blockFill(b: { tone: number }, camp: boolean): string {
+  if (camp) return 'rgba(240, 230, 190, 0.8)';
+  let f = BLOCK_FILL.get(b);
+  if (!f) {
+    if (b.tone < 0) {
+      // Thatch: straw roofs, darker on older huts; the meeting house (tone -1) darkest
+      const t = -b.tone;
+      f = `rgb(${Math.round(196 - t * 70)}, ${Math.round(168 - t * 62)}, ${Math.round(104 - t * 44)})`;
+    } else {
+      const v = Math.round(70 + b.tone * 70);
+      f = `rgb(${v}, ${v - 4}, ${v - 12})`;
+    }
+    BLOCK_FILL.set(b, f);
+  }
+  return f;
+}
+
 export function drawTerrainOverlays(rc: RenderContext, map: TerrainMap, camera: Camera): void {
   const ctx = rc.ctx;
   const zoom = camera.zoom;
@@ -587,8 +606,13 @@ export function drawTerrainOverlays(rc: RenderContext, map: TerrainMap, camera: 
         ctx.stroke();
       }
       const shadows = zoom >= 0.5 && d.kind !== 'camp';
+      // Only the buildings of a large town that are actually in view
+      const hw = rc.width / 2 / zoom + 30;
+      const hh = rc.height / 2 / zoom + 30;
+      const whole = Math.abs(d.center.x - camera.x) + d.radius < hw && Math.abs(d.center.y - camera.y) + d.radius < hh;
       for (const b of d.blocks) {
         const p = b.pts;
+        if (!whole && (Math.abs(p[0].x - camera.x) > hw || Math.abs(p[0].y - camera.y) > hh)) continue;
         if (shadows) {
           ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
           ctx.beginPath();
@@ -597,15 +621,7 @@ export function drawTerrainOverlays(rc: RenderContext, map: TerrainMap, camera: 
           ctx.closePath();
           ctx.fill();
         }
-        if (d.kind === 'camp') ctx.fillStyle = 'rgba(240, 230, 190, 0.8)';
-        else if (b.tone < 0) {
-          // Thatch: straw roofs, darker on older huts; the meeting house (tone -1) darkest
-          const t = -b.tone;
-          ctx.fillStyle = `rgb(${Math.round(196 - t * 70)}, ${Math.round(168 - t * 62)}, ${Math.round(104 - t * 44)})`;
-        } else {
-          const v = Math.round(70 + b.tone * 70);
-          ctx.fillStyle = `rgb(${v}, ${v - 4}, ${v - 12})`;
-        }
+        ctx.fillStyle = blockFill(b, d.kind === 'camp');
         ctx.beginPath();
         ctx.moveTo(p[0].x, p[0].y);
         for (let k = 1; k < 4; k++) ctx.lineTo(p[k].x, p[k].y);

@@ -29,6 +29,8 @@ const NONE = new Set<string>([
   'patrol_boat', 'lcvp', 'lst', 'lsm_r', 'lcm8', 'komar_ptg', 'osa', 'pbr', 'river_gunboat', 'lcac',
 ]);
 
+const ATLANTA_CLASS = /Atlanta|Juneau|San Juan|San Diego|Oakland|Reno|Flint|Tucson|CL-5[1-4]|CL-9[5-8]/;
+
 /** By name, for allied ships whose type is generic (cruiser / ddg / ffg). */
 const ALLIED_BY_NAME: Array<[RegExp, ShipFlight, Era[]]> = [
   [/King George V|Duke of York|Howe|Exeter|Australia|Canberra|Shropshire/, F('walrus', 1), ['era1', 'era2']],
@@ -68,6 +70,8 @@ export function shipAviation(ship: Ship, era: Era): ShipFlight | undefined {
       if (era === 'era3') return H('ho3s1', 1);
       return undefined;
     case 'cruiser':
+      // Atlanta / Oakland class AA cruisers had no catapults
+      if (ATLANTA_CLASS.test(`${ship.name} ${ship.codeName ?? ''}`)) return undefined;
       if (era === 'era1') return F('os2u', 2);
       if (era === 'era2') return F('sc1', 2);
       if (era === 'era3') return H('ho3s1', 1);

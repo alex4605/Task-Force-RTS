@@ -5,23 +5,8 @@ import { RenderContext, Camera } from './context';
 export function drawOcean(rc: RenderContext, camera: Camera, worldSize: number, radarOrigin?: Vector2D) {
   const ctx = rc.ctx;
   ctx.save();
-  ctx.fillStyle = '#050D18';
-  ctx.fillRect(0, 0, rc.width, rc.height);
-
-  // Subtle deep-sea bathymetric radial vignette
-  const bgGrad = ctx.createRadialGradient(
-    rc.width * 0.5,
-    rc.height * 0.5,
-    Math.min(rc.width, rc.height) * 0.15,
-    rc.width * 0.5,
-    rc.height * 0.5,
-    Math.max(rc.width, rc.height) * 0.78
-  );
-  bgGrad.addColorStop(0, 'rgba(13, 42, 74, 0.28)');
-  bgGrad.addColorStop(0.65, 'rgba(7, 20, 38, 0.1)');
-  bgGrad.addColorStop(1, 'rgba(2, 6, 14, 0.55)');
-  ctx.fillStyle = bgGrad;
-  ctx.fillRect(0, 0, rc.width, rc.height);
+  // Deep-sea base colour and bathymetric vignette, drawn once per screen size
+  ctx.drawImage(oceanBackdrop(rc.width, rc.height), 0, 0);
 
   ctx.translate(rc.width / 2, rc.height / 2);
   ctx.scale(camera.zoom, camera.zoom);
@@ -42,45 +27,39 @@ export function drawOcean(rc: RenderContext, camera: Camera, worldSize: number, 
   const endY = Math.min(worldSize, Math.ceil((camera.y + (rc.height / 2) / camera.zoom) / gridSize) * gridSize);
 
   // Subtle sinusoidal ocean ripples
+  // (one path for all of them: they never overlap, so a single stroke looks the same)
   ctx.strokeStyle = 'rgba(41, 98, 155, 0.14)';
   ctx.lineWidth = 1;
   const wavePhase = rc.time * 1.5;
+  ctx.beginPath();
   for (let wx = startX + 60; wx < endX; wx += 140) {
     for (let wy = startY + 60; wy < endY; wy += 140) {
       const waveOffset = Math.sin(wx * 0.008 + wy * 0.008 + wavePhase) * 5;
-      ctx.beginPath();
       ctx.moveTo(wx - 14, wy + waveOffset);
       ctx.quadraticCurveTo(wx, wy + waveOffset + 3, wx + 14, wy + waveOffset);
-      ctx.stroke();
     }
   }
+  ctx.stroke();
 
   // Grid coordinates
   ctx.strokeStyle = 'rgba(23, 46, 75, 0.45)';
   ctx.lineWidth = 1;
   ctx.setLineDash([4, 8]);
 
+  ctx.beginPath();
   for (let x = startX; x <= endX; x += gridSize) {
-    ctx.beginPath();
     ctx.moveTo(x, startY);
     ctx.lineTo(x, endY);
-    ctx.stroke();
-
-    ctx.fillStyle = 'rgba(74, 114, 156, 0.55)';
-    ctx.font = '10px monospace';
-    ctx.fillText(`${Math.floor(x / 10)}°E`, x + 6, startY + 20);
   }
-
   for (let y = startY; y <= endY; y += gridSize) {
-    ctx.beginPath();
     ctx.moveTo(startX, y);
     ctx.lineTo(endX, y);
-    ctx.stroke();
-
-    ctx.fillStyle = 'rgba(74, 114, 156, 0.55)';
-    ctx.font = '10px monospace';
-    ctx.fillText(`${Math.floor(y / 10)}°S`, startX + 6, y - 6);
   }
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(74, 114, 156, 0.55)';
+  ctx.font = '10px monospace';
+  for (let x = startX; x <= endX; x += gridSize) ctx.fillText(`${Math.floor(x / 10)}°E`, x + 6, startY + 20);
+  for (let y = startY; y <= endY; y += gridSize) ctx.fillText(`${Math.floor(y / 10)}°S`, startX + 6, y - 6);
 
   ctx.setLineDash([]);
 
@@ -265,4 +244,25 @@ function drawRadarSweep(rc: RenderContext, origin: Vector2D) {
   ctx.fill();
 
   ctx.restore();
+}
+
+let backdrop: { canvas: HTMLCanvasElement; w: number; h: number } | null = null;
+
+/** The flat deep-sea colour with its radial vignette, cached for the current screen size. */
+function oceanBackdrop(w: number, h: number): HTMLCanvasElement {
+  if (backdrop && backdrop.w === w && backdrop.h === h) return backdrop.canvas;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, w);
+  canvas.height = Math.max(1, h);
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = '#050D18';
+  ctx.fillRect(0, 0, w, h);
+  const g = ctx.createRadialGradient(w * 0.5, h * 0.5, Math.min(w, h) * 0.15, w * 0.5, h * 0.5, Math.max(w, h) * 0.78);
+  g.addColorStop(0, 'rgba(13, 42, 74, 0.28)');
+  g.addColorStop(0.65, 'rgba(7, 20, 38, 0.1)');
+  g.addColorStop(1, 'rgba(2, 6, 14, 0.55)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  backdrop = { canvas, w, h };
+  return canvas;
 }
