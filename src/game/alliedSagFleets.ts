@@ -361,6 +361,13 @@ const EXTRA_SAG_FLEETS: Record<Era, AlliedSagFleet[]> = {
 };
 
 /**
+ * The allied hull figures above were written on a heavier scale than the player's and the
+ * enemy's ships (a King George V at 16,000 against USS Washington's 5,200); this brings them onto
+ * the shared one so the same class of ship takes the same punishment whoever sails it.
+ */
+const ALLIED_HULL_SCALE = 0.38;
+
+/**
  * Historical allied surface action group for an era (Royal Navy, UN, NATO or JMSDF).
  * Eras 4 and 5 pick between two task forces with one Math.random() call.
  */
@@ -740,5 +747,6 @@ export function getAlliedSagFleet(era: Era): AlliedSagFleet {
 
   // The era's original task group or one of its other historical groups, equally likely
   const options: AlliedSagFleet[] = [{ title, ships }, ...EXTRA_SAG_FLEETS[era]];
-  return options[Math.floor(Math.random() * options.length)];
+  const fleet = options[Math.floor(Math.random() * options.length)];
+  return { ...fleet, ships: fleet.ships.map((sh) => ({ ...sh, maxHealth: Math.round(sh.maxHealth * ALLIED_HULL_SCALE) })) };
 }

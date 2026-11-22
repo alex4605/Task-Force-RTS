@@ -7491,17 +7491,23 @@ const GARRISON_SUPPORT: Record<Era, { type: GroundUnitType; name: string }[]> = 
     { type: 'opfor_ija_hmg_42', name: '九二式重機槍隊' },
     { type: 'opfor_ija_47mm_at', name: '一式機動四十七粍速射砲隊' },
     { type: 'opfor_ija_kami', name: '特二式內火艇「カミ」水陸戰車隊' },
+    { type: 'opfor_ija_type92_70', name: '九二式步兵砲 大隊砲小隊' },
+    { type: 'opfor_ija_type98_aa', name: '九八式高射機關砲隊' },
   ],
   era2: [
     { type: 'opfor_ija_banzai_45', name: '挺身斬込隊 (刺突爆雷)' },
     { type: 'opfor_ija_hmg_42', name: '九二式重機槍隊' },
     { type: 'opfor_ija_47mm_at', name: '一式機動四十七粍速射砲隊' },
     { type: 'opfor_ija_kami', name: '特二式內火艇「カミ」水陸戰車隊' },
+    { type: 'opfor_ija_type92_70', name: '九二式步兵砲 大隊砲小隊' },
+    { type: 'opfor_ija_type98_aa', name: '九八式高射機關砲隊' },
   ],
   era3: [
     { type: 'opfor_pva_infantry_50', name: '志願軍步兵排 (衝鋒號)' },
     { type: 'opfor_su76m', name: 'SU-76M 自走突擊砲排' },
     { type: 'opfor_zis3_76', name: 'ZiS-3 76mm 加農砲連' },
+    { type: 'opfor_dshk_aa', name: 'DShK 12.7mm 防空機槍陣地' },
+    { type: 'opfor_bm13_katyusha', name: '志願軍 火箭砲第21師 BM-13 喀秋莎 火箭砲連' },
   ],
   era4: [
     { type: 'opfor_vc_guerrilla_65', name: '越共地方游擊隊' },

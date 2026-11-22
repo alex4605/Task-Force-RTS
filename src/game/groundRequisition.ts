@@ -68,6 +68,7 @@ const GROUND_REQUISITIONS: Record<string, Resolver> = {
   us_m270_atacms: fixed('us_m270_atacms', 'MGM-140 ATACMS 戰術飛彈車 (M57碉堡剋星)'),
   us_m4_calliope: fixed('us_m4_calliope', 'M4A3 薛曼「管風琴」60聯裝火箭車'),
   us_m7_priest: fixed('us_m7_priest', 'M7 牧師 105mm 自走榴彈砲 (反砲兵急速射擊)'),
+  us_armor_m4a3e8: fixed('us_armor_m4a3e8', 'US Army M4A3E8 薛曼戰車排'),
   us_m26_pershing: fixed('us_m26_pershing', 'US Army M26 潘興重戰車排'),
   us_m1a1_abrams: fixed('us_m1a1_abrams', 'M1A1 艾布蘭主力戰車排'),
   us_m44_spg: fixed('us_m44_spg', 'M44 155mm 自走榴彈砲 (反砲兵急速射擊)'),

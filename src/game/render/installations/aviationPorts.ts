@@ -42,7 +42,7 @@ function scaled(ctx: Ctx, k: number, draw: () => void): void {
 const PARKED: Record<string, { player: string[]; enemy: string[] }> = {
   era1: { player: ['f4f', 'sbd', 'p40', 'b17'], enemy: ['zero_a6m2', 'val', 'g4m', 'kate'] },
   era2: { player: ['f6f', 'f4u', 'tbf', 'p51'], enemy: ['zero_a6m5', 'judy', 'ki84', 'jill'] },
-  era3: { player: ['f86', 'f9f', 'ad1', 'f84'], enemy: ['mig15', 'yak9', 'il10', 'tu14'] },
+  era3: { player: ['f86', 'f9f', 'ad1', 'f84'], enemy: ['mig15', 'yak9', 'la11', 'il10', 'tu14'] },
   era4: { player: ['f4e', 'f105', 'a1h', 'a4'], enemy: ['mig21', 'mig17', 'mig19', 'il28'] },
   era5: { player: ['f16a', 'f15a', 'a10a', 'fa18a'], enemy: ['mig29a', 'su27', 'su25', 'mig23'] },
 };

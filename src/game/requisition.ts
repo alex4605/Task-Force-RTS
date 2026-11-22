@@ -1703,6 +1703,17 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
         typeTag: 'us_m4_calliope',
       },
       {
+        id: 'req-ground-m4a3e8',
+        category: 'ground',
+        name: 'US Army M4A3E8「Easy Eight」薛曼戰車排',
+        cost: 300,
+        era: 'era3',
+        badge: '76mm M1A2 · HVSS 懸吊',
+        desc: '韓戰美軍數量最多的戰車：76mm 長砲管配 HVAP 穿甲彈足以擊穿 T-34/85，水平渦形彈簧懸吊在山地泥濘中機動可靠，價格比潘興便宜、補給更容易。',
+        statsDesc: 'HP: 3000 | 76mm M1A2 | 機動可靠 | 價格實惠',
+        typeTag: 'us_armor_m4a3e8',
+      },
+      {
         id: 'req-ground-m26-pershing',
         category: 'ground',
         name: 'US Army M26 潘興重戰車排',

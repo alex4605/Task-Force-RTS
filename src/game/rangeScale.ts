@@ -68,6 +68,7 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   usmc_armor_m48: 2.0, // M41 90mm
   usmc_ontos_m50: 1.1, // M40 106mm recoilless rifle
   us_m26_pershing: 2.0, // M3 90mm
+  us_armor_m4a3e8: 1.8, // M1A2 76mm
   us_m551_sheridan: 2.0, // M81 152mm gun-launcher (HEAT / canister in Vietnam)
   usmc_lvtp5a1: 1.5,
   opfor_vietnam_sapper: 0.2,
@@ -184,6 +185,9 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   opfor_ija_banzai_45: 0.3, // lunge mines, bayonets
   opfor_pva_infantry_50: 0.4, // PPSh / Mosin / grenades
   opfor_zis3_76: 2.0, // ZiS-3 direct fire
+  opfor_ija_type92_70: 1.5, // Type 92 battalion gun, direct and indirect fire
+  opfor_ija_type98_aa: 1.2, // Type 98 20mm
+  opfor_bm13_katyusha: 8.5, // M-13 132mm rocket
   opfor_su76m: 2.0, // ZiS-3Sh 76mm
   opfor_vc_guerrilla_65: 0.4, // SKS / AK / B-40
   opfor_rpg_team_65: 0.3, // RPG-2 / RPG-7

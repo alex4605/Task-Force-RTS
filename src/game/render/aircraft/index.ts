@@ -963,7 +963,7 @@ const AIRCRAFT_PROPULSION: Record<AircraftModel, Propulsion> = {
   af_guardian: 'single_prop', ad3w: 'single_prop', zero: 'single_prop', zero_a6m2: 'single_prop',
   zero_a6m5: 'single_prop', ki61: 'single_prop', george: 'single_prop', val: 'single_prop',
   judy: 'single_prop', kate: 'single_prop', jill: 'single_prop', kamikaze_zero: 'single_prop',
-  kamikaze_judy: 'single_prop', yak9: 'single_prop', il10: 'single_prop', p36a: 'single_prop',
+  kamikaze_judy: 'single_prop', yak9: 'single_prop', la11: 'single_prop', il10: 'single_prop', p36a: 'single_prop',
   p39d: 'single_prop', hurricane: 'single_prop', spitfire_v: 'single_prop', swordfish: 'single_prop',
   spitfire_xiv: 'single_prop', tempest: 'single_prop', sea_fury: 'single_prop', rokaf_p51: 'single_prop',
   firefly_as5: 'single_prop', a1h: 'single_prop', rufe: 'single_prop', e13a: 'single_prop', walrus: 'single_prop', lynx: 'helicopter', ki84: 'single_prop', po2: 'single_prop', boomerang: 'single_prop',

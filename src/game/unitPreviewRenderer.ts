@@ -699,6 +699,10 @@ const EXPLICIT_SILHOUETTE_CLASS: Record<string, GroundSilhouetteClass> = {
   opfor_ija_banzai_45: 'infantry',
   opfor_pva_infantry_50: 'infantry',
   opfor_zis3_76: 'towed',
+  opfor_ija_type92_70: 'towed',
+  opfor_ija_type98_aa: 'towed',
+  opfor_bm13_katyusha: 'rocket',
+  us_armor_m4a3e8: 'tank',
   opfor_su76m: 'spg',
   opfor_vc_guerrilla_65: 'infantry',
   opfor_rpg_team_65: 'infantry',
@@ -758,6 +762,7 @@ function classifyGroundSilhouette(unitType: string): GroundSilhouetteClass {
     t.includes('m270') ||
     t.includes('calliope') ||
     t.includes('grad') ||
+    t.includes('katyusha') ||
     t.includes('uragan') ||
     t.includes('scud');
 

@@ -174,6 +174,7 @@ export const AIRCRAFT_CRUISE_KMH: Record<AircraftModel, number> = {
   mig15: 850,
   tu14: 700,
   yak9: 400,
+  la11: 420, // 674 km/h
   il10: 380,
   // Vietnam War
   f8: 900,

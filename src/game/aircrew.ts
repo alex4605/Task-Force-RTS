@@ -45,7 +45,7 @@ const PISTON_LATE = new Set<AircraftModel>([
   'tempest', 'mosquito', 'lancaster', 'beaufort', 'boomerang', 'seafire', 'barracuda', 'rufe', 'e13a', 'walrus', 'ki84', 'zero',
   'zero_a6m2', 'zero_a6m5', 'ki61', 'george', 'val', 'judy', 'kate', 'jill', 'g4m',
   // Piston types still flying in the jet eras
-  'f4u4', 'ad1', 'ad3w', 'a1h', 'af_guardian', 'yak9', 'il10', 'po2', 'sea_fury', 'firefly_as5', 'rokaf_p51',
+  'f4u4', 'ad1', 'ad3w', 'a1h', 'af_guardian', 'yak9', 'la11', 'il10', 'po2', 'sea_fury', 'firefly_as5', 'rokaf_p51',
   'f82', 'pby', 'c47', 'ac47', 'b29', 'tu14', 'e1', 's2', 'c1', 'p3', 'c130', 'il38', 'be12', 'ov10',
 ]);
 

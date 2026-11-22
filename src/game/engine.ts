@@ -121,6 +121,8 @@ import {
   createOscarSSGN,
   createFoxtrotSS,
   createIjnIBoatSS,
+  createKashinDDG,
+  createRigaFFG,
   createMonsunUBoatSS,
   createSovietWhiskeySS,
   createSovietVictor3SSN,
@@ -8362,7 +8364,7 @@ export class GameEngine {
       : isEra4
       ? (Math.random() < 0.45 ? 'mig21' : Math.random() < 0.5 ? 'mig19' : 'mig17')
       : isEra3
-      ? (Math.random() < 0.6 ? 'mig15' : 'yak9')
+      ? pickModel(['mig15', 'yak9', 'la11'], [0.6, 0.2, 0.2])
       : this.era === 'era1'
       ? pickModel(['zero_a6m2', 'zero', 'rufe'], [0.4, 0.4, 0.2]) // Rufe floatplanes from Tulagi / Shortlands
       : pickModel(['ki61', 'george', 'ki84'], [0.35, 0.35, 0.3]);
@@ -8503,7 +8505,7 @@ export class GameEngine {
     for (let i = 0; i < aswCount; i++) {
       const aswModel: AircraftModel = isEra4 ? 'be12' : i === 0 ? 'il38' : 'ka27';
       const aswSpeed = getAircraftSpeed(aswModel);
-      const aswHealth = aswModel === 'il38' ? 1150 : aswModel === 'be12' ? 920 : 800;
+      const aswHealth = getAircraftBaseHealth(aswModel);
 
       this.aircraft.push({
         id: `opfor-asw-${Date.now()}-${i}`,
@@ -8568,10 +8570,10 @@ export class GameEngine {
         : isEra4
         ? (i % 2 === 0 ? 'mig21' : 'mig17')
         : isEra3
-        ? (i % 2 === 0 ? 'mig15' : 'yak9')
+        ? (i % 2 === 0 ? 'mig15' : i % 4 === 1 ? 'la11' : 'yak9')
         : fModel;
       const cSpeed = getAircraftSpeed(capModel);
-      const cHealth = capModel === 'su27' ? 750 : capModel === 'mig29a' ? 680 : capModel === 'mig21' ? 580 : capModel === 'mig17' ? 480 : capModel === 'mig15' ? 540 : capModel === 'yak9' ? 440 : 150;
+      const cHealth = getAircraftBaseHealth(capModel);
 
       this.aircraft.push({
         id: `cap-f-${Date.now()}-${i}`,
@@ -8640,7 +8642,7 @@ export class GameEngine {
     const heading = Math.atan2(targetPos.y - spawnPos.y, targetPos.x - spawnPos.x);
     const casModel: AircraftModel = isEra5 ? (Math.random() < 0.6 ? 'su25' : 'mi24') : isEra4 ? (Math.random() < 0.6 ? 'su7' : 'mig17') : isEra3 ? pickModel(['il10', 'po2'], [0.7, 0.3]) : dbModel;
     const casSpeed = getAircraftSpeed(casModel);
-    const casHealth = isEra5 ? (casModel === 'su25' ? 850 : 750) : isEra4 ? 680 : isEra3 ? 620 : 145;
+    const casHealth = getAircraftBaseHealth(casModel);
     const casCount = Math.min(6, this.calculateDynamicWaveSize(4));
 
     for (let i = 0; i < casCount; i++) {
@@ -8715,7 +8717,7 @@ export class GameEngine {
 
     const heavyModel: AircraftModel = isEra5 ? (Math.random() < 0.6 ? 'tu22m3' : 'tu95') : isEra4 ? 'il28' : isEra3 ? 'tu14' : 'g4m';
     const hSpeed = getAircraftSpeed(heavyModel);
-    const hHealth = isEra5 ? 2500 : isEra4 ? 850 : isEra3 ? 680 : 480;
+    const hHealth = getAircraftBaseHealth(heavyModel);
 
     const heavyCount = this.calculateDynamicWaveSize(6);
     for (let i = 0; i < heavyCount; i++) {
@@ -8798,8 +8800,8 @@ export class GameEngine {
     const fleetTbModel: AircraftModel = isEra5 ? 'tu22m3' : isEra4 ? 'il28' : isEra3 ? 'tu14' : tbModel;
     const fDbSpeed = getAircraftSpeed(fleetDbModel);
     const fTbSpeed = getAircraftSpeed(fleetTbModel);
-    const fDbHealth = isEra5 ? 850 : isEra4 ? 700 : isEra3 ? 620 : 155;
-    const fTbHealth = isEra5 ? 2200 : isEra4 ? 950 : isEra3 ? 680 : 150;
+    const fDbHealth = getAircraftBaseHealth(fleetDbModel);
+    const fTbHealth = getAircraftBaseHealth(fleetTbModel);
 
     const totalFleetCount = this.calculateDynamicWaveSize(6); // 4-12 架
     const fDbCount = Math.ceil(totalFleetCount / 2);
@@ -8921,7 +8923,7 @@ export class GameEngine {
     // 護航戰鬥機 (Su-27 / MiG-21 / MiG-15 / Zero Escorts)
     const escModel: AircraftModel = isEra5 ? (Math.random() < 0.5 ? 'su27' : 'mig29a') : isEra4 ? 'mig21' : isEra3 ? 'mig15' : fModel;
     const escSpeed = getAircraftSpeed(escModel);
-    const escHealth = isEra5 ? 750 : isEra4 ? 580 : isEra3 ? 540 : 160;
+    const escHealth = getAircraftBaseHealth(escModel);
 
     for (let i = 0; i < escCount; i++) {
       this.aircraft.push({
@@ -8961,7 +8963,7 @@ export class GameEngine {
     // 俯衝轟炸機 / 強擊機 (Su-25 / Su-7 / IL-10 / Val / Judy)
     const strikeDbModel: AircraftModel = isEra5 ? 'su25' : isEra4 ? 'su7' : isEra3 ? 'il10' : dbModel;
     const strikeDbSpeed = getAircraftSpeed(strikeDbModel);
-    const strikeDbHealth = isEra5 ? 850 : isEra4 ? 700 : isEra3 ? 620 : 155;
+    const strikeDbHealth = getAircraftBaseHealth(strikeDbModel);
 
     for (let i = 0; i < dbCount; i++) {
       this.aircraft.push({
@@ -9000,7 +9002,7 @@ export class GameEngine {
     // 魚雷攻擊機 / 長程反艦飛彈轟炸機 (Tu-22M3 逆火 / Tu-16 獾式 / Tu-14 / Kate / Jill)
     const strikeTbModel: AircraftModel = isEra5 ? 'tu22m3' : isEra4 ? 'tu16' : isEra3 ? 'tu14' : tbModel;
     const strikeTbSpeed = getAircraftSpeed(strikeTbModel);
-    const strikeTbHealth = isEra5 ? 2200 : isEra4 ? 1350 : isEra3 ? 680 : 150;
+    const strikeTbHealth = getAircraftBaseHealth(strikeTbModel);
 
     for (let i = 0; i < tbCount; i++) {
       this.aircraft.push({
@@ -9076,7 +9078,7 @@ export class GameEngine {
 
     const scModel: AircraftModel = isEra5 ? (() => { const r = Math.random(); return r < 0.34 ? 'su27' : r < 0.67 ? 'mig29a' : 'mig23'; })() : isEra4 ? (Math.random() < 0.5 ? 'mig21' : 'mig19') : isEra3 ? 'mig15' : fModel;
     const scSpeed = getAircraftSpeed(scModel);
-    const scHealth = isEra5 ? 720 : scModel === 'mig21' ? 580 : scModel === 'mig19' ? 560 : isEra3 ? 540 : 150;
+    const scHealth = getAircraftBaseHealth(scModel);
     const scrambleCount = Math.min(8, this.calculateDynamicWaveSize(4));
 
     for (let i = 0; i < scrambleCount; i++) {
@@ -9155,12 +9157,12 @@ export class GameEngine {
         : isEra4
         ? (i % 3 === 0 ? 'mig21' : i % 3 === 1 ? 'mig19' : 'mig17')
         : isEra3
-        ? (i % 2 === 0 ? 'mig15' : 'yak9')
+        ? (i % 2 === 0 ? 'mig15' : i % 4 === 1 ? 'la11' : 'yak9')
         : i % 2 === 0
         ? fModel
         : (this.era === 'era1' ? 'zero_a6m5' : 'ki61');
       const sSpeed = getAircraftSpeed(sweepModel);
-      const sHealth = sweepModel === 'su27' ? 750 : sweepModel === 'mig29a' ? 680 : sweepModel === 'yak38' ? 520 : sweepModel === 'mig21' ? 580 : sweepModel === 'mig19' ? 560 : sweepModel === 'mig17' ? 480 : sweepModel === 'mig15' ? 540 : sweepModel === 'yak9' ? 440 : 175;
+      const sHealth = getAircraftBaseHealth(sweepModel);
 
       this.aircraft.push({
         id: `enemy-sweep-${Date.now()}-${i}`,
@@ -9237,7 +9239,7 @@ export class GameEngine {
 
     const dcaModel: AircraftModel = isEra5 ? (() => { const r = Math.random(); return r < 0.34 ? 'su27' : r < 0.67 ? 'mig29a' : 'mig23'; })() : isEra4 ? (Math.random() < 0.6 ? 'mig21' : 'mig19') : isEra3 ? 'mig15' : fModel;
     const dcaSpeed = getAircraftSpeed(dcaModel);
-    const dcaHealth = isEra5 ? 750 : dcaModel === 'mig21' ? 580 : dcaModel === 'mig19' ? 560 : isEra3 ? 540 : 160;
+    const dcaHealth = getAircraftBaseHealth(dcaModel);
     const dcaCount = this.calculateDynamicWaveSize(5);
 
     for (let i = 0; i < dcaCount; i++) {
@@ -9993,6 +9995,7 @@ export class GameEngine {
       unit.type === 'opfor_zsu23_shilka' ||
       unit.type === 'opfor_zu23_aa' ||
       unit.type === 'opfor_dshk_aa' ||
+      unit.type === 'opfor_ija_type98_aa' ||
       unit.type === 'opfor_zsu57_2' ||
       unit.type === 'opfor_btr_zd' ||
       unit.type === 'opfor_tunguska';
@@ -10007,6 +10010,8 @@ export class GameEngine {
           ? 1550
           : unit.type === 'opfor_dshk_aa'
           ? 1000
+          : unit.type === 'opfor_ija_type98_aa'
+          ? 950
           : 1400;
       const targetPlane = this.aircraft.find(
         (a) => this.isHostile(unit.side, a.side) && a.state !== 'shot_down' && dist(unit.pos, a.pos) <= aaRange && this.aaCanSee(unit.pos, a)
@@ -10095,7 +10100,7 @@ export class GameEngine {
         const isAtgm = unit.type === 'opfor_bmp2' || unit.type === 'opfor_t80b';
         const isNuclearScud = unit.type === 'opfor_scud_nuclear';
         const isScud = unit.type === 'opfor_scud_tel';
-        const isOpforMlrs = unit.type === 'opfor_bm21_grad' || unit.type === 'opfor_bm27_uragan';
+        const isOpforMlrs = unit.type === 'opfor_bm21_grad' || unit.type === 'opfor_bm27_uragan' || unit.type === 'opfor_bm13_katyusha';
 
         if (isNuclearScud) {
           this.fireNuclearSSMMissile(unit, targetGround.pos, targetGround);
@@ -13889,8 +13894,8 @@ export class GameEngine {
           this.fireM270MLRSSalvo(gUnit, targetEnemyGround.pos, targetEnemyGround);
           gUnit.cooldown = gUnit.reloadTime || 28.0;
         }
-      } else if (gUnit.side === 'enemy' && (gUnit.type === 'opfor_bm21_grad' || gUnit.type === 'opfor_bm27_uragan')) {
-        const maxR = gUnit.type === 'opfor_bm27_uragan' ? 4800 : 4200;
+      } else if (gUnit.side === 'enemy' && (gUnit.type === 'opfor_bm21_grad' || gUnit.type === 'opfor_bm27_uragan' || gUnit.type === 'opfor_bm13_katyusha')) {
+        const maxR = gUnit.type === 'opfor_bm27_uragan' ? 4800 : gUnit.type === 'opfor_bm13_katyusha' ? 2400 : 4200;
         const targetPlayerGround = this.groundUnits.find(
           (gu) => !gu.isDestroyed && this.isHostile(gUnit.side, gu.side) && dist(gUnit.pos, gu.pos) <= maxR
         );
@@ -17534,8 +17539,8 @@ export class GameEngine {
     const extraPool: [GroundUnitType, string][] = isEra5
       ? [['opfor_t64b', '蘇軍第20近衛集團軍 T-64B 戰車排'], ['opfor_btr70', '蘇軍摩步 BTR-70 裝甲運兵排'], ['opfor_bmd1', '蘇軍第103近衛空降師 BMD-1 傘兵戰車排'], ['opfor_spetsnaz_83', 'GRU 特種偵察排 (Spetsnaz)'], ['opfor_igla_team', '蘇軍摩步營 9K310 針-1 (SA-16) 防空小組']]
       : isEra4
-      ? [['opfor_nlf_main_force_65', '越南南方民族解放陣線 第5師 主力營 排'], ['opfor_vc_guerrilla_65', '越共第9師 地方游擊隊'], ['opfor_rpg_team_65', 'PAVN B-40/B-41 火箭筒組'], ['opfor_dshk_aa', 'PAVN DShK 12.7mm 防空機槍組'], ['opfor_sa7_strela', 'PAVN 9K32 箭-2 (SA-7) 肩射防空小組']]
-      : [['opfor_kpa_infantry_50', '朝鮮人民軍 第105戰車師 步兵排'], ['opfor_pva_infantry_50', '中國人民志願軍第39軍 步兵排'], ['opfor_su76m', 'KPA SU-76M 自走突擊砲排'], ['opfor_zis3_76', 'KPA ZiS-3 76mm 加農砲連']];
+      ? [['opfor_bm21_grad', 'PAVN 第675砲兵團 蘇援 BM-21 冰雹 122mm 火箭砲連'], ['opfor_t54_tank', 'PAVN 第202裝甲團 59式戰車排 (中國援越)'], ['opfor_nlf_main_force_65', '越南南方民族解放陣線 第5師 主力營 排'], ['opfor_vc_guerrilla_65', '越共第9師 地方游擊隊'], ['opfor_rpg_team_65', 'PAVN B-40/B-41 火箭筒組'], ['opfor_dshk_aa', 'PAVN DShK 12.7mm 防空機槍組'], ['opfor_sa7_strela', 'PAVN 9K32 箭-2 (SA-7) 肩射防空小組']]
+      : [['opfor_bm13_katyusha', '志願軍 火箭砲第21師 BM-13 喀秋莎 火箭砲連'], ['opfor_dshk_aa', '朝鮮人民軍 DShK 12.7mm 防空機槍排'], ['opfor_kpa_infantry_50', '朝鮮人民軍 第105戰車師 步兵排'], ['opfor_pva_infantry_50', '中國人民志願軍第39軍 步兵排'], ['opfor_su76m', 'KPA SU-76M 自走突擊砲排'], ['opfor_zis3_76', 'KPA ZiS-3 76mm 加農砲連']];
     const [extraType, extraName] = extraPool[Math.floor(Math.random() * extraPool.length)];
     waveUnits.push(
       createGroundUnit(`opfor-wave-x-${ts}`, extraType, extraName, 'enemy', this.era, {
@@ -17605,7 +17610,7 @@ export class GameEngine {
       const patrolCenter: Vector2D = { x: 8600, y: 5200 };
       const model = isEra5 ? (Math.random() < 0.5 ? 'f15a' : 'f16a') : isEra4 ? 'f4e' : 'f86';
       const speed = getAircraftSpeed(model);
-      const baseHealth = isEra5 ? 750 : isEra4 ? 680 : 520;
+      const baseHealth = getAircraftBaseHealth(model);
       const modelName = isEra5 ? (model === 'f15a' ? 'F-15A 鷹式超音速空優戰機' : 'F-16A 戰隼全天候戰機') : isEra4 ? 'F-4E 幽靈二式空優戰鬥機' : 'F-86 軍刀空優機';
       const pType = isEra5 ? 'aim9_sidewinder' : isEra4 ? 'aim9_sidewinder' : 'clean_guns';
       const pName = isEra5 ? 'AIM-7F 麻雀 / AIM-9L 響尾蛇' : isEra4 ? 'AIM-7E 麻雀 / AIM-9E 響尾蛇' : '純空優截擊';
@@ -17664,7 +17669,7 @@ export class GameEngine {
       const targetPos: Vector2D = targetUnit ? { ...targetUnit.pos } : { x: 9200, y: 4800 };
       const model = isEra5 ? 'a10a' : isEra4 ? 'a7' : 'ad1';
       const speed = getAircraftSpeed(model);
-      const baseHealth = isEra5 ? 1100 : isEra4 ? 750 : 700;
+      const baseHealth = getAircraftBaseHealth(model);
       const modelName = isEra5 ? 'A-10A 雷霆二式裝甲獵殺機' : isEra4 ? 'A-7 海盜二式輕型攻擊機' : 'AD-1 天襲者密接打擊機';
       const pType = isEra5 ? 'agm65_maverick' : isEra4 ? 'bombs_snakeye_retarded' : (count % 2 === 0 ? 'hvar_rockets' : 'napalm_canister');
       const pName = isEra5 ? 'AGM-65 小牛飛彈 / GAU-8 30mm' : isEra4 ? 'Mk 82 蛇眼減速炸彈' : (count % 2 === 0 ? 'HVAR 火箭' : '凝固汽油彈');
@@ -18563,6 +18568,11 @@ export class GameEngine {
           ? createKotlinDD(`opfor-sag-x${n}-${ts}`, `Soviet Skory (30bis型 史可里級驅逐艦 #${330 + n})`, pos)
           : this.era === 'era4'
           ? (k % 2 === 0 ? createPetyaFFG(`opfor-sag-x${n}-${ts}`, `Soviet Petya (佩佳級 反潛護衛艦 СКР-${10 + n})`, pos) : createOsaPTG(`opfor-sag-x${n}-${ts}`, `北越 Project 205 Osa 飛彈快艇 (#${2 + n})`, pos))
+          : k % 3 === 2
+          ? // Warsaw Pact navies sail with the Baltic Fleet: Poland's Kashin and the Volksmarine's Riga frigates
+            Math.random() < 0.5
+            ? createKashinDDG(`opfor-sag-x${n}-${ts}`, '波蘭海軍 ORP Warszawa (61MP型 卡辛級驅逐艦)', pos)
+            : createRigaFFG(`opfor-sag-x${n}-${ts}`, '東德人民海軍 Ernst Thälmann (50型 里加級護衛艦)', pos)
           : (k % 2 === 0 ? createSovremennyDD(`opfor-sag-x${n}-${ts}`, `Project 956 Sovremenny (現代級 #${n + 1})`, pos) : createUdaloyDD(`opfor-sag-x${n}-${ts}`, `Project 1155 Udaloy (無畏級 #${n + 1})`, pos));
       this.enemyShips.push(extra);
     }
@@ -21147,7 +21157,7 @@ export class GameEngine {
       'opfor_zsu57_2', 'opfor_sa6_kub', 'opfor_sa9_strela1', 'opfor_sa8_osa', 'opfor_sa11_buk', 'opfor_sa15_tor', 'opfor_btr_zd',
       'opfor_tunguska', 'opfor_strela10', 'opfor_t72b', 'opfor_t80b', 'opfor_bmp2',
       'usmc_armor_m3', 'usmc_armor_m4', 'usmc_patton_m46', 'us_army_armor_korea',
-      'usmc_duster_m42', 'usmc_armor_m48', 'usmc_ontos_m50', 'us_m551_sheridan', 'us_m26_pershing', 'us_m1a1_abrams', 'us_army_m113_mech', 'us_army_chaparral_sam',
+      'usmc_duster_m42', 'usmc_armor_m48', 'usmc_ontos_m50', 'us_m551_sheridan', 'us_m26_pershing', 'us_armor_m4a3e8', 'us_m1a1_abrams', 'us_army_m113_mech', 'us_army_chaparral_sam',
       'usmc_m4a3r3_flame', 'us_m24_chaffee', 'us_m16_quad50', 'us_m113_acav', 'us_avenger', 'au_matilda', 'cw_centurion', 'arvn_m41',
       'frg_marder', 'frg_leopard2', 'uk_challenger1', 'uk_warrior',
       'au_matilda_frog', 'rok_m36', 'au_centurion_68', 'arvn_m113_acav', 'frg_gepard', 'frg_m109g'

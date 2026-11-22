@@ -51,6 +51,7 @@ export const TAIL_SPECS: Partial<Record<AircraftModel, TailSpec>> = {
   jill: { kind: 'prop', x: -12, halfSpan: 7, chord: 4 },
   kamikaze_judy: { kind: 'prop', x: -10, halfSpan: 5.5, chord: 3.5 },
   yak9: { kind: 'prop', x: -10.5, halfSpan: 6, chord: 4 },
+  la11: { kind: 'prop', x: -10.5, halfSpan: 6.2, chord: 4 },
   il10: { kind: 'prop', x: -11, halfSpan: 7.5, chord: 4.5 },
   p36a: { kind: 'prop', x: -10, halfSpan: 6, chord: 4 },
   p39d: { kind: 'prop', x: -11, halfSpan: 5.5, chord: 3.5 },

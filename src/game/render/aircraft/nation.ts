@@ -47,7 +47,7 @@ export const AIRCRAFT_NATION: Record<AircraftModel, AircraftNation> = {
   mirage3: 'france', mirage2000: 'france',
   viggen_ja37: 'sweden',
   // Soviet Union / Warsaw Pact
-  mig15: 'ussr', tu14: 'ussr', yak9: 'ussr', il10: 'ussr', mig17: 'ussr', mig19: 'ussr', mig21: 'ussr',
+  mig15: 'ussr', tu14: 'ussr', yak9: 'ussr', la11: 'ussr', il10: 'ussr', mig17: 'ussr', mig19: 'ussr', mig21: 'ussr',
   su7: 'ussr', il28: 'ussr', tu16: 'ussr', tu95: 'ussr', tu22m3: 'ussr', yak38: 'ussr', ka27: 'ussr',
   mig29a: 'ussr', su27: 'ussr', a50: 'ussr', su25: 'ussr', mi24: 'ussr', be12: 'ussr', il38: 'ussr', mig23: 'ussr', mig31: 'ussr', po2: 'ussr',
 };
