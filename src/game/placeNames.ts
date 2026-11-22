@@ -67,6 +67,12 @@ const RENAME: Record<ColdWarEra, Record<string, string>> = {
     'opfor-rail-freight-yard': '安員鐵路編組調度站 [Yên Viên Rail Yard]',
     'cont-south-city': '西貢—嘉定 都會區 [Saigon–Gia Định]',
     'cont-south-coastal-battery': 'B-13 130mm 頭頓海角地下岸防重砲堡 [Vũng Tàu Cape Battery]',
+    // 1960s air defence and artillery at the allied bases
+    'player-cont-flak-1': '美陸戰隊 M42 清道夫雙管40mm 自走防空砲連',
+    'player-cont-flak-2': '美陸軍 M55 四聯裝 .50 機槍防空排 (Quad-50)',
+    'friendly-base-flak-1': '友軍 M42 清道夫雙管40mm 自走防空砲連',
+    'friendly-base-flak-2': '友軍 M55 四聯裝 .50 機槍防空排 (Quad-50)',
+    'friendly-base-radar': '友軍 AN/TPS-43 遠程對空搜索雷達站',
   },
   era5: {
     'player-afb-continental': '阿爾霍恩北約前進作戰基地 (Ahlhorn FOL / 2ATAF)',
@@ -122,6 +128,15 @@ const RENAME: Record<ColdWarEra, Record<string, string>> = {
     'cont-east-theatre-hq': '華約西方戰區 前敵地下總指揮中心 [Western TVD Forward HQ]',
     'cont-east-trail-depot': '東線機械化輜重基地 [Eastern Mechanised Convoy Base]',
     'enemy-fwd-cp-valley': '蘇軍摩托化步兵團 前沿加固地下指揮所 [Valley CP Echo]',
+    // 1980s air defence and artillery at the allied bases
+    'player-cont-flak-1': '西德陸軍 獵豹 (Gepard) 35mm 自走防空砲連',
+    'player-cont-flak-2': '美陸軍 M163 火神 20mm 自走防空砲排',
+    'player-cont-flak-3': '荷蘭陸軍 PRTL 35mm 自走防空砲連',
+    'player-cont-arty-1': '美陸軍 M109A3 155mm 自走榴彈砲連',
+    'player-cont-arty-2': '美陸軍 M110A2 203mm 自走榴彈砲連',
+    'friendly-base-flak-1': '荷蘭空軍 L/70 40mm 防空砲連 (Flycatcher 火控)',
+    'friendly-base-flak-2': '荷蘭陸軍 PRTL 35mm 自走防空砲連',
+    'friendly-base-radar': '友軍 AN/TPS-43 遠程對空搜索雷達站',
   },
 };
 

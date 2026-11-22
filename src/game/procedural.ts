@@ -36,6 +36,9 @@ type InstallationSpec = Omit<Installation, 'maxHealth' | 'isDestroyed' | 'angle'
   Partial<Pick<Installation, 'angle' | 'range' | 'cooldown' | 'reloadTime'>>;
 
 /** Builds an intact installation at full health; omitted facing, range and reload default to 0. */
+/** "Con Co Island (Cồn Cỏ 島 要塞飛彈陣地)" → "Con Co Island": island names inside position names. */
+export const shortPlace = (name: string): string => name.split(' (')[0];
+
 export function makeInstallation(spec: InstallationSpec): Installation {
   return { angle: 0, range: 0, cooldown: 0, reloadTime: 0, ...spec, maxHealth: spec.health, isDestroyed: false };
 }
@@ -277,12 +280,12 @@ export function generateCoralAtoll(
         {
           pos: ridgeSpine[2] || center,
           elevation: 165,
-          label: `${name} · 望海石灰岩崖頂 [Cliff Peak 165m]`,
+          label: `${shortPlace(name)} · 望海石灰岩崖頂 [Cliff Peak 165m]`,
         },
         {
           pos: ridgeSpine[5] || center,
           elevation: 185,
-          label: `${name} · 迎風高地要塞稜線 [Windward Bluff 185m]`,
+          label: `${shortPlace(name)} · 迎風高地要塞稜線 [Windward Bluff 185m]`,
         },
       ],
     },
@@ -306,7 +309,7 @@ export function generateCoralAtoll(
   const cp1Inst: Installation = makeInstallation({
     id: `${id}-sh1-cp`,
     type: 'command_post',
-    name: era === 'era2' ? `${name} · 灘頭鋼筋混凝土要塞指揮所 [Alpha CP]` : `${name} · 灘頭木石野戰指揮掩體 [Alpha CP]`,
+    name: era === 'era2' ? `${shortPlace(name)} · 灘頭鋼筋混凝土要塞指揮所 [Alpha CP]` : `${shortPlace(name)} · 灘頭木石野戰指揮掩體 [Alpha CP]`,
     weaponDesc: '前線沙灘抗登陸第一防禦線樞紐 · 衛隊機槍與迫擊砲守備',
     pos: cp1Pos,
     angle: sh1Angle,
@@ -404,7 +407,7 @@ export function generateCoralAtoll(
 
   strongholds.push({
     id: `${id}-sh-1`,
-    name: `${name} · 灘頭外圍要塞據點`,
+    name: `${shortPlace(name)} · 灘頭外圍要塞據點`,
     cpPos: cp1Pos,
     isCaptured: false,
     captureProgress: 0,
@@ -425,7 +428,7 @@ export function generateCoralAtoll(
   const cp2Inst: Installation = makeInstallation({
     id: `${id}-sh2-cp`,
     type: 'command_post',
-    name: `${name} · 潟湖航空要塞司令部 [Bravo CP]`,
+    name: `${shortPlace(name)} · 潟湖航空要塞司令部 [Bravo CP]`,
     weaponDesc: '環礁內海航空作戰與戰役物資調配中心 · 衛隊駐守',
     pos: cp2Pos,
     angle: sh2Angle,
@@ -445,7 +448,7 @@ export function generateCoralAtoll(
   const afbInst: Installation = makeInstallation({
     id: `${id}-sh2-airfield`,
     type: 'airfield',
-    name: `${name} · 潟湖水上與陸基雙用野戰機場`,
+    name: `${shortPlace(name)} · 潟湖水上與陸基雙用野戰機場`,
     weaponDesc:
       era === 'era5'
         ? '現代化混凝土硬化跑道與超視距防空雷達站 · 支援 Su-27 / MiG-29 與 Tu-22M3 起降'
@@ -522,7 +525,7 @@ export function generateCoralAtoll(
 
   strongholds.push({
     id: `${id}-sh-2`,
-    name: `${name} · 潟湖航空要塞司令部`,
+    name: `${shortPlace(name)} · 潟湖航空要塞司令部`,
     cpPos: cp2Pos,
     isCaptured: false,
     captureProgress: 0,
@@ -543,7 +546,7 @@ export function generateCoralAtoll(
   const cp3Inst: Installation = makeInstallation({
     id: `${id}-sh3-cp`,
     type: 'command_post',
-    name: `${name} · 深水航道水門海防指揮所 [Charlie CP]`,
+    name: `${shortPlace(name)} · 深水航道水門海防指揮所 [Charlie CP]`,
     weaponDesc: '扼守環礁潟湖深水航道通道 · 堅固防禦工事',
     pos: cp3Pos,
     angle: sh3Angle,
@@ -629,7 +632,7 @@ export function generateCoralAtoll(
 
   strongholds.push({
     id: `${id}-sh-3`,
-    name: `${name} · 深水航道水門海防據點`,
+    name: `${shortPlace(name)} · 深水航道水門海防據點`,
     cpPos: cp3Pos,
     isCaptured: false,
     captureProgress: 0,
@@ -650,7 +653,7 @@ export function generateCoralAtoll(
   const cp4Inst: Installation = makeInstallation({
     id: `${id}-sh4-cp`,
     type: 'command_post',
-    name: `${name} · 迎風高地要塞指揮所 [Delta CP]`,
+    name: `${shortPlace(name)} · 迎風高地要塞指揮所 [Delta CP]`,
     weaponDesc: '石灰岩高地地下坑道指揮所 · 控制全島制高點與遠程砲隊',
     pos: cp4Pos,
     angle: sh4Angle,
@@ -727,7 +730,7 @@ export function generateCoralAtoll(
 
   strongholds.push({
     id: `${id}-sh-4`,
-    name: `${name} · 迎風高地要塞據點`,
+    name: `${shortPlace(name)} · 迎風高地要塞據點`,
     cpPos: cp4Pos,
     isCaptured: false,
     captureProgress: 0,
@@ -984,12 +987,12 @@ export function generateOrganicIsland(
 
   const cp1Name =
     era === 'era4'
-      ? `${name} · 北越前線沿海堅固防禦指揮所 [Alpha CP]`
+      ? `${shortPlace(name)} · 北越前線沿海堅固防禦指揮所 [Alpha CP]`
       : era === 'era3'
-      ? `${name} · 灘頭地下防核坑道要塞中心 [Alpha CP]`
+      ? `${shortPlace(name)} · 灘頭地下防核坑道要塞中心 [Alpha CP]`
       : era === 'era2'
-      ? `${name} · 灘頭鋼筋混凝土要塞指揮所 [Alpha CP]`
-      : `${name} · 灘頭木石野戰指揮掩體 [Alpha CP]`;
+      ? `${shortPlace(name)} · 灘頭鋼筋混凝土要塞指揮所 [Alpha CP]`
+      : `${shortPlace(name)} · 灘頭木石野戰指揮掩體 [Alpha CP]`;
   const cp1Desc =
     era === 'era4'
       ? '地下交錯坑道與加固防爆指揮所 · 具備戰術有線電與早期預警通訊'
@@ -1246,7 +1249,7 @@ export function generateOrganicIsland(
 
   strongholds.push({
     id: `${id}-sh-1`,
-    name: `${name} · 灘頭要塞據點`,
+    name: `${shortPlace(name)} · 灘頭要塞據點`,
     cpPos: cp1Pos,
     isCaptured: false,
     captureProgress: 0,
@@ -1266,12 +1269,12 @@ export function generateOrganicIsland(
 
   const cp2Name =
     era === 'era4'
-      ? `${name} · 人民軍核心地下坑道司令部 [Bravo CP]`
+      ? `${shortPlace(name)} · 人民軍核心地下坑道司令部 [Bravo CP]`
       : era === 'era3'
-      ? `${name} · 核心地下堅固司令部 [Bravo CP]`
+      ? `${shortPlace(name)} · 核心地下堅固司令部 [Bravo CP]`
       : era === 'era2'
-      ? `${name} · 核心高地司令部 [Bravo CP]`
-      : `${name} · 高地守備指揮部 [Bravo CP]`;
+      ? `${shortPlace(name)} · 核心高地司令部 [Bravo CP]`
+      : `${shortPlace(name)} · 高地守備指揮部 [Bravo CP]`;
   const cp2Desc =
     era === 'era4'
       ? '地下複雜防爆坑道網 · 具備早期預警防空通信與後勤調配中樞'
@@ -1524,7 +1527,7 @@ export function generateOrganicIsland(
 
   strongholds.push({
     id: `${id}-sh-2`,
-    name: `${name} · 核心高地司令部`,
+    name: `${shortPlace(name)} · 核心高地司令部`,
     cpPos: cp2Pos,
     isCaptured: false,
     captureProgress: 0,
@@ -1545,10 +1548,10 @@ export function generateOrganicIsland(
 
     const cp3Name =
       era === 'era3'
-        ? `${name} · 港灣地下海防戰術指揮所 [Charlie CP]`
+        ? `${shortPlace(name)} · 港灣地下海防戰術指揮所 [Charlie CP]`
         : era === 'era2'
-        ? `${name} · 港灣地下指揮所 [Charlie CP]`
-        : `${name} · 港口守備指揮所 [Charlie CP]`;
+        ? `${shortPlace(name)} · 港灣地下指揮所 [Charlie CP]`
+        : `${shortPlace(name)} · 港口守備指揮所 [Charlie CP]`;
     const cp3Desc =
       era === 'era3'
         ? '深層岩石防護掩體 · 港口水雷與自動岸防射控'
@@ -1684,7 +1687,7 @@ export function generateOrganicIsland(
 
     strongholds.push({
       id: `${id}-sh-3`,
-      name: `${name} · 港灣地下要塞`,
+      name: `${shortPlace(name)} · 港灣地下要塞`,
       cpPos: cp3Pos,
       isCaptured: false,
       captureProgress: 0,

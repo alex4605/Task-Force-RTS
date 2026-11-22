@@ -196,6 +196,9 @@ const SPHERE_SITES: ReadonlySet<string> = new Set(['settlement', 'town', 'city',
 /** Hull types that dive. */
 const SUBMARINE_TYPES: ReadonlySet<string> = new Set(['submarine', 'ssn_la', 'ssgn_oscar', 'foxtrot']);
 
+/** A flak_battery installation that is really an MIM-104 Patriot battalion. */
+const isPatriotBattery = (inst: Installation): boolean => /MIM-104|愛國者|Patriot/.test(inst.name);
+
 export class GameEngine {
   public sectorNumber: number = 1;
   public era: Era = 'era1';
@@ -7568,7 +7571,7 @@ export class GameEngine {
           ? `【聲自導反潛雷投放】${attackerName} 掠海投放 Mk 46 / Mk 24 聲自導反潛魚雷！聲吶水下被動聽音主動搜索鎖定目標！`
           : `【掠海投雷】${attackerName} 釋放 Mk 13 高速航空魚雷！水中航速 340節，直指目標！`,
       });
-    } else if (plane.payloadType === 'asw_torpedo' || plane.payloadType === 'asw_acoustic_torpedo') {
+    } else if (plane.side === 'enemy' && (plane.payloadType === 'asw_torpedo' || plane.payloadType === 'asw_acoustic_torpedo')) {
       this.addCombatLog({
         category: 'air',
         sourceSide: 'enemy',
@@ -8083,7 +8086,7 @@ export class GameEngine {
           sourceName: '落難信號 (SOS)',
           targetName: pName,
           actionType: 'recon_spotted',
-          text: `🪂【敵機組員跳傘】「${pName}」被擊墜，機組 ${bail.crew} 人中 ${bail.survivors} 人跳傘${bail.killed > 0 ? `、${bail.killed} 人陣亡` : ''}（座標 [${Math.round(plane.pos.x)}, ${Math.round(plane.pos.y)}]）。派水面艦（85–120m 內）或地面部隊（85m 內）接近即可俘虜。`,
+          text: `🪂【敵機組員跳傘】「${pName}」被擊墜，機組 ${bail.crew} 人中 ${bail.survivors} 人跳傘${bail.killed > 0 ? `、${bail.killed} 人陣亡` : ''}。派艦艇或地面部隊接近即可俘虜。`,
         });
       }
     } else {
@@ -8775,7 +8778,7 @@ export class GameEngine {
         ? `💣【陸基前進基地遭襲！】敵 ${heavyCount}架 IL-28 雙噴射重型轟炸機以高空大編隊越境！意圖對前進空軍基地跑道與機庫實施毀滅性地毯轟炸！`
         : isEra3
         ? `💣【陸基前進基地遭襲！】冷戰聯軍 ${heavyCount}架 Tu-14 雙噴射轟炸機以高空編隊越境！意圖對前進空軍基地跑道與機庫實施毀滅性面狀轟炸！`
-        : `💣【陸基前進基地遭襲！】敵 ${heavyCount}架 一式陸攻以高空編隊越境！意圖對 Henderson Field 機場跑道與機庫實施毀滅性面狀轟炸！`,
+        : `💣【陸基前進基地遭襲！】敵 ${heavyCount}架 一式陸攻以高空編隊越境！意圖對我方前進機場跑道與機庫實施面狀轟炸！`,
     });
 
     this.organizeStrikePackage(sqId);
@@ -9056,7 +9059,7 @@ export class GameEngine {
       text: isEra5
         ? `🚨【蘇聯海航逆火大編隊反艦突擊！】長程雷達網紅警狂響！偵測到蘇聯海航 ${totalStrikeCount}機 飽和打擊群（Tu-22M3 逆火掛載 Kh-22 重型超音速反艦飛彈 + Su-25 蛙足強擊機 + Su-27 側衛超音速護航）全速直撲「${flagship?.name || '航空母艦'}」！`
         : isEra4
-        ? `🚨【蘇越海空聯合突擊旗艦！】長程對空警戒雷達警報大作！偵測到敵 ${totalStrikeCount}機 聯合重打擊群（蘇聯海航 Tu-16 獾式飛彈轟炸機掛載 KSR-5 凱爾特超音速重型反艦飛彈 + 蘇聯空軍 Su-7 裝配匠超音速強擊機 + 北越 921 團 MiG-21 超音速護航）全速直撲「${flagship?.name || '航空母艦'}」！`
+        ? `🚨【蘇越海空聯合打擊編隊！】長程對空警戒雷達警報大作！偵測到敵 ${totalStrikeCount}機 聯合重打擊群（蘇聯海航 Tu-16 獾式飛彈轟炸機掛載 KSR-5 凱爾特超音速重型反艦飛彈 + 蘇聯空軍 Su-7 裝配匠超音速強擊機 + 北越 921 團 MiG-21 超音速護航）全速直撲「${flagship?.name || '航空母艦'}」！`
         : isEra3
         ? `🚨【旗艦打擊編隊！】長程對空雷達警報大作！偵測到敵 ${totalStrikeCount}機 動態反艦打擊群 (Tu-14 噴射魚雷機 + IL-10 鐵獸強擊機 + MiG-15 噴射直衛) 全速直撲「${flagship?.name || '航空母艦'}」！`
         : `🚨【旗艦打擊編隊！】長程對空雷達警報大作！偵測到敵 ${totalStrikeCount}機 動態反艦打擊群 (魚雷機+俯衝艦爆+直衛零戰) 全速直撲「${flagship?.name || '航空母艦'}」！`,
@@ -9344,6 +9347,8 @@ export class GameEngine {
         inst.cooldown = Math.max(0, inst.cooldown - dt);
 
         if (inst.type === 'flak_battery') {
+          // A Patriot battalion fires missiles (updateLandMissileSites), not flak
+          if (this.era === 'era5' && isPatriotBattery(inst)) continue;
           // 防空高射砲陣地 (雙方皆可自動對敵機射擊)
           const targetPlane = this.aircraft.find(
             (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= inst.range && this.aaCanSee(inst.pos, a)
@@ -13446,7 +13451,9 @@ export class GameEngine {
         if (inst.cooldown > 0) continue;
 
         // 6a. 友軍 MIM-104 愛國者 (Patriot) 長程防空/反飛彈發射營 (Mach 4.5, 射程 3800m)
-        if (inst.side !== 'enemy' && (inst.type === 'sam_patriot' || inst.type === 'flak_battery')) {
+        // Only real Patriot batteries (the purpose-built site or a requisitioned Patriot battalion);
+        // gun batteries keep firing flak in updateInstallations
+        if (inst.side !== 'enemy' && (inst.type === 'sam_patriot' || (inst.type === 'flak_battery' && isPatriotBattery(inst)))) {
           const samRange = 3800;
           // 優先攔截來襲敵方反艦/巡弋/彈道/潛射核飛彈 (ATBM 戰術與戰略彈道飛彈攔截能力)
           const incomingAshm = this.projectiles.find(
@@ -15903,7 +15910,7 @@ export class GameEngine {
       sourceName: `${ship.name} (${samModel})`,
       targetName,
       actionType: 'recon_spotted',
-      text: `🚀【防空飛彈點火升空】「${ship.name}」射控雷達導引發射 ${samModel} 導向飛彈！極速 ${speed} 呼嘯撲向 ${targetName}！`,
+      text: `🚀【艦對空飛彈發射】「${ship.name}」射控雷達導引 ${samModel.replace(/\s*導向飛彈$/, '')}，撲向${targetName}！`,
     });
   }
 
@@ -17114,7 +17121,7 @@ export class GameEngine {
           targetName: raft.pilotName,
           actionType: 'aa_down',
           text: raft.side === 'player'
-            ? `🌊【搜救逾時】我方落難救生筏（${raft.planeName} - ${raft.pilotName}）逾時未獲救援，訊號消失...`
+            ? `🌊【搜救逾時】我方落難救生筏（${raft.pilotName.includes(raft.planeName) || raft.planeName.includes(raft.pilotName) ? raft.pilotName : `${raft.planeName} · ${raft.pilotName}`}）逾時未獲救援，訊號消失…`
             : `🌊【敵飛行員失蹤】敵落難飛行員（${raft.pilotName}）救生信號中斷消失。`,
         });
         this.lifeRafts.splice(i, 1);
@@ -18428,10 +18435,10 @@ export class GameEngine {
       this.addCombatLog({
         category: 'air',
         sourceSide: 'enemy',
-        sourceName: '北越空軍 GCI 地面導引台',
+        sourceName: this.era === 'era4' ? '北越空軍 GCI 地面導引台' : '蘇軍 GCI 地面導引台',
         targetName: plane.name,
         actionType: 'recon_spotted',
-        text: `⚡【蘇聯一擊脫離 (Hit & Run)】「${plane.name}」完成超音速呼嘯掠殺！開全後燃器 (Mach 1.5+) 大仰角躍升脫離戰區！甩開美軍空對空飛彈！`,
+        text: `⚡【一擊脫離 (Hit & Run)】「${plane.name}」高速掠襲後開全後燃器 (Mach 1.5+) 躍升脫離，甩開我方空對空飛彈！`,
       });
     } else if (plane.model === 'mig17') {
       plane.speed = plane.maxSpeed * 1.25;
@@ -19518,7 +19525,7 @@ export class GameEngine {
                 sourceName: plane.name,
                 targetName: proj.attackerName || '導向飛彈',
                 actionType: 'recon_spotted',
-                text: `💨【高G機動破轉避開！】「${plane.name}」大過載劇烈破轉，敵飛彈超載脫靶於舷側近距擦過爆炸！`,
+                text: `💨【高G破轉避彈】「${plane.name}」大過載急轉，來襲飛彈追蹤不及，於機旁擦過脫靶！`,
               });
               break;
             }
@@ -20236,7 +20243,7 @@ export class GameEngine {
               result: isCrit ? 'crit' : 'hit',
               rollDesc,
             },
-            text: `🚀🎲【火箭彈齊射命中】${attacker} HVAR 火箭命中「${targetShipName}」上層建築！造成 ${actualDmg} 點破壞！`,
+            text: `🚀🎲【火箭彈齊射命中】${attacker} 火箭命中「${targetShipName}」上層建築！造成 ${actualDmg} 點破壞！`,
           });
         } else if (proj.type === 'missile_ashm') {
           this.addCombatLog({
@@ -20274,7 +20281,7 @@ export class GameEngine {
               result: isCrit ? 'crit' : 'hit',
               rollDesc,
             },
-            text: `🎯🎲【艦砲命中判定】艦砲齊射貫穿「${targetShipName}」外裝甲！造成 ${actualDmg} 點傷害！`,
+            text: `🎯🎲【艦砲命中】${attacker} 砲彈貫穿「${targetShipName}」外裝甲！造成 ${actualDmg} 點傷害！`,
           });
         }
 
@@ -20505,7 +20512,7 @@ export class GameEngine {
                   result: 'near_miss',
                   rollDesc: `D100土堤偏斜檢定: ${roll} vs 門檻 ${hitThreshold} [掩體吸收衝擊]`,
                 },
-                text: `🛡️🎲【掩體防護/散佈偏斜 D100: ${roll} / 門檻 ${hitThreshold}】${attacker} 航彈落於「${inst.name}」土堤外側！掩體沙袋大幅吸收爆風 (-${actualDmg} HP)，砲位暫時受震壓制！`,
+                text: `🛡️🎲【掩體防護/散佈偏斜 D100: ${roll} / 門檻 ${hitThreshold}】${attacker} 落彈於「${inst.name}」土堤外側！掩體沙袋大幅吸收爆風 (-${actualDmg} HP)，砲位暫時受震壓制！`,
               });
             }
           } else {
@@ -20539,7 +20546,7 @@ export class GameEngine {
                 sourceName: attacker,
                 targetName: inst.name,
                 actionType: 'installation_down',
-                text: `🚨【友軍設施遭毀】我方重要島嶼設施「${inst.name}」在敵猛烈空襲下被徹底摧毀！`,
+                text: `🚨【友軍設施遭毀】我方設施「${inst.name}」在敵空襲下被徹底摧毀！`,
               });
             }
           }
@@ -20603,7 +20610,7 @@ export class GameEngine {
           targetName: unit.name,
           actionType: proj.type === 'bomb' ? 'bomb_hit' : 'gun_hit',
           damage: physicalDmg,
-          text: `💥【火力覆蓋震盪】${attacker} 火力落入「${unit.name}」陣地！工事吸收部分殺傷 (-${physicalDmg} HP / 建制度 ${unit.strength}%)，劇烈爆震使部隊士氣受挫 (組織度 -${orgLoss}% -> ${Math.round(unit.organization)}%)！`,
+          text: `💥【火力覆蓋】${attacker} 火力落入「${unit.name}」陣地！${unit.isInUrbanCover ? '市街掩蔽吸收部分殺傷，' : unit.fieldCover ? '工事吸收部分殺傷，' : ''}-${physicalDmg} HP (建制度 ${unit.strength}%)，組織度 -${orgLoss}% → ${Math.round(unit.organization)}%`,
         });
 
         // 建制度過低 (STR / Health 歸零) -> 徹底消滅瓦解
@@ -20954,7 +20961,7 @@ export class GameEngine {
       const gainTxt = this.grant(cpAward, 'kill');
 
       this.addBannerAlert(
-        `⚓【重大擊沉戰報】敵艦「${shipName}」(${ship.type.toUpperCase()}) 徹底沉沒！獲得 +${gainTxt}`,
+        `⚓【重大擊沉戰報】敵艦「${shipName}」徹底沉沒！獲得 +${gainTxt}`,
         'enemy',
         'sunk',
         7.5
@@ -20965,7 +20972,7 @@ export class GameEngine {
         sourceName: '特混艦隊',
         targetName: shipName,
         actionType: 'ship_sunk',
-        text: `⚓【重大擊沉戰報】敵艦「${shipName}」(${ship.type.toUpperCase()}) 發生災難性殉爆，徹底沉沒！排水量 ${tonnage.toLocaleString()}噸 沉入海底！獲取 +${points} 分，★+${stars} 星，+${gainTxt}！`,
+        text: `⚓【重大擊沉戰報】敵艦「${shipName}」(${tonnage.toLocaleString()} 噸) 沉沒！獲取 +${points} 分，★+${stars} 星，+${gainTxt}`,
       });
     } else {
       this.casualties.playerShipsLost++;
@@ -20974,7 +20981,9 @@ export class GameEngine {
       this.addBannerAlert(
         isAllied
           ? `🚨【盟軍艦艇沉沒】支援友軍「${shipName}」遭受致命打擊沉沒！`
-          : `🚨【旗艦警報】我方主力艦艇「${shipName}」遭受致命打擊沉沒！`,
+          : ship.isFlagship
+          ? `🚨【旗艦警報】旗艦「${shipName}」遭受致命打擊沉沒！`
+          : `🚨【我艦沉沒】我方艦艇「${shipName}」遭受致命打擊沉沒！`,
         'player',
         'sunk',
         7.5
@@ -20987,7 +20996,7 @@ export class GameEngine {
         actionType: 'ship_sunk',
         text: isAllied
           ? `🚨【警報！盟軍支援艦沉沒】盟軍艦艇「${shipName}」(${tonnage.toLocaleString()}噸) 遭受致命打擊沉沒！`
-          : `🚨【警報！友軍艦艇沉沒】我方主力艦艇「${shipName}」(${tonnage.toLocaleString()}噸) 遭受致命打擊沉沒！`,
+          : `🚨【警報！友軍艦艇沉沒】我方艦艇「${shipName}」(${tonnage.toLocaleString()}噸) 遭受致命打擊沉沒！`,
       });
     }
   }
