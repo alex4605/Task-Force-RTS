@@ -247,8 +247,3 @@ export function formatBundle(b: Partial<Bundle>): string {
     .map((k) => `${RES_INFO[k].label} ${Math.round(b[k] ?? 0)}`)
     .join(' · ');
 }
-
-/** "未達 RP 120 · TP 40" */
-export function formatShortfall(s: Partial<Bundle>): string {
-  return formatBundle(s);
-}

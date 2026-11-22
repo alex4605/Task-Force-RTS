@@ -13,7 +13,6 @@ export type UnitPreviewKind = 'ship' | 'aircraft' | 'ground' | 'installation';
 export interface UnitPreviewOptions {
   payloadType?: AircraftPayloadType;
   compact?: boolean;
-  isPlayer?: boolean;
   /** Era of the card (ships: draws the exact class the card delivers in that era). */
   era?: Era;
 }
@@ -638,6 +637,10 @@ const EXPLICIT_SILHOUETTE_CLASS: Record<string, GroundSilhouetteClass> = {
   us_m24_chaffee: 'tank',
   us_m16_quad50: 'air_defense',
   usmc_90mm_aa_42: 'towed',
+  us_redeye_team: 'atgm',
+  us_stinger_team: 'atgm',
+  opfor_sa7_strela: 'atgm',
+  opfor_igla_team: 'atgm',
   usmc_40mm_bofors_45: 'towed',
   us_m113_acav: 'carrier',
   us_m107_175: 'spg',
@@ -696,6 +699,10 @@ const EXPLICIT_SILHOUETTE_CLASS: Record<string, GroundSilhouetteClass> = {
   opfor_ija_banzai_45: 'infantry',
   opfor_pva_infantry_50: 'infantry',
   opfor_zis3_76: 'towed',
+  opfor_ija_type92_70: 'towed',
+  opfor_ija_type98_aa: 'towed',
+  opfor_bm13_katyusha: 'rocket',
+  us_armor_m4a3e8: 'tank',
   opfor_su76m: 'spg',
   opfor_vc_guerrilla_65: 'infantry',
   opfor_rpg_team_65: 'infantry',
@@ -715,6 +722,20 @@ const EXPLICIT_SILHOUETTE_CLASS: Record<string, GroundSilhouetteClass> = {
   au_sasr_66: 'infantry',
   nl_leopard1: 'tank',
   nl_infantry_83: 'infantry',
+  frg_jaeger_83: 'infantry',
+  frg_heimatschutz_83: 'infantry',
+  opfor_giyutai_45: 'infantry',
+  sof_lrrp_65: 'infantry',
+  opfor_rail_troops_83: 'infantry',
+  opfor_mvd_vv_83: 'infantry',
+  fr_infantry_83: 'infantry',
+  fr_amx30b2: 'tank',
+  uk_infantry_83: 'infantry',
+  arvn_rfpf_65: 'infantry',
+  opfor_nlf_main_force_65: 'infantry',
+  rok_police_50: 'infantry',
+  opfor_kpa_infantry_50: 'infantry',
+  si_scouts_42: 'infantry',
   frg_luchs: 'carrier',
   uk_sas_83: 'infantry',
 };
@@ -741,6 +762,7 @@ function classifyGroundSilhouette(unitType: string): GroundSilhouetteClass {
     t.includes('m270') ||
     t.includes('calliope') ||
     t.includes('grad') ||
+    t.includes('katyusha') ||
     t.includes('uragan') ||
     t.includes('scud');
 
@@ -1868,7 +1890,7 @@ const AIRCRAFT_ICON_CACHE = new Map<string, { canvas: HTMLCanvasElement; w: numb
 const ICON_RES = 6;
 const ICON_SPAN = 120;
 
-function aircraftIcon(model: string, payloadType?: AircraftPayloadType): { canvas: HTMLCanvasElement; w: number; h: number } | null {
+export function aircraftIcon(model: string, payloadType?: AircraftPayloadType): { canvas: HTMLCanvasElement; w: number; h: number } | null {
   const key = `${model}|${payloadType ?? ''}`;
   if (AIRCRAFT_ICON_CACHE.has(key)) return AIRCRAFT_ICON_CACHE.get(key)!;
   let result: { canvas: HTMLCanvasElement; w: number; h: number } | null = null;
@@ -1964,9 +1986,7 @@ function drawAircraftPreview(
     m === 'ah1' ||
     m === 'uh1' ||
     m === 'ch53' ||
-    m === 'ch47' ||
     m === 'sh3f' ||
-    m === 'sh3' ||
     m === 'sh2' ||
     m === 'ka27' ||
     m === 'mi24' ||
@@ -1993,9 +2013,9 @@ function drawAircraftPreview(
     m === 'p3' ||
     m === 'il38';
 
-  const isAwacs = m === 'e2c' || m === 'e3a' || m === 'e2' || m === 'e1' || m === 'a50' || m === 'aew_ad3w' || m === 'ad3w';
-  const isDelta = m === 'mirage3' || m === 'mirage2000' || m === 'mig21' || m === 'a4' || m === 'su7' || m === 'viggen_ja37';
-  const isSwingWing = m === 'f14a' || m === 'f111' || m === 'tornado_gr1' || m === 'tornado_ids' || m === 'tornado_adv' || m === 'su24' || m === 'tu22m3';
+  const isAwacs = m === 'e2c' || m === 'e3a' || m === 'e1' || m === 'a50' || m === 'aew_ad3w' || m === 'ad3w';
+  const isDelta = m === 'mirage3' || m === 'mirage2000' || m === 'mig21' || m === 'a4' || m === 'su7';
+  const isSwingWing = m === 'f14a' || m === 'f111' || m === 'tornado_gr1' || m === 'tornado_ids' || m === 'tornado_adv' || m === 'tu22m3';
   const isTwinBoom = m === 'p38' || m === 'ov10' || m === 'f82';
   const isJet =
     isDelta ||
@@ -2031,8 +2051,6 @@ function drawAircraftPreview(
     m === 'mig17' ||
     m === 'mig19' ||
     m === 'mig23' ||
-    m === 'mig25' ||
-    m === 'mig29' ||
     m === 'su25' ||
     m === 'su27' ||
     m === 'yak38' ||
@@ -2203,7 +2221,7 @@ function drawAircraftPreview(
     ctx.fillRect(-22, -4, 3, 2.2);
     ctx.fillRect(-22, 1.8, 3, 2.2);
   } else if (isDelta) {
-    // Pure Delta (Mirage III/2000, MiG-21, A-4) or Canard Delta (Viggen)
+    // Pure Delta (Mirage III/2000, MiG-21, A-4)
     ctx.fillStyle = bodyFill;
     ctx.strokeStyle = primaryStroke;
     ctx.lineWidth = 1.4;
@@ -2215,15 +2233,6 @@ function drawAircraftPreview(
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
-    if (m === 'viggen_ja37') {
-      ctx.beginPath();
-      ctx.moveTo(15, 0);
-      ctx.lineTo(7, -8);
-      ctx.lineTo(7, 8);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-    }
     ctx.beginPath();
     ctx.moveTo(22, 0);
     ctx.lineTo(10, -2.8);

@@ -353,8 +353,6 @@ export interface App6Options {
   fn: App6Function;
   echelon: Echelon;
   mobility: Mobility;
-  /** Operational condition from strength: drawn as a bar under the frame (green / yellow / red). */
-  condition?: number;
   /** Dim the whole symbol (suppressed / pinned). */
   dim?: boolean;
   /** Frame fill override (allied formations: green, to tell them from the player's own blue). */
@@ -388,11 +386,6 @@ export function drawApp6(ctx: CanvasRenderingContext2D, o: App6Options): void {
   ctx.restore();
 }
 
-/** Symbol extents for placing labels and bars around it. */
-export function app6Extents(a: Affiliation): { top: number; bottom: number } {
-  return { top: frameTop(a) - 6.5, bottom: frameBottom(a) + 5.5 };
-}
-
 // ════════════════════════════════════════════════════════════════════════════
 // Unit type -> symbol mapping
 // ════════════════════════════════════════════════════════════════════════════
@@ -408,6 +401,10 @@ const EXPLICIT_FUNCTION: Record<string, App6Function> = {
   us_m24_chaffee: 'armour',
   us_m16_quad50: 'air_defence_gun',
   usmc_90mm_aa_42: 'air_defence_gun',
+  us_redeye_team: 'air_defence_missile',
+  us_stinger_team: 'air_defence_missile',
+  opfor_sa7_strela: 'air_defence_missile',
+  opfor_igla_team: 'air_defence_missile',
   usmc_40mm_bofors_45: 'air_defence_gun',
   us_m113_acav: 'armoured_recon',
   us_m107_175: 'field_artillery',
@@ -466,6 +463,10 @@ const EXPLICIT_FUNCTION: Record<string, App6Function> = {
   opfor_ija_banzai_45: 'infantry',
   opfor_pva_infantry_50: 'infantry',
   opfor_zis3_76: 'field_artillery',
+  opfor_ija_type92_70: 'field_artillery',
+  opfor_ija_type98_aa: 'air_defence_gun',
+  opfor_bm13_katyusha: 'rocket_artillery',
+  us_armor_m4a3e8: 'armour',
   opfor_su76m: 'anti_armour_armoured',
   opfor_vc_guerrilla_65: 'infantry',
   opfor_rpg_team_65: 'anti_armour',
@@ -485,6 +486,20 @@ const EXPLICIT_FUNCTION: Record<string, App6Function> = {
   au_sasr_66: 'special_forces',
   nl_leopard1: 'armour',
   nl_infantry_83: 'mech_infantry',
+  frg_jaeger_83: 'infantry',
+  frg_heimatschutz_83: 'infantry',
+  opfor_giyutai_45: 'infantry',
+  sof_lrrp_65: 'recon',
+  opfor_rail_troops_83: 'engineer',
+  opfor_mvd_vv_83: 'infantry',
+  fr_infantry_83: 'mech_infantry',
+  fr_amx30b2: 'armour',
+  uk_infantry_83: 'mech_infantry',
+  arvn_rfpf_65: 'infantry',
+  opfor_nlf_main_force_65: 'infantry',
+  rok_police_50: 'infantry',
+  opfor_kpa_infantry_50: 'infantry',
+  si_scouts_42: 'infantry',
   frg_luchs: 'armoured_recon',
   uk_sas_83: 'special_forces',
 };
@@ -493,6 +508,10 @@ const EXPLICIT_MOBILITY: Record<string, Mobility> = {
   usmc_37mm_at: 'towed',
   us_m16_quad50: 'wheeled_tracked',
   usmc_90mm_aa_42: 'towed',
+  us_redeye_team: 'none',
+  us_stinger_team: 'none',
+  opfor_sa7_strela: 'none',
+  opfor_igla_team: 'none',
   usmc_40mm_bofors_45: 'towed',
   us_m107_175: 'tracked',
   us_hmmwv_tow: 'wheeled',
@@ -511,6 +530,9 @@ const EXPLICIT_MOBILITY: Record<string, Mobility> = {
   opfor_ija_47mm_at: 'towed',
   opfor_ija_kami: 'amphibious',
   opfor_zis3_76: 'towed',
+  opfor_ija_type92_70: 'towed',
+  opfor_ija_type98_aa: 'towed',
+  opfor_bm13_katyusha: 'wheeled',
   opfor_su76m: 'tracked',
   opfor_m46_130mm: 'towed',
   opfor_dshk_aa: 'towed',

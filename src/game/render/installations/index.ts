@@ -2,8 +2,11 @@ import { Island, Installation } from '../../../types/game';
 import { RenderContext } from '../context';
 import { getInstallationStyle } from './style';
 import { INSTALLATION_DRAWERS } from './bodies';
+import { airfieldFootprint } from '../../airfieldLayout';
 
 // Draw Installation
+const SPHERE_LABEL: ReadonlySet<string> = new Set(['settlement', 'town', 'city', 'civil_hospital', 'copra_plantation', 'civil_wharf', 'sugar_mill', 'power_plant', 'pagoda', 'factory']);
+
 export function drawInstallation(rc: RenderContext, inst: Installation, island?: Island) {
   const ctx = rc.ctx;
   ctx.save();
@@ -48,6 +51,12 @@ export function drawInstallation(rc: RenderContext, inst: Installation, island?:
 
   ctx.rotate(inst.angle);
 
+  if (inst.isDestroyed && inst.type === 'airfield') {
+    drawNukedAirfield(rc, inst);
+    ctx.restore();
+    return;
+  }
+
   if (inst.isDestroyed) {
     ctx.strokeStyle = '#546E7A';
     ctx.lineWidth = 1.5;
@@ -79,6 +88,28 @@ export function drawInstallation(rc: RenderContext, inst: Installation, island?:
 
   // Type-specific body: see bodies.ts
   INSTALLATION_DRAWERS[inst.type]?.(rc, inst, style, island);
+  if (inst.type === 'airfield' && inst.cratered) drawCrateredOverlay(rc, inst);
+  if (inst.type === 'airfield' && inst.captureProgress && inst.captureBy) {
+    // Ground troops taking the field
+    const { hy } = airfieldFootprint(inst);
+    const k = Math.min(1, inst.captureProgress / 100);
+    ctx.fillStyle = 'rgba(4, 12, 22, 0.85)';
+    ctx.fillRect(-40, -hy - 34, 80, 6);
+    ctx.fillStyle = inst.captureBy === 'player' ? '#4FC3F7' : '#FF5252';
+    ctx.fillRect(-39, -hy - 33, 78 * k, 4);
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(inst.captureBy === 'player' ? `🚩 我軍奪取機場 ${Math.floor(k * 100)}%` : `⚠️ 敵軍奪取機場 ${Math.floor(k * 100)}%`, 0, -hy - 38);
+  }
+
+  // Whose sphere a village or town is in (our troops holding the ground round it make it ours)
+  if (inst.controlledBy && SPHERE_LABEL.has(inst.type)) {
+    ctx.font = 'bold 8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = inst.controlledBy === 'player' ? '#81D4FA' : '#FF8A80';
+    const ours = inst.type === 'civil_hospital' ? '🟦 我方勢力範圍 · 收治傷患' : '🟦 我方勢力範圍 · 有產出';
+    ctx.fillText(inst.controlledBy === 'player' ? ours : '🟥 敵方勢力範圍', 0, 24);
+  }
 
   if (inst.health < inst.maxHealth) {
     const hpPct = Math.max(0, inst.health / inst.maxHealth);
@@ -97,4 +128,63 @@ export function drawInstallation(rc: RenderContext, inst: Installation, island?:
   }
 
   ctx.restore();
+}
+
+/** Bomb craters along a knocked-out runway, burning hangars and the repair state. */
+function drawCrateredOverlay(rc: RenderContext, inst: Installation): void {
+  const ctx = rc.ctx;
+  const { hx, hy } = airfieldFootprint(inst);
+  const progress = inst.cratered?.progress ?? 0;
+  // Craters fill in as the repair goes on
+  const n = Math.max(0, Math.round(14 * (1 - progress)));
+  for (let k = 0; k < n; k++) {
+    const x = -hx * 0.85 + ((k * 0.618) % 1) * hx * 1.7;
+    const y = (((k * 0.377) % 1) - 0.5) * hy * 0.6;
+    ctx.fillStyle = 'rgba(20, 14, 10, 0.85)';
+    ctx.beginPath();
+    ctx.arc(x, y, 6 + (k % 3) * 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(121, 85, 72, 0.8)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  // Smoke from the hangars
+  for (let k = 0; k < 3; k++) {
+    const t = (rc.time * 0.5 + k / 3) % 1;
+    ctx.fillStyle = `rgba(30, 30, 34, ${0.5 * (1 - t)})`;
+    ctx.beginPath();
+    ctx.arc(-20 + k * 25, hy * 0.8 - t * 40, 8 + t * 16, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.font = 'bold 9px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#FFB74D';
+  ctx.fillText(`💥 跑道癱瘓 · 搶修中 ${Math.floor(progress * 100)}%`, 0, -hy - 10);
+}
+
+/** A field wiped out by a nuclear burst: scorched ground, the runway outline and any rebuilding. */
+function drawNukedAirfield(rc: RenderContext, inst: Installation): void {
+  const ctx = rc.ctx;
+  const { hx, hy } = airfieldFootprint(inst);
+  ctx.fillStyle = 'rgba(25, 20, 18, 0.75)';
+  ctx.beginPath();
+  ctx.ellipse(0, 0, hx * 1.05, hy * 1.6, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(120, 120, 120, 0.5)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([10, 8]);
+  ctx.strokeRect(-hx * 0.95, -hy * 0.35, hx * 1.9, hy * 0.7);
+  ctx.setLineDash([]);
+  if (inst.rebuildProgress) {
+    ctx.fillStyle = 'rgba(255, 213, 79, 0.35)';
+    ctx.fillRect(-hx * 0.95, -hy * 0.35, hx * 1.9 * inst.rebuildProgress, hy * 0.7);
+  }
+  ctx.font = 'bold 9px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#FF8A65';
+  ctx.fillText(
+    inst.rebuildProgress ? `☢️ 機場全毀 · 工兵重建 ${Math.floor(inst.rebuildProgress * 100)}%` : '☢️ 機場全毀 · 需工兵在場重建',
+    0,
+    -hy - 10
+  );
 }

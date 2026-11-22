@@ -35,7 +35,7 @@ const ATLANTA_CLASS = /Atlanta|Juneau|San Juan|San Diego|Oakland|Reno|Flint|Tucs
 const ALLIED_BY_NAME: Array<[RegExp, ShipFlight, Era[]]> = [
   [/King George V|Duke of York|Howe|Exeter|Australia|Canberra|Shropshire/, F('walrus', 1), ['era1', 'era2']],
   [/Shirane|Haruna/, H('sh3f', 3), ['era4', 'era5']],
-  [/Type 42|利安達級|Andromeda|Bremen|Georges Leygues|Tourville/, H('lynx', 1), ['era4', 'era5']],
+  [/Type 42|Sheffield 謝菲爾德號 \(D80|Coventry|Glasgow|Andromeda|Bremen|Georges Leygues|Tourville/, H('lynx', 1), ['era4', 'era5']],
 ];
 
 export function shipAviation(ship: Ship, era: Era): ShipFlight | undefined {

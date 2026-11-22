@@ -131,6 +131,7 @@ export const AIRCRAFT_GUNS: Record<AircraftModel, GunBattery | null> = {
   firefly_as5: wing('4x 20mm 西斯帕諾', g('20', 4, 640)),
   mig15: nose('1x 37mm N-37 + 2x 23mm NR-23', g('37', 1, 40), g('23', 2, 160)),
   tu14: nose('2x 23mm NR-23', g('23', 2, 170)),
+  la11: nose('3x 23mm NS-23', g('23', 3, 75)),
   yak9: nose('1x 20mm ShVAK + 1x 12.7mm UBS', g('20', 1, 120), g('12.7', 1, 200)),
   il10: wing('2x 23mm NS-23 + 2x 7.62mm ShKAS', g('23', 2, 300), g('7.62', 2, 1500)),
   po2: null,
@@ -175,7 +176,6 @@ export const AIRCRAFT_GUNS: Record<AircraftModel, GunBattery | null> = {
   tornado_adv: nose('1x 27mm 毛瑟 BK-27', g('27', 1, 180)),
   mirage2000: nose('2x 30mm DEFA 554', g('30', 2, 250)),
   jaguar_gr1: nose('2x 30mm ADEN', g('30', 2, 300)),
-  viggen_ja37: nose('1x 30mm 奧利岡 KCA', g('30', 1, 150)),
   canberra: null,
   buccaneer: null,
   sea_harrier: wing('2x 30mm ADEN 吊艙', g('30', 2, 260)),
@@ -250,11 +250,6 @@ export function burstBullets(battery: GunBattery): BulletSpec[] {
   }));
 }
 
-/** Penetration of a gun round against armour, by its damage class (used on the projectile). */
-export function calibreVsArmour(cal: GunCalibre | undefined): number {
-  return cal ? CALIBRE_VS_ARMOUR[cal] : 0.1;
-}
-
 // ── Rockets ───────────────────────────────────────────────────────────────────────────────────
 
 export type RocketKind = 'hvar' | 'rp3' | 'rs82' | 'type3' | 'ffar' | 'zuni' | 'sneb' | 's5' | 's8' | 's24' | 'hydra';
@@ -279,7 +274,7 @@ const BRITISH_RP3 = new Set<AircraftModel>(['tempest', 'mosquito', 'beaufighter'
 export function rocketKind(model: AircraftModel, era: Era): RocketKind {
   if (BRITISH_RP3.has(model)) return 'rp3';
   if (model === 'hunter_fga9' || model === 'jaguar_gr1' || model === 'mirage3' || model === 'tornado_ids') return 'sneb';
-  if (model === 'il10' || model === 'yak9' || model === 'po2') return 'rs82';
+  if (model === 'il10' || model === 'yak9' || model === 'la11' || model === 'po2') return 'rs82';
   if (model === 'zero' || model === 'zero_a6m2' || model === 'zero_a6m5' || model === 'ki84' || model === 'george' || model === 'val' || model === 'judy') return 'type3';
   if (model === 'su25') return 's8';
   if (model === 'mi24') return era === 'era5' ? 's8' : 's5';
@@ -301,7 +296,6 @@ export function rocketsPerSalvo(rounds: number, payload: AircraftPayloadType): n
 export interface BombSpec {
   label: string;
   /** Weight of each bomb (lb). */
-  weightLb: number;
   damage: number;
   blast: number;
   armourPiercing?: boolean;
@@ -311,7 +305,6 @@ export interface BombSpec {
 function bombOf(label: string, weightLb: number, armourPiercing = false): BombSpec {
   return {
     label,
-    weightLb,
     damage: Math.round(1650 * Math.pow(weightLb / 1000, 0.85)),
     blast: Math.round(58 * Math.cbrt(weightLb / 1000)),
     armourPiercing,
@@ -403,29 +396,6 @@ export function warheadVsShip(warhead: Warhead | undefined): number {
     case 'cluster': return 0.5;
     case 'heat': return 0.85;
     default: return 1;
-  }
-}
-
-/** The warhead class of a store. */
-export function payloadWarhead(payload: AircraftPayloadType | undefined): Warhead {
-  switch (payload) {
-    case 'bomb_1600':
-    case 'bomb_1600_ap':
-    case 'tiny_tim_rocket':
-    case 'rgm84_harpoon':
-    case 'heli_asm':
-      return 'ap';
-    case 'agm65_maverick':
-    case 'hellfire_missiles':
-    case 'tow_missiles':
-      return 'heat';
-    case 'cbu_cluster_bombs':
-      return 'cluster';
-    case 'napalm_canister':
-    case 'blu27_napalm':
-      return 'incendiary';
-    default:
-      return 'he';
   }
 }
 

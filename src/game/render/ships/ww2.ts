@@ -314,7 +314,7 @@ function destroyerLayout(name: string): DestroyerLayout {
   if (/IJN|Kagero|Yukikaze/.test(name)) {
     return { navy: 'ijn', bridge: [0.14, 0.23], deckBreak: 0.13, funnels: [{ x: 0.07, raked: true, trunked: true }, { x: -0.04, raked: true }], tubes: [{ x: 0.01, count: 4 }, { x: -0.12, count: 4 }] };
   }
-  if (/Skory/.test(name)) {
+  if (/Skory|Smotryashchy|Sposobny|Ozhestochonny|Vnimatelny|Vrazumitelny|Vidny/.test(name)) {
     return { navy: 'sov', bridge: [0.12, 0.2], funnels: [{ x: 0.07 }, { x: -0.06 }], tubes: [{ x: 0.0, count: 5 }, { x: -0.13, count: 5 }] };
   }
   if (/DE-|Samuel B/.test(name)) {

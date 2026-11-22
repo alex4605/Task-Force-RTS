@@ -37,16 +37,13 @@ export interface AlliedHost {
 }
 
 interface LandingGroup {
-  id: string;
   escortId?: string;
   transportIds: string[];
-  cargo: GroundUnit[];
   /** Which craft carries which units; each craft beaches and unloads on its own. */
   cargoByShip: Record<string, GroundUnit[]>;
   landed: number;
   island: Island;
   offshore: Vector2D;
-  land: Vector2D;
   home: Vector2D;
   phase: 'transit' | 'withdraw';
   age: number;
@@ -117,6 +114,10 @@ const BASE_ROSTER: Partial<Record<Era, { base: string; forward: string; units: C
       { type: 'cw_infantry_50', name: '格洛斯特團第1營 步兵排' },
       { type: 'tr_infantry_50', name: '土耳其旅 第241團 步兵排' },
       { type: 'gr_infantry_50', name: '希臘遠征軍 斯巴達營 步兵排' },
+      { type: 'tr_infantry_50', name: '衣索比亞皇家衛隊 卡格紐營 步兵排 (Kagnew)', minTier: 1 },
+      { type: 'tr_infantry_50', name: '哥倫比亞營 步兵排 (Batallón Colombia)', minTier: 1 },
+      { type: 'tr_infantry_50', name: '菲律賓遠征軍 第10營戰鬥團 步兵排 (PEFTOK)', minTier: 1 },
+      { type: 'tr_infantry_50', name: '泰國皇家陸軍 第21步兵團 小老虎營 排', minTier: 2 },
       { type: 'cw_bren_carrier', name: '皇家諾森伯蘭燧發槍團 布倫載具排', minTier: 1 },
       { type: 'fr_infantry_50', name: '聯合國軍法國營 步兵排 (砥平里)', minTier: 1 },
       { type: 'cw_churchill_50', name: '第7皇家坦克團C中隊 邱吉爾鱷魚戰車排', minTier: 2 },
@@ -136,8 +137,9 @@ const BASE_ROSTER: Partial<Record<Era, { base: string; forward: string; units: C
       { type: 'arvn_ranger_65', name: '越南共和國陸軍 第37遊騎兵營 排' },
       { type: 'rok_marine_65', name: '南韓海軍陸戰隊 青龍部隊 排' },
       { type: 'au_rar_65', name: '皇家澳洲團第6營 步兵排' },
+      { type: 'au_rar_65', name: '紐西蘭皇家步兵團 V連 步兵排 (ANZAC 營)', minTier: 1 },
       { type: 'rok_tiger_65', name: '南韓首都師 猛虎部隊 第1團 排' },
-      { type: 'th_cobra_67', name: '泰國皇家志願團「女王眼鏡蛇」排' },
+      { type: 'th_cobra_67', name: '泰國皇家志願團「女王眼鏡蛇」排', minTier: 1 },
       { type: 'au_sasr_66', name: '澳洲特種空勤團 第3中隊 巡邏隊', minTier: 1 },
       { type: 'arvn_m48a3', name: '越南共和國陸軍 第20戰車團 M48A3 排', minTier: 2 },
       { type: 'arvn_m113_acav', name: '越南共和國陸軍 第1裝騎團 M113「綠龍」排', minTier: 1 },
@@ -157,10 +159,17 @@ const BASE_ROSTER: Partial<Record<Era, { base: string; forward: string; units: C
       { type: 'uk_milan_team', name: '皇家綠夾克團第1營 MILAN 反戰車排' },
       { type: 'uk_warrior', name: '英國第7裝甲旅 武士步兵戰車排' },
       { type: 'nl_infantry_83', name: '荷蘭第1軍 第41裝甲旅 機械化步兵排' },
+      { type: 'frg_jaeger_83', name: '西德第1空降師 第261傘兵營 傘兵獵兵排 (Fallschirmjäger)' },
+      { type: 'uk_infantry_83', name: '皇家安格利亞團第1營 機械化步兵排 (FV432)' },
+      { type: 'fr_infantry_83', name: '法國第2軍 第3裝甲師 機械化步兵排 (VAB)', minTier: 1 },
+      { type: 'fr_amx30b2', name: '法國第2軍 第501戰車團 AMX-30B2 排', minTier: 2 },
       { type: 'frg_luchs', name: '西德第1裝甲師 山貓裝甲偵察排', minTier: 1 },
       { type: 'uk_sas_83', name: '英國第22特種空勤團 D中隊 巡邏隊', minTier: 1 },
       { type: 'nl_leopard1', name: '荷蘭第1軍 第41裝甲旅 豹1V 戰車排', minTier: 2 },
+      { type: 'nl_leopard1', name: '丹麥日德蘭師 豹1A3 戰車排 (LANDJUT)', minTier: 1 },
+      { type: 'frg_infantry_83', name: '西德第6裝甲擲彈兵師 擲彈兵排 (LANDJUT)' },
       { type: 'frg_gepard', name: '西德第1裝甲師 獵豹防空砲排', minTier: 1 },
+      { type: 'us_stinger_team', name: '西德第1裝甲擲彈兵旅 Fliegerfaust 2 (刺針) 防空小組', minTier: 1 },
       { type: 'frg_leopard2', name: '西德第3裝甲師 豹2戰車排', minTier: 1 },
       { type: 'frg_m109g', name: '西德第1砲兵團 M109G 自走砲連', minTier: 2 },
       { type: 'uk_challenger1', name: '皇家驃騎兵 挑戰者戰車排', minTier: 2 },
@@ -360,7 +369,7 @@ export class AlliedOps {
     } else {
       cargo.forEach((u, i) => (cargoByShip[transports[i % transports.length].id] ??= []).push(u));
     }
-    this.groups.push({ id: `lg-${ts}`, escortId: escort?.id, transportIds: transports.map((t) => t.id), cargo, cargoByShip, landed: 0, island, offshore, land, home, phase: 'transit', age: 0, progress: {} });
+    this.groups.push({ escortId: escort?.id, transportIds: transports.map((t) => t.id), cargoByShip, landed: 0, island, offshore, home, phase: 'transit', age: 0, progress: {} });
     h.banner(`⚓【盟軍搶灘支隊出航】${cargoDef.title}：${escort ? escort.name + ' 護航，' : ''}${useLst ? `戰車登陸艦${transports.length > 1 ? ` + LCVP ×${transports.length - 1}` : ''}` : `LCVP 登陸艇 ×${transports.length}`} 載運 ${cargo.length} 個排駛向「${island.name.split(' (')[0]}」！`);
   }
 

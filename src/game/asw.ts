@@ -202,11 +202,12 @@ export function updateDieselBattery(sub: Ship, dt: number, era: Era, nearestShip
 
   if (sub.isSnorkeling) {
     sub.battery = Math.min(1, battery + 0.02 * dt);
-    if (sub.battery >= 0.95 || nearestShip < 1000) sub.isSnorkeling = false;
+    // Lookouts or the ESM mast report an aircraft: pull the snorkel and go deep
+    if (sub.battery >= 0.95 || nearestShip < 1000 || nearestAircraft < 2500) sub.isSnorkeling = false;
     return sub.isSnorkeling ? { capKt: 6 } : {};
   }
   drain();
-  if ((sub.battery ?? 0) < 0.3 && nearestShip >= 1000) {
+  if ((sub.battery ?? 0) < 0.3 && nearestShip >= 1000 && nearestAircraft >= 2500) {
     sub.isSnorkeling = true;
     return { capKt: 6 };
   }
@@ -291,7 +292,7 @@ const ASW_FITS: Array<[RegExp, AswFit]> = [
   [/Jervis|Arunta|Warramunga|Quilliam|Armada/, { depthCharges: true }],
   // ── Era 3 Korean War
   [/Gearing|Frank Knox/, { depthCharges: true, aheadThrower: 'hedgehog' }],
-  [/Skory/, { depthCharges: true }],
+  [/Skory|Smotryashchy|Sposobny|Ozhestochonny|Vnimatelny|Vrazumitelny|Vidny/, { depthCharges: true }],
   [/Bataan|Cayuga|Cossack/, { depthCharges: true }],
   [/Defender/, { aheadThrower: 'squid', depthCharges: true }], // RN Daring class: one triple Squid
   [/Vampire/, { aheadThrower: 'limbo' }], // the RAN Darings were completed with Limbo in place of Squid
@@ -302,13 +303,13 @@ const ASW_FITS: Array<[RegExp, AswFit]> = [
   [/Charles F\. Adams|DDG-2\b/, { standoff: 'ASROC', svtt: true }],
   [/Forrest Sherman \(DD-931\)/, { aheadThrower: 'hedgehog', depthCharges: true, svtt: true }], // not ASW-modernised
   [/Knox \(FF?G-1052\)/, { standoff: 'ASROC', svtt: true }],
-  [/Sheffield \(Type 42|Gloucester|Type 42/, { svtt: true }], // STWS Mk 2
+  [/Sheffield 謝菲爾德號 \(D80|Coventry|Glasgow|Gloucester|Type 42/, { svtt: true }], // STWS Mk 2
   [/Andromeda/, { aheadThrower: 'limbo' }], // Leander as built: Limbo Mk 10
   [/Iroquois/, { aheadThrower: 'limbo', svtt: true }],
   [/Haruna|Shirane/, { standoff: 'ASROC', svtt: true }],
   [/Takatsuki/, { standoff: 'ASROC', svtt: true, aheadThrower: 'bofors375' }],
   [/Amatsukaze/, { standoff: 'ASROC', svtt: true, aheadThrower: 'hedgehog' }],
-  [/D39|D38|HMAS Hobart 荷巴特號|HMAS Perth/, { standoff: 'Ikara', svtt: true }], // RAN Perth class
+  [/D39|D38|HMAS Perth/, { standoff: 'Ikara', svtt: true }], // RAN Perth class
   // ── Era 5
   [/Ticonderoga \(CG-47\)/, { standoff: 'ASROC', svtt: true }], // CG-47..51 fire ASROC from Mk 26
   [/Virginia|Spruance|Kidd \(DDG-993\)/, { standoff: 'ASROC', svtt: true }],

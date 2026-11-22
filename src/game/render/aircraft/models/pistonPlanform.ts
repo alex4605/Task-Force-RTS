@@ -79,6 +79,8 @@ const SPECS: Partial<Record<AircraftModel, PistonSpec>> = {
   p51: { span: 26, rootChord: 6.4, tipChord: 3, wingX: 4, sweep: 0.4, tip: 'square', nose: 'inline', width: 3.2, canopy: { x: 1.5, len: 4.5, kind: 'bubble' }, radiator: true, ...USAAF_NMF },
   rokaf_p51: { span: 26, rootChord: 6.4, tipChord: 3, wingX: 4, sweep: 0.4, tip: 'square', nose: 'inline', width: 3.2, canopy: { x: 1.5, len: 4.5, kind: 'bubble' }, radiator: true, ...USAAF_NMF },
   f8f: { span: 25, rootChord: 5.8, tipChord: 3.2, wingX: 5, sweep: 0.6, tip: 'square', nose: 'radial', width: 4, canopy: { x: 2, len: 4.5, kind: 'bubble' }, ...USN_BLUE },
+  // La-11: the La-9's radial-engined long-range escort fighter, short canopy, wing root oil coolers
+  la11: { span: 22.5, rootChord: 5.4, tipChord: 2.4, wingX: 4.5, sweep: 1, tip: 'round', nose: 'radial', width: 3.4, canopy: { x: 1.5, len: 4.2, kind: 'framed' }, ...VVS_GREEN },
   yak9: { span: 22.5, rootChord: 5.6, tipChord: 2.4, wingX: 4.5, sweep: 1, tip: 'round', nose: 'inline', width: 3, canopy: { x: 1.5, len: 4.5, kind: 'framed' }, radiator: true, ...VVS_GREEN },
   il10: { span: 31, rootChord: 7, tipChord: 3, wingX: 5, sweep: 1.6, tip: 'square', nose: 'inline', width: 3.8, canopy: { x: 3, len: 7, kind: 'framed' }, radiator: true, ...VVS_GREEN },
   // US Navy carrier aircraft

@@ -1198,7 +1198,7 @@ export function drawPetyaFFG(rc: RenderContext, ship: Ship, hullColor: string, d
 // twin 25mm 2M-3 mounts fore and aft, small wheelhouse with radar mast.
 export function drawP6TorpedoBoat(rc: RenderContext, ship: Ship, hullColor: string, detailColor: string) {
   const ctx = rc.ctx;
-  if (/P-4/.test(ship.name)) {
+  if (/P-4|T-33\d/.test(ship.name)) {
     drawP4TorpedoBoat(ctx, ship, hullColor, detailColor);
     return;
   }

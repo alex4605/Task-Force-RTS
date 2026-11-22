@@ -36,10 +36,6 @@ class SoundEngine {
     return this.isMuted;
   }
 
-  public getMuted(): boolean {
-    return this.isMuted;
-  }
-
   // Heavy naval gun artillery salvo (16-inch / 8-inch battery)
   public playGunSalvo(isHeavy = true) {
     if (this.isMuted) return;
@@ -452,10 +448,6 @@ class SoundEngine {
     gain.connect(this.masterGain);
     osc.start(t);
     osc.stop(t + duration);
-  }
-
-  public playPlaneGun() {
-    this.playGunBurst();
   }
 }
 

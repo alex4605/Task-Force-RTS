@@ -9,8 +9,10 @@ import { Era, Island, MountainRidge, Vector2D } from '../../types/game';
  *
  *  era 3  Korea, east coast 1950-53: Kaema plateau and Chosin Reservoir, the Taebaek range,
  *         narrow coastal plain with the coastal road and railway, Sobaek range, Naktong basin.
- *  era 4  North Vietnam / Tonkin 1965-73: Red River delta with its distributaries, Ha Long and
- *         Ninh Binh karst, the Annamite (Truong Son) range and the Ho Chi Minh trail, Route 1.
+ *  era 4  Vietnam 1965-73, compressed north to south: the Viet Bac and Lang Son border, Ha Long
+ *         karst and the Red River delta (Hanoi), the DMZ on the Ben Hai, Khe Sanh and the A Shau,
+ *         Hue on the Perfume River, Da Nang, the Annamite (Truong Son) range with the Ho Chi Minh
+ *         trail, Route 1, and the Mekong at the southern edge.
  *  era 5  North German Plain / Schleswig-Holstein 1983-91: Elbe estuary, Weser and Aller, the
  *         Kiel Canal, Holstein lakes, Lüneburg Heath, the Harz, Wadden flats, autobahns.
  */
@@ -98,44 +100,46 @@ function tonkin(m: Island): void {
       ['12600,900', 1540, '諒山北部邊境主峰 [Lang Son Border Peak 1540m]'],
     ]),
     ridge('truong-son', 620, 1600, '13300,2600 12900,4400 12700,6300 12500,8200 12000,10000 11300,11800 10500,13400', [
-      ['12900,4400', 1600, '長山山脈北段 [Truong Son North 1600m]'],
-      ['12500,8200', 1250, '初邦山 [Chu Pong Massif 1250m]'],
-      ['11300,11800', 980, '波萊古高原隘口 [Pleiku Pass 980m]'],
+      ['12900,4400', 1600, '長山山脈 [Truong Son 1600m]'],
+      ['12500,8200', 2598, '玉嶺山 [Ngọc Linh 2598m]'],
+      ['11300,11800', 986, '黑婆山 [Núi Bà Đen 986m]'],
     ]),
-    ridge('khe-sanh', 320, 937, '9200,6100 9700,6600 10100,7200 10900,7900', [
-      ['9200,6100', 881, '溪山881南峰 [Hill 881 South]'],
-      ['9700,6600', 937, '漢堡高地 [Hamburger Hill 937m]'],
-      ['10100,7200', 875, '875高地 [Hill 875]'],
+    // Khe Sanh's hills just south of the DMZ, and the A Shau valley wall west of Hue
+    ridge('khe-sanh', 320, 937, '9100,4700 9600,4400 10100,5200 10600,6100', [
+      ['9600,4400', 881, '溪山881南峰 [Hill 881 South]'],
+      ['9100,4700', 861, '861高地 [Hill 861]'],
+      ['10600,6100', 937, '阿紹谷 漢堡高地 [Hamburger Hill 937m]'],
     ]),
     ridge('son-tra', 170, 693, '5300,9100 5600,8850 5850,8700', [['5600,8850', 693, '山茶半島猴山 [Son Tra Peak 693m]']]),
   ];
   m.terrainZones = [
     // Red River delta: dead-flat paddy country criss-crossed by dykes and distributaries
-    { kind: 'delta', points: P('5050,2700 6600,2500 8400,3200 9000,4200 8400,5300 7200,6000 5100,6200') },
+    { kind: 'delta', points: P('5050,1900 6600,1800 8400,2500 9000,3300 8000,3900 6600,4000 5100,4000') },
     // Ha Long Bay / Cam Pha karst behind the north coast
     { kind: 'karst', points: P('5100,300 7600,300 8600,1100 8200,2000 6600,2300 5100,2300') },
-    // Ninh Binh "Ha Long on land": towers rising from the southern edge of the delta
+    // Marble Mountains and the Hai Van karst between Hue and Da Nang
     { kind: 'karst', points: P('7300,6300 8600,6200 9200,6900 8600,7500 7500,7300') },
-    // Ca River (Vinh) coastal flats and mangrove fringe
+    // Mekong delta flats and mangrove fringe at the southern edge
     { kind: 'delta', points: P('5100,11600 6700,11800 7400,12900 6600,13900 5100,13900') },
   ];
   m.lakes = [{ id: 'ba-be', name: '巴貝湖', points: P('11300,2300 11600,2250 11750,2500 11500,2700 11300,2600') }];
   m.rivers = [
-    { width: 30, name: '紅河 Song Hong', points: P('13600,1300 12200,1900 10800,2600 9500,3200 8400,3700 7600,4100 6800,4400 6000,4500 5040,4600') },
-    { width: 18, name: '太平江', points: P('7600,4100 6900,3600 6100,3200 5040,3000') },
-    { width: 16, name: '底江', points: P('7000,4350 6600,5100 6000,5700 5060,6000') },
-    { width: 20, name: '沱江 Song Da', points: P('13400,4400 12000,4500 10800,4200 9900,3700 9500,3200') },
-    { width: 22, name: '馬江 Song Ma', points: P('13000,5800 11400,6300 10000,6900 8800,7300 7600,7100 6500,6800 5080,6850') },
-    { width: 24, name: '藍江 Song Ca', points: P('13200,9600 11800,10300 10400,11100 9000,11900 7800,12600 6600,13100 5150,13500') },
+    { width: 30, name: '紅河 Song Hong', points: P('13600,1000 12200,1500 10800,2100 9500,2600 8400,3000 7600,3300 6800,3500 6000,3600 5040,3700') },
+    { width: 18, name: '太平江', points: P('7600,3300 6900,2900 6100,2600 5040,2500') },
+    { width: 16, name: '底江', points: P('7000,3550 6500,3800 5900,3950 5060,4000') },
+    { width: 20, name: '沱江 Song Da', points: P('13400,3800 12000,3700 10800,3300 9900,2900 9500,2600') },
+    // The Ben Hai: the 17th parallel and the DMZ
+    { width: 12, name: '濱海河 Bến Hải (DMZ)', points: P('12000,4100 10600,4050 9000,4100 8200,4200 7400,4350 6400,4550 5200,4700') },
+    { width: 22, name: '香江 Sông Hương', points: P('13000,5800 11400,6300 10000,6900 8800,7300 7600,7100 6500,6800 5080,6850') },
+    { width: 24, name: '湄公河 前江 (Tiền Giang)', points: P('13200,9600 11800,10300 10400,11100 9000,11900 7800,12600 6600,13100 5150,13500') },
     { width: 14, points: P('11000,12800 9800,12500 9000,11900') },
-    { width: 12, name: '濱海河 (DMZ)', points: P('12000,10000 10600,9800 9000,9600 7400,9500 5200,9400') },
   ];
   m.roads = [
     // Route 1 and the Hanoi–Saigon railway down the coast
     { type: 'road', points: P('5400,400 5900,2400 6300,4300 6800,6400 7300,7800 7700,9800 7600,11600 7200,13600') },
     { type: 'rail', points: P('5550,400 6050,2400 6450,4300 6950,6400 7450,7800 7850,9800 7750,11600 7350,13600') },
-    // Hanoi – Haiphong highway (Route 5) and the Route 6 / 7 mountain roads
-    { type: 'road', points: P('8400,3700 7400,4000 6400,4100 5300,4000') },
+    // Hanoi – Haiphong highway (Route 5) and Route 9 from Dong Ha up to Khe Sanh and Laos
+    { type: 'road', points: P('8400,3000 7400,3200 6400,3300 5300,3200') },
     { type: 'road', points: P('6800,6400 7900,5500 9200,4500 10600,3800 11800,3400') },
     // Ho Chi Minh trail: braided tracks along the Truong Son
     { type: 'trail', points: P('11800,3400 12200,5000 11900,6800 12000,8600 11500,10400 10900,12200') },
@@ -171,17 +175,18 @@ function northGermanPlain(m: Island): void {
     { kind: 'plantation', points: P('7000,10600 7800,10500 7900,11200 7100,11300') },
   ];
   m.lakes = [
-    { id: 'ploen', name: '大普倫湖 Großer Plöner See', points: P('12800,2700 13300,2650 13450,3000 13200,3350 12850,3250 12700,3000') },
-    { id: 'ratzeburg', name: '拉策堡湖', points: P('13200,4800 13400,4750 13500,5300 13300,5600 13150,5200') },
+    { id: 'ploen', name: '大普倫湖 Großer Plöner See', points: P('12800,5100 13300,5050 13450,5400 13200,5750 12850,5650 12700,5400') },
+    { id: 'ratzeburg', name: '拉策堡湖', points: P('13200,7000 13400,6950 13500,7500 13300,7800 13150,7400') },
     { id: 'steinhude', name: '斯坦胡德湖 Steinhuder Meer', points: P('11200,12900 11700,12800 11900,13100 11500,13350 11150,13200') },
   ];
   m.rivers = [
-    { width: 20, name: '基爾運河 Nord-Ostsee-Kanal', straight: true, points: P('5020,2300 6400,2350 8000,2200 9600,2000 11200,1700 12600,1300 13900,1100') },
+    // The Eider runs north of the Kiel Canal, which cuts across Holstein from the Elbe side to Kiel
+    { width: 14, name: '艾德河 Eider', points: P('5020,2300 6400,2350 8000,2200 9600,2000 11200,1700 12600,1300 13900,1100') },
     { width: 46, name: '易北河 Elbe', points: P('13900,8100 12600,8400 11400,8800 10200,8950 9000,8800 7800,9100 6800,9400 6000,9600 5020,9700') },
     { width: 14, name: '施托爾河', points: P('9000,5200 8600,6300 7900,7300 7700,8200 7800,9100') },
     { width: 32, name: '威悉河 Weser', points: P('12600,13900 11400,13000 10200,12600 9000,12700 7800,12900 6400,13200 5150,13300') },
     { width: 18, name: '阿勒爾河 Aller', points: P('13700,10200 12600,10900 11400,11600 10200,12600') },
-    { width: 14, name: '艾德河 Eider', points: P('10600,4400 9200,4600 7800,4500 6400,4300 5040,4300') },
+    { width: 20, name: '基爾運河 Nord-Ostsee-Kanal', straight: true, points: P('13900,3600 12200,4000 10600,4400 9200,4600 7800,4500 6400,4300 5040,4300') },
     { width: 10, points: P('12800,6200 11800,6800 11200,7600 11400,8600') },
   ];
   m.roads = [

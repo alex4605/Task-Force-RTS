@@ -1,5 +1,9 @@
 // Per-type installation artwork. Each drawer runs with the canvas translated to the installation's position.
 import { Era, Installation, InstallationType, Island } from '../../../types/game';
+import { drawBunkerSite, drawCacheSite, drawCoastalGunSite, drawFanSongSite, drawFerrySite, drawRadarSite, drawRadioSite, drawSamBatterySite, drawTunnelSite, drawWatchtowerSite } from './groundSites';
+import { drawCivilWharf, drawCopraPlantation, drawFactory, drawPagoda, drawPowerPlant, drawSugarMill } from './civilEconomy';
+import { drawAirfieldSite, drawMajorPortSite, drawPontoonPierSite, drawRailStationSite, drawRepairDockSite } from './aviationPorts';
+import { drawAmmoDepotSite, drawBattalionCpSite, drawCivilHospitalSite, drawCommandPostSite, drawFieldHospitalSite, drawMotorPoolSite, drawSupplyDepotSite } from './support';
 import { RenderContext } from '../context';
 import { drawGroundSilhouette, GROUND_SILHOUETTE_SCALE, groundSilhouetteClass } from '../../unitPreviewRenderer';
 import { InstallationStyle } from './style';
@@ -7,214 +11,9 @@ import { InstallationStyle } from './style';
 /** Draws the type-specific body of one installation in its local frame. */
 export type InstallationDrawer = (rc: RenderContext, inst: Installation, style: InstallationStyle, island?: Island) => void;
 
-function drawAirfield(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-  const { isPlayer, color, labelColor } = style;
 
-  // Runway concrete apron & blast pad shadow
-  ctx.fillStyle = 'rgba(2, 8, 16, 0.55)';
-  ctx.fillRect(-67, -11, 134, 26);
 
-  ctx.lineWidth = 2;
-  ctx.fillStyle = '#0F1C2A';
-  ctx.fillRect(-65, -12, 130, 24);
-  ctx.strokeRect(-65, -12, 130, 24);
 
-  // Runway threshold piano keys
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
-  for (const tx of [-61, 55]) {
-    for (const ty of [-8, -3, 2, 7]) {
-      ctx.fillRect(tx, ty - 1, 6, 2);
-    }
-  }
-
-  // Centerline dashes
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
-  ctx.lineWidth = 1.5;
-  ctx.setLineDash([8, 8]);
-  ctx.beginPath();
-  ctx.moveTo(-48, 0);
-  ctx.lineTo(48, 0);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Hangar & control tower apron
-  ctx.fillStyle = '#182C3E';
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
-  ctx.fillRect(10, 15, 16, 13);
-  ctx.strokeRect(10, 15, 16, 13);
-  ctx.fillStyle = '#FFD54F';
-  ctx.fillRect(-6, 15, 7, 7);
-  ctx.strokeRect(-6, 15, 7, 7);
-
-  ctx.fillStyle = labelColor;
-  ctx.font = 'bold 8.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(isPlayer ? '✈️ [友軍航空基地 AFB]' : '✈️ [敵軍航空基地 AFB]', 0, -18);
-}
-
-function drawCoastalGun(rc: RenderContext, inst: Installation, style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-  const { isPlayer, labelColor } = style;
-
-  const is240mm = inst.name.includes('240mm') || inst.id.includes('240');
-  if (is240mm) {
-    // M1 240mm "Black Dragon" 重型八角混凝土砲座固定重砲
-    ctx.lineWidth = 2.2;
-    ctx.beginPath();
-    for (let i = 0; i < 8; i++) {
-      const a = (i * Math.PI) / 4 + Math.PI / 8;
-      const x = Math.cos(a) * 16;
-      const y = Math.sin(a) * 16;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
-    ctx.fillStyle = isPlayer ? 'rgba(13, 71, 161, 0.78)' : 'rgba(78, 52, 46, 0.8)';
-    ctx.fill();
-    ctx.stroke();
-
-    // Gun carriage & dual hydraulic recuperator cylinders
-    ctx.fillStyle = isPlayer ? '#546E7A' : '#5D4037';
-    ctx.fillRect(-10, -7, 16, 14);
-    ctx.strokeRect(-10, -7, 16, 14);
-
-    // Long heavy 240mm barrel + recoil cylinders
-    ctx.lineWidth = 4.2;
-    ctx.strokeStyle = isPlayer ? '#80DEEA' : '#FF8A80';
-    ctx.beginPath();
-    ctx.moveTo(2, 0);
-    ctx.lineTo(34, 0);
-    ctx.stroke();
-
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = isPlayer ? '#B2EBF2' : '#FFCDD2';
-    ctx.beginPath();
-    ctx.moveTo(2, -4.5);
-    ctx.lineTo(15, -4.5);
-    ctx.moveTo(2, 4.5);
-    ctx.lineTo(15, 4.5);
-    ctx.stroke();
-
-    ctx.fillStyle = labelColor;
-    ctx.font = 'bold 8.5px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(isPlayer ? '[友軍重砲] M1 240mm 黑龍' : '[敵軍要塞重砲] 240mm', 0, -24);
-  } else {
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(0, 0, 12, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.fillStyle = isPlayer ? 'rgba(21, 101, 192, 0.65)' : 'rgba(78, 52, 46, 0.75)';
-    ctx.fill();
-
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = isPlayer ? '#80DEEA' : '#FF8A80';
-    ctx.beginPath();
-    ctx.moveTo(4, -3);
-    ctx.lineTo(24, -3);
-    ctx.moveTo(4, 3);
-    ctx.lineTo(24, 3);
-    ctx.stroke();
-
-    const caliberMatch = inst.name.match(/\d{3}mm/);
-    const calText = caliberMatch ? caliberMatch[0] : (isPlayer ? '155mm' : '140mm');
-    ctx.fillStyle = labelColor;
-    ctx.font = 'bold 8.5px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(isPlayer ? `[友軍岸防砲連] ${calText}` : `[敵軍岸防重砲] ${calText}`, 0, -20);
-  }
-}
-
-function drawRadarStation(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-  const { isPlayer, labelColor } = style;
-
-  ctx.fillStyle = '#0F2234';
-  ctx.lineWidth = 2;
-  ctx.fillRect(-10, -10, 20, 20);
-  ctx.strokeRect(-10, -10, 20, 20);
-
-  const radarAngle = rc.time * 3;
-  // Soft sweep wedge
-  ctx.fillStyle = isPlayer ? 'rgba(100, 255, 218, 0.14)' : 'rgba(255, 138, 128, 0.14)';
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.arc(0, 0, 28, radarAngle - 0.35, radarAngle);
-  ctx.closePath();
-  ctx.fill();
-
-  // Rotating parabolic dish reflector bar
-  ctx.strokeStyle = '#ECEFF1';
-  ctx.lineWidth = 2.2;
-  ctx.beginPath();
-  ctx.moveTo(-Math.sin(radarAngle) * 7, Math.cos(radarAngle) * 7);
-  ctx.lineTo(Math.sin(radarAngle) * 7, -Math.cos(radarAngle) * 7);
-  ctx.stroke();
-
-  ctx.strokeStyle = isPlayer ? 'rgba(100, 255, 218, 0.7)' : 'rgba(255, 138, 128, 0.7)';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(Math.cos(radarAngle) * 32, Math.sin(radarAngle) * 32);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(0, 0, 26, 0, Math.PI * 2);
-  ctx.stroke();
-
-  ctx.fillStyle = labelColor;
-  ctx.font = 'bold 8.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(isPlayer ? '[友軍早期電探哨] SCR-270' : '[敵軍防空電探哨] 二一號', 0, -22);
-}
-
-function drawAmmoDepot(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-  const { isPlayer, color, labelColor } = style;
-
-  // Ammunition storage area: earth-covered igloo magazines in staggered rows (spaced against
-  // sympathetic detonation), a perimeter fence, access road and above-ground fuel tanks.
-  ctx.strokeStyle = 'rgba(176, 190, 197, 0.55)';
-  ctx.lineWidth = 0.8;
-  ctx.setLineDash([2, 1.5]);
-  ctx.strokeRect(-20, -14, 40, 30);
-  ctx.setLineDash([]);
-  // Access road
-  ctx.strokeStyle = 'rgba(176, 164, 140, 0.6)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(-20, 1);
-  ctx.lineTo(20, 1);
-  ctx.stroke();
-  // Igloos: earth mound with a concrete headwall facing the road
-  for (const [x, y, face] of [[-13, -7, 1], [0, -7, 1], [13, -7, 1], [-7, 9, -1], [7, 9, -1]] as const) {
-    ctx.fillStyle = 'rgba(85, 107, 47, 0.95)';
-    ctx.strokeStyle = 'rgba(30, 40, 20, 0.9)';
-    ctx.lineWidth = 0.8;
-    ctx.beginPath();
-    ctx.ellipse(x, y, 4.5, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = '#B0BEC5';
-    ctx.fillRect(x - 2.5, y + face * 3.2 - 0.6, 5, 1.2);
-  }
-  // Fuel storage tanks
-  ctx.fillStyle = isPlayer ? '#546E7A' : '#5D4037';
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 0.9;
-  for (const x of [-16, 16]) {
-    ctx.beginPath();
-    ctx.arc(x, 10, 3, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  }
-
-  ctx.fillStyle = labelColor;
-  ctx.font = 'bold 8.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(isPlayer ? '[友軍戰略油彈庫]' : '[敵軍戰略彈藥庫]', 0, -23);
-}
 
 function drawInfantrySquad(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
   const ctx = rc.ctx;
@@ -454,264 +253,11 @@ function drawFlakBattery(rc: RenderContext, _inst: Installation, style: Installa
   ctx.fillText(emplacementLabel('flak_battery', isPlayer, rc.era), 0, -35);
 }
 
-function drawShipRepairDock(rc: RenderContext, _inst: Installation, _style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
 
-  // ════ NATO 船舶維修設施 / 應急修船浮塢 (Ship Repair Facility & Floating Drydock) ════
-  // 1. NATO APP-6 Maintenance Tactical Box Frame (友軍藍戰術框 + 扳手維修符號)
-  ctx.fillStyle = 'rgba(21, 101, 192, 0.55)';
-  ctx.strokeStyle = '#42A5F5';
-  ctx.lineWidth = 2.2;
-  ctx.strokeRect(-18, -32, 36, 18);
-  ctx.fillRect(-18, -32, 36, 18);
 
-  // NATO 維修符號: 交叉工具
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 1.8;
-  ctx.beginPath();
-  ctx.moveTo(-9, -27);
-  ctx.lineTo(9, -15);
-  ctx.moveTo(9, -27);
-  ctx.lineTo(-9, -15);
-  ctx.stroke();
 
-  // "REP" 標記
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = 'bold 8px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('REP', 0, -18);
 
-  // 2. 地面與水域物理設施: 巨大浮動修船塢槽 (Floating U-Drydock Basin) + 起重機桁架 + 焊接閃光
-  ctx.fillStyle = '#1A2938';
-  ctx.strokeStyle = '#42A5F5';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(-24, -12, 10, 48);
-  ctx.fillRect(-24, -12, 10, 48);
-  ctx.strokeRect(14, -12, 10, 48);
-  ctx.fillRect(14, -12, 10, 48);
 
-  // 塢底基座
-  ctx.strokeStyle = '#90CAF9';
-  ctx.lineWidth = 2.4;
-  ctx.beginPath();
-  ctx.moveTo(-24, 36);
-  ctx.lineTo(24, 36);
-  ctx.stroke();
-
-  // 浮動船塢水槽
-  ctx.fillStyle = 'rgba(3, 169, 244, 0.2)';
-  ctx.fillRect(-14, -12, 28, 48);
-
-  // 旋臂造船起重機
-  const craneRot = rc.time * 0.8;
-  ctx.strokeStyle = '#FFD54F';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(-19, 0);
-  ctx.lineTo(-19 + Math.cos(craneRot) * 18, Math.sin(craneRot) * 18);
-  ctx.stroke();
-
-  // 電銲搶修動態火花
-  const weldFlash = (Math.sin(rc.time * 16) + 1) * 0.5;
-  ctx.fillStyle = `rgba(128, 222, 234, ${0.4 + weldFlash * 0.5})`;
-  ctx.beginPath();
-  ctx.arc(0, 12, 5 + weldFlash * 4, 0, Math.PI * 2);
-  ctx.fill();
-
-  // 標籤
-  ctx.fillStyle = '#80DEEA';
-  ctx.font = 'bold 8.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('⚓ [NATO 友軍船塢 REPAIR] 應急損管修船廠', 0, -38);
-}
-
-function drawCommandPost(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-  const { isPlayer, frameFill, frameStroke, labelColor } = style;
-
-  // ════ NATO 指揮所司令部 (APP-6 Command Post: Headquarters Flag + Fortified Bunker) ════
-  // 1. NATO APP-6 Headquarters Frame (友軍藍 / 敵軍紅 + 左側旗桿 Flagpole)
-  ctx.fillStyle = frameFill;
-  ctx.strokeStyle = frameStroke;
-  ctx.lineWidth = 2.2;
-  ctx.strokeRect(-16, -32, 32, 18);
-  ctx.fillRect(-16, -32, 32, 18);
-
-  // 左側指揮所旗桿延伸線 (Headquarters Staff/Flagpole)
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(-16, -32);
-  ctx.lineTo(-16, -42);
-  ctx.stroke();
-
-  // "CP" 字樣標示
-  ctx.fillStyle = '#FFFFFF';
-  ctx.font = 'bold 10px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('CP', 0, -20);
-
-  // 2. 地面物理建築: 重裝甲鋼筋混泥土司令掩體 + 旋轉無線電雷達天線
-  ctx.fillStyle = isPlayer ? 'rgba(21, 101, 192, 0.45)' : '#263238';
-  ctx.strokeStyle = isPlayer ? '#81C784' : '#90A4AE';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(-18, -4, 36, 26);
-  ctx.fillRect(-18, -4, 36, 26);
-
-  // 司令部防爆觀察窗狹縫
-  ctx.fillStyle = '#FFD54F';
-  ctx.fillRect(-12, 4, 24, 4);
-
-  // 通訊雷達天線桿
-  const antRot = rc.time * 2.5;
-  ctx.strokeStyle = '#80DEEA';
-  ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  ctx.moveTo(0, -4);
-  ctx.lineTo(0, -18);
-  ctx.moveTo(-7 * Math.cos(antRot), -18 - 7 * Math.sin(antRot));
-  ctx.lineTo(7 * Math.cos(antRot), -18 + 7 * Math.sin(antRot));
-  ctx.stroke();
-
-  // 標籤
-  ctx.fillStyle = labelColor;
-  ctx.font = 'bold 9.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(isPlayer ? '🚩 [NATO 友軍指揮所 CP] 後勤要塞' : '🚩 [NATO 指揮所 CP] 核心樞紐', 0, -46);
-}
-
-function drawHiddenTunnel(rc: RenderContext, _inst: Installation, _style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-
-  // ════ 隱蔽地下坑道掩體 (Hidden Bomb Shelter / Tunnel Entrance) ════
-  ctx.fillStyle = 'rgba(62, 39, 35, 0.85)';
-  ctx.strokeStyle = '#8D6E63';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(0, 0, 14, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-
-  // 蛛網洞穴掩蔽木板
-  ctx.strokeStyle = '#D7CCC8';
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  ctx.moveTo(-10, -5);
-  ctx.lineTo(10, 5);
-  ctx.moveTo(-10, 5);
-  ctx.lineTo(10, -5);
-  ctx.stroke();
-
-  ctx.fillStyle = '#BCAAA4';
-  ctx.font = 'bold 8.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('[地下坑道網]', 0, -18);
-}
-
-function drawPontoonPier(rc: RenderContext, inst: Installation, _style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-
-  // ════ 浮式人工棧橋港 (Expedient Pontoon Pier / 急造港口) ════
-  // 浮動突堤棧橋 (Modular Pontoon Pier) + 卸載吊桿
-  ctx.lineWidth = 2.2;
-  ctx.strokeStyle = '#4FC3F7';
-  ctx.fillStyle = 'rgba(2, 136, 209, 0.45)';
-  ctx.strokeRect(-28, -8, 56, 16);
-  ctx.fillRect(-28, -8, 56, 16);
-
-  // 突堤木質棧道橫條紋
-  ctx.strokeStyle = '#81D4FA';
-  ctx.lineWidth = 1.2;
-  for (let px = -24; px <= 24; px += 6) {
-    ctx.beginPath();
-    ctx.moveTo(px, -8);
-    ctx.lineTo(px, 8);
-    ctx.stroke();
-  }
-
-  // 吊運起重桁架桿
-  ctx.strokeStyle = '#FFD54F';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(15, 0);
-  ctx.lineTo(26, -14);
-  ctx.lineTo(32, -8);
-  ctx.stroke();
-
-  // 標籤與工兵升級進度
-  ctx.fillStyle = '#80D8FF';
-  ctx.font = 'bold 9px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('⚓ [浮式人工棧橋港] 急造港口 (補給線連通)', 0, -22);
-
-  if (inst.upgradeTimer && inst.upgradeTimer > 0) {
-    const upProg = Math.min(1, inst.upgradeTimer / 35.0);
-    ctx.fillStyle = '#FFD54F';
-    ctx.fillText(`🔨 工兵拓建中: ${Math.round(inst.upgradeTimer)}s / 35s`, 0, 26);
-    ctx.fillStyle = 'rgba(7, 19, 34, 0.9)';
-    ctx.fillRect(-20, 29, 40, 3.5);
-    ctx.fillStyle = '#FFD54F';
-    ctx.fillRect(-20, 29, 40 * upProg, 3.5);
-  }
-}
-
-function drawMajorNavalPort(rc: RenderContext, _inst: Installation, _style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-
-  // ════ 正規深水軍港 (Major Deepwater Naval Port) ════
-  // 現代化大型深水混凝土突堤碼頭 + 港埠起重機
-  ctx.lineWidth = 2.6;
-  ctx.strokeStyle = '#00E5FF';
-  ctx.fillStyle = 'rgba(0, 151, 167, 0.55)';
-  ctx.strokeRect(-42, -14, 84, 28);
-  ctx.fillRect(-42, -14, 84, 28);
-
-  // 大型龍門吊車架構
-  ctx.strokeStyle = '#FFE082';
-  ctx.lineWidth = 2.2;
-  ctx.beginPath();
-  ctx.moveTo(-20, -14);
-  ctx.lineTo(-20, -26);
-  ctx.lineTo(20, -26);
-  ctx.lineTo(20, -14);
-  ctx.stroke();
-
-  // 突堤泊靠繫纜樁
-  ctx.fillStyle = '#FFFFFF';
-  for (const bx of [-36, -18, 0, 18, 36]) {
-    ctx.beginPath();
-    ctx.arc(bx, -12, 2.2, 0, Math.PI * 2);
-    ctx.arc(bx, 12, 2.2, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  ctx.fillStyle = '#80DEEA';
-  ctx.font = 'bold 9.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('⚓【正規深水軍港】全島戰略樞紐 (+1.5 RP/s)', 0, -32);
-}
-
-function drawSupplyDepot(rc: RenderContext, _inst: Installation, _style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-
-  // ════ 戰地輜重補給樞紐 (Supply Depot) ════
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = '#FFA726';
-  ctx.fillStyle = 'rgba(230, 81, 0, 0.45)';
-  ctx.strokeRect(-22, -12, 44, 24);
-  ctx.fillRect(-22, -12, 44, 24);
-
-  // 彈藥箱堆疊符號
-  ctx.strokeStyle = '#FFE082';
-  ctx.lineWidth = 1.4;
-  ctx.strokeRect(-16, -6, 12, 12);
-  ctx.strokeRect(4, -6, 12, 12);
-
-  ctx.fillStyle = '#FFE082';
-  ctx.font = 'bold 9px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('📦 [戰地輜重樞紐] 建制度修整 +2.0%/s', 0, -20);
-}
 
 function drawPowCamp(rc: RenderContext, inst: Installation, style: InstallationStyle, _island?: Island): void {
   const ctx = rc.ctx;
@@ -752,26 +298,6 @@ function drawPowCamp(rc: RenderContext, inst: Installation, style: InstallationS
   ctx.fillText(style.isPlayer ? `⛓ [戰俘營] 收押 ${n}/80${wait}` : `⛓ [敵戰俘營] 我方被俘 ${n}/80${wait} · 禁止射擊`, 0, -28);
 }
 
-function drawFieldHospital(rc: RenderContext, _inst: Installation, _style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-
-  // ════ 戰地野戰醫院 (Field Hospital) ════
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = '#EF5350';
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-  ctx.strokeRect(-20, -12, 40, 24);
-  ctx.fillRect(-20, -12, 40, 24);
-
-  // 紅十字 Red Cross
-  ctx.fillStyle = '#D32F2F';
-  ctx.fillRect(-3, -8, 6, 16);
-  ctx.fillRect(-8, -3, 16, 6);
-
-  ctx.fillStyle = '#EF5350';
-  ctx.font = 'bold 9px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('🏥 [戰地野戰醫院] 組織度穩定 +2.5%/s', 0, -20);
-}
 
 function drawCity(rc: RenderContext, inst: Installation, _style: InstallationStyle, _island?: Island): void {
   const ctx = rc.ctx;
@@ -930,124 +456,7 @@ function drawRefugeeCamp(rc: RenderContext, _inst: Installation, _style: Install
   ctx.fillText(`⛺【人道救援難民營】誤擊扣政治值`, 0, -26);
 }
 
-function drawBunkerNest(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-  const { isPlayer } = style;
 
-  // ════ 加固鋼筋混凝土暗堡與機槍碉堡 (Fortified Concrete Bunker & MG Nest) ════
-  // 1. 沙袋半月形外圍防護堤
-  ctx.strokeStyle = '#BCAAA4';
-  ctx.fillStyle = 'rgba(78, 52, 46, 0.75)';
-  ctx.lineWidth = 2.2;
-  ctx.beginPath();
-  ctx.arc(0, 4, 18, -Math.PI * 0.85, Math.PI * 0.85);
-  ctx.stroke();
-  ctx.fill();
-
-  // 2. 八角形鋼筋混泥土厚重工事主體
-  ctx.fillStyle = isPlayer ? 'rgba(21, 101, 192, 0.65)' : '#37474F';
-  ctx.strokeStyle = isPlayer ? '#42A5F5' : '#78909C';
-  ctx.lineWidth = 2.4;
-  ctx.beginPath();
-  for (let i = 0; i < 8; i++) {
-    const ang = (i * Math.PI) / 4 + Math.PI / 8;
-    const bx = Math.cos(ang) * 14;
-    const by = Math.sin(ang) * 14;
-    if (i === 0) ctx.moveTo(bx, by);
-    else ctx.lineTo(bx, by);
-  }
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-
-  // 3. 橫向防爆射擊狹縫 (Firing Embrasures)
-  ctx.fillStyle = '#1A237E';
-  ctx.fillRect(-8, -2, 16, 3.5);
-  ctx.fillStyle = '#FF5252';
-  ctx.fillRect(-2, -1, 4, 1.8);
-
-  // 4. 重機槍與無後座力砲身
-  ctx.strokeStyle = '#FFE082';
-  ctx.lineWidth = 2.2;
-  ctx.beginPath();
-  ctx.moveTo(0, 0);
-  ctx.lineTo(16, 0);
-  ctx.moveTo(8, -3);
-  ctx.lineTo(8, 3);
-  ctx.stroke();
-
-  // 5. 標籤
-  ctx.fillStyle = isPlayer ? '#90CAF9' : '#FF8A80';
-  ctx.font = 'bold 8.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(isPlayer ? '🛡️ [NATO 友軍加固暗堡] 重機槍/無後座力砲' : '🛡️ [敵軍加固防禦暗堡] 重機槍/穿甲砲', 0, -24);
-}
-
-function drawSamHawk(rc: RenderContext, inst: Installation, _style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-
-  // ════ 美軍陸戰隊 MIM-23 鷹式 / MIM-104 愛國者防空飛彈營 ════
-  // 1. NATO APP-6 防空飛彈長方框標記
-  ctx.fillStyle = 'rgba(21, 101, 192, 0.65)';
-  ctx.strokeStyle = '#42A5F5';
-  ctx.lineWidth = 2.2;
-  ctx.strokeRect(-16, -30, 32, 17);
-  ctx.fillRect(-16, -30, 32, 17);
-
-  // 防空圓頂 + 向上飛彈箭頭
-  ctx.strokeStyle = '#FFFFFF';
-  ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  ctx.arc(0, -18, 5, Math.PI, 0);
-  ctx.moveTo(-6, -18);
-  ctx.lineTo(6, -18);
-  ctx.moveTo(0, -14);
-  ctx.lineTo(0, -25);
-  ctx.lineTo(-3, -22);
-  ctx.moveTo(0, -25);
-  ctx.lineTo(3, -22);
-  ctx.stroke();
-
-  // 2. 圓形旋轉發射基座
-  ctx.fillStyle = '#263238';
-  ctx.strokeStyle = '#78909C';
-  ctx.lineWidth = 1.8;
-  ctx.beginPath();
-  ctx.arc(0, 6, 12, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-
-  // 3. 三聯裝鷹式飛彈導軌與 3 枚白色羽翼飛彈 (或愛國者四聯裝箱式發射架)
-  const hawkRot = rc.time * 0.4;
-  for (let m = 0; m < (inst.type === 'sam_patriot' ? 4 : 3); m++) {
-    const mAngle = hawkRot + (m * Math.PI * 2) / (inst.type === 'sam_patriot' ? 4 : 3);
-    const mx = Math.cos(mAngle) * 8;
-    const my = 6 + Math.sin(mAngle) * 8;
-
-    ctx.strokeStyle = '#ECEFF1';
-    ctx.lineWidth = 2.2;
-    ctx.beginPath();
-    ctx.moveTo(mx, my);
-    ctx.lineTo(mx + Math.cos(mAngle) * 14, my + Math.sin(mAngle) * 14);
-    ctx.stroke();
-
-    // 標誌性梯形翼
-    ctx.strokeStyle = '#80DEEA';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(mx + Math.cos(mAngle) * 5, my + Math.sin(mAngle) * 5);
-    ctx.lineTo(mx + Math.cos(mAngle) * 5 - Math.sin(mAngle) * 4, my + Math.sin(mAngle) * 5 + Math.cos(mAngle) * 4);
-    ctx.moveTo(mx + Math.cos(mAngle) * 5, my + Math.sin(mAngle) * 5);
-    ctx.lineTo(mx + Math.cos(mAngle) * 5 + Math.sin(mAngle) * 4, my + Math.sin(mAngle) * 5 - Math.cos(mAngle) * 4);
-    ctx.stroke();
-  }
-
-  // 4. 標籤
-  ctx.fillStyle = '#80DEEA';
-  ctx.font = 'bold 8.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(inst.type === 'sam_patriot' ? '🚀 [NATO 愛國者防空飛彈營] MIM-104 Patriot (相列雷達多通道攔截)' : '🚀 [NATO 友軍霍克防空飛彈 SAM] MIM-23 Hawk (自動攔截)', 0, -36);
-}
 
 function drawSa2SamSite(rc: RenderContext, inst: Installation, _style: InstallationStyle, _island?: Island): void {
   const ctx = rc.ctx;
@@ -1276,49 +685,6 @@ function drawScudSite(rc: RenderContext, _inst: Installation, _style: Installati
   ctx.fillText('🚀 [華約 9K72 飛毛腿-B 戰術飛彈營] Scud-B SSM (6500m)', 0, -24);
 }
 
-function drawFanSongRadar(rc: RenderContext, _inst: Installation, _style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-
-  // ════ 敵軍扇歌射控火控雷達 (SNR-75 Fan Song Dual Orthogonal Lewis Scanners) ════
-  ctx.fillStyle = '#263238';
-  ctx.strokeStyle = '#FF1744';
-  ctx.lineWidth = 2.0;
-  ctx.fillRect(-13, -10, 26, 20);
-  ctx.strokeRect(-13, -10, 26, 20);
-
-  // 雙正交橙紅拋物面扇形掃描天線 (Horizontal + Vertical Fan Arrays)
-  const radarRot = rc.time * 2.2;
-  ctx.save();
-  ctx.rotate(radarRot);
-  ctx.strokeStyle = '#FF8A65';
-  ctx.lineWidth = 2.8;
-  ctx.beginPath();
-  ctx.moveTo(-10, -4);
-  ctx.lineTo(10, -4);
-  ctx.moveTo(4, -10);
-  ctx.lineTo(4, 10);
-  ctx.stroke();
-  ctx.fillStyle = '#FF5252';
-  ctx.beginPath();
-  ctx.arc(0, 0, 3.2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-
-  // 電磁波輻射環 (供 AGM-45 反輻射飛彈鎖定示意)
-  const radPulse = (Math.sin(rc.time * 6) + 1) * 0.5;
-  ctx.strokeStyle = `rgba(255, 23, 68, ${0.3 + radPulse * 0.5})`;
-  ctx.lineWidth = 1.5;
-  ctx.setLineDash([3, 3]);
-  ctx.beginPath();
-  ctx.arc(0, 0, 22 + radPulse * 8, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  ctx.fillStyle = '#FF8A80';
-  ctx.font = 'bold 8.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('📡 [敵軍射控火控雷達] Fan Song 扇歌 (高頻輻射)', 0, -24);
-}
 
 function drawRubberPlantation(rc: RenderContext, inst: Installation, style: InstallationStyle, _island?: Island): void {
   const ctx = rc.ctx;
@@ -1358,166 +724,9 @@ function drawRubberPlantation(rc: RenderContext, inst: Installation, style: Inst
   ctx.fillText(`🌲 [${inst.name}]`, 0, -24);
 }
 
-function drawRiverFerry(rc: RenderContext, inst: Installation, style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-  const { isPlayer } = style;
 
-  // ════ 內河渡口 (River Ferry Terminal) ════
-  // 1. 木造渡口突堤與繫纜樁
-  ctx.fillStyle = '#5D4037';
-  ctx.fillRect(-18, -4, 20, 8);
-  ctx.strokeStyle = '#8D6E63';
-  ctx.lineWidth = 1.4;
-  ctx.strokeRect(-18, -4, 20, 8);
 
-  // 2. 停泊的平底鋼纜渡輪駁船 (Ferry Barge)
-  ctx.fillStyle = '#37474F';
-  ctx.fillRect(4, -7, 18, 14);
-  ctx.strokeStyle = isPlayer ? '#42A5F5' : '#FFB300';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(4, -7, 18, 14);
 
-  // 鋼纜引渡線
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-  ctx.setLineDash([3, 3]);
-  ctx.beginPath();
-  ctx.moveTo(-24, 0);
-  ctx.lineTo(26, 0);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // 渡口號誌燈
-  ctx.fillStyle = isPlayer ? '#00E5FF' : '#FFD54F';
-  ctx.beginPath();
-  ctx.arc(-16, -4, 2.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = isPlayer ? '#80DEEA' : '#FFD54F';
-  ctx.font = 'bold 8.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(`⛴️ [${inst.name}]`, 0, -22);
-}
-
-function drawRadioStation(rc: RenderContext, inst: Installation, style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-  const { isPlayer } = style;
-
-  // ════ 轉播電台 / 無線電通訊塔 (Radio Relay Station) ════
-  // 1. 鋼構桁架發射鐵塔
-  ctx.strokeStyle = isPlayer ? '#00E5FF' : '#FF5252';
-  ctx.lineWidth = 1.8;
-  ctx.beginPath();
-  ctx.moveTo(-10, 14);
-  ctx.lineTo(0, -18);
-  ctx.lineTo(10, 14);
-  // 塔架橫樑
-  ctx.moveTo(-7, 6);
-  ctx.lineTo(7, 6);
-  ctx.moveTo(-4, -4);
-  ctx.lineTo(4, -4);
-  ctx.stroke();
-
-  // 2. 頂部航空障礙閃爍信標
-  const blink = Math.sin(rc.time * 8) > 0;
-  ctx.fillStyle = blink ? '#FF1744' : '#546E7A';
-  ctx.beginPath();
-  ctx.arc(0, -19, 3, 0, Math.PI * 2);
-  ctx.fill();
-
-  // 3. 擴散電波環
-  const wavePhase = ((rc.time * 2) % 1);
-  ctx.strokeStyle = isPlayer ? `rgba(0, 229, 255, ${0.7 * (1 - wavePhase)})` : `rgba(255, 82, 82, ${0.7 * (1 - wavePhase)})`;
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  ctx.arc(0, -19, 6 + wavePhase * 18, -Math.PI * 0.8, -Math.PI * 0.2);
-  ctx.stroke();
-
-  ctx.fillStyle = isPlayer ? '#80DEEA' : '#FF8A80';
-  ctx.font = 'bold 8.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(`📡 [${inst.name}]`, 0, -26);
-}
-
-function drawAmmoCache(rc: RenderContext, inst: Installation, style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-  const { isPlayer } = style;
-
-  // ════ 前線彈藥補給庫 (Ammunition Cache) ════
-  // 1. 環形防爆沙袋堡 (Sandbag Revetment)
-  ctx.strokeStyle = '#BCAAA4';
-  ctx.fillStyle = 'rgba(78, 52, 46, 0.7)';
-  ctx.lineWidth = 2.2;
-  ctx.strokeRect(-16, -12, 32, 24);
-  ctx.fillRect(-16, -12, 32, 24);
-
-  // 2. 堆疊的軍綠色彈藥箱與帆布遮棚
-  ctx.fillStyle = '#33691E';
-  ctx.fillRect(-10, -7, 9, 6);
-  ctx.fillRect(1, -7, 9, 6);
-  ctx.fillRect(-5, 0, 10, 6);
-
-  // 3. 亮黃/紅色危險標記
-  ctx.fillStyle = '#FFD54F';
-  ctx.beginPath();
-  ctx.moveTo(0, -9);
-  ctx.lineTo(-4, -3);
-  ctx.lineTo(4, -3);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = isPlayer ? '#80DEEA' : '#FFAB91';
-  ctx.font = 'bold 8.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(`📦 [${inst.name}]`, 0, -20);
-}
-
-function drawWatchtower(rc: RenderContext, inst: Installation, style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-  const { isPlayer } = style;
-
-  // ════ 邊境觀察哨樓 (Border Observation Watchtower) ════
-  // 1. 四腳木/鋼支撐架
-  ctx.strokeStyle = '#8D6E63';
-  ctx.lineWidth = 2.0;
-  ctx.beginPath();
-  ctx.moveTo(-10, 16);
-  ctx.lineTo(-5, -10);
-  ctx.moveTo(10, 16);
-  ctx.lineTo(5, -10);
-  ctx.moveTo(-7, 3);
-  ctx.lineTo(7, 3);
-  ctx.stroke();
-
-  // 2. 頂部高架木造瞭望崗樓
-  ctx.fillStyle = isPlayer ? '#1565C0' : '#4E342E';
-  ctx.strokeStyle = isPlayer ? '#42A5F5' : '#D7CCC8';
-  ctx.lineWidth = 1.4;
-  ctx.fillRect(-8, -16, 16, 8);
-  ctx.strokeRect(-8, -16, 16, 8);
-
-  // 3. 鐵皮屋頂 (Roof)
-  ctx.fillStyle = '#37474F';
-  ctx.beginPath();
-  ctx.moveTo(-11, -16);
-  ctx.lineTo(0, -22);
-  ctx.lineTo(11, -16);
-  ctx.closePath();
-  ctx.fill();
-
-  // 4. 探照燈光束提示
-  const beamAng = rc.time * 0.8;
-  ctx.strokeStyle = 'rgba(255, 238, 88, 0.35)';
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.moveTo(0, -14);
-  ctx.lineTo(Math.cos(beamAng) * 32, -14 + Math.sin(beamAng) * 32);
-  ctx.stroke();
-
-  ctx.fillStyle = isPlayer ? '#80DEEA' : '#FFE082';
-  ctx.font = 'bold 8.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(`🗼 [${inst.name}]`, 0, -28);
-}
 
 type EmplacementKind = 'infantry_squad' | 'infantry_platoon' | 'tank_platoon' | 'tank_battalion' | 'towed_artillery' | 'flak_battery';
 
@@ -1816,59 +1025,6 @@ function drawSa3Site(rc: RenderContext, _inst: Installation, _style: Installatio
 }
 
 // ════ Battalion command post: sandbagged command bunker, GP tents, radio mast and unit flag ════
-function drawBattalionCp(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-  const { color, labelColor } = style;
-  // Sandbag berm around the bunker
-  ctx.strokeStyle = '#A1887F';
-  ctx.lineWidth = 2.6;
-  ctx.setLineDash([2.4, 1.2]);
-  ctx.beginPath();
-  ctx.roundRect(-11, -8, 22, 16, 4);
-  ctx.stroke();
-  ctx.setLineDash([]);
-  // Bunker roof (timber + earth) with entrance
-  ctx.fillStyle = '#3E4A3D';
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.2;
-  ctx.fillRect(-7, -5, 14, 10);
-  ctx.strokeRect(-7, -5, 14, 10);
-  ctx.fillStyle = '#1B1B1B';
-  ctx.fillRect(6, -1.5, 2.5, 3);
-  // Two GP medium tents
-  ctx.fillStyle = '#556B2F';
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
-  for (const [tx, ty] of [[-16, -12], [12, 10]]) {
-    ctx.fillRect(tx - 4, ty - 3, 8, 6);
-    ctx.beginPath();
-    ctx.moveTo(tx - 4, ty);
-    ctx.lineTo(tx + 4, ty);
-    ctx.stroke();
-  }
-  // Radio antenna mast with guy wires
-  ctx.strokeStyle = '#CFD8DC';
-  ctx.lineWidth = 0.8;
-  ctx.beginPath();
-  ctx.moveTo(-3, -5);
-  ctx.lineTo(-3, -18);
-  ctx.moveTo(-3, -18);
-  ctx.lineTo(-8, -10);
-  ctx.moveTo(-3, -18);
-  ctx.lineTo(2, -10);
-  ctx.stroke();
-  // Unit flag
-  ctx.fillStyle = color;
-  ctx.fillRect(3, -14, 6, 4);
-  ctx.strokeStyle = '#ECEFF1';
-  ctx.beginPath();
-  ctx.moveTo(3, -14);
-  ctx.lineTo(3, -5);
-  ctx.stroke();
-  ctx.fillStyle = labelColor;
-  ctx.font = 'bold 8.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('🎖️ [營指揮所 Battalion CP]', 0, -24);
-}
 
 // ════ Forward operating base: HESCO barrier perimeter, helipad, tent rows and parked vehicles ════
 function drawForwardFob(rc: RenderContext, _inst: Installation, style: InstallationStyle, _island?: Island): void {
@@ -1924,44 +1080,53 @@ function drawForwardFob(rc: RenderContext, _inst: Installation, style: Installat
 
 /** Exhaustive: an InstallationType without artwork is a compile error (it used to render as nothing). */
 export const INSTALLATION_DRAWERS: Record<InstallationType, InstallationDrawer> = {
-  airfield: drawAirfield,
-  coastal_gun: drawCoastalGun,
-  radar_station: drawRadarStation,
-  ammo_depot: drawAmmoDepot,
+  airfield: drawAirfieldSite,
+  coastal_gun: drawCoastalGunSite,
+  radar_station: drawRadarSite,
+  ammo_depot: drawAmmoDepotSite,
   infantry_squad: drawInfantrySquad,
   infantry_platoon: drawInfantryPlatoon,
   tank_platoon: drawTankPlatoon,
   tank_battalion: drawTankBattalion,
   towed_artillery: drawTowedArtillery,
   flak_battery: drawFlakBattery,
-  ship_repair_dock: drawShipRepairDock,
-  command_post: drawCommandPost,
-  hidden_tunnel: drawHiddenTunnel,
-  pontoon_pier: drawPontoonPier,
-  major_naval_port: drawMajorNavalPort,
-  supply_depot: drawSupplyDepot,
-  field_hospital: drawFieldHospital,
+  ship_repair_dock: drawRepairDockSite,
+  command_post: drawCommandPostSite,
+  hidden_tunnel: drawTunnelSite,
+  pontoon_pier: drawPontoonPierSite,
+  major_naval_port: drawMajorPortSite,
+  supply_depot: drawSupplyDepotSite,
+  field_hospital: drawFieldHospitalSite,
+  civil_hospital: drawCivilHospitalSite,
+  copra_plantation: drawCopraPlantation,
+  civil_wharf: drawCivilWharf,
+  sugar_mill: drawSugarMill,
+  power_plant: drawPowerPlant,
+  pagoda: drawPagoda,
+  factory: drawFactory,
+  motor_pool: drawMotorPoolSite,
+  rail_station: drawRailStationSite,
   pow_camp: drawPowCamp,
   city: drawCity,
   town: drawTown,
   settlement: drawSettlement,
   refugee_camp: drawRefugeeCamp,
-  bunker_nest: drawBunkerNest,
-  sam_hawk: drawSamHawk,
-  sam_patriot: drawSamHawk,
+  bunker_nest: drawBunkerSite,
+  sam_hawk: drawSamBatterySite,
+  sam_patriot: drawSamBatterySite,
   sa2_sam_site: drawSa2Site,
   sa3_sam_site: drawSa3Site,
-  battalion_cp: drawBattalionCp,
+  battalion_cp: drawBattalionCpSite,
   forward_fob: drawForwardFob,
   s300_sam_site: drawSa2SamSite,
   coastal_harpoon: drawCoastalHarpoon,
   glcm_site: drawGlcmSite,
   coastal_rubezh: drawCoastalRubezh,
   scud_site: drawScudSite,
-  fan_song_radar: drawFanSongRadar,
+  fan_song_radar: drawFanSongSite,
   rubber_plantation: drawRubberPlantation,
-  river_ferry: drawRiverFerry,
-  radio_station: drawRadioStation,
-  ammo_cache: drawAmmoCache,
-  watchtower: drawWatchtower,
+  river_ferry: drawFerrySite,
+  radio_station: drawRadioSite,
+  ammo_cache: drawCacheSite,
+  watchtower: drawWatchtowerSite,
 };

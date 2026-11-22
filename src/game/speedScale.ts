@@ -174,6 +174,7 @@ export const AIRCRAFT_CRUISE_KMH: Record<AircraftModel, number> = {
   mig15: 850,
   tu14: 700,
   yak9: 400,
+  la11: 420, // 674 km/h
   il10: 380,
   // Vietnam War
   f8: 900,
@@ -214,7 +215,6 @@ export const AIRCRAFT_CRUISE_KMH: Record<AircraftModel, number> = {
   tornado_adv: 950,
   mirage2000: 1000,
   jaguar_gr1: 850,
-  viggen_ja37: 1000,
   // Late Cold War
   f14a: 980,
   f15a: 1000,

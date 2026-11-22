@@ -194,7 +194,7 @@ export function drawAlliedSAGShip(rc: RenderContext, ship: Ship, hullColor: stri
   } else {
     // 4. 英國皇家海軍 (Royal Navy SAG: KGV / Duke of York / Sheffield / Belfast / Type 42 / Jervis)
     const isRNBB = name.includes('George') || name.includes('York') || ship.type === 'battleship';
-    const isRNDDG = name.includes('Type 42') || name.includes('42型') || name.includes('Gloucester') || (name.includes('Sheffield') && name.includes('D80'));
+    const isRNDDG = name.includes('Type 42') || name.includes('42型') || name.includes('Coventry') || name.includes('Glasgow') || name.includes('Gloucester') || (name.includes('Sheffield') && name.includes('D80'));
     const isRNCruiser = ship.type === 'cruiser' || name.includes('Belfast') || (name.includes('Sheffield') && !isRNDDG);
 
     // 英國海軍部海軍灰 (Admiralty Dark Sea Grey)

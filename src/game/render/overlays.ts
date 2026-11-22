@@ -1,4 +1,4 @@
-import { Aircraft, Island, Vector2D, SelectionBox, RequisitionItem, Era } from '../../types/game';
+import { Aircraft, Installation, Island, Vector2D, SelectionBox, RequisitionItem, Era } from '../../types/game';
 import { RenderContext, Camera, OrderMarker, isWorldCircleVisible } from './context';
 import type { RadarCoverage } from '../engine';
 import { costOf, formatBundle } from '../economy';
@@ -658,4 +658,62 @@ export function drawDippingSonar(rc: RenderContext, aircraft: Aircraft[], select
     }
   }
   if (started) ctx.restore();
+}
+
+/** Engineer works under way: the site outline, staked out and hatched, with its progress. */
+export function drawConstructionSites(
+  rc: RenderContext,
+  sites: { inst: Installation; progress: number; builders: number; itemName: string }[],
+  camera: Camera
+) {
+  if (sites.length === 0) return;
+  const ctx = rc.ctx;
+  ctx.save();
+  ctx.translate(rc.width / 2, rc.height / 2);
+  ctx.scale(camera.zoom, camera.zoom);
+  ctx.translate(-camera.x, -camera.y);
+  for (const site of sites) {
+    const { inst } = site;
+    if (!isWorldCircleVisible(rc, inst.pos.x, inst.pos.y, 80, camera)) continue;
+    const big = inst.type === 'airfield' || inst.type === 'major_naval_port' || inst.type === 'ship_repair_dock';
+    const w = big ? 70 : 40;
+    const h = big ? 30 : 26;
+    ctx.save();
+    ctx.translate(inst.pos.x, inst.pos.y);
+    ctx.rotate(inst.angle || 0);
+    // Graded earth and stakes
+    ctx.fillStyle = 'rgba(141, 110, 99, 0.45)';
+    ctx.fillRect(-w / 2, -h / 2, w, h);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(-w / 2, -h / 2, w * site.progress, h);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(255, 213, 79, 0.45)';
+    ctx.lineWidth = 1;
+    for (let x = -w / 2 - h; x < w / 2; x += 5) {
+      ctx.beginPath();
+      ctx.moveTo(x, h / 2);
+      ctx.lineTo(x + h, -h / 2);
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.strokeStyle = '#FFD54F';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeRect(-w / 2, -h / 2, w, h);
+    ctx.setLineDash([]);
+    ctx.restore();
+    // Progress bar and status
+    ctx.fillStyle = 'rgba(4, 12, 22, 0.85)';
+    ctx.fillRect(inst.pos.x - 22, inst.pos.y + h / 2 + 6, 44, 5);
+    ctx.fillStyle = site.builders > 0 ? '#FFD54F' : '#FF7043';
+    ctx.fillRect(inst.pos.x - 21, inst.pos.y + h / 2 + 7, 42 * Math.min(1, site.progress), 3);
+    ctx.font = 'bold 8px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = site.builders > 0 ? '#FFE082' : '#FF8A65';
+    const status = site.builders > 0 ? `施工中 ${Math.floor(site.progress * 100)}% · 工兵 ${site.builders}` : `施工暫停：無工兵在場 (${Math.floor(site.progress * 100)}%)`;
+    ctx.fillText(`🚧 ${site.itemName}`, inst.pos.x, inst.pos.y - h / 2 - 12);
+    ctx.fillText(status, inst.pos.x, inst.pos.y - h / 2 - 3);
+  }
+  ctx.restore();
 }

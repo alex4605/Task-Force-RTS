@@ -65,6 +65,8 @@ export const TANK_PLANS: TankPlan[] = [
   { match: /churchill/, L: 7.44, W: 3.25, track: 0.62, nose: 'flat', noseLen: 0.4, turret: { x: 0.5, len: 2.4, wid: 2.2, shape: 'cast', bustle: 0.2 }, gun: { bore: 75, len: 2.7 }, cupola: { x: -0.35, y: 0.45, r: 0.35 }, loaderHatch: true, engineDeck: 2.3, skirts: true, driver: 1 },
   // Leopard 1: cast turret with the long L7 105mm and thermal sleeve
   { match: /leopard1/, L: 7.09, W: 3.25, track: 0.55, nose: 'glacis', noseLen: 1.0, turret: { x: 0.0, len: 3.4, wid: 3.0, shape: 'cast', bustle: 0.5 }, gun: { bore: 105, len: 5.4, evac: 0.55 }, cupola: { x: -0.5, y: 0.7, r: 0.42 }, loaderHatch: true, engineDeck: 2.4, skirts: true, driver: 1 },
+  // AMX-30B2: low hull, cast turret, CN-105-F1 105mm without a fume extractor (thermal sleeve)
+  { match: /amx30/, L: 6.59, W: 3.1, track: 0.57, nose: 'glacis', noseLen: 1.0, turret: { x: 0.1, len: 3.2, wid: 2.9, shape: 'cast', bustle: 0.6 }, gun: { bore: 105, len: 5.6 }, cupola: { x: -0.4, y: 0.7, r: 0.4 }, loaderHatch: true, engineDeck: 2.2, driver: 1 },
   // Matilda Frog: the Australian flame conversion, a stubby flame projector in place of the 2pdr
   { match: /matilda_frog/, L: 5.61, W: 2.59, track: 0.35, nose: 'flat', noseLen: 0.5, turret: { x: 0.3, len: 1.9, wid: 1.7, shape: 'cast', bustle: 0.25 }, gun: { bore: 110, len: 2.1 }, cupola: { x: -0.35, y: 0.35, r: 0.3 }, engineDeck: 1.8, skirts: true, driver: 0 },
   // Matilda II: armoured skirts over the tracks, small cast turret, 2pdr
@@ -80,6 +82,8 @@ export const TANK_PLANS: TankPlan[] = [
   // M3 Stuart: narrow riveted hull, small welded turret, 37mm
   { match: /armor_m3$/, L: 4.53, W: 2.24, track: 0.3, nose: 'flat', noseLen: 0.5, turret: { x: 0.3, len: 1.5, wid: 1.4, shape: 'box' }, gun: { bore: 37, len: 2.2 }, cupola: { x: -0.3, y: -0.3, r: 0.3 }, engineDeck: 1.5, driver: -1 },
   // M4 Sherman: rounded cast transmission cover, cast turret with bustle, 75mm
+  // M4A3E8: wet-stowage hull on HVSS, the T23 turret with the long 76mm M1A2 and its muzzle brake
+  { match: /m4a3e8/, L: 6.27, W: 2.99, track: 0.58, nose: 'round', noseLen: 0.8, turret: { x: 0.1, len: 2.5, wid: 2.2, shape: 'cast', bustle: 0.45 }, gun: { bore: 76, len: 4.0, brake: 'double' }, cupola: { x: -0.45, y: 0.45, r: 0.35 }, loaderHatch: true, engineDeck: 2.1, driver: -1 },
   { match: /armor_m4$/, L: 5.84, W: 2.62, track: 0.42, nose: 'round', noseLen: 0.8, turret: { x: 0.2, len: 2.3, wid: 2.0, shape: 'cast', bustle: 0.35 }, gun: { bore: 75, len: 3.2 }, cupola: { x: -0.45, y: 0.45, r: 0.35 }, loaderHatch: true, engineDeck: 2.0, driver: -1 },
   // M46 / M4A3E8 mix in Korea, drawn as the M46 Patton: 90mm with bore evacuator and muzzle brake
   { match: /patton_m46|armor_korea/, L: 6.35, W: 3.51, track: 0.58, nose: 'glacis', noseLen: 0.9, turret: { x: -0.1, len: 2.9, wid: 2.6, shape: 'cast', bustle: 0.45 }, gun: { bore: 90, len: 4.8, evac: 0.72, brake: 'single' }, cupola: { x: -0.5, y: 0.65, r: 0.38 }, loaderHatch: true, engineDeck: 2.3, driver: -1 },

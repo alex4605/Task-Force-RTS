@@ -66,6 +66,18 @@ const KITS = {
   // ROK Capital (Tiger) Division in Vietnam: tiger-stripe over OG-107, covered M1
   rok_tiger: { uniform: '#58623E', camo: '#2B2A1C', helmet: 'm1_cover', helmetColour: '#5A6A3C', pack: 'alice' },
   // BAOR 1983: DPM smock, Mk 6 helmet with scrim
+  frg_jaeger: { uniform: '#5E6142', camo: '#3A3B26', helmet: 'm1', helmetColour: '#4E5236', pack: 'alice' },
+  frg_heimat: { uniform: '#6A6B4A', helmet: 'm1', helmetColour: '#5A5C3E', pack: 'haversack' },
+  french_83: { uniform: '#5C6440', camo: '#3B4228', helmet: 'm1', helmetColour: '#4F5A36', pack: 'alice' },
+  arvn_rfpf: { uniform: '#4E5A36', helmet: 'boonie', helmetColour: '#5E6A40', pack: 'ruck' },
+  nlf_main: { uniform: '#3E4A2E', helmet: 'pith', helmetColour: '#5E6A3E', pack: 'ruck' },
+  rok_police: { uniform: '#3F4A5A', helmet: 'm1', helmetColour: '#3A4450', pack: 'haversack' },
+  kpa: { uniform: '#7A7A55', helmet: 'cap', helmetColour: '#6C6C48', pack: 'veshmeshok' },
+  giyutai: { uniform: '#7E7660', helmet: 'cap', helmetColour: '#6E6450', pack: 'haversack' },
+  lrrp: { uniform: '#3E4A30', camo: '#1E2416', helmet: 'boonie', helmetColour: '#3E4A30', pack: 'ruck' },
+  zhd: { uniform: '#5E6040', helmet: 'soviet', helmetColour: '#4C5A2E', pack: 'veshmeshok' },
+  mvd: { uniform: '#5A5C40', helmet: 'soviet', helmetColour: '#4A4E30', pack: 'veshmeshok' },
+  si_scouts: { uniform: '#6D5A3E', helmet: 'bare', helmetColour: '#3E2E22', pack: 'haversack' },
   uk_83: { uniform: '#5F6040', camo: '#3B2F22', helmet: 'brodie', helmetColour: '#4F5536', pack: 'alice' },
 } satisfies Record<string, Kit>;
 
@@ -146,6 +158,27 @@ const TEAMS: TeamSpec[] = [
   { match: /fr_infantry/, kit: KITS.french, men: WEDGE4('rifle', 'bar', 'bazooka', 'rifle') },
   { match: /th_cobra/, kit: KITS.thai, men: WEDGE4('rifle', 'lmg', 'm79', 'rifle') },
   { match: /nl_infantry/, kit: KITS.dutch, men: WEDGE4('long_rifle', 'lmg', 'at4', 'long_rifle') },
+  // Jäger: light infantry in Flecktarn-era olive, MILAN team; Heimatschutz reservists with G3 and an MG3
+  { match: /frg_jaeger/, kit: KITS.frg_jaeger, foliage: true, men: WEDGE4('rifle', 'lmg', 'at4', 'radio') },
+  { match: /frg_heimatschutz/, kit: KITS.frg_heimat, men: WEDGE4('rifle', 'lmg', 'rifle', 'rifle') },
+  // French mechanised infantry (FAMAS, AA-52, LRAC 89mm); British mech infantry (SLR, GPMG, 66mm)
+  { match: /fr_infantry_83/, kit: KITS.french_83, men: WEDGE4('rifle', 'lmg', 'at4', 'rifle') },
+  { match: /uk_infantry_83/, kit: KITS.uk_83, men: WEDGE4('long_rifle', 'lmg', 'at4', 'long_rifle') },
+  // Regional / Popular Forces: carbines, a BAR; NLF main force: AKs, RPD, B-40
+  { match: /arvn_rfpf/, kit: KITS.arvn_rfpf, men: WEDGE4('rifle', 'bar', 'rifle', 'rifle') },
+  { match: /nlf_main_force/, kit: KITS.nlf_main, foliage: true, men: WEDGE4('rifle', 'lmg', 'rpg', 'rifle') },
+  // ROK combat police; KPA rifle section with PPSh and DP
+  { match: /rok_police/, kit: KITS.rok_police, men: WEDGE4('rifle', 'bar', 'rifle', 'rifle') },
+  { match: /kpa_infantry/, kit: KITS.kpa, men: WEDGE4('smg', 'lmg', 'long_rifle', 'smg') },
+  // Solomon Islands scouts: light, barefoot, a rifle or two and the district officer's radio
+  // Volunteer Fighting Corps: old rifles, grenades, bamboo spears
+  { match: /giyutai/, kit: KITS.giyutai, men: WEDGE4('long_rifle', 'rifle', 'long_rifle', 'rifle') },
+  // LRRP: five or six men, M16s, an M79 and the PRC-25
+  { match: /sof_lrrp/, kit: KITS.lrrp, foliage: true, men: [{ x: 6.5, y: 0, w: 'rifle' }, { x: 2, y: 0.8, w: 'm79' }, { x: -2.5, y: -0.6, w: 'radio' }, { x: -7, y: 0.4, w: 'rifle' }] },
+  // Soviet railway troops (guard section) and MVD internal troops
+  { match: /rail_troops/, kit: KITS.zhd, men: WEDGE4('rifle', 'rifle', 'lmg', 'rifle') },
+  { match: /mvd_vv/, kit: KITS.mvd, men: WEDGE4('rifle', 'lmg', 'rpg', 'rifle') },
+  { match: /si_scouts/, kit: KITS.si_scouts, foliage: true, men: [{ x: 6, y: 0, w: 'long_rifle' }, { x: 2, y: 0.8, w: 'long_rifle' }, { x: -2.2, y: -0.6, w: 'radio' }] },
   // Panzergrenadiere: G3, MG3, Panzerfaust
   { match: /frg_infantry/, kit: KITS.frg_83, men: WEDGE4('rifle', 'lmg', 'at4', 'rifle') },
   // USMC fireteam: leader, BAR man, two riflemen (1945 brings an M2 flamethrower)

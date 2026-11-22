@@ -41,6 +41,9 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
     ctx.save();
     ctx.translate(unit.pos.x, unit.pos.y);
 
+    // 散兵坑: scraped pits with a spoil and sandbag lip (drawn round as it is dug)
+    if (unit.foxhole !== undefined) drawFoxholes(ctx, unit.foxhole, unit.side === 'enemy');
+
     // 0. Physical Top-Down Vehicle / Fireteam Silhouette underneath NATO frame
     const moveHeading = unit.order.targetPos
       ? Math.atan2(unit.order.targetPos.y - unit.pos.y, unit.order.targetPos.x - unit.pos.x)
@@ -126,7 +129,10 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
     // 6. Tactical Status Badges & Unit Name (保留純粹洗鍊 NATO 圖標，僅在選中或極端狀態下顯示戰術標籤)
     if (unit.isInUrbanCover) {
       ctx.fillStyle = '#00E5FF';
-      blitText(ctx, '🛡️ [URBAN 掩體 -70%航彈 -50%直射]', 'bold 7.5px monospace', ctx.fillStyle as string, 0, isSelected ? -46 : -36);
+      const cover = unit.fieldCover === 'foxhole' ? '🪖 [散兵坑' : unit.fieldCover === 'trench' ? '🪖 [壕溝' : '🛡️ [URBAN';
+      blitText(ctx, `${cover} 掩體 -70%航彈 -50%直射]`, 'bold 7.5px monospace', ctx.fillStyle as string, 0, isSelected ? -46 : -36);
+    } else if (unit.foxhole !== undefined) {
+      blitText(ctx, `⛏️ 構築散兵坑 ${Math.floor(unit.foxhole * 100)}%`, 'bold 7.5px monospace', '#FFE082', 0, isSelected ? -46 : -36);
     }
 
     // 火力壓制警示標籤 (Progressive Suppression Badges)
@@ -195,4 +201,23 @@ export function drawGroundUnits(rc: RenderContext, groundUnits: GroundUnit[], ca
   }
 
   ctx.restore();
+}
+
+/** A fireteam's two-man foxholes in a ring, each with its spoil heap; the arc grows as they dig. */
+function drawFoxholes(ctx: CanvasRenderingContext2D, progress: number, enemy: boolean): void {
+  const holes = 5;
+  const shown = Math.max(1, Math.ceil(holes * Math.min(1, progress + 0.05)));
+  for (let k = 0; k < shown; k++) {
+    const a = (k / holes) * Math.PI * 2 - Math.PI / 2;
+    const x = Math.cos(a) * 11;
+    const y = 2 + Math.sin(a) * 8;
+    ctx.fillStyle = enemy ? 'rgba(121, 85, 72, 0.9)' : 'rgba(141, 110, 99, 0.9)';
+    ctx.beginPath();
+    ctx.ellipse(x + Math.cos(a) * 2, y + Math.sin(a) * 1.6, 3.6, 2.4, a, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(28, 20, 14, 0.92)';
+    ctx.beginPath();
+    ctx.ellipse(x, y, 2.4, 1.7, a, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }

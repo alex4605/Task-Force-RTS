@@ -101,7 +101,6 @@ export function impactFor(p: Projectile, surface: ImpactSurface, era: Era): Impa
     case 'missile_ashm':
     case 'missile_cruise':
     case 'missile_ssm':
-    case 'missile_nuclear_ssm':
     case 'missile_arm':
       kind = 'missile';
       size = 30 + Math.min(30, p.damage / 30);

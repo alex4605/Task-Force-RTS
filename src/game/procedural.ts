@@ -2,6 +2,7 @@ import { addEnemyPowCamp } from './pow';
 import { applyHistoricalAswFit } from './asw';
 import { addIslandSettlements, naturalizeCoast, naturalizeIslands } from './coastline';
 import { applyMainlandTemplate } from './terrain/theaters';
+import { OUTER_ISLANDS, STAGING_BASE, applyEraEquipment, applyEraPlaceNames } from './placeNames';
 import {
   Island,
   IslandStronghold,
@@ -35,8 +36,48 @@ type InstallationSpec = Omit<Installation, 'maxHealth' | 'isDestroyed' | 'angle'
   Partial<Pick<Installation, 'angle' | 'range' | 'cooldown' | 'reloadTime'>>;
 
 /** Builds an intact installation at full health; omitted facing, range and reload default to 0. */
+/** "Con Co Island (Cồn Cỏ 島 要塞飛彈陣地)" → "Con Co Island": island names inside position names. */
+export const shortPlace = (name: string): string => name.split(' (')[0];
+
+/** The island as a garrison's name prefix shows it ("元山 · T-34/85 戰車排"). */
+const GARRISON_PLACE_ZH: Record<string, string> = {
+  'Guadalcanal-Tulagi': '瓜島',
+  'Ironbottom Sound': '鐵底灣',
+  Rabaul: '拉包爾',
+  'Santa Cruz': '聖克魯斯',
+  'Okinawa Hontō': '沖繩',
+  'Kerama Rettō': '慶良間',
+  'Iwo Jima': '硫磺島',
+  Saipan: '塞班島',
+  Wonsan: '元山',
+  'Yo-do': '麗島',
+  'Cu Lao Cham': '占婆島',
+  'Con Co': 'Cồn Cỏ 島',
+  Helgoland: '黑爾戈蘭',
+  Sylt: '敘爾特',
+};
+
 export function makeInstallation(spec: InstallationSpec): Installation {
   return { angle: 0, range: 0, cooldown: 0, reloadTime: 0, ...spec, maxHealth: spec.health, isDestroyed: false };
+}
+
+/**
+ * The nearest item to `from` that passes `keep`, in one pass and without allocating. Distance is
+ * compared first, so the (often costly) predicate only runs on candidates closer than the best so
+ * far. Ties go to the earlier item, as with a stable sort.
+ */
+export function nearestTo<T extends { pos: Vector2D }>(items: readonly T[], from: Vector2D, keep?: (t: T) => boolean): T | undefined {
+  let best: T | undefined;
+  let bestD = Infinity;
+  for (const t of items) {
+    const dx = t.pos.x - from.x;
+    const dy = t.pos.y - from.y;
+    const d = dx * dx + dy * dy;
+    if (d >= bestD || (keep && !keep(t))) continue;
+    best = t;
+    bestD = d;
+  }
+  return best;
 }
 
 export function dist(a: Vector2D, b: Vector2D): number {
@@ -257,12 +298,12 @@ export function generateCoralAtoll(
         {
           pos: ridgeSpine[2] || center,
           elevation: 165,
-          label: `${name} · 望海石灰岩崖頂 [Cliff Peak 165m]`,
+          label: `${shortPlace(name)} · 望海石灰岩崖頂 [Cliff Peak 165m]`,
         },
         {
           pos: ridgeSpine[5] || center,
           elevation: 185,
-          label: `${name} · 迎風高地要塞稜線 [Windward Bluff 185m]`,
+          label: `${shortPlace(name)} · 迎風高地要塞稜線 [Windward Bluff 185m]`,
         },
       ],
     },
@@ -286,7 +327,7 @@ export function generateCoralAtoll(
   const cp1Inst: Installation = makeInstallation({
     id: `${id}-sh1-cp`,
     type: 'command_post',
-    name: era === 'era2' ? `${name} · 灘頭鋼筋混凝土要塞指揮所 [Alpha CP]` : `${name} · 灘頭木石野戰指揮掩體 [Alpha CP]`,
+    name: era === 'era2' ? `${shortPlace(name)} · 灘頭鋼筋混凝土要塞指揮所 [Alpha CP]` : `${shortPlace(name)} · 灘頭木石野戰指揮掩體 [Alpha CP]`,
     weaponDesc: '前線沙灘抗登陸第一防禦線樞紐 · 衛隊機槍與迫擊砲守備',
     pos: cp1Pos,
     angle: sh1Angle,
@@ -384,7 +425,7 @@ export function generateCoralAtoll(
 
   strongholds.push({
     id: `${id}-sh-1`,
-    name: `${name} · 灘頭外圍要塞據點`,
+    name: `${shortPlace(name)} · 灘頭外圍要塞據點`,
     cpPos: cp1Pos,
     isCaptured: false,
     captureProgress: 0,
@@ -405,7 +446,7 @@ export function generateCoralAtoll(
   const cp2Inst: Installation = makeInstallation({
     id: `${id}-sh2-cp`,
     type: 'command_post',
-    name: `${name} · 潟湖航空要塞司令部 [Bravo CP]`,
+    name: `${shortPlace(name)} · 潟湖航空要塞司令部 [Bravo CP]`,
     weaponDesc: '環礁內海航空作戰與戰役物資調配中心 · 衛隊駐守',
     pos: cp2Pos,
     angle: sh2Angle,
@@ -425,7 +466,7 @@ export function generateCoralAtoll(
   const afbInst: Installation = makeInstallation({
     id: `${id}-sh2-airfield`,
     type: 'airfield',
-    name: `${name} · 潟湖水上與陸基雙用野戰機場`,
+    name: `${shortPlace(name)} · 潟湖水上與陸基雙用野戰機場`,
     weaponDesc:
       era === 'era5'
         ? '現代化混凝土硬化跑道與超視距防空雷達站 · 支援 Su-27 / MiG-29 與 Tu-22M3 起降'
@@ -502,7 +543,7 @@ export function generateCoralAtoll(
 
   strongholds.push({
     id: `${id}-sh-2`,
-    name: `${name} · 潟湖航空要塞司令部`,
+    name: `${shortPlace(name)} · 潟湖航空要塞司令部`,
     cpPos: cp2Pos,
     isCaptured: false,
     captureProgress: 0,
@@ -523,7 +564,7 @@ export function generateCoralAtoll(
   const cp3Inst: Installation = makeInstallation({
     id: `${id}-sh3-cp`,
     type: 'command_post',
-    name: `${name} · 深水航道水門海防指揮所 [Charlie CP]`,
+    name: `${shortPlace(name)} · 深水航道水門海防指揮所 [Charlie CP]`,
     weaponDesc: '扼守環礁潟湖深水航道通道 · 堅固防禦工事',
     pos: cp3Pos,
     angle: sh3Angle,
@@ -571,8 +612,8 @@ export function generateCoralAtoll(
         : era === 'era3'
         ? '裝甲戰車排 (T-34/85 突擊裝甲陣地)'
         : era === 'era2'
-        ? '裝甲戰車排 (九七式中戰車「チハ」陣地)'
-        : '裝甲戰車排 (九五式輕戰車陣地)',
+        ? '九七式中戰車「チハ」 戰車陣地'
+        : '九五式輕戰車 戰車陣地',
     weaponDesc: '裝甲埋伏射擊掩體 · 反擊突破航道之登陸裝甲車',
     pos: { x: cp3Pos.x - 40, y: cp3Pos.y - 35 },
     angle: sh3Angle,
@@ -609,7 +650,7 @@ export function generateCoralAtoll(
 
   strongholds.push({
     id: `${id}-sh-3`,
-    name: `${name} · 深水航道水門海防據點`,
+    name: `${shortPlace(name)} · 深水航道水門海防據點`,
     cpPos: cp3Pos,
     isCaptured: false,
     captureProgress: 0,
@@ -630,7 +671,7 @@ export function generateCoralAtoll(
   const cp4Inst: Installation = makeInstallation({
     id: `${id}-sh4-cp`,
     type: 'command_post',
-    name: `${name} · 迎風高地要塞指揮所 [Delta CP]`,
+    name: `${shortPlace(name)} · 迎風高地要塞指揮所 [Delta CP]`,
     weaponDesc: '石灰岩高地地下坑道指揮所 · 控制全島制高點與遠程砲隊',
     pos: cp4Pos,
     angle: sh4Angle,
@@ -707,7 +748,7 @@ export function generateCoralAtoll(
 
   strongholds.push({
     id: `${id}-sh-4`,
-    name: `${name} · 迎風高地要塞據點`,
+    name: `${shortPlace(name)} · 迎風高地要塞據點`,
     cpPos: cp4Pos,
     isCaptured: false,
     captureProgress: 0,
@@ -964,12 +1005,12 @@ export function generateOrganicIsland(
 
   const cp1Name =
     era === 'era4'
-      ? `${name} · 北越前線沿海堅固防禦指揮所 [Alpha CP]`
+      ? `${shortPlace(name)} · 北越前線沿海堅固防禦指揮所 [Alpha CP]`
       : era === 'era3'
-      ? `${name} · 灘頭地下防核坑道要塞中心 [Alpha CP]`
+      ? `${shortPlace(name)} · 灘頭地下防核坑道要塞中心 [Alpha CP]`
       : era === 'era2'
-      ? `${name} · 灘頭鋼筋混凝土要塞指揮所 [Alpha CP]`
-      : `${name} · 灘頭木石野戰指揮掩體 [Alpha CP]`;
+      ? `${shortPlace(name)} · 灘頭鋼筋混凝土要塞指揮所 [Alpha CP]`
+      : `${shortPlace(name)} · 灘頭木石野戰指揮掩體 [Alpha CP]`;
   const cp1Desc =
     era === 'era4'
       ? '地下交錯坑道與加固防爆指揮所 · 具備戰術有線電與早期預警通訊'
@@ -986,11 +1027,11 @@ export function generateOrganicIsland(
     weaponDesc: cp1Desc,
     pos: cp1Pos,
     angle: sh1Angle,
-    health: (era === 'era4' || era === 'era3') ? 4600 : era === 'era2' ? 3800 : 3200,
-    armor: (era === 'era4' || era === 'era3') ? 0.68 : era === 'era2' ? 0.55 : 0.40,
-    range: (era === 'era4' || era === 'era3') ? 780 : era === 'era2' ? 700 : 600,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 4600 : era === 'era2' ? 3800 : 3200,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.68 : era === 'era2' ? 0.55 : 0.40,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 780 : era === 'era2' ? 700 : 600,
     cooldown: 0.8,
-    reloadTime: (era === 'era4' || era === 'era3') ? 1.4 : 1.8,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 1.4 : 1.8,
     side: 'enemy',
     strongholdId: `${id}-sh-1`,
     isASuWOnly: true,
@@ -1023,11 +1064,11 @@ export function generateOrganicIsland(
     weaponDesc: coastalGunDesc,
     pos: { x: cp1Pos.x + 40, y: cp1Pos.y + 30 },
     angle: sh1Angle,
-    health: (era === 'era4' || era === 'era3') ? 4200 : era === 'era2' ? 3500 : 2800,
-    armor: (era === 'era4' || era === 'era3') ? 0.65 : era === 'era2' ? 0.55 : 0.45,
-    range: (era === 'era4' || era === 'era3') ? 1800 : era === 'era2' ? 1600 : 1350,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 4200 : era === 'era2' ? 3500 : 2800,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.65 : era === 'era2' ? 0.55 : 0.45,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 1800 : era === 'era2' ? 1600 : 1350,
     cooldown: 2,
-    reloadTime: (era === 'era4' || era === 'era3') ? 3.4 : era === 'era2' ? 5.6 : 5.0,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 3.4 : era === 'era2' ? 5.6 : 5.0,
     side: 'enemy',
     strongholdId: `${id}-sh-1`,
     isASuWOnly: true,
@@ -1060,11 +1101,11 @@ export function generateOrganicIsland(
     weaponDesc: coastalGun1BDesc,
     pos: { x: cp1Pos.x - 55, y: cp1Pos.y + 20 },
     angle: sh1Angle - 0.4,
-    health: (era === 'era4' || era === 'era3') ? 3400 : era === 'era2' ? 2800 : 2200,
-    armor: (era === 'era4' || era === 'era3') ? 0.60 : era === 'era2' ? 0.50 : 0.40,
-    range: (era === 'era4' || era === 'era3') ? 1500 : era === 'era2' ? 1350 : 1200,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 3400 : era === 'era2' ? 2800 : 2200,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.60 : era === 'era2' ? 0.50 : 0.40,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 1500 : era === 'era2' ? 1350 : 1200,
     cooldown: 1.4,
-    reloadTime: (era === 'era4' || era === 'era3') ? 2.6 : era === 'era2' ? 4.2 : 4.0,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 2.6 : era === 'era2' ? 4.2 : 4.0,
     side: 'enemy',
     strongholdId: `${id}-sh-1`,
     isASuWOnly: true,
@@ -1097,11 +1138,11 @@ export function generateOrganicIsland(
     weaponDesc: flak1Desc,
     pos: { x: cp1Pos.x - 35, y: cp1Pos.y + 45 },
     angle: sh1Angle + 0.5,
-    health: (era === 'era4' || era === 'era3') ? 3200 : era === 'era2' ? 2600 : 2200,
-    armor: (era === 'era4' || era === 'era3') ? 0.55 : era === 'era2' ? 0.45 : 0.38,
-    range: (era === 'era4' || era === 'era3') ? 1200 : era === 'era2' ? 950 : 880,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 3200 : era === 'era2' ? 2600 : 2200,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.55 : era === 'era2' ? 0.45 : 0.38,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 1200 : era === 'era2' ? 950 : 880,
     cooldown: 0.8,
-    reloadTime: (era === 'era4' || era === 'era3') ? 1.0 : era === 'era2' ? 2.0 : 2.4,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 1.0 : era === 'era2' ? 2.0 : 2.4,
     side: 'enemy',
     strongholdId: `${id}-sh-1`,
     isASuWOnly: false,
@@ -1134,11 +1175,11 @@ export function generateOrganicIsland(
     weaponDesc: flak1BDesc,
     pos: { x: cp1Pos.x + 25, y: cp1Pos.y + 55 },
     angle: sh1Angle - 0.3,
-    health: (era === 'era4' || era === 'era3') ? 2800 : era === 'era2' ? 2400 : 1900,
-    armor: (era === 'era4' || era === 'era3') ? 0.50 : era === 'era2' ? 0.42 : 0.35,
-    range: (era === 'era4' || era === 'era3') ? 1000 : era === 'era2' ? 820 : 750,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 2800 : era === 'era2' ? 2400 : 1900,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.50 : era === 'era2' ? 0.42 : 0.35,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 1000 : era === 'era2' ? 820 : 750,
     cooldown: 0.5,
-    reloadTime: (era === 'era4' || era === 'era3') ? 0.8 : era === 'era2' ? 1.6 : 1.8,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.8 : era === 'era2' ? 1.6 : 1.8,
     side: 'enemy',
     strongholdId: `${id}-sh-1`,
     isASuWOnly: false,
@@ -1150,7 +1191,7 @@ export function generateOrganicIsland(
   for (let s = 1; s <= 2; s++) {
     const sqName =
       era === 'era4'
-        ? `越盟前線守備第${s}班 (AK-47 / RPG-7 反戰車組)`
+        ? `北越前線守備第${s}班 (AK-47 / RPG-7 反戰車組)`
         : era === 'era3'
         ? `灘頭守備第${s}班 (地下防空暗堡與重機槍)`
         : era === 'era2'
@@ -1172,11 +1213,11 @@ export function generateOrganicIsland(
       weaponDesc: sqDesc,
       pos: { x: cp1Pos.x + (s === 1 ? 50 : -45), y: cp1Pos.y + (s === 1 ? -40 : -35) },
       angle: sh1Angle,
-      health: (era === 'era4' || era === 'era3') ? 2400 : era === 'era2' ? 1800 : 1400,
-      armor: (era === 'era4' || era === 'era3') ? 0.45 : era === 'era2' ? 0.35 : 0.28,
-      range: (era === 'era4' || era === 'era3') ? 680 : era === 'era2' ? 580 : 500,
+      health: (era === 'era4' || era === 'era3' || era === 'era5') ? 2400 : era === 'era2' ? 1800 : 1400,
+      armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.45 : era === 'era2' ? 0.35 : 0.28,
+      range: (era === 'era4' || era === 'era3' || era === 'era5') ? 680 : era === 'era2' ? 580 : 500,
       cooldown: 0.3,
-      reloadTime: (era === 'era4' || era === 'era3') ? 1.0 : 1.4,
+      reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 1.0 : 1.4,
       side: 'enemy',
       strongholdId: `${id}-sh-1`,
       isASuWOnly: true,
@@ -1212,11 +1253,11 @@ export function generateOrganicIsland(
     weaponDesc: art1Desc,
     pos: { x: cp1Pos.x + 10, y: cp1Pos.y - 65 },
     angle: sh1Angle,
-    health: (era === 'era4' || era === 'era3') ? 3000 : era === 'era2' ? 2500 : 2000,
-    armor: (era === 'era4' || era === 'era3') ? 0.50 : era === 'era2' ? 0.40 : 0.35,
-    range: (era === 'era4' || era === 'era3') ? 1500 : era === 'era2' ? 1250 : 1100,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 3000 : era === 'era2' ? 2500 : 2000,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.50 : era === 'era2' ? 0.40 : 0.35,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 1500 : era === 'era2' ? 1250 : 1100,
     cooldown: 1.6,
-    reloadTime: (era === 'era4' || era === 'era3') ? 3.0 : era === 'era2' ? 3.8 : 4.0,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 3.0 : era === 'era2' ? 3.8 : 4.0,
     side: 'enemy',
     strongholdId: `${id}-sh-1`,
     isASuWOnly: true,
@@ -1226,7 +1267,7 @@ export function generateOrganicIsland(
 
   strongholds.push({
     id: `${id}-sh-1`,
-    name: `${name} · 灘頭要塞據點`,
+    name: `${shortPlace(name)} · 灘頭要塞據點`,
     cpPos: cp1Pos,
     isCaptured: false,
     captureProgress: 0,
@@ -1246,12 +1287,12 @@ export function generateOrganicIsland(
 
   const cp2Name =
     era === 'era4'
-      ? `${name} · 人民軍核心地下坑道司令部 [Bravo CP]`
+      ? `${shortPlace(name)} · 人民軍核心地下坑道司令部 [Bravo CP]`
       : era === 'era3'
-      ? `${name} · 核心地下堅固司令部 [Bravo CP]`
+      ? `${shortPlace(name)} · 核心地下堅固司令部 [Bravo CP]`
       : era === 'era2'
-      ? `${name} · 核心高地司令部 [Bravo CP]`
-      : `${name} · 高地守備指揮部 [Bravo CP]`;
+      ? `${shortPlace(name)} · 核心高地司令部 [Bravo CP]`
+      : `${shortPlace(name)} · 高地守備指揮部 [Bravo CP]`;
   const cp2Desc =
     era === 'era4'
       ? '地下複雜防爆坑道網 · 具備早期預警防空通信與後勤調配中樞'
@@ -1268,11 +1309,11 @@ export function generateOrganicIsland(
     weaponDesc: cp2Desc,
     pos: cp2Pos,
     angle: sh2Angle,
-    health: (era === 'era4' || era === 'era3') ? 5200 : era === 'era2' ? 4200 : 3500,
-    armor: (era === 'era4' || era === 'era3') ? 0.70 : era === 'era2' ? 0.55 : 0.42,
-    range: (era === 'era4' || era === 'era3') ? 850 : era === 'era2' ? 750 : 650,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 5200 : era === 'era2' ? 4200 : 3500,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.70 : era === 'era2' ? 0.55 : 0.42,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 850 : era === 'era2' ? 750 : 650,
     cooldown: 0.6,
-    reloadTime: (era === 'era4' || era === 'era3') ? 1.2 : 1.6,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 1.2 : 1.6,
     side: 'enemy',
     strongholdId: `${id}-sh-2`,
     isASuWOnly: true,
@@ -1350,11 +1391,11 @@ export function generateOrganicIsland(
     weaponDesc: tankBnDesc,
     pos: { x: cp2Pos.x - 55, y: cp2Pos.y - 20 },
     angle: sh2Angle,
-    health: (era === 'era4' || era === 'era3') ? 4400 : era === 'era2' ? 3600 : 2800,
-    armor: (era === 'era4' || era === 'era3') ? 0.68 : era === 'era2' ? 0.55 : 0.42,
-    range: (era === 'era4' || era === 'era3') ? 1200 : era === 'era2' ? 1050 : 900,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 4400 : era === 'era2' ? 3600 : 2800,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.68 : era === 'era2' ? 0.55 : 0.42,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 1200 : era === 'era2' ? 1050 : 900,
     cooldown: 1.2,
-    reloadTime: (era === 'era4' || era === 'era3') ? 2.5 : era === 'era2' ? 3.2 : 3.0,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 2.5 : era === 'era2' ? 3.2 : 3.0,
     side: 'enemy',
     strongholdId: `${id}-sh-2`,
     isASuWOnly: true,
@@ -1387,11 +1428,11 @@ export function generateOrganicIsland(
     weaponDesc: flak2Desc,
     pos: { x: cp2Pos.x + 60, y: cp2Pos.y + 40 },
     angle: sh2Angle + 1.2,
-    health: (era === 'era4' || era === 'era3') ? 3600 : era === 'era2' ? 2800 : 2200,
-    armor: (era === 'era4' || era === 'era3') ? 0.58 : era === 'era2' ? 0.48 : 0.38,
-    range: (era === 'era4' || era === 'era3') ? 1350 : era === 'era2' ? 950 : 880,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 3600 : era === 'era2' ? 2800 : 2200,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.58 : era === 'era2' ? 0.48 : 0.38,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 1350 : era === 'era2' ? 950 : 880,
     cooldown: 0.7,
-    reloadTime: (era === 'era4' || era === 'era3') ? 1.4 : era === 'era2' ? 2.0 : 2.2,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 1.4 : era === 'era2' ? 2.0 : 2.2,
     side: 'enemy',
     strongholdId: `${id}-sh-2`,
     isASuWOnly: false,
@@ -1424,11 +1465,11 @@ export function generateOrganicIsland(
     weaponDesc: coastalGun2Desc,
     pos: { x: cp2Pos.x - 70, y: cp2Pos.y + 35 },
     angle: sh2Angle + 0.8,
-    health: (era === 'era4' || era === 'era3') ? 4400 : era === 'era2' ? 3600 : 2800,
-    armor: (era === 'era4' || era === 'era3') ? 0.68 : era === 'era2' ? 0.55 : 0.45,
-    range: (era === 'era4' || era === 'era3') ? 1900 : era === 'era2' ? 1650 : 1400,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 4400 : era === 'era2' ? 3600 : 2800,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.68 : era === 'era2' ? 0.55 : 0.45,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 1900 : era === 'era2' ? 1650 : 1400,
     cooldown: 2.2,
-    reloadTime: (era === 'era4' || era === 'era3') ? 3.8 : era === 'era2' ? 6.0 : 5.5,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 3.8 : era === 'era2' ? 6.0 : 5.5,
     side: 'enemy',
     strongholdId: `${id}-sh-2`,
     isASuWOnly: true,
@@ -1461,9 +1502,9 @@ export function generateOrganicIsland(
     weaponDesc: radarDesc,
     pos: { x: cp2Pos.x - 30, y: cp2Pos.y + 55 },
     angle: sh2Angle,
-    health: (era === 'era4' || era === 'era3') ? 2800 : era === 'era2' ? 2200 : 1800,
-    armor: (era === 'era4' || era === 'era3') ? 0.45 : era === 'era2' ? 0.35 : 0.28,
-    range: (era === 'era4' || era === 'era3') ? 3800 : era === 'era2' ? 2400 : 2000,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 2800 : era === 'era2' ? 2200 : 1800,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.45 : era === 'era2' ? 0.35 : 0.28,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 3800 : era === 'era2' ? 2400 : 2000,
     side: 'enemy',
     strongholdId: `${id}-sh-2`,
   });
@@ -1494,8 +1535,8 @@ export function generateOrganicIsland(
     weaponDesc: depotDesc,
     pos: { x: cp2Pos.x + 30, y: cp2Pos.y + 60 },
     angle: sh2Angle,
-    health: (era === 'era4' || era === 'era3') ? 3400 : era === 'era2' ? 2600 : 2000,
-    armor: (era === 'era4' || era === 'era3') ? 0.50 : era === 'era2' ? 0.40 : 0.30,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 3400 : era === 'era2' ? 2600 : 2000,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.50 : era === 'era2' ? 0.40 : 0.30,
     side: 'enemy',
     strongholdId: `${id}-sh-2`,
   });
@@ -1504,7 +1545,7 @@ export function generateOrganicIsland(
 
   strongholds.push({
     id: `${id}-sh-2`,
-    name: `${name} · 核心高地司令部`,
+    name: `${shortPlace(name)} · 核心高地司令部`,
     cpPos: cp2Pos,
     isCaptured: false,
     captureProgress: 0,
@@ -1525,10 +1566,10 @@ export function generateOrganicIsland(
 
     const cp3Name =
       era === 'era3'
-        ? `${name} · 港灣地下海防戰術指揮所 [Charlie CP]`
+        ? `${shortPlace(name)} · 港灣地下海防戰術指揮所 [Charlie CP]`
         : era === 'era2'
-        ? `${name} · 港灣地下指揮所 [Charlie CP]`
-        : `${name} · 港口守備指揮所 [Charlie CP]`;
+        ? `${shortPlace(name)} · 港灣地下指揮所 [Charlie CP]`
+        : `${shortPlace(name)} · 港口守備指揮所 [Charlie CP]`;
     const cp3Desc =
       era === 'era3'
         ? '深層岩石防護掩體 · 港口水雷與自動岸防射控'
@@ -1564,8 +1605,8 @@ export function generateOrganicIsland(
         : era === 'era3'
         ? '裝甲反擊排 (T-34/85 岸防陣地)'
         : era === 'era2'
-        ? '裝甲戰車排 (九七式中戰車「チハ」陣地)'
-        : '裝甲戰車排 (九五式輕戰車陣地)';
+        ? '九七式中戰車「チハ」 戰車陣地'
+        : '九五式輕戰車 戰車陣地';
     const tankPlDesc =
       era === 'era5'
         ? '125mm 滑膛砲與反戰車飛彈掩體 · 扼守港區水陸要道'
@@ -1664,7 +1705,7 @@ export function generateOrganicIsland(
 
     strongholds.push({
       id: `${id}-sh-3`,
-      name: `${name} · 港灣地下要塞`,
+      name: `${shortPlace(name)} · 港灣地下要塞`,
       cpPos: cp3Pos,
       isCaptured: false,
       captureProgress: 0,
@@ -1748,7 +1789,7 @@ export function generateFriendlyBaseIsland(
     makeInstallation({
       id: 'friendly-base-afb',
       type: 'airfield',
-      name: '友軍前進航空基地 (AFB Henderson Field)',
+      name: STAGING_BASE[era].airfield,
       weaponDesc: '雙跑道全天候後勤航空站 · 提供機隊補充與長程空中打擊',
       pos: { x: center.x + 20, y: center.y - 20 },
       angle: -Math.PI / 4,
@@ -1932,7 +1973,7 @@ export function generateFriendlyBaseIsland(
 
   return {
     id: 'friendly-base-island',
-    name: 'Espiritu Santo Staging Base (友軍前線後勤與空軍基地)',
+    name: STAGING_BASE[era].island,
     center,
     radius: baseRadius,
     points,
@@ -1993,8 +2034,6 @@ export function createGroundUnit(
     isSPG,
     isMLRS,
     isNuclearTEL,
-    canBuildAirfield: type === 'usmc_engineer',
-    buildCooldown: 0,
     isDestroyed: false,
     organization: 100,
     maxOrganization: 100,
@@ -2002,7 +2041,6 @@ export function createGroundUnit(
     maxStrength: 100,
     isSupplied: true,
     isSurrendered: false,
-    surrenderTimer: 0,
     disorganized: false,
     echelon,
   };
@@ -2103,8 +2141,6 @@ export function createNewportLST(id: string, name: string, pos: Vector2D, era: E
     ciwsCooldown: 0,
     ciwsRange: 1100,
     ciwsType: 'phalanx',
-    hasChaffLauncher: isEra5,
-    chaffCooldown: 0,
     turrets: isEra5
       ? [
           createTurret(24, 0, 'Mk 33 3-inch/50 Twin (艦艏雙聯3吋速射砲)', 1400, 1.4, 2, heading, 150),
@@ -2187,8 +2223,6 @@ export function createCV63(id: string, name: string, pos: Vector2D): Ship {
     samCooldown: 0,
     maxSAMs: 32,
     readySAMs: 32,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     turrets: [
       createTurret(-34, 15, 'Mk 10 Mod 3 Twin-Arm Terrier Launcher (右舷艦艉梗犬防空飛彈)', 2400, 3.5, 2, heading, 90),
       createTurret(-34, -15, 'Mk 10 Mod 3 Twin-Arm Terrier Launcher (左舷艦艉梗犬防空飛彈)', 2400, 3.5, 2, heading, 90),
@@ -2240,8 +2274,6 @@ export function createBelknapCG(id: string, name: string, pos: Vector2D): Ship {
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     turrets: [
       createTurret(28, 0, 'Mk 10 Mod 7 (雙臂長程防空飛彈發射架 RIM-67/Terrier)', 3400, 3.0, 2, heading, 260),
       createTurret(-28, 0, '5-inch/54 Mk 42 Rapid Gun (艦艉5吋自動速射砲)', 1450, 1.5, 1, heading, 220),
@@ -2290,8 +2322,6 @@ export function createAdamsDDG(id: string, name: string, pos: Vector2D): Ship {
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     hasTorpedoes: true,
     torpedoCooldown: 0,
     torpedoReloadTime: 12,
@@ -2343,8 +2373,6 @@ export function createForrestShermanDD(id: string, name: string, pos: Vector2D):
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     hasDepthCharges: true,
     depthChargeCooldown: 0,
     turrets: [
@@ -2394,8 +2422,6 @@ export function createKnoxFFG(id: string, name: string, pos: Vector2D): Ship {
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     turrets: [
       createTurret(24, 0, '5-inch/54 Mk 42 Auto (艦艏5吋自動速射主砲)', 1450, 1.5, 1, heading, 110),
       createTurret(12, 0, 'ASROC 8-cell Launcher (艦艏八聯裝反潛火箭箱)', 1900, 3.5, 1, heading, 80),
@@ -2431,10 +2457,7 @@ export function createLPHIwoJima(id: string, name: string, pos: Vector2D): Ship 
     maxHealth: 4800,
     armor: 0.32,
     detectionRange: 3800,
-    isLPH: true,
     isAmphibious: true,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     cargoCapacity: 6,
     embarkedUnitIds: [],
     turrets: [
@@ -2737,8 +2760,6 @@ export function createCVNNimitz(id: string, name: string, pos: Vector2D): Ship {
     ciwsCooldown: 0,
     ciwsRange: 1100,
     ciwsType: 'phalanx',
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     turrets: [
       createTurret(35, 16, 'Mk 29 Sea Sparrow Octuple (右舷前海麻雀)', 2800, 2.5, 1, heading, 150),
       createTurret(-45, -16, 'Mk 29 Sea Sparrow Octuple (左舷後海麻雀)', 2800, 2.5, 1, heading, 150),
@@ -2804,8 +2825,6 @@ export function createTiconderogaCG(id: string, name: string, pos: Vector2D): Sh
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     turrets: [
       createTurret(32, 0, '5-inch/54 Mk 45 Lightweight (艦艏5吋輕量艦砲)', 1500, 1.8, 1, heading, 120),
       createTurret(-32, 0, '5-inch/54 Mk 45 Lightweight (艦艉5吋輕量艦砲)', 1500, 1.8, 1, heading, 120),
@@ -2866,8 +2885,6 @@ export function createVirginiaCGN(id: string, name: string, pos: Vector2D): Ship
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     turrets: [
       createTurret(30, 0, '5-inch/54 Mk 45 Lightweight (艦艏5吋砲)', 1500, 1.8, 1, heading, 120),
       createTurret(-30, 0, '5-inch/54 Mk 45 Lightweight (艦艉5吋砲)', 1500, 1.8, 1, heading, 120),
@@ -2915,8 +2932,6 @@ export function createIowaModernizedBB(id: string, name: string, pos: Vector2D):
     harpoonCooldown: 0,
     readyHarpoons: 16,
     maxHarpoons: 16,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     rocketCooldown: 0,
     turrets: [
       createTurret(42, 0, '16-inch/50 Mk 7 Triple (No.1 艦艏三聯裝406mm主砲)', 2400, 5.0, 3, heading, 820),
@@ -2979,8 +2994,6 @@ export function createSpruanceDD(id: string, name: string, pos: Vector2D): Ship 
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     turrets: [
       createTurret(28, 0, '5-inch/54 Mk 45 Lightweight (艦艏5吋自動砲)', 1500, 1.8, 1, heading, 120),
       createTurret(-28, 0, '5-inch/54 Mk 45 Lightweight (艦艉5吋自動砲)', 1500, 1.8, 1, heading, 120),
@@ -3041,8 +3054,6 @@ export function createKiddDDG(id: string, name: string, pos: Vector2D): Ship {
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     turrets: [
       createTurret(28, 0, '5-inch/54 Mk 45 Lightweight (艦艏5吋砲)', 1500, 1.8, 1, heading, 120),
       createTurret(-28, 0, '5-inch/54 Mk 45 Lightweight (艦艉5吋砲)', 1500, 1.8, 1, heading, 120),
@@ -3097,8 +3108,6 @@ export function createPerryFFG(id: string, name: string, pos: Vector2D): Ship {
     maxHarpoons: 6,
     hasSVTT: true,
     svttCooldown: 0,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     turrets: [
       createTurret(24, 0, 'Mk 13 Mod 4 Single-Arm Launcher (艦艏單臂標準SM-1MR/魚叉)', 3200, 2.4, 1, heading, 220),
       createTurret(0, 0, 'OTO Melara 76mm/62 Compact (舯部76mm自動快砲)', 1350, 1.2, 1, heading, 100),
@@ -3175,13 +3184,10 @@ export function createAustinLPD(id: string, name: string, pos: Vector2D): Ship {
     armor: 0.30,
     detectionRange: 3800,
     isAmphibious: true,
-    isLPH: true,
     hasCIWS: true,
     ciwsCooldown: 0,
     ciwsRange: 1100,
     ciwsType: 'phalanx',
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     cargoCapacity: 8,
     embarkedUnitIds: [],
     turrets: [
@@ -3700,7 +3706,8 @@ export function createOscarSSGN(id: string, name: string, pos: Vector2D): Ship {
 // ERA 1–5 OPFOR SUBMARINE WOLFPACK CONSTRUCTORS
 // ═══════════════════════════════════════════════════════════════════════
 
-// Era 1 & Era 2: Kriegsmarine Monsun Gruppe Type VIIC / IXD2 U-Boat
+
+// Era 1 & Era 2 easter egg: a Kriegsmarine Monsun Gruppe Type IXD2 U-boat out of Penang (from 1943)
 export function createMonsunUBoatSS(id: string, name: string, pos: Vector2D, era: Era): Ship {
   const heading = (Math.PI * 3) / 4;
   return createShip({
@@ -3735,6 +3742,7 @@ export function createMonsunUBoatSS(id: string, name: string, pos: Vector2D, era
     flakRange: 0,
   });
 }
+
 
 // Era 1 & Era 2: IJN 伊號巡潛大型潛艦 (I-19 / I-168 / I-58)
 export function createIjnIBoatSS(id: string, name: string, pos: Vector2D, era: Era): Ship {
@@ -3901,7 +3909,7 @@ export function createTokyoExpressDD(id: string, name: string, pos: Vector2D): S
 // MULTI-ERA OPFOR SURFACE ACTION GROUP (SAG) WARSHIPS
 // ═══════════════════════════════════════════════════════════════════════
 
-// Era 1 SAG Flagship: IJN Chōkai (鳥海號重巡洋艦 - 第八艦隊夜戰旗艦)
+// Era 1 SAG Flagship: IJN Chokai (鳥海號重巡洋艦 - 第八艦隊夜戰旗艦)
 export function createChokaiCA(id: string, name: string, pos: Vector2D): Ship {
   const heading = (Math.PI * 3) / 4;
   return createShip({
@@ -3979,7 +3987,7 @@ export function createSendaiCL(id: string, name: string, pos: Vector2D): Ship {
   });
 }
 
-// Era 2 SAG Battleship: IJN Kongō (金剛號高速戰艦 - 第一遊擊部隊主砲編隊)
+// Era 2 SAG Battleship: IJN Kongo (金剛號高速戰艦 - 第一遊擊部隊主砲編隊)
 export function createKongoBB(id: string, name: string, pos: Vector2D): Ship {
   const heading = (Math.PI * 3) / 4;
   return createShip({
@@ -4098,13 +4106,13 @@ export function createSverdlovCL(id: string, name: string, pos: Vector2D): Ship 
   });
 }
 
-// Era 3 SAG Gun Destroyer: Project 56 Kotlin (56型科特林級艦隊驅逐艦)
+// Era 3 SAG Gun Destroyer: Project 30bis Skory (the Pacific Fleet's destroyers of 1950-53)
 export function createKotlinDD(id: string, name: string, pos: Vector2D): Ship {
   const heading = Math.PI * 0.45;
   return createShip({
     id,
     name,
-    codeName: 'Fleet Destroyer (56型科特林級火砲驅逐艦)',
+    codeName: 'Fleet Destroyer (30bis型史可里級火砲驅逐艦)',
     type: 'destroyer',
     side: 'enemy',
     era: 'era3',
@@ -4936,27 +4944,27 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
       era === 'era5'
         ? '北約北方集團軍前進聯合作戰指揮中心 [NATO NORTHAG HQ]'
         : era === 'era4'
-        ? '美軍 MACV 峴港前進指揮中心 [MACV Da Nang HQ]'
+        ? '美軍第3兩棲陸戰隊 (III MAF) 峴港前進指揮中心 [III MAF Da Nang HQ]'
         : '美陸軍前線指揮中心 [Mainland Allied HQ]';
     const hqDesc =
       era === 'era5'
         ? '北約歐洲盟軍最高司令部前線地下指揮掩體 · 戰術C3I通信數據鏈與空地作戰指管樞紐'
         : era === 'era4'
-        ? '美軍軍事援助越南司令部 · 前線雷達導引通信中心與戰術任務指管部'
+        ? '美軍第3兩棲陸戰隊司令部 (III MAF) · 第一軍區前線雷達導引通信中心與戰術任務指管部'
         : '地下花崗岩加固防核指揮掩體 · 戰術通信與前線陸軍部隊整備中心';
 
     const afbName =
       era === 'era5'
-        ? '拉姆施泰因北約戰術前進空軍基地 (Ramstein AFB / USAFE)'
+        ? '阿爾霍恩北約前進作戰基地 (Ahlhorn FOL / 2ATAF)'
         : era === 'era4'
         ? '峴港空軍基地 (Da Nang Air Base / 366th TFW)'
-        : '遠東空軍大陸前進航空基地 (K-18 Suwon/Osan AFB)';
+        : '聯合國軍 前進野戰航空基地 (陸戰隊第1航空聯隊 / 美國遠東空軍第5航空軍)';
     const afbDesc =
       era === 'era5'
-        ? '北約核心全天候重型戰術空軍基地 · 部署 A-10A, F-15A, F-16A, E-3A, F-111, B-52, C-130'
+        ? '北約第2戰術空軍 前進作戰基地 · 部署 A-10A, 龍捲風 GR1, F-16A, 獵鷹 (Jaguar), C-130'
         : era === 'era4'
-        ? '雙跑道全天候重型空軍航空基地 · 部署 F-4E, F-105, B-52, A-7, OV-10, UH-1, AH-1'
-        : '雙跑道全天候後勤航空站 · USAAF 第5航空隊 F-86 軍刀機與天襲者起降基地';
+        ? '雙跑道全天候重型空軍航空基地 · 部署 F-4C/D, A-1E, OV-10, O-2A, AC-47, UH-1, AH-1'
+        : '雙跑道全天候後勤航空站 · 美國遠東空軍第5航空軍與陸戰隊 F4U 海盜、F9F 黑豹、AD 天襲者起降基地';
 
     addAlliedMainlandBases(continent, alliedHqPos, hqName, hqDesc, afbName, afbDesc);
 
@@ -4974,8 +4982,9 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
     islands.push(continent);
 
     // 2個外海戰略長條形屏障島 (具備連續山脊、長條雨林帶與雙倍雷達/岸防設施)
-    const outIsl1Name = era === 'era4' ? 'Hon Me Island (昏果島戰略海防雷達前哨島)' : 'Wonsan Outer Bastion (元山外海要塞屏障島)';
-    const outIsl2Name = era === 'era4' ? 'Con Co Island (白龍尾要塞飛彈陣地島)' : 'Chodo Radar Outpost (椒島雷達前哨島)';
+    const [outer1, outer2] = OUTER_ISLANDS[era];
+    const outIsl1Name = outer1.name;
+    const outIsl2Name = outer2.name;
     
     const outIsland1 = generateOrganicIsland(
       'island-wonsan',
@@ -4996,7 +5005,7 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
         ],
         width: 140,
         height: 195,
-        peaks: [{ pos: { x: 3800, y: 8600 }, elevation: 195, label: '昏果島頂峰雷達崖 [Hon Me Peak 195m]' }],
+        peaks: [{ pos: { x: 3800, y: 8600 }, elevation: 195, label: outer1.peak }],
       },
     ];
     outIsland1.forestBelts = [
@@ -5033,7 +5042,7 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
         ],
         width: 130,
         height: 180,
-        peaks: [{ pos: { x: 3200, y: 5200 }, elevation: 180, label: '白龍尾山脊觀測哨 [Con Co Peak 180m]' }],
+        peaks: [{ pos: { x: 3200, y: 5200 }, elevation: 180, label: outer2.peak }],
       },
     ];
     outIsland2.forestBelts = [
@@ -5056,11 +5065,21 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
   } else {
     // 時代一與時代二: 4座巨型戰略珊瑚環礁要塞群 (狹長型珊瑚環礁與中央內海潟湖)
     // 減少島嶼數量但島嶼大幅擴大 (半徑 1100-1350m)，內部有深水潟湖水域可供舟艇穿梭
+    // 時代一: the Solomons 1942; 時代二: the Central Pacific drive 1944-45 (Okinawa, the Keramas, Saipan, Iwo Jima)
+    const atollNames =
+      era === 'era2'
+        ? ['Okinawa Hontō (沖繩本島)', 'Kerama Rettō (慶良間列島)', 'Saipan (塞班島)', 'Iwo Jima (硫磺島)']
+        : [
+            'Guadalcanal-Tulagi Atoll Complex (瓜達爾卡納爾-圖拉吉巨型珊瑚環礁群)',
+            'Ironbottom Sound Barrier Atoll (鐵底灣天然屏障雙環礁)',
+            'Rabaul Caldera Fortress Lagoon (拉包爾破火山口要塞潟湖群)',
+            'Santa Cruz Strategic Coral Atoll (聖克魯斯深水潟湖前哨環礁)',
+          ];
     const atollConfigs: { name: string; center: Vector2D; radius: number }[] = [
-      { name: 'Guadalcanal-Tulagi Atoll Complex (瓜達爾卡納爾-圖拉吉巨型珊瑚環礁群)', center: { x: 5000, y: 8800 }, radius: 1250 },
-      { name: 'Ironbottom Sound Barrier Atoll (鐵底灣天然屏障雙環礁)', center: { x: 7400, y: 6200 }, radius: 1180 },
-      { name: 'Rabaul Caldera Fortress Lagoon (拉包爾破火山口要塞潟湖群)', center: { x: 9200, y: 3800 }, radius: 1350 },
-      { name: 'Santa Cruz Strategic Coral Atoll (聖克魯斯深水潟湖前哨環礁)', center: { x: 9800, y: 8200 }, radius: 1120 },
+      { name: atollNames[0], center: { x: 5000, y: 8800 }, radius: 1250 },
+      { name: atollNames[1], center: { x: 7400, y: 6200 }, radius: 1180 },
+      { name: atollNames[2], center: { x: 9200, y: 3800 }, radius: 1350 },
+      { name: atollNames[3], center: { x: 9800, y: 8200 }, radius: 1120 },
     ];
 
     for (let i = 0; i < atollConfigs.length; i++) {
@@ -5072,8 +5091,9 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
         y: Math.max(1600, Math.min(worldSize - 1600, cfg.center.y + jitterY)),
       };
 
-      // Guadalcanal (a high volcanic island) never has a lagoon; Santa Cruz (Nendo) sometimes not
-      const solid = i === 0 || (i === 3 && Math.abs(Math.sin(seedBase * 7.13)) < 0.5);
+      // Guadalcanal and Okinawa (high islands) and Iwo Jima (volcanic) have no lagoon; Santa Cruz (Nendo) sometimes not.
+      // The Keramas' anchorage and Saipan's Tanapag lagoon keep theirs.
+      const solid = i === 0 || (era === 'era2' && i === 3) || (i === 3 && Math.abs(Math.sin(seedBase * 7.13)) < 0.5);
       islands.push(
         generateCoralAtoll(
           `atoll-${i + 1}`,
@@ -5151,13 +5171,16 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
       ? Math.PI * 0.45 // Heading Southeast into the gulf/strait
       : (Math.PI * 3) / 4; addEnemyTaskForce(era, enemyShips, enemyCenter, enemyHeading);
 
+  applyEraPlaceNames(era, islands);
+  applyEraEquipment(era, islands);
+
   const briefingName =
     era === 'era5'
-      ? `GIUK Gap & Barents Sea 1983-1991 (Sector ${sectorNumber})`
+      ? `North Sea & German Bight 1983-1991 (Sector ${sectorNumber})`
       : era === 'era4'
       ? `Gulf of Tonkin & Yankee Station 1965-1973 (Sector ${sectorNumber})`
       : era === 'era3'
-      ? `Korea Strait & Wonsan Gulf 1950-1953 (Sector ${sectorNumber})`
+      ? `Sea of Japan & Wonsan Gulf 1950-1953 (Sector ${sectorNumber})`
       : SECTOR_NAMES[(sectorNumber - 1) % SECTOR_NAMES.length];
 
   return {
@@ -5177,10 +5200,10 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
           : era === 'era2'
           ? 'Western Pacific & Philippine Sea 1944-45'
           : era === 'era3'
-          ? 'Far East & Korean Peninsula 1950-1953 (韓戰遠東特遣隊)'
+          ? 'North-East Korea 1950-1953 (韓戰東海岸 · 元山—咸興)'
           : era === 'era4'
-          ? 'Gulf of Tonkin & Yankee Station 1965-1973 (越戰北部灣特遣隊)'
-          : 'GIUK Gap & North Atlantic 1983-1991 (北大西洋神盾攻勢作戰)',
+          ? 'Vietnam & Yankee Station 1965-1973 (越戰 · 北部灣與第一軍區)'
+          : 'North Sea & Northern Germany 1983-1991 (北海與北德平原聯合作戰)',
       briefing:
         era === 'era1'
           ? '【1942 瓜達爾卡納爾戰役】美軍第16/61特遣艦隊 (USS Enterprise CV-6, San Francisco, Atlanta) 奉命進入鐵底灣與所羅門群島海域，尋殲日軍南雲第一航空艦隊 (翔鶴、比叡、鳥海、秋月) 與摧毀島嶼要塞防線！'
@@ -5190,7 +5213,7 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
           ? '【1950~1953 韓戰與遠東冷戰戰役】美海軍第77特遣艦隊 (USS Oriskany CV-34 SCB-27A, USS Missouri BB-63, Des Moines, Gearing) 進駐元山與日本海戰區！全面出動 F9F 黑豹、F2H 女妖噴射機、AD-1 天襲者、AD-3W 全域空中預警機與 HO3S-1 搜救直升機。假想敵冷戰遠東聯軍集結 MiG-15 噴射機、Tu-14 噴射轟炸機、53式魚雷快艇群與 T-34/85、IS-3 重戰車堅固防線！'
           : era === 'era4'
           ? '【1965~1973 越戰與北部灣特遣作戰】美海軍第77特遣艦隊旗艦小鷹號超級航艦 (CV-63 USS Kitty Hawk)、貝爾納普號飛彈巡洋艦 (CG-26)、查爾斯·亞當斯號飛彈驅逐艦 (DDG-2) 與硫磺島號兩棲突擊艦 (LPH-2) 駛入北部灣洋基站！全域實裝超音速噴射打擊群 (F-4B/J, F-8, A-6, A-4, B-52, F-105)、空空/空艦/反輻射導引飛彈系統與直升機立體垂直包圍！全面壓制北越 SA-2 導針防空飛彈營、扇歌射控雷達與冥河反艦飛彈快艇！'
-          : '【1983~1991 假想第三次世界大戰 · 格陵蘭-冰島-英國斷口 (GIUK) 與巴倫支海前線】美海軍大西洋打擊艦隊 (USS Nimitz CVN-68, Ticonderoga CG-47, Virginia CGN-38, Iowa BB-61 近代化改裝, Spruance, Kidd, Perry, Los Angeles 核潛艦, Austin 船塢艦與 LCAC 氣墊艇) 推進大洋！迎戰蘇聯紅海軍北方艦隊主力 (基輔號航母、基洛夫號核動力巡洋艦、現代級、無畏級與奧斯卡級飛彈核潛艇)。敵方集結 Tu-22M3 逆火、Tu-95 熊式、MiG-29A、Su-27、T-80B 與 T-72B，發動大規模飽和超音速反艦巡弋飛彈齊射！神盾 SM-2MR、方陣 CIWS 與 F-14A 鳳凰飛彈準備全力接戰！',
+          : '【1983~1991 假想第三次世界大戰 · 德意志灣與北德平原前線 (什勒斯維希-霍爾斯坦 / 易北河)】美海軍大西洋打擊艦隊 (USS Nimitz CVN-68, Ticonderoga CG-47, Virginia CGN-38, Iowa BB-61 近代化改裝, Spruance, Kidd, Perry, Los Angeles 核潛艦, Austin 船塢艦與 LCAC 氣墊艇) 推進大洋！迎戰蘇聯紅海軍北方艦隊主力 (基輔號航母、基洛夫號核動力巡洋艦、現代級、無畏級與奧斯卡級飛彈核潛艇)。敵方集結 Tu-22M3 逆火、Tu-95 熊式、MiG-29A、Su-27、T-80B 與 T-72B，發動大規模飽和超音速反艦巡弋飛彈齊射！神盾 SM-2MR、方陣 CIWS 與 F-14A 鳳凰飛彈準備全力接戰！',
       primaryObjective:
         era === 'era1'
           ? '擊沉日軍正規航母翔鶴號與護衛主力艦，摧毀島嶼核心設施'
@@ -7286,56 +7309,56 @@ function addMainlandCivilianZones(era: Era, continent: Island): void {
 function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
   if (era === 'era1') {
     groundUnits.push(
-      createGroundUnit('usmc-inf-1', 'usmc_rifle_42', 'USMC 1st Marine Div Rifle Plt (春田/M1加蘭德)', 'player', 'era1', { x: 2030, y: 12380 }),
-      createGroundUnit('usmc-lvt-1', 'usmc_lvt_42', 'USMC 1st Amphibian Tractor Plt (LVT-1水牛)', 'player', 'era1', { x: 2080, y: 12410 }),
-      createGroundUnit('usmc-tank-1', 'usmc_armor_m3', 'USMC 1st Tank Bn Stuart Plt (M3輕戰車)', 'player', 'era1', { x: 2040, y: 12450 }),
-      createGroundUnit('usmc-art-1', 'usmc_artillery_105', 'USMC 10th Artillery Btry (M2A1 105mm)', 'player', 'era1', { x: 2060, y: 12470 }),
-      createGroundUnit('usmc-eng-1', 'usmc_engineer', 'USN 133rd Seabees Combat Engr Plt', 'player', 'era1', { x: 2060, y: 12430 }),
-      createGroundUnit('usmc-eng-2', 'usmc_engineer', 'USMC 第1工兵營 (野戰機場工兵隊)', 'player', 'era1', { x: 2090, y: 12460 }),
-      createGroundUnit('usmc-aa-1', 'usmc_90mm_aa_42', 'USMC 3rd Defense Bn 90mm AA Btry (M1 牽引高射砲)', 'player', 'era1', { x: 2010, y: 12430 })
+      createGroundUnit('usmc-inf-1', 'usmc_rifle_42', '陸戰隊第1師 步槍排', 'player', 'era1', { x: 2030, y: 12380 }),
+      createGroundUnit('usmc-lvt-1', 'usmc_lvt_42', '陸戰隊第1兩棲牽引車營 LVT-1 排', 'player', 'era1', { x: 2080, y: 12410 }),
+      createGroundUnit('usmc-tank-1', 'usmc_armor_m3', '陸戰隊第1戰車營 M3 斯圖亞特戰車排', 'player', 'era1', { x: 2040, y: 12450 }),
+      createGroundUnit('usmc-art-1', 'usmc_artillery_105', '陸戰隊第10砲兵團 M2A1 105mm 榴彈砲連', 'player', 'era1', { x: 2060, y: 12470 }),
+      createGroundUnit('usmc-eng-1', 'usmc_engineer', '海軍第133機動工兵營 工兵排', 'player', 'era1', { x: 2060, y: 12430 }),
+      createGroundUnit('usmc-eng-2', 'usmc_engineer', '陸戰隊第1工兵營 工兵排', 'player', 'era1', { x: 2090, y: 12460 }),
+      createGroundUnit('usmc-aa-1', 'usmc_90mm_aa_42', '陸戰隊第3防衛營 90mm 高射砲連', 'player', 'era1', { x: 2010, y: 12430 })
     );
   } else if (era === 'era2') {
     groundUnits.push(
-      createGroundUnit('usmc-inf-1', 'usmc_rifle_45', 'USMC 6th Marine Div Assault Plt (M1/巴祖卡)', 'player', 'era2', { x: 2030, y: 12380 }),
-      createGroundUnit('usmc-lvt-1', 'usmc_lvt_45', 'USMC 3rd Amphibian Tractor Plt (LVT-4突擊火砲)', 'player', 'era2', { x: 2080, y: 12410 }),
-      createGroundUnit('usmc-tank-1', 'usmc_armor_m4', 'USMC 4th Tank Bn Sherman Plt (M4A2薛曼)', 'player', 'era2', { x: 2040, y: 12450 }),
-      createGroundUnit('usmc-art-1', 'usmc_artillery_105', 'USMC 10th Artillery Btry (M2A1 105mm)', 'player', 'era2', { x: 2060, y: 12470 }),
-      createGroundUnit('usmc-eng-1', 'usmc_engineer', 'USN 133rd Seabees Combat Engr Plt', 'player', 'era2', { x: 2060, y: 12430 }),
-      createGroundUnit('usmc-eng-2', 'usmc_engineer', 'USMC 第1工兵營 (野戰機場工兵隊)', 'player', 'era2', { x: 2090, y: 12460 }),
-      createGroundUnit('usmc-aa-1', 'usmc_40mm_bofors_45', 'USMC 2nd AAA Bn Bofors Plt (40mm M1 牽引)', 'player', 'era2', { x: 2010, y: 12430 }),
-      createGroundUnit('usmc-aa-2', 'us_m16_quad50', 'US Army 96th Inf Div AAA Plt (M16 四聯裝 .50 半履帶車)', 'player', 'era2', { x: 2110, y: 12420 })
+      createGroundUnit('usmc-inf-1', 'usmc_rifle_45', '陸戰隊第6師 突擊排', 'player', 'era2', { x: 2030, y: 12380 }),
+      createGroundUnit('usmc-lvt-1', 'usmc_lvt_45', '陸戰隊第3兩棲牽引車營 LVT-4 排', 'player', 'era2', { x: 2080, y: 12410 }),
+      createGroundUnit('usmc-tank-1', 'usmc_armor_m4', '陸戰隊第4戰車營 M4A2 薛曼戰車排', 'player', 'era2', { x: 2040, y: 12450 }),
+      createGroundUnit('usmc-art-1', 'usmc_artillery_105', '陸戰隊第10砲兵團 M2A1 105mm 榴彈砲連', 'player', 'era2', { x: 2060, y: 12470 }),
+      createGroundUnit('usmc-eng-1', 'usmc_engineer', '海軍第133機動工兵營 工兵排', 'player', 'era2', { x: 2060, y: 12430 }),
+      createGroundUnit('usmc-eng-2', 'usmc_engineer', '陸戰隊第1工兵營 工兵排', 'player', 'era2', { x: 2090, y: 12460 }),
+      createGroundUnit('usmc-aa-1', 'usmc_40mm_bofors_45', '陸戰隊第2防空營 40mm 波佛斯高射砲排', 'player', 'era2', { x: 2010, y: 12430 }),
+      createGroundUnit('usmc-aa-2', 'us_m16_quad50', '美陸軍第96步兵師 M16 四聯裝防空車排', 'player', 'era2', { x: 2110, y: 12420 })
     );
   } else if (era === 'era3') {
     // 時代三 (1950-1953):
     // 1. 後方艦隊後勤基地之 USMC 兩棲陸戰隊 (待乘登陸艇出擊)
     groundUnits.push(
-      createGroundUnit('usmc-inf-1', 'usmc_korea_rifle', 'USMC 1st Marine Div Assault Plt (M1/M20)', 'player', 'era3', { x: 2030, y: 12380 }),
-      createGroundUnit('usmc-tank-1', 'usmc_patton_m46', 'USMC 1st Tank Bn Patton Plt (M46 90mm)', 'player', 'era3', { x: 2040, y: 12450 }),
-      createGroundUnit('usmc-art-1', 'usmc_howitzer_155', 'USMC 11th Artillery Btry (M114 155mm)', 'player', 'era3', { x: 2060, y: 12470 }),
-      createGroundUnit('usmc-duster-1', 'usmc_duster_m42', 'US Army 3rd AAA Bn Duster Plt (M42)', 'player', 'era3', { x: 2080, y: 12410 }),
-      createGroundUnit('usmc-lvt-1', 'usmc_lvtp5', 'USMC 1st Amphibian Tractor Plt (LVT-P5重裝步戰)', 'player', 'era3', { x: 2070, y: 12390 }),
-      createGroundUnit('usmc-eng-1', 'usmc_engineer', 'USN 133rd Seabees Combat Engr Plt', 'player', 'era3', { x: 2060, y: 12430 })
+      createGroundUnit('usmc-inf-1', 'usmc_korea_rifle', '陸戰隊第1師 步槍排', 'player', 'era3', { x: 2030, y: 12380 }),
+      createGroundUnit('usmc-tank-1', 'usmc_patton_m46', '陸戰隊第1戰車營 M46 巴頓戰車排', 'player', 'era3', { x: 2040, y: 12450 }),
+      createGroundUnit('usmc-art-1', 'usmc_howitzer_155', '陸戰隊第11砲兵團 M114 155mm 榴彈砲連', 'player', 'era3', { x: 2060, y: 12470 }),
+      createGroundUnit('usmc-duster-1', 'usmc_duster_m42', '美陸軍第3防空營 M42 清道夫防空砲排', 'player', 'era3', { x: 2080, y: 12410 }),
+      createGroundUnit('usmc-lvt-1', 'usmc_lvtp5', '陸戰隊第1兩棲牽引車營 LVT-P5 排', 'player', 'era3', { x: 2070, y: 12390 }),
+      createGroundUnit('usmc-eng-1', 'usmc_engineer', '海軍第133機動工兵營 工兵排', 'player', 'era3', { x: 2060, y: 12430 })
     );
 
     // 2. 大陸主戰線上的 NPC 美陸軍自動推進部隊 (自動定期自友軍大陸HQ推向敵方要塞)
     groundUnits.push(
       {
-        ...createGroundUnit('us-army-front-inf-1', 'us_army_infantry_korea', 'US Army 7th Inf Div Rifle Plt (前線突擊步兵第1排)', 'player', 'era3', { x: 6900, y: 7300 }),
+        ...createGroundUnit('us-army-front-inf-1', 'us_army_infantry_korea', '美陸軍第7步兵師 步兵第1排', 'player', 'era3', { x: 6900, y: 7300 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-front-inf-2', 'us_army_infantry_korea', 'US Army 7th Inf Div Rifle Plt (前線突擊步兵第2排)', 'player', 'era3', { x: 7050, y: 7150 }),
+        ...createGroundUnit('us-army-front-inf-2', 'us_army_infantry_korea', '美陸軍第7步兵師 步兵第2排', 'player', 'era3', { x: 7050, y: 7150 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-front-tank-1', 'us_army_armor_korea', 'US Army 70th Heavy Tank Plt (M46巴頓裝甲第1排)', 'player', 'era3', { x: 6800, y: 7400 }),
+        ...createGroundUnit('us-army-front-tank-1', 'us_army_armor_korea', '美陸軍第70戰車營 M46 巴頓戰車第1排', 'player', 'era3', { x: 6800, y: 7400 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-front-m44-1', 'us_m44_spg', 'US Army 155mm M44 SPG Btry (自走砲反砲兵支援連)', 'player', 'era3', { x: 6600, y: 7600 }),
+        ...createGroundUnit('us-army-front-m44-1', 'us_m44_spg', '美陸軍 M44 155mm 自走砲連', 'player', 'era3', { x: 6600, y: 7600 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       }
@@ -7343,54 +7366,54 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
 
     // 3. 大陸主戰線上的 OPFOR 守備與反撲部隊
     groundUnits.push(
-      createGroundUnit('opfor-cont-inf-1', 'opfor_coldwar_infantry', 'KPA 4th Inf Div Assault Plt (遠東突擊步兵第1排)', 'enemy', 'era3', { x: 8600, y: 5200 }),
-      createGroundUnit('opfor-cont-inf-2', 'opfor_coldwar_infantry', 'KPA 4th Inf Div Assault Plt (遠東突擊步兵第2排)', 'enemy', 'era3', { x: 8800, y: 5000 }),
-      createGroundUnit('opfor-cont-tank-1', 'opfor_t34_85', 'KPA 105th Armored Div T-34/85 Plt (裝甲突擊排)', 'enemy', 'era3', { x: 9100, y: 4700 }),
-      createGroundUnit('opfor-cont-su100-1', 'opfor_su100', 'OPFOR SU-100/ISU-152 重型突擊自走砲連 (反砲兵)', 'enemy', 'era3', { x: 9300, y: 4650 }),
-      createGroundUnit('opfor-cont-flak-1', 'opfor_s60_flak', 'OPFOR 24th AAA Regt S-60 Btry (57mm雷達防砲連)', 'enemy', 'era3', { x: 9400, y: 4500 })
+      createGroundUnit('opfor-cont-inf-1', 'opfor_coldwar_infantry', '朝鮮人民軍第4步兵師 突擊第1排', 'enemy', 'era3', { x: 8600, y: 5200 }),
+      createGroundUnit('opfor-cont-inf-2', 'opfor_coldwar_infantry', '朝鮮人民軍第4步兵師 突擊第2排', 'enemy', 'era3', { x: 8800, y: 5000 }),
+      createGroundUnit('opfor-cont-tank-1', 'opfor_t34_85', '朝鮮人民軍第105戰車師 T-34/85 戰車排', 'enemy', 'era3', { x: 9100, y: 4700 }),
+      createGroundUnit('opfor-cont-su100-1', 'opfor_su100', '朝鮮人民軍 SU-100 自走砲連', 'enemy', 'era3', { x: 9300, y: 4650 }),
+      createGroundUnit('opfor-cont-flak-1', 'opfor_s60_flak', '第24高射砲團 S-60 57mm 高射砲連', 'enemy', 'era3', { x: 9400, y: 4500 })
     );
   } else if (era === 'era4') {
     // 時代四 (1965-1973):
     // 1. 後方艦隊後勤基地之 USMC 空中突擊與裝甲排
     groundUnits.push(
-      createGroundUnit('usmc-inf-1', 'usmc_air_assault_65', 'USMC 3rd Marine Div Air Assault Plt (M16/M60)', 'player', 'era4', { x: 2030, y: 12380 }),
-      createGroundUnit('usmc-tank-1', 'usmc_armor_m48', 'USMC 3rd Tank Bn Patton Plt (M48A3 90mm)', 'player', 'era4', { x: 2040, y: 12450 }),
-      createGroundUnit('usmc-ontos-1', 'usmc_ontos_m50', 'USMC 3rd Anti-Tank Bn Ontos Plt (M50 6管無後座力砲)', 'player', 'era4', { x: 2070, y: 12390 }),
-      createGroundUnit('usmc-art-1', 'usmc_howitzer_155', 'USMC 12th Artillery Btry (M109/M114 155mm)', 'player', 'era4', { x: 2060, y: 12470 }),
-      createGroundUnit('usmc-duster-1', 'usmc_duster_m42', 'US Army Duster Plt (M42 40mm)', 'player', 'era4', { x: 2080, y: 12410 }),
-      createGroundUnit('usmc-eng-1', 'usmc_engineer', 'USN Seabees Combat Engr Plt', 'player', 'era4', { x: 2060, y: 12430 }),
-      createGroundUnit('us-army-mech-base-1', 'us_army_m113_mech', 'US Army 1st Cav M113 Mech Inf (後方機步整備排)', 'player', 'era4', { x: 2090, y: 12420 })
+      createGroundUnit('usmc-inf-1', 'usmc_air_assault_65', '陸戰隊第3師 空中突擊排', 'player', 'era4', { x: 2030, y: 12380 }),
+      createGroundUnit('usmc-tank-1', 'usmc_armor_m48', '陸戰隊第3戰車營 M48A3 巴頓戰車排', 'player', 'era4', { x: 2040, y: 12450 }),
+      createGroundUnit('usmc-ontos-1', 'usmc_ontos_m50', '陸戰隊第3反戰車營 M50 安托斯排', 'player', 'era4', { x: 2070, y: 12390 }),
+      createGroundUnit('usmc-art-1', 'usmc_howitzer_155', '陸戰隊第12砲兵團 M114 155mm 榴彈砲連', 'player', 'era4', { x: 2060, y: 12470 }),
+      createGroundUnit('usmc-duster-1', 'usmc_duster_m42', '美陸軍 M42 清道夫防空砲排', 'player', 'era4', { x: 2080, y: 12410 }),
+      createGroundUnit('usmc-eng-1', 'usmc_engineer', '海軍機動工兵營 工兵排', 'player', 'era4', { x: 2060, y: 12430 }),
+      createGroundUnit('us-army-mech-base-1', 'us_army_m113_mech', '美陸軍第1騎兵師 M113 機械化步兵排', 'player', 'era4', { x: 2090, y: 12420 })
     );
 
     // 2. 大陸主戰線上的 NPC 美軍自動推進部隊
     groundUnits.push(
       {
-        ...createGroundUnit('us-army-front-inf-1', 'us_army_rifle_platoon_65', 'US Army 1st Cav Rifle Plt (前線突擊步槍第1排)', 'player', 'era4', { x: 6900, y: 7300 }),
+        ...createGroundUnit('us-army-front-inf-1', 'us_army_rifle_platoon_65', '美陸軍第1騎兵師 步兵第1排', 'player', 'era4', { x: 6900, y: 7300 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-front-inf-2', 'usmc_air_assault_65', 'USMC 3rd Marine Div Air Assault (前線突擊第2排)', 'player', 'era4', { x: 7050, y: 7150 }),
+        ...createGroundUnit('us-army-front-inf-2', 'usmc_air_assault_65', '陸戰隊第3師 空中突擊第2排', 'player', 'era4', { x: 7050, y: 7150 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-front-m113-1', 'us_army_m113_mech', 'US Army 11th ACR M113 (M113裝甲騎兵第1排)', 'player', 'era4', { x: 6750, y: 7350 }),
+        ...createGroundUnit('us-army-front-m113-1', 'us_army_m113_mech', '美陸軍第11裝甲騎兵團 M113 第1排', 'player', 'era4', { x: 6750, y: 7350 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-front-tank-1', 'usmc_armor_m48', 'USMC 3rd Tank Bn (M48A3巴頓裝甲第1排)', 'player', 'era4', { x: 6800, y: 7400 }),
+        ...createGroundUnit('us-army-front-tank-1', 'usmc_armor_m48', '陸戰隊第3戰車營 M48A3 巴頓戰車第1排', 'player', 'era4', { x: 6800, y: 7400 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-front-sam-1', 'us_army_chaparral_sam', 'US Army MIM-72 Chaparral (榭樹野戰防空飛彈排)', 'player', 'era4', { x: 6650, y: 7550 }),
+        ...createGroundUnit('us-army-front-sam-1', 'usmc_duster_m42', '美陸軍第60防空砲兵團第4營 M42 清道夫防空砲排', 'player', 'era4', { x: 6650, y: 7550 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-front-m109-1', 'us_m109_spg', 'US Army M109 155mm 自走榴彈砲連 (反砲兵支援)', 'player', 'era4', { x: 6500, y: 7650 }),
+        ...createGroundUnit('us-army-front-m109-1', 'us_m109_spg', '美陸軍 M109 155mm 自走砲連', 'player', 'era4', { x: 6500, y: 7650 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       }
@@ -7398,72 +7421,72 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
 
     // 3. 大陸主戰線上的 OPFOR 守備與反撲部隊 (北越人民軍與華約軍援防空網)
     groundUnits.push(
-      createGroundUnit('opfor-cont-inf-1', 'opfor_vietnam_sapper', 'PAVN 320th Div Sapper Plt (北越特工突擊第1排)', 'enemy', 'era4', { x: 8600, y: 5200 }),
-      createGroundUnit('opfor-cont-inf-2', 'opfor_vietnam_sapper', 'PAVN 320th Div Sapper Plt (北越特工突擊第2排)', 'enemy', 'era4', { x: 8800, y: 5000 }),
-      createGroundUnit('opfor-cont-patrol-1', 'opfor_vietnam_sapper', 'PAVN 66th Regt Recon Plt (北越深入偵察特工巡邏隊)', 'enemy', 'era4', { x: 8300, y: 5800 }),
-      createGroundUnit('opfor-cont-patrol-2', 'opfor_vietnam_sapper', 'PAVN Border Sapper Squad (北越前線工兵滲透排)', 'enemy', 'era4', { x: 7900, y: 6300 }),
-      createGroundUnit('opfor-cont-tank-1', 'opfor_t54_tank', 'PAVN 203rd Armored Regt T-54 Plt (T-54主力戰車排)', 'enemy', 'era4', { x: 9100, y: 4700 }),
-      createGroundUnit('opfor-cont-pt76-1', 'opfor_pt76_amphib', 'PAVN 198th Amphibious Plt (PT-76兩棲戰車排)', 'enemy', 'era4', { x: 8900, y: 5400 }),
-      createGroundUnit('opfor-cont-2s3-1', 'opfor_2s3', '蘇援 PAVN 2S3 金合歡 152mm 自走榴彈砲連 (反砲兵)', 'enemy', 'era4', { x: 9350, y: 4800 }),
-      createGroundUnit('opfor-cont-mortar-1', 'opfor_mortar_platoon', 'PAVN 120mm Heavy Mortar Btry (北越120mm重迫擊砲連)', 'enemy', 'era4', { x: 9300, y: 4900 }),
-      createGroundUnit('opfor-cont-flak-1', 'opfor_zsu23_shilka', 'PAVN 367th AAA Regt Shilka (ZSU-23-4 雷達防砲連)', 'enemy', 'era4', { x: 9400, y: 4500 }),
-      createGroundUnit('opfor-cont-zsu57-1', 'opfor_zsu57_2', 'PAVN ZSU-57-2「雙管57」履帶重型自走防空連', 'enemy', 'era4', { x: 9050, y: 4950 }),
-      createGroundUnit('opfor-cont-sa6-1', 'opfor_sa6_kub', '蘇援 2K12 立方體 (SA-6 Gainful) 履帶防空飛彈連', 'enemy', 'era4', { x: 9700, y: 4300 }),
-      createGroundUnit('opfor-cont-sa9-1', 'opfor_sa9_strela1', '華約 9K31 箭-1 (SA-9 Gaskin) 輪型野戰紅外防空車排', 'enemy', 'era4', { x: 8750, y: 5350 })
+      createGroundUnit('opfor-cont-inf-1', 'opfor_vietnam_sapper', '越南人民軍第320師 特工第1排', 'enemy', 'era4', { x: 8600, y: 5200 }),
+      createGroundUnit('opfor-cont-inf-2', 'opfor_vietnam_sapper', '越南人民軍第320師 特工第2排', 'enemy', 'era4', { x: 8800, y: 5000 }),
+      createGroundUnit('opfor-cont-patrol-1', 'opfor_vietnam_sapper', '越南人民軍第66團 偵察特工排', 'enemy', 'era4', { x: 8300, y: 5800 }),
+      createGroundUnit('opfor-cont-patrol-2', 'opfor_vietnam_sapper', '越南人民軍 邊境特工班', 'enemy', 'era4', { x: 7900, y: 6300 }),
+      createGroundUnit('opfor-cont-tank-1', 'opfor_t54_tank', '越南人民軍第203裝甲團 T-54 戰車排', 'enemy', 'era4', { x: 9100, y: 4700 }),
+      createGroundUnit('opfor-cont-pt76-1', 'opfor_pt76_amphib', '越南人民軍第198裝甲營 PT-76 水陸戰車排', 'enemy', 'era4', { x: 8900, y: 5400 }),
+      createGroundUnit('opfor-cont-2s3-1', 'opfor_m46_130mm', '越南人民軍第164砲兵團 M-46 130mm 加農砲連', 'enemy', 'era4', { x: 9350, y: 4800 }),
+      createGroundUnit('opfor-cont-mortar-1', 'opfor_mortar_platoon', '越南人民軍 120mm 重迫擊砲連', 'enemy', 'era4', { x: 9300, y: 4900 }),
+      createGroundUnit('opfor-cont-flak-1', 'opfor_zsu23_shilka', '越南人民軍 ZSU-23-4 石勒喀河 防空砲連', 'enemy', 'era4', { x: 9400, y: 4500 }),
+      createGroundUnit('opfor-cont-zsu57-1', 'opfor_zsu57_2', '越南人民軍 ZSU-57-2 自走高射砲連', 'enemy', 'era4', { x: 9050, y: 4950 }),
+      createGroundUnit('opfor-cont-sa6-1', 'opfor_sa6_kub', '蘇軍顧問團 2K12 立方體 (SA-6) 防空飛彈連', 'enemy', 'era4', { x: 9700, y: 4300 }),
+      createGroundUnit('opfor-cont-sa9-1', 'opfor_s60_flak', '越南人民軍第367防空師 S-60 57mm 高射砲連', 'enemy', 'era4', { x: 8750, y: 5350 })
     );
   } else {
     // 時代五 (1973-1991) 歐戰與現代化冷戰主戰場:
     // 1. 後方艦隊後勤基地之 USMC / 陸軍重裝整備部隊
     groundUnits.push(
-      createGroundUnit('usmc-inf-1', 'usmc_rifle_83', 'USMC 2nd Marine Div Rifle Plt (83年編裝陸戰步槍排)', 'player', 'era5', { x: 2030, y: 12380 }),
-      createGroundUnit('usmc-aav-1', 'usmc_aav7a1', 'USMC 2nd Amphibian Assault Bn (AAV-7A1兩棲突擊載具)', 'player', 'era5', { x: 2070, y: 12390 }),
-      createGroundUnit('usmc-lav-1', 'usmc_lav25', 'USMC 2nd LAR Bn LAV-25 Plt (25mm大毒蛇裝甲偵察排)', 'player', 'era5', { x: 2050, y: 12410 }),
-      createGroundUnit('us-m1-1', 'us_m1ip_abrams', 'US Army 3rd Armored Div M1IP Plt (M1IP 艾布蘭主戰戰車排)', 'player', 'era5', { x: 2040, y: 12450 }),
-      createGroundUnit('us-m60-1', 'us_m60a1_rise', 'USMC 1st Tank Bn M60A1 RISE (反應裝甲主力戰車排)', 'player', 'era5', { x: 2020, y: 12460 }),
-      createGroundUnit('us-m198-1', 'us_m198_155', 'US Army 155mm M198 Btry (155mm雙模榴彈砲連)', 'player', 'era5', { x: 2060, y: 12470 }),
-      createGroundUnit('us-lavad-1', 'usmc_lav_ad', 'USMC LAV-AD Air Defense Plt (刺針/加特林防空車)', 'player', 'era5', { x: 2080, y: 12430 }),
-      createGroundUnit('us-m163-1', 'us_m163_vads', 'US Army M163 VADS Plt (20mm火神自走防空砲)', 'player', 'era5', { x: 2090, y: 12420 })
+      createGroundUnit('usmc-inf-1', 'usmc_rifle_83', '陸戰隊第2師 步槍排', 'player', 'era5', { x: 2030, y: 12380 }),
+      createGroundUnit('usmc-aav-1', 'usmc_aav7a1', '陸戰隊第2兩棲突擊營 AAV-7A1 排', 'player', 'era5', { x: 2070, y: 12390 }),
+      createGroundUnit('usmc-lav-1', 'usmc_lav25', '陸戰隊第2輕裝甲偵察營 LAV-25 排', 'player', 'era5', { x: 2050, y: 12410 }),
+      createGroundUnit('us-m1-1', 'us_m1ip_abrams', '美陸軍第3裝甲師 M1IP 艾布蘭戰車排', 'player', 'era5', { x: 2040, y: 12450 }),
+      createGroundUnit('us-m60-1', 'us_m60a1_rise', '陸戰隊第1戰車營 M60A1 戰車排', 'player', 'era5', { x: 2020, y: 12460 }),
+      createGroundUnit('us-m198-1', 'us_m198_155', '美陸軍 M198 155mm 榴彈砲連', 'player', 'era5', { x: 2060, y: 12470 }),
+      createGroundUnit('us-lavad-1', 'us_stinger_team', '陸戰隊第2低空防空營 刺針小組', 'player', 'era5', { x: 2080, y: 12430 }),
+      createGroundUnit('us-m163-1', 'us_m163_vads', '美陸軍 M163 火神防空砲排', 'player', 'era5', { x: 2090, y: 12420 })
     );
 
     // 2. 大陸主戰線上的 NPC 北約自動推進部隊 (自動自友軍大陸HQ開赴敵方核心要塞)
     groundUnits.push(
       {
-        ...createGroundUnit('us-army-front-m1-1', 'us_m1ip_abrams', 'US Army 3rd Armored Div (M1IP艾布蘭突破先鋒排)', 'player', 'era5', { x: 6900, y: 7300 }),
+        ...createGroundUnit('us-army-front-m1-1', 'us_m1ip_abrams', '美陸軍第3裝甲師 M1IP 艾布蘭戰車排', 'player', 'era5', { x: 6900, y: 7300 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-front-m60-1', 'us_m60a1_rise', 'USMC 1st Tank Bn (M60A1 RISE反應裝甲戰車排)', 'player', 'era5', { x: 7050, y: 7150 }),
+        ...createGroundUnit('us-army-front-m60-1', 'us_m60a1_rise', '陸戰隊第1戰車營 M60A1 戰車排', 'player', 'era5', { x: 7050, y: 7150 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-front-lav-1', 'usmc_lav25', 'USMC 2nd LAR Bn (LAV-25裝甲前衛偵察排)', 'player', 'era5', { x: 6750, y: 7350 }),
+        ...createGroundUnit('us-army-front-lav-1', 'usmc_lav25', '陸戰隊第2輕裝甲偵察營 LAV-25 排', 'player', 'era5', { x: 6750, y: 7350 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-front-inf-1', 'us_army_rifle_83', 'US Army 8th Inf Div (83年編裝機械化步兵排)', 'player', 'era5', { x: 6800, y: 7400 }),
+        ...createGroundUnit('us-army-front-inf-1', 'us_army_rifle_83', '美陸軍第8步兵師 機械化步兵排', 'player', 'era5', { x: 6800, y: 7400 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-front-ad-1', 'usmc_lav_ad', 'USMC LAV-AD (刺針防空野戰伴隨車排)', 'player', 'era5', { x: 6650, y: 7550 }),
+        ...createGroundUnit('us-army-front-ad-1', 'us_army_chaparral_sam', '美陸軍第59防空砲兵團 MIM-72 榭樹 防空飛彈排', 'player', 'era5', { x: 6650, y: 7550 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-m270-1', 'us_m270_mlrs', 'US Army 1st Cav Div M270 MLRS 多管火箭連', 'player', 'era5', { x: 6500, y: 7650 }),
+        ...createGroundUnit('us-army-m270-1', 'us_m270_mlrs', '美陸軍第1騎兵師 M270 多管火箭連', 'player', 'era5', { x: 6500, y: 7650 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-atacms-1', 'us_m270_atacms', 'US Army 18th Field Arty Bde MGM-140 ATACMS 戰術飛彈連', 'player', 'era5', { x: 6350, y: 7750 }),
+        ...createGroundUnit('us-army-atacms-1', 'us_m270_atacms', '美陸軍第18野戰砲兵旅 ATACMS 戰術飛彈連', 'player', 'era5', { x: 6350, y: 7750 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-paladin-1', 'us_m109a6_paladin', 'US Army 3rd Inf Div M109A6 帕拉丁 155mm 數位自走砲連', 'player', 'era5', { x: 6450, y: 7700 }),
+        ...createGroundUnit('us-army-paladin-1', 'us_m109a3_83', '美陸軍第3裝甲師 M109A3 155mm 自走砲連', 'player', 'era5', { x: 6450, y: 7700 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       }
@@ -7473,17 +7496,17 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
     groundUnits.push(
       createGroundUnit('opfor-cont-t80-1', 'opfor_t80b', '蘇軍近衛第8軍 T-80B 穿甲突擊主力戰車排', 'enemy', 'era5', { x: 8600, y: 5200 }),
       createGroundUnit('opfor-cont-t72-1', 'opfor_t72b', '蘇軍第39近衛摩托化步兵師 T-72B 戰車排', 'enemy', 'era5', { x: 8800, y: 5000 }),
-      createGroundUnit('opfor-cont-bmp2-1', 'opfor_bmp2', '蘇聯近衛摩托化步兵 BMP-2 裝甲步戰排', 'enemy', 'era5', { x: 8300, y: 5800 }),
-      createGroundUnit('opfor-cont-inf-1', 'opfor_motor_rifle_83', '蘇軍 83年編裝摩托化步兵突擊排 (AK-74/RPG-7)', 'enemy', 'era5', { x: 7900, y: 6300 }),
-      createGroundUnit('opfor-cont-2s19-1', 'opfor_2s19', '蘇聯近衛砲兵師 2S19 姆斯塔-S 152mm 自動反砲兵自走砲連', 'enemy', 'era5', { x: 9200, y: 4650 }),
-      createGroundUnit('opfor-cont-2s1-1', 'opfor_2s1', '蘇軍 2S1 石竹 122mm 自走榴彈砲連 (雙模射擊)', 'enemy', 'era5', { x: 9100, y: 4700 }),
+      createGroundUnit('opfor-cont-bmp2-1', 'opfor_bmp2', '蘇軍近衛摩托化步兵 BMP-2 步兵戰車排', 'enemy', 'era5', { x: 8300, y: 5800 }),
+      createGroundUnit('opfor-cont-inf-1', 'opfor_motor_rifle_83', '蘇軍 摩托化步兵排', 'enemy', 'era5', { x: 7900, y: 6300 }),
+      createGroundUnit('opfor-cont-2s19-1', 'opfor_2s19', '蘇軍近衛砲兵師 2S19 姆斯塔-S 152mm 自走砲連', 'enemy', 'era5', { x: 9200, y: 4650 }),
+      createGroundUnit('opfor-cont-2s1-1', 'opfor_2s1', '蘇軍 2S1 石竹 122mm 自走砲連', 'enemy', 'era5', { x: 9100, y: 4700 }),
       createGroundUnit('opfor-cont-bm21-1', 'opfor_bm21_grad', '蘇軍第39近衛摩托化步兵師 BM-21 冰雹火箭砲營', 'enemy', 'era5', { x: 9250, y: 4550 }),
-      createGroundUnit('opfor-cont-bm27-1', 'opfor_bm27_uragan', '蘇聯近衛第8砲兵師 BM-27 颶風 220mm 重火箭砲營', 'enemy', 'era5', { x: 9550, y: 4350 }),
-      createGroundUnit('opfor-cont-tunguska-1', 'opfor_tunguska', '蘇聯 2K22 通古斯卡 彈砲合一自走防空連', 'enemy', 'era5', { x: 8900, y: 5400 }),
-      createGroundUnit('opfor-cont-strela-1', 'opfor_strela10', '蘇軍 9K35 箭-10 (SA-13) 野戰防空飛彈車排', 'enemy', 'era5', { x: 9300, y: 4900 }),
-      createGroundUnit('opfor-cont-sa8-1', 'opfor_sa8_osa', '華約 9K33 黃蜂 (SA-8 Gecko) 兩棲野戰防空飛彈連', 'enemy', 'era5', { x: 8650, y: 5600 }),
-      createGroundUnit('opfor-cont-sa11-1', 'opfor_sa11_buk', '蘇聯近衛防空旅 9K37 山毛櫸 (SA-11 Gadfly) 飛彈發射車連', 'enemy', 'era5', { x: 9650, y: 4250 }),
-      createGroundUnit('opfor-cont-sa15-1', 'opfor_sa15_tor', '蘇軍 9K330 道爾 (SA-15 Gauntlet) 垂發反飛彈近防戰車連', 'enemy', 'era5', { x: 9450, y: 4600 }),
+      createGroundUnit('opfor-cont-bm27-1', 'opfor_bm27_uragan', '蘇軍近衛第8砲兵師 BM-27 颶風 220mm 火箭砲營', 'enemy', 'era5', { x: 9550, y: 4350 }),
+      createGroundUnit('opfor-cont-tunguska-1', 'opfor_tunguska', '蘇軍 2K22 通古斯卡 防空連', 'enemy', 'era5', { x: 8900, y: 5400 }),
+      createGroundUnit('opfor-cont-strela-1', 'opfor_strela10', '蘇軍 9K35 箭-10 (SA-13) 防空飛彈車排', 'enemy', 'era5', { x: 9300, y: 4900 }),
+      createGroundUnit('opfor-cont-sa8-1', 'opfor_sa8_osa', '蘇軍 9K33 黃蜂 (SA-8) 防空飛彈連', 'enemy', 'era5', { x: 8650, y: 5600 }),
+      createGroundUnit('opfor-cont-sa11-1', 'opfor_sa11_buk', '蘇軍近衛防空旅 9K37 山毛櫸 (SA-11) 防空飛彈連', 'enemy', 'era5', { x: 9650, y: 4250 }),
+      createGroundUnit('opfor-cont-sa15-1', 'opfor_sa15_tor', '蘇軍 9K330 道爾 (SA-15) 防空飛彈車連', 'enemy', 'era5', { x: 9450, y: 4600 }),
       createGroundUnit('opfor-cont-btrzd-1', 'opfor_btr_zd', '蘇軍空降部隊 BTR-ZD「喀嚓」雙管23mm伴隨防空車', 'enemy', 'era5', { x: 8450, y: 5150 }),
       createGroundUnit('opfor-cont-pt76-1', 'opfor_pt76_amphib', '蘇軍海軍步兵 PT-76B 水陸裝甲偵察排', 'enemy', 'era5', { x: 9400, y: 4500 })
     );
@@ -7497,17 +7520,23 @@ const GARRISON_SUPPORT: Record<Era, { type: GroundUnitType; name: string }[]> = 
     { type: 'opfor_ija_hmg_42', name: '九二式重機槍隊' },
     { type: 'opfor_ija_47mm_at', name: '一式機動四十七粍速射砲隊' },
     { type: 'opfor_ija_kami', name: '特二式內火艇「カミ」水陸戰車隊' },
+    { type: 'opfor_ija_type92_70', name: '九二式步兵砲 大隊砲小隊' },
+    { type: 'opfor_ija_type98_aa', name: '九八式高射機關砲隊' },
   ],
   era2: [
-    { type: 'opfor_ija_banzai_45', name: '挺身斬込隊 (刺突爆雷)' },
+    { type: 'opfor_ija_banzai_45', name: '挺身斬込隊' },
     { type: 'opfor_ija_hmg_42', name: '九二式重機槍隊' },
     { type: 'opfor_ija_47mm_at', name: '一式機動四十七粍速射砲隊' },
     { type: 'opfor_ija_kami', name: '特二式內火艇「カミ」水陸戰車隊' },
+    { type: 'opfor_ija_type92_70', name: '九二式步兵砲 大隊砲小隊' },
+    { type: 'opfor_ija_type98_aa', name: '九八式高射機關砲隊' },
   ],
   era3: [
-    { type: 'opfor_pva_infantry_50', name: '志願軍步兵排 (衝鋒號)' },
+    { type: 'opfor_pva_infantry_50', name: '志願軍 步兵排' },
     { type: 'opfor_su76m', name: 'SU-76M 自走突擊砲排' },
     { type: 'opfor_zis3_76', name: 'ZiS-3 76mm 加農砲連' },
+    { type: 'opfor_dshk_aa', name: 'DShK 12.7mm 防空機槍陣地' },
+    { type: 'opfor_bm13_katyusha', name: '志願軍 火箭砲第21師 BM-13 喀秋莎 火箭砲連' },
   ],
   era4: [
     { type: 'opfor_vc_guerrilla_65', name: '越共地方游擊隊' },
@@ -7516,8 +7545,8 @@ const GARRISON_SUPPORT: Record<Era, { type: GroundUnitType; name: string }[]> = 
     { type: 'opfor_m46_130mm', name: 'M-46 130mm 加農砲連' },
   ],
   era5: [
-    { type: 'opfor_spetsnaz_83', name: 'GRU 特種偵察排 (Spetsnaz)' },
-    { type: 'opfor_btr70', name: 'BTR-70 海軍步兵裝甲運兵排' },
+    { type: 'opfor_spetsnaz_83', name: 'GRU 特種偵察排' },
+    { type: 'opfor_btr70', name: '海軍步兵 BTR-70 裝甲運兵車排' },
     { type: 'opfor_bmd1', name: 'BMD-1 空降突擊排' },
     { type: 'opfor_t64b', name: 'T-64B 戰車排' },
   ],
@@ -7529,7 +7558,8 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
     const isl = islands[i];
     if (isl.id === 'island-mainland') continue; // 大陸已專門配置戰線部隊
     const center = isl.center;
-    const islShortName = isl.name.split(' ')[0] || `島嶼#${i}`;
+    const islEn = shortPlace(isl.name).replace(/ (Atoll Complex|Barrier Atoll|Caldera Fortress Lagoon|Strategic Coral Atoll|Outer Bastion|Radar Outpost|Bastion|Island)$/, '');
+    const islShortName = GARRISON_PLACE_ZH[islEn] ?? (islEn || `島嶼#${i}`);
 
     // 每個要塞島嶼部署守備步兵部隊
     const infType: GroundUnitType =
@@ -7544,14 +7574,16 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
         : 'opfor_vietnam_sapper';
     const infName =
       era === 'era5'
-        ? '蘇聯海軍步兵突擊排 (83年編裝)'
+        ? isl.id === 'island-chodo'
+          ? '波蘭人民軍 第7盧日采海軍突擊師 登陸排' // the Polish naval assault division was meant for the Danish and German coast
+          : '蘇聯海軍步兵 突擊排'
         : era === 'era1'
-        ? 'IJN 2nd SNLF Rifle Plt (海軍特別陸戰隊)'
+        ? '橫須賀第2特別陸戰隊 步槍小隊'
         : era === 'era2'
-        ? 'IJA 32nd Army Defense Plt (守備隊步槍排)'
+        ? ({ 'Iwo Jima': '第109師團 守備步兵小隊', Saipan: '第43師團 守備步兵小隊', 'Kerama Rettō': '海上挺進第3戰隊 基地大隊' } as Record<string, string>)[islEn] ?? '第32軍 守備步兵小隊'
         : era === 'era3'
-        ? 'KPA 4th Inf Div Assault Plt (遠東突擊排)'
-        : 'PAVN Sapper Plt (特工排)';
+        ? '朝鮮人民軍第4步兵師 突擊排'
+        : '越南人民軍 特工排';
     groundUnits.push(
       createGroundUnit(
         `opfor-inf-${i}`,
@@ -7589,11 +7621,11 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
           : 'opfor_type95_tank';
       const tankName =
         era === 'era5'
-          ? (i % 2 === 0 ? 'T-80B 穿甲突擊戰車排' : 'BMP-2 裝甲步戰排')
+          ? (i % 2 === 0 ? 'T-80B 戰車排' : 'BMP-2 步兵戰車排')
           : era === 'era4'
-          ? (i % 2 === 0 ? 'T-54/55 主力戰車排' : 'PT-76 水陸戰車排')
+          ? (i % 2 === 0 ? 'T-54/55 戰車排' : 'PT-76 水陸戰車排')
           : era === 'era3'
-          ? (i % 2 === 0 ? 'T-34/85 突擊戰車排' : 'IS-3 重戰車排')
+          ? (i % 2 === 0 ? 'T-34/85 戰車排' : 'IS-3 重戰車排')
           : era === 'era2'
           ? '九七式改中戰車排'
           : '九五式輕戰車機動小隊';
@@ -7608,12 +7640,12 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
         )
       );
 
-      // 迫擊砲排 / S-60 / ZSU-23-4 / ZSU-57-2 / SA-6 / SA-9 / 通古斯卡 / 黃蜂 / 道爾 / BTR-ZD
+      // 迫擊砲排 / S-60 / ZSU-23-4 / ZSU-57-2 / 通古斯卡 / 黃蜂 / 道爾 / BTR-ZD
       const mortarType: GroundUnitType =
         era === 'era5'
           ? (i % 4 === 0 ? 'opfor_sa15_tor' : i % 4 === 1 ? 'opfor_sa8_osa' : i % 4 === 2 ? 'opfor_tunguska' : 'opfor_btr_zd')
           : era === 'era4'
-          ? (i % 3 === 0 ? 'opfor_sa6_kub' : i % 3 === 1 ? 'opfor_zsu57_2' : 'opfor_zsu23_shilka')
+          ? (i % 3 === 0 ? 'opfor_s60_flak' : i % 3 === 1 ? 'opfor_zsu57_2' : 'opfor_zsu23_shilka')
           : era === 'era3'
           ? 'opfor_s60_flak'
           : 'opfor_mortar_platoon';
@@ -7623,17 +7655,15 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
           : mortarType === 'opfor_sa8_osa'
           ? '9K33 黃蜂 (SA-8 Gecko) 兩棲野戰防空連'
           : mortarType === 'opfor_btr_zd'
-          ? 'BTR-ZD 雙管23mm空降防空自走砲連'
+          ? 'BTR-ZD 23mm 空降防空砲車連'
           : mortarType === 'opfor_tunguska'
           ? '2K22 通古斯卡彈砲合一防空連'
-          : mortarType === 'opfor_sa6_kub'
-          ? '2K12 立方體 (SA-6 Gainful) 履帶防空飛彈連'
           : mortarType === 'opfor_zsu57_2'
           ? 'ZSU-57-2「雙管57」履帶重型自走防空砲連'
           : mortarType === 'opfor_zsu23_shilka'
-          ? 'ZSU-23-4 石勒喀河自走防空連'
+          ? 'ZSU-23-4 石勒喀河 防空砲連'
           : mortarType === 'opfor_s60_flak'
-          ? 'S-60 57mm雷達防空砲連'
+          ? 'S-60 57mm 高射砲連'
           : '九七式81mm迫擊砲排';
       groundUnits.push(
         createGroundUnit(
@@ -7651,31 +7681,38 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
           era === 'era5'
             ? (i % 3 === 0 ? 'opfor_2s19' : i % 3 === 1 ? 'opfor_sa11_buk' : 'opfor_2s1')
             : era === 'era4'
-            ? (i % 3 === 0 ? 'opfor_2s3' : i % 3 === 1 ? 'opfor_sa9_strela1' : 'opfor_zu23_aa')
+            ? (i % 3 === 0 ? (Math.random() < 0.2 ? 'opfor_2s3' : 'opfor_m46_130mm') : i % 3 === 1 ? 'opfor_sa7_strela' : 'opfor_zu23_aa')
             : era === 'era3'
             ? (i % 2 === 0 ? 'opfor_su100' : 'opfor_ks19_heavy')
             : era === 'era2'
-            ? (i % 2 === 0 ? 'opfor_hummel' : 'opfor_field_artillery')
+            ? (Math.random() < 0.15 ? 'opfor_hummel' : 'opfor_field_artillery')
             : 'opfor_field_artillery';
         const artName =
           artType === 'opfor_2s19'
-            ? '2S19 姆斯塔-S 152mm自動反砲兵自走砲連'
+            ? '2S19 姆斯塔-S 152mm 自走砲連'
             : artType === 'opfor_sa11_buk'
             ? '9K37 山毛櫸 (SA-11 Gadfly) 野戰防空飛彈連'
             : artType === 'opfor_2s1'
             ? '2S1 石竹 122mm自走榴彈砲連'
+            : artType === 'opfor_m46_130mm'
+            ? 'M-46 130mm 加農砲連'
             : artType === 'opfor_2s3'
-            ? '2S3 金合歡 152mm自走榴彈砲連'
-            : artType === 'opfor_sa9_strela1'
-            ? '9K31 箭-1 (SA-9 Gaskin) 輪型野戰防空連'
+            ? '蘇軍 2S3 金合歡 152mm 自走榴彈砲連'
+            : artType === 'opfor_sa7_strela'
+            ? '9K32 箭-2 (SA-7) 肩射防空排'
             : artType === 'opfor_zu23_aa'
-            ? 'ZU-23-2 雙管防空砲兵連'
+            ? 'ZU-23-2 23mm 高射砲連'
             : artType === 'opfor_su100'
-            ? 'SU-100/ISU-152 重型反砲兵自走砲連'
+            ? 'SU-100 自走砲連'
             : artType === 'opfor_ks19_heavy'
-            ? 'KS-19 100mm重高射砲連'
+            ? 'KS-19 100mm 高射砲連'
             : artType === 'opfor_hummel'
-            ? 'Hummel 150mm重自走砲連 (反砲兵支援)'
+            ? // IJA self-propelled guns were few (the Ho-Ro); once in a while a German Hummel shipped by blockade runner
+              Math.random() < 0.3
+              ? '德國軍事顧問團 Hummel 150mm 自走砲 (封鎖突破船運抵)'
+              : '四式十五糎自走砲 ホロ 砲兵小隊'
+            : era === 'era2'
+            ? '九六式十五糎榴彈砲隊'
             : '機動野戰重砲隊';
         groundUnits.push(
           createGroundUnit(
@@ -7743,7 +7780,7 @@ function addPlayerTaskForce(era: Era, cvPos: Vector2D, initialHeading: number, p
       createPerryFFG('player-ffg1', 'USS Oliver Hazard Perry (FFG-7)', { x: cvPos.x - 180, y: cvPos.y + 280 }),
       createLosAngelesSSN('player-ssn1', 'USS Los Angeles (SSN-688)', { x: cvPos.x + 420, y: cvPos.y + 40 }),
       createAustinLPD('player-lpd1', 'USS Austin (LPD-4)', { x: cvPos.x - 360, y: cvPos.y - 100 }),
-      createLCAC('player-lcac1', 'LCAC-01 Air Cushion Craft', { x: cvPos.x - 380, y: cvPos.y - 60 }),
+      createLCAC('player-lcac1', 'LCAC-01 氣墊登陸艇', { x: cvPos.x - 380, y: cvPos.y - 60 }),
       createTarawaLHA('player-lha1', 'USS Tarawa (LHA-1)', { x: cvPos.x - 520, y: cvPos.y - 200 }),
       // Special Boat Unit 26's PBR Mk IIs (still in service through 1989)
       createPBR('player-pbr1', 'PBR Mk II (Special Boat Unit 26)', { x: cvPos.x - 440, y: cvPos.y - 300 }, 'era5'),
@@ -8601,14 +8638,14 @@ function addEnemyTaskForce(era: Era, enemyShips: Ship[], enemyCenter: Vector2D, 
     // 遠洋常規攻擊潛艦: Project 641 Foxtrot-class (B-427, 10具 533mm魚雷發射管)
     // ═══════════════════════════════════════════════════════════════════════
     enemyShips.push(
-      createKashinDDG('enemy-kashin-1', 'Project 61 Kashin (DDG Krasny Kavkaz)', enemyCenter),
-      createRigaFFG('enemy-riga-1', 'Project 50 Riga (HQ-01)', { x: enemyCenter.x - 420, y: enemyCenter.y + 240 }),
-      createOsaPTG('enemy-osa-1', 'Project 205 Osa (PTG-351)', { x: enemyCenter.x + 360, y: enemyCenter.y - 180 }),
-      createOsaPTG('enemy-osa-2', 'Project 205 Osa (PTG-352)', { x: enemyCenter.x + 500, y: enemyCenter.y + 140 }),
-      createKomarMissileBoat('enemy-komar-1', 'Project 183R Komar (PTG-181)', { x: enemyCenter.x - 220, y: enemyCenter.y - 280 }),
-      createFoxtrotSS('enemy-foxtrot-1', 'Project 641 Foxtrot (B-427)', { x: 3200, y: 3800 }),
-      createP4TorpedoBoat('enemy-p4-1', 'Project 123K P-4 (T-333)', { x: enemyCenter.x - 520, y: enemyCenter.y + 420 }),
-      createP4TorpedoBoat('enemy-p4-2', 'Project 123K P-4 (T-336)', { x: enemyCenter.x - 600, y: enemyCenter.y + 360 })
+      createKashinDDG('enemy-kashin-1', 'Krasny Kavkaz 紅色高加索號', enemyCenter),
+      createRigaFFG('enemy-riga-1', '里加級護衛艦 HQ-01', { x: enemyCenter.x - 420, y: enemyCenter.y + 240 }),
+      createOsaPTG('enemy-osa-1', '黃蜂級飛彈艇 PTG-351', { x: enemyCenter.x + 360, y: enemyCenter.y - 180 }),
+      createOsaPTG('enemy-osa-2', '黃蜂級飛彈艇 PTG-352', { x: enemyCenter.x + 500, y: enemyCenter.y + 140 }),
+      createKomarMissileBoat('enemy-komar-1', '蚊子級飛彈艇 PTG-181', { x: enemyCenter.x - 220, y: enemyCenter.y - 280 }),
+      createFoxtrotSS('enemy-foxtrot-1', '狐步級潛艦 B-427', { x: 3200, y: 3800 }),
+      createP4TorpedoBoat('enemy-p4-1', 'P-4 魚雷艇 T-333', { x: enemyCenter.x - 520, y: enemyCenter.y + 420 }),
+      createP4TorpedoBoat('enemy-p4-2', 'P-4 魚雷艇 T-336', { x: enemyCenter.x - 600, y: enemyCenter.y + 360 })
     );
   } else if (era === 'era5') {
     // ═══════════════════════════════════════════════════════════════════════
@@ -8620,12 +8657,12 @@ function addEnemyTaskForce(era: Era, enemyShips: Ship[], enemyCenter: Vector2D, 
     // 巡航導彈核潛艦: Project 949A Oscar II (奧斯卡級, 24x P-700花崗岩潛射飛彈, 650mm魚雷)
     // ═══════════════════════════════════════════════════════════════════════
     enemyShips.push(
-      createKievCVHG('enemy-kiev-1', 'Project 1143 Kiev (CVHG Kiev)', enemyCenter),
-      createKirovCGN('enemy-kirov-1', 'Project 1144 Kirov (CGN Kirov)', { x: enemyCenter.x - 380, y: enemyCenter.y + 220 }),
-      createSovremennyDD('enemy-sovremenny-1', 'Project 956 Sovremenny (DDG-670)', { x: enemyCenter.x + 360, y: enemyCenter.y - 180 }),
-      createUdaloyDD('enemy-udaloy-1', 'Project 1155 Udaloy (DDG-680)', { x: enemyCenter.x - 240, y: enemyCenter.y - 240 }),
-      createSlavaCG('enemy-slava-1', 'Project 1164 Slava (Marshal Ustinov)', { x: enemyCenter.x + 420, y: enemyCenter.y + 300 }),
-      createOscarSSGN('enemy-oscar-1', 'Project 949A Oscar II (K-148 Krasnodar)', { x: 3400, y: 3600 })
+      createKievCVHG('enemy-kiev-1', 'Kiev 基輔號', enemyCenter),
+      createKirovCGN('enemy-kirov-1', 'Frunze 伏龍芝號', { x: enemyCenter.x - 380, y: enemyCenter.y + 220 }),
+      createSovremennyDD('enemy-sovremenny-1', 'Otchayanny 拼命號', { x: enemyCenter.x + 360, y: enemyCenter.y - 180 }),
+      createUdaloyDD('enemy-udaloy-1', 'Vitse-Admiral Kulakov 庫拉科夫中將號', { x: enemyCenter.x - 240, y: enemyCenter.y - 240 }),
+      createSlavaCG('enemy-slava-1', 'Marshal Ustinov 烏斯季諾夫元帥號', { x: enemyCenter.x + 420, y: enemyCenter.y + 300 }),
+      createOscarSSGN('enemy-oscar-1', 'K-148 Krasnodar 克拉斯諾達爾號', { x: 3400, y: 3600 })
     );
   }
 }
@@ -8634,18 +8671,18 @@ function addEnemyTaskForce(era: Era, enemyShips: Ship[], enemyCenter: Vector2D, 
 function addEnemyFleetEra1(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeading: number): void {
   // ═══════════════════════════════════════════════════════════════════════
   // ERA 1: 1st CARRIER STRIKING FORCE & VANGUARD (南雲機動部隊與近藤前進部隊)
-  // 旗艦: IJN Shōkaku (翔鶴號大型正規航母)
+  // 旗艦: IJN Shokaku (翔鶴號大型正規航母)
   // 戰艦: IJN Hiei (比叡號金剛級高速戰艦, 356mm主砲)
-  // 重巡洋艦: IJN Chōkai (鳥海號第八艦隊旗艦, 10門203mm, 16枚九三式氧氣魚雷)
+  // 重巡洋艦: IJN Chokai (鳥海號第八艦隊旗艦, 10門203mm, 16枚九三式氧氣魚雷)
   // 防空驅逐艦: IJN Akizuki (秋月號, 8門100mm長身管雙聯高角砲)
-  // 一等驅逐艦: IJN Kagerō (陽炎號), IJN Yukikaze (雪風號)
+  // 一等驅逐艦: IJN Kagero (陽炎號), IJN Yukikaze (雪風號)
   // 伏擊潛艇: I-19 (伊-19號)
   // ═══════════════════════════════════════════════════════════════════════
   enemyShips.push(
-    // 1. IJN Shōkaku (Fleet Carrier) - 翔鶴號大型正規航母
+    // 1. IJN Shokaku (Fleet Carrier) - 翔鶴號大型正規航母
     createShip({
       id: 'enemy-cv-1',
-      name: 'IJN Shokaku (Fleet Carrier)',
+      name: 'IJN Shokaku 翔鶴號',
       codeName: 'Crane of Good Omen',
       type: 'carrier',
       side: 'enemy',
@@ -8682,7 +8719,7 @@ function addEnemyFleetEra1(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
     // 2. IJN Hiei (Fast Battleship) - 比叡號高速戰艦 (金剛級)
     createShip({
       id: 'enemy-bb-1',
-      name: 'IJN Hiei (Fast Battleship)',
+      name: 'IJN Hiei 比叡號',
       codeName: 'Iron Dragon',
       type: 'battleship',
       side: 'enemy',
@@ -8730,10 +8767,10 @@ function addEnemyFleetEra1(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
       flakRange: 750,
     }),
 
-    // 3. IJN Chōkai (Heavy Cruiser) - 鳥海號重巡洋艦 (高雄級, 第八艦隊旗艦)
+    // 3. IJN Chokai (Heavy Cruiser) - 鳥海號重巡洋艦 (高雄級, 第八艦隊旗艦)
     createShip({
       id: 'enemy-ca-1',
-      name: 'IJN Chokai (Heavy Cruiser)',
+      name: 'IJN Chokai 鳥海號',
       codeName: 'Night Raiding Flagship',
       type: 'cruiser',
       side: 'enemy',
@@ -8774,7 +8811,7 @@ function addEnemyFleetEra1(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
     // 4. IJN Akizuki (Flak Destroyer) - 秋月號防空驅逐艦
     createShip({
       id: 'enemy-dd-1',
-      name: 'IJN Akizuki (Flak Destroyer)',
+      name: 'IJN Akizuki 秋月號',
       type: 'destroyer',
       side: 'enemy',
       era: 'era1',
@@ -8806,10 +8843,10 @@ function addEnemyFleetEra1(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
       flakRange: 750,
     }),
 
-    // 5. IJN Kagerō (Destroyer) - 陽炎號驅逐艦
+    // 5. IJN Kagero (Destroyer) - 陽炎號驅逐艦
     createShip({
       id: 'enemy-dd-2',
-      name: 'IJN Kagero (Destroyer)',
+      name: 'IJN Kagero 陽炎號',
       type: 'destroyer',
       side: 'enemy',
       era: 'era1',
@@ -8842,7 +8879,7 @@ function addEnemyFleetEra1(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
     // 6. IJN Yukikaze (Destroyer) - 雪風號驅逐艦 (奇蹟之不沉艦)
     createShip({
       id: 'enemy-dd-3',
-      name: 'IJN Yukikaze (Destroyer)',
+      name: 'IJN Yukikaze 雪風號',
       codeName: 'Miracle Ship',
       type: 'destroyer',
       side: 'enemy',
@@ -8876,7 +8913,7 @@ function addEnemyFleetEra1(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
     // 7. I-19 (Submarine) - 伊-19號潛艦 (伏擊於中央水道)
     createShip({
       id: 'enemy-sub-1',
-      name: 'I-19 (Cruiser Submarine)',
+      name: 'IJN 伊-19',
       type: 'submarine',
       side: 'enemy',
       era: 'era1',
@@ -8910,8 +8947,8 @@ function addEnemyFleetEra2(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
   // ═══════════════════════════════════════════════════════════════════════
   // ERA 2: KURITA CENTER FORCE & 1st MOBILE FLEET (栗田主力艦隊與第一機動艦隊)
   // 戰艦: IJN Yamato (大和號超級戰艦, 9門 460mm 巨砲, 162門防空砲!)
-  // 航母: IJN Taihō (大鳳號重裝甲航母)
-  // 戰艦: IJN Kongō (金剛號高速戰艦, 356mm主砲)
+  // 航母: IJN Taiho (大鳳號重裝甲航母)
+  // 戰艦: IJN Kongo (金剛號高速戰艦, 356mm主砲)
   // 重巡洋艦: IJN Takao (高雄號重巡洋艦, 10門203mm, 16枚氧氣魚雷)
   // 輕巡洋艦: IJN Yahagi (矢矧號水雷戰隊旗艦, 152mm主砲)
   // 特型驅逐艦: IJN Shimakaze (島風號, 15管氧氣魚雷齊射!)
@@ -8922,7 +8959,7 @@ function addEnemyFleetEra2(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
     // 1. IJN Yamato (Super Battleship) - 大和號超級戰列艦
     createShip({
       id: 'enemy-bb-1',
-      name: 'IJN Yamato (Super Battleship)',
+      name: 'IJN Yamato 大和號',
       codeName: 'Imperial Behemoth',
       type: 'battleship',
       side: 'enemy',
@@ -8968,7 +9005,7 @@ function addEnemyFleetEra2(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
     // 1b. IJN Musashi - 武藏號 (大和級二號艦，1944 年 10 月 24 日錫布延海遭 19 枚魚雷、17 枚炸彈擊沉)
     createShip({
       id: 'enemy-bb-2',
-      name: 'IJN Musashi (Super Battleship)',
+      name: 'IJN Musashi 武藏號',
       codeName: 'Imperial Behemoth',
       type: 'battleship',
       side: 'enemy',
@@ -9012,10 +9049,10 @@ function addEnemyFleetEra2(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
       flakRange: 920,
     }),
 
-    // 2. IJN Taihō (Armored Carrier) - 大鳳號裝甲航空母艦
+    // 2. IJN Taiho (Armored Carrier) - 大鳳號裝甲航空母艦
     createShip({
       id: 'enemy-cv-1',
-      name: 'IJN Taiho (Armored Carrier)',
+      name: 'IJN Taiho 大鳳號',
       codeName: 'Armored Phoenix',
       type: 'carrier',
       side: 'enemy',
@@ -9047,10 +9084,10 @@ function addEnemyFleetEra2(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
       flakRange: 820,
     }),
 
-    // 3. IJN Kongō (Fast Battleship) - 金剛號高速戰艦
+    // 3. IJN Kongo (Fast Battleship) - 金剛號高速戰艦
     createShip({
       id: 'enemy-bb-2',
-      name: 'IJN Kongo (Fast Battleship)',
+      name: 'IJN Kongo 金剛號',
       codeName: 'Vanguard Titan',
       type: 'battleship',
       side: 'enemy',
@@ -9097,7 +9134,7 @@ function addEnemyFleetEra2(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
     // 4. IJN Takao (Heavy Cruiser) - 高雄號重巡洋艦
     createShip({
       id: 'enemy-ca-1',
-      name: 'IJN Takao (Heavy Cruiser)',
+      name: 'IJN Takao 高雄號',
       type: 'cruiser',
       side: 'enemy',
       era: 'era2',
@@ -9136,7 +9173,7 @@ function addEnemyFleetEra2(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
     // 5. IJN Yahagi (Light Cruiser) - 矢矧號輕巡洋艦 (第二水雷戰隊旗艦)
     createShip({
       id: 'enemy-cl-1',
-      name: 'IJN Yahagi (Light Cruiser)',
+      name: 'IJN Yahagi 矢矧號',
       codeName: 'DesRon 2 Flagship',
       type: 'cruiser',
       side: 'enemy',
@@ -9171,7 +9208,7 @@ function addEnemyFleetEra2(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
     // 6. IJN Shimakaze (Super Destroyer) - 島風號特型驅逐艦 (15管氧氣魚雷齊射!)
     createShip({
       id: 'enemy-dd-1',
-      name: 'IJN Shimakaze (Super Destroyer)',
+      name: 'IJN Shimakaze 島風號',
       codeName: 'Gale of the Sea',
       type: 'destroyer',
       side: 'enemy',
@@ -9206,7 +9243,7 @@ function addEnemyFleetEra2(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
     // 7. IJN Akizuki (Flak Destroyer) - 秋月號防空驅逐艦
     createShip({
       id: 'enemy-dd-2',
-      name: 'IJN Akizuki (Flak Destroyer)',
+      name: 'IJN Akizuki 秋月號',
       type: 'destroyer',
       side: 'enemy',
       era: 'era2',
@@ -9240,7 +9277,7 @@ function addEnemyFleetEra2(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
     // 8. I-400 (Submarine Carrier) - 伊-400號特型潛艦
     createShip({
       id: 'enemy-sub-1',
-      name: 'I-400 (Submarine Carrier)',
+      name: 'IJN 伊-400',
       type: 'submarine',
       side: 'enemy',
       era: 'era2',
@@ -9283,7 +9320,7 @@ function addEnemyFleetEra3(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
     // 1. Red Fleet Sverdlov (Cruiser) - 斯維爾德洛夫級旗艦巡洋艦
     createShip({
       id: 'enemy-ca-1',
-      name: 'Sverdlov (Cruiser)',
+      name: 'Dmitry Pozharsky 波扎爾斯基號',
       codeName: 'Red Flagship',
       type: 'cruiser',
       side: 'enemy',
@@ -9322,7 +9359,7 @@ function addEnemyFleetEra3(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
     // 2. Skory-class Destroyer (Skory DD-12) - 斯考利級驅逐艦
     createShip({
       id: 'enemy-dd-1',
-      name: 'Skory (DD-12)',
+      name: 'Ozhestochonny 狂暴號',
       codeName: 'Red Guard Destroyer',
       type: 'destroyer',
       side: 'enemy',
@@ -9357,7 +9394,7 @@ function addEnemyFleetEra3(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
     // 3. Skory-class Destroyer (Skory DD-14)
     createShip({
       id: 'enemy-dd-2',
-      name: 'Skory (DD-14)',
+      name: 'Vnimatelny 專注號',
       codeName: 'Red Guard Escort',
       type: 'destroyer',
       side: 'enemy',
@@ -9391,7 +9428,7 @@ function addEnemyFleetEra3(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
     // 4. Project 183 Bolshevik (P-6 PT-1) - 53式魚雷快艇
     createShip({
       id: 'enemy-pt-1',
-      name: 'Project 183 P-6 (PT-1)',
+      name: 'P-6 魚雷艇 PT-1',
       codeName: 'Mosquito Striker',
       type: 'patrol_boat',
       side: 'enemy',
@@ -9424,7 +9461,7 @@ function addEnemyFleetEra3(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
     // 5. Project 183 Bolshevik (P-6 PT-2)
     createShip({
       id: 'enemy-pt-2',
-      name: 'Project 183 P-6 (PT-2)',
+      name: 'P-6 魚雷艇 PT-2',
       codeName: 'Mosquito Striker',
       type: 'patrol_boat',
       side: 'enemy',
@@ -9456,7 +9493,7 @@ function addEnemyFleetEra3(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
     // 6. Project 183 Bolshevik (P-6 PT-3)
     createShip({
       id: 'enemy-pt-3',
-      name: 'Project 183 P-6 (PT-3)',
+      name: 'P-6 魚雷艇 PT-3',
       codeName: 'Mosquito Striker',
       type: 'patrol_boat',
       side: 'enemy',
@@ -9488,7 +9525,7 @@ function addEnemyFleetEra3(enemyShips: Ship[], enemyCenter: Vector2D, enemyHeadi
     // 7. Whiskey-class Submarine (S-117) - W級常規潛艦
     createShip({
       id: 'enemy-sub-1',
-      name: 'Whiskey-class (S-117)',
+      name: '威士忌級潛艦 S-117',
       codeName: 'Black Phantom',
       type: 'submarine',
       subVariant: 'whiskey',
@@ -9644,13 +9681,27 @@ export function createTurret(
     cooldown: Math.random() * 1.5,
     barrelCount,
     angle: initialAngle,
-    arcMin: -Math.PI * 0.85,
-    arcMax: Math.PI * 0.85,
     damage,
   };
 }
 
+/** Bounding boxes of polygons, cached per array (recomputed if its length changes). */
+const POLY_BOX = new WeakMap<Vector2D[], { n: number; x0: number; y0: number; x1: number; y1: number }>();
+
 export function isPointInPolygon(point: Vector2D, polygon: Vector2D[]): boolean {
+  // Most calls test a point far outside the polygon (another island): reject on the box first
+  let box = POLY_BOX.get(polygon);
+  if (!box || box.n !== polygon.length) {
+    box = { n: polygon.length, x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+    for (const p of polygon) {
+      if (p.x < box.x0) box.x0 = p.x;
+      if (p.y < box.y0) box.y0 = p.y;
+      if (p.x > box.x1) box.x1 = p.x;
+      if (p.y > box.y1) box.y1 = p.y;
+    }
+    POLY_BOX.set(polygon, box);
+  }
+  if (point.x < box.x0 || point.x > box.x1 || point.y < box.y0 || point.y > box.y1) return false;
   let inside = false;
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
     const xi = polygon[i].x;

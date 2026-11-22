@@ -11,8 +11,6 @@ export interface Escalation {
   /** Share of objectives in friendly hands, 0..1. */
   progress: number;
   tier: EscalationTier;
-  captured: number;
-  total: number;
 }
 
 /** One line on what the new stage means, for the banner. */
@@ -58,7 +56,7 @@ export function computeEscalation(islands: Island[], capturedInstallations: numb
   const progress = total > 0 ? Math.min(1, captured / total) : 0;
   let tier: EscalationTier = 0;
   for (let i = 0; i < TIER_AT.length; i++) if (progress >= TIER_AT[i]) tier = (i + 1) as EscalationTier;
-  return { progress, tier, captured, total };
+  return { progress, tier };
 }
 
 export interface AirEscalation {

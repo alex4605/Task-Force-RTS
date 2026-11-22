@@ -8,9 +8,9 @@ import { ArmamentModal } from './components/ArmamentModal';
 import { TacticalMapModal } from './components/TacticalMapModal';
 import { DockyardModal } from './components/DockyardModal';
 import { BattleLogModal } from './components/BattleLogModal';
+import { CodexModal } from './components/CodexModal';
 import { GameOverModal } from './components/GameOverModal';
 import {
-  FleetUpgrades,
   Ship,
   Aircraft,
   AircraftModel,
@@ -72,6 +72,7 @@ export default function App() {
   const [isAirPrepOpen, setIsAirPrepOpen] = useState<boolean>(false);
   const [isArmamentOpen, setIsArmamentOpen] = useState<boolean>(false);
   const [isBattleLogOpen, setIsBattleLogOpen] = useState<boolean>(false);
+  const [isCodexOpen, setIsCodexOpen] = useState<boolean>(false);
   const [isMapOpen, setIsMapOpen] = useState<boolean>(false);
   const [radarLayerOn, setRadarLayerOn] = useState<boolean>(false);
   const [isDockyardOpen, setIsDockyardOpen] = useState<boolean>(false);
@@ -128,16 +129,6 @@ export default function App() {
   const handleCancelSonobuoy = () => {
     setIsDesignatingSonobuoy(false);
   };
-
-  // Upgrades
-  const [upgrades, setUpgrades] = useState<FleetUpgrades>({
-    hullArmorLevel: 1,
-    aaFirepowerLevel: 1,
-    radarRangeLevel: 1,
-    carrierCapacityLevel: 1,
-    artilleryDamageLevel: 1,
-    depthChargeSonarLevel: 1,
-  });
 
   const lastIslandsVer = useRef<number>(-1);
   const lastCombatLogsVer = useRef<number>(-1);
@@ -258,14 +249,6 @@ export default function App() {
     engine.stopUnits();
   };
 
-  const handleSetSpeed = (knots: number) => {
-    engine.setFleetSpeed(knots);
-  };
-
-  const handleSteer = (dir: 'port' | 'starboard') => {
-    engine.steerRudder(dir);
-  };
-
   const handleToggleMute = () => {
     const muted = soundEngine.toggleMute();
     setIsMuted(muted);
@@ -300,40 +283,6 @@ export default function App() {
     setIsPaused(false);
   };
 
-  // Upgrades & Repairs
-  const handleSpendStars = (amount: number): boolean => {
-    if (engine.score.stars >= amount) {
-      engine.score.stars -= amount;
-      setScore({ ...engine.score });
-      return true;
-    }
-    return false;
-  };
-
-  const handleRepairShips = () => {
-    for (const ship of engine.playerShips) {
-      ship.health = ship.maxHealth;
-      ship.isSunk = false;
-      if (ship.carrierPlanes) {
-        for (const k in ship.carrierPlanes.ready) {
-          ship.carrierPlanes.ready[k] = ship.carrierPlanes.maxPerType[k] || 6;
-        }
-      }
-    }
-    setPlayerShips([...engine.playerShips]);
-  };
-
-  const handleApplyUpgrade = (type: keyof FleetUpgrades) => {
-    const val = upgrades[type];
-    const next: FleetUpgrades = {
-      ...upgrades,
-      [type]: typeof val === 'number' ? val + 1 : true,
-    };
-    setUpgrades(next);
-    engine.applyFleetUpgrades(next);
-    setPlayerShips([...engine.playerShips]);
-  };
-
   const handleNextSector = () => {
     const nextSector = sectorNumber + 1;
     setSectorNumber(nextSector);
@@ -345,16 +294,6 @@ export default function App() {
   };
 
   const handleRestart = () => {
-    const baseUpgrades: FleetUpgrades = {
-      hullArmorLevel: 1,
-      aaFirepowerLevel: 1,
-      radarRangeLevel: 1,
-      carrierCapacityLevel: 1,
-      artilleryDamageLevel: 1,
-      depthChargeSonarLevel: 1,
-    };
-    setUpgrades(baseUpgrades);
-    engine.applyFleetUpgrades(baseUpgrades);
     setSectorNumber(1);
     engine.score = {
       enemyShipsSunk: 0,
@@ -472,6 +411,18 @@ export default function App() {
           engine.toggleDippingSonar();
           setAircraft([...engine.aircraft]);
         }}
+        onToggleFoxhole={() => {
+          engine.toggleFoxholes();
+          setGroundUnits([...engine.groundUnits]);
+        }}
+        onToggleEmcon={() => {
+          engine.toggleEmcon();
+          setPlayerShips([...engine.playerShips]);
+        }}
+        onLaunchMoss={() => {
+          engine.launchMossSelected();
+          setPlayerShips([...engine.playerShips]);
+        }}
         onSetGunRoe={(key, value) => {
           engine.setGunRoe(key, value);
           setPlayerShips([...engine.playerShips]);
@@ -499,8 +450,6 @@ export default function App() {
         onLaunchModel={handleLaunchModel}
         onOrderSelected={handleOrderSelected}
         onStopUnits={handleStopUnits}
-        onSetSpeed={handleSetSpeed}
-        onSteer={handleSteer}
         intel={intel}
         score={score}
         onOpenBriefing={() => setIsBriefingOpen(true)}
@@ -515,6 +464,7 @@ export default function App() {
         onOpenAirPrep={() => setIsAirPrepOpen(true)}
         onOpenArmament={() => setIsArmamentOpen(true)}
         onOpenBattleLog={() => setIsBattleLogOpen(true)}
+        onOpenCodex={() => setIsCodexOpen(true)}
         combatLogs={combatLogs}
         gameSpeed={gameSpeed}
         isPaused={isPaused}
@@ -553,6 +503,7 @@ export default function App() {
           id: a.id,
           name: a.name,
           isHQ: a.id === engine.hqAirfieldId,
+          rotaryOnly: !!a.rotaryOnly,
           planes: engine.getAirfieldPool(a.id),
         }))}
         onTransferPlanes={(model, count, fromId, toId) => {
@@ -622,6 +573,7 @@ export default function App() {
       />
 
       {/* Tactical Battle Log Modal */}
+      <CodexModal isOpen={isCodexOpen} onClose={() => setIsCodexOpen(false)} era={era} />
       <BattleLogModal
         isOpen={isBattleLogOpen}
         onClose={() => setIsBattleLogOpen(false)}
@@ -661,12 +613,6 @@ export default function App() {
       <DockyardModal
         isOpen={isDockyardOpen}
         onClose={() => setIsDockyardOpen(false)}
-        stars={score.stars}
-        onSpendStars={handleSpendStars}
-        playerShips={playerShips}
-        onRepairShips={handleRepairShips}
-        upgrades={upgrades}
-        onUpgrade={handleApplyUpgrade}
         era={era}
         onSetEra={handleSetEra}
         canAdvance={engine.isVictory}

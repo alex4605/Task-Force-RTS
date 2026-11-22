@@ -87,14 +87,20 @@ export function naturalizeIslands(islands: Island[], seed: number, skip: (isl: I
 
 // ── Settlements ──────────────────────────────────────────────────────────
 
-/** Village names by theatre: Solomons and Bismarcks; Korea; Vietnam; the Baltic and Norway. */
+/** Village names by theatre: the Solomons; Saipan, Okinawa and the Keramas; Wonsan harbour; Vietnam's coastal islands; the German Bight. */
 const VILLAGE_NAMES: Record<Era, string[]> = {
   era1: ['科孔布納土著村落 (Kokumbona)', '塔薩法隆加村 (Tassafaronga)', '馬塔尼考村 (Matanikau)', '科利角漁村 (Koli Point)', '馬拉瑙傳教站 (Marau Mission)', '奧拉椰子種植園 (Aola)'],
-  era2: ['拉包爾土著村落 (Rabaul)', '塔拉西村 (Talasea)', '馬努斯漁村 (Manus)', '金貝灣村落 (Gimbe)', '天主教維納波普傳教站 (Vunapope)', '利弗兄弟椰子種植園 (Lever Bros.)'],
-  era3: ['德積島漁村 (Deokjeok-do)', '永宗島村落 (Yeongjong-do)', '月尾島漁港 (Wolmi-do)', '靈興島漁村 (Yeongheung-do)'],
-  era4: ['昆山島漁村 (Côn Sơn)', '富國島村社 (Phú Quốc)', '吉婆島漁村 (Cát Bà)', '海防外島村社 (Ấp)'],
-  era5: ['哥特蘭漁村 (Gotland)', '博恩霍姆小港 (Bornholm)', '羅弗敦漁村 (Lofoten)', '呂根島村落 (Rügen)'],
+  era2: ['加拉班町 (Garapan)', '查蘭卡諾亞村 (Chalan Kanoa)', '那霸港町 (Naha)', '首里城下町 (Shuri)', '座間味村 (Zamami)', '讀谷村 (Yomitan)'],
+  // Wonsan harbour islands held by the UN through the siege of Wonsan (1951-53)
+  era3: ['熊島村落 (Ung-do)', '黃土島漁村 (Hwangto-do)', '麗島漁村 (Yo-do)', '薪島漁村 (Sin-do)'],
+  // Cu Lao Cham off Hoi An, and Con Co off the DMZ
+  era4: ['占婆島 Bãi Làng 漁村', '占婆島 Bãi Hương 漁村', 'Cồn Cỏ 島 漁民村', 'Cồn Cỏ 島 燈塔哨村'],
+  // Helgoland and Sylt in the German Bight
+  era5: ['黑爾戈蘭 下城漁港 (Unterland)', '黑爾戈蘭 上城 (Oberland)', '敘爾特 韋斯特蘭 (Westerland)', '敘爾特 利斯特漁港 (List)'],
 };
+
+/** On the Cold War maps each offshore island has its own pair of villages (see placeNames.ts). */
+const ISLAND_VILLAGE_SLOTS: Record<string, [number, number]> = { 'island-wonsan': [0, 2], 'island-chodo': [2, 4] };
 
 /** Thatched-hut villages in the tropics, tight fishing villages elsewhere. */
 export const isThatchedEra = (era: Era) => era === 'era1' || era === 'era2' || era === 'era4';
@@ -106,11 +112,18 @@ export const isThatchedEra = (era: Era) => era === 'era1' || era === 'era2' || e
  * political support.
  */
 export function addIslandSettlements(islands: Island[], era: Era, seed: number): void {
-  const names = [...VILLAGE_NAMES[era]];
+  const all = [...VILLAGE_NAMES[era]];
+  let names = all;
   let rnd = Math.abs(Math.floor(seed)) % 2147483647 || 1;
   const rand = () => (rnd = (rnd * 16807) % 2147483647) / 2147483647;
   for (const isl of islands) {
-    if (isl.isMainland || names.length === 0) continue;
+    if (isl.isMainland) continue;
+    const slot = ISLAND_VILLAGE_SLOTS[isl.id];
+    if (era === 'era3' || era === 'era4' || era === 'era5') {
+      if (!slot) continue;
+      names = all.slice(slot[0], slot[1]);
+    }
+    if (names.length === 0) continue;
     const want = isl.radius > 1000 ? (rand() < 0.6 ? 2 : 1) : rand() < 0.75 ? 1 : 0;
     const military: Vector2D[] = [...isl.installations.map((i) => i.pos), ...(isl.strongholds ?? []).map((s) => s.cpPos)];
     const placed: Vector2D[] = [];

@@ -130,12 +130,6 @@ export class NavalNavigationGrid {
     }
   }
 
-  /** Shallowest water in the cell holding `pos` (m). */
-  public depthAt(pos: Vector2D): number {
-    const { gx, gy } = this.worldToCell(pos);
-    return this.minDepth[gy * this.cols + gx];
-  }
-
   /** Runs a query for a ship needing `depth` metres of water (0 = depth ignored). */
   public withDepth<T>(depth: number, fn: () => T): T {
     const prev = this.needDepth;
@@ -286,24 +280,23 @@ export class NavalNavigationGrid {
     }
 
     const totalCells = this.cols * this.rows;
-    const gScore = new Float32Array(totalCells);
-    gScore.fill(Infinity);
-    const fScore = new Float32Array(totalCells);
-    fScore.fill(Infinity);
-    const cameFrom = new Int32Array(totalCells);
-    cameFrom.fill(-1);
-    const closed = new Uint8Array(totalCells);
-    const inOpen = new Uint8Array(totalCells);
+    // Search buffers are kept between searches; a cell's entries count only when stamped with this
+    // search's generation, so nothing has to be cleared or reallocated per query.
+    const sc = this.searchBuffers(totalCells);
+    const gen = ++sc.gen;
+    const { g: gScore, f: fScore, from: cameFrom, seen, closedAt, openAt } = sc;
+    const gOf = (i: number) => (seen[i] === gen ? gScore[i] : Infinity);
 
     const startIdx = startCell.gy * this.cols + startCell.gx;
     const goalIdx = goalCell.gy * this.cols + goalCell.gx;
-
+    seen[startIdx] = gen;
     gScore[startIdx] = 0;
+    cameFrom[startIdx] = -1;
     fScore[startIdx] = this.octileHeuristic(startCell.gx, startCell.gy, goalCell.gx, goalCell.gy);
 
     // Binary Min-Heap over cell indices
     const heap: number[] = [startIdx];
-    inOpen[startIdx] = 1;
+    openAt[startIdx] = gen;
 
     const pushHeap = (node: number) => {
       heap.push(node);
@@ -347,13 +340,13 @@ export class NavalNavigationGrid {
 
     while (heap.length > 0 && expansions < maxExpansions) {
       const current = popHeap();
-      inOpen[current] = 0;
+      openAt[current] = 0;
       if (current === goalIdx) {
         found = true;
         break;
       }
-      if (closed[current]) continue;
-      closed[current] = 1;
+      if (closedAt[current] === gen) continue;
+      closedAt[current] = gen;
       expansions++;
 
       const cx = current % this.cols;
@@ -365,7 +358,7 @@ export class NavalNavigationGrid {
         if (nx < 0 || nx >= this.cols || ny < 0 || ny >= this.rows) continue;
 
         const nIdx = ny * this.cols + nx;
-        if (closed[nIdx]) continue;
+        if (closedAt[nIdx] === gen) continue;
         const cellType = this.grid[nIdx];
         if (this.blocked(nIdx)) continue;
 
@@ -383,13 +376,14 @@ export class NavalNavigationGrid {
         const marginal = this.needDepth > 0 && this.minDepth[nIdx] < this.needDepth * 1.6;
         const terrainWeight = (cellType === CELL_COASTAL ? 3.2 : 1.0) * (marginal ? 1.8 : 1.0);
         const tentativeG = gScore[current] + dir.cost * terrainWeight;
-        if (tentativeG < gScore[nIdx]) {
+        if (tentativeG < gOf(nIdx)) {
+          seen[nIdx] = gen;
           cameFrom[nIdx] = current;
           gScore[nIdx] = tentativeG;
           fScore[nIdx] = tentativeG + this.octileHeuristic(nx, ny, goalCell.gx, goalCell.gy);
-          if (!inOpen[nIdx]) {
+          if (openAt[nIdx] !== gen) {
             pushHeap(nIdx);
-            inOpen[nIdx] = 1;
+            openAt[nIdx] = gen;
           }
         }
       }
@@ -433,6 +427,23 @@ export class NavalNavigationGrid {
     }
 
     return smoothed.length > 0 ? smoothed : [goalWorld];
+  }
+
+  private search?: { g: Float32Array; f: Float32Array; from: Int32Array; seen: Uint32Array; closedAt: Uint32Array; openAt: Uint32Array; gen: number };
+
+  private searchBuffers(n: number) {
+    if (!this.search || this.search.g.length !== n || this.search.gen > 0xfffffff0) {
+      this.search = {
+        g: new Float32Array(n),
+        f: new Float32Array(n),
+        from: new Int32Array(n),
+        seen: new Uint32Array(n),
+        closedAt: new Uint32Array(n),
+        openAt: new Uint32Array(n),
+        gen: 0,
+      };
+    }
+    return this.search;
   }
 
   private octileHeuristic(ax: number, ay: number, bx: number, by: number): number {

@@ -1076,5 +1076,4 @@ export const PROJECTILE_DRAWERS: Partial<Record<ProjectileType, ProjectileDrawer
   slbm_r39: withSmoke(drawSlbmTrident, 3, 0.55),
   missile_ssm: withSmoke(drawMissileSsm, 3, 0.55),
   // Was missing: nuclear-tipped tactical ballistic missiles were invisible in flight
-  missile_nuclear_ssm: withSmoke(drawMissileSsm, 3, 0.55),
 };

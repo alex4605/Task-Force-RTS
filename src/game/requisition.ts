@@ -1,10 +1,11 @@
 import { withGroundRequisitions } from './groundRequisition';
 import { withAircraftRequisitions } from './airRequisition';
 import { RequisitionItem, Era } from '../types/game';
+import { FIELD_WORK_DESC, fieldWorkName } from './fieldWorks';
 
 /** Reinforcement menu for an era, with every ground entry tagged with the unit it raises. */
 export function getRequisitionCatalog(era: Era): RequisitionItem[] {
-  return withAircraftRequisitions(withMissingWorks(withGroundRequisitions(buildRequisitionCatalog(era), era), era), era);
+  return withFieldWorks(withAircraftRequisitions(withMissingWorks(withGroundRequisitions(buildRequisitionCatalog(era), era), era), era), era);
 }
 
 function buildRequisitionCatalog(era: Era): RequisitionItem[] {
@@ -472,17 +473,6 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
         typeTag: 'm198_155',
       },
       {
-        id: 'req-ground-lav-ad',
-        category: 'ground',
-        name: 'LAV-AD 輪型防空自走砲車',
-        cost: 390,
-        era: 'era5',
-        badge: '25mm格林火神+8x刺針防空飛彈',
-        desc: '陸戰隊高速輪型彈砲合一防空車！裝備 GAU-12 25mm 五管格林機砲 (3000發/分) 與兩具四聯裝 FIM-92 刺針紅外防空飛彈，自動獵殺 1600m 內敵戰機與掠海飛彈！',
-        statsDesc: 'HP: 1800 | 25mm 五管格林機砲 (3000發/分) + 8枚刺針飛彈 | 彈砲合一',
-        typeTag: 'lav_ad',
-      },
-      {
         id: 'req-ground-m163-vads',
         category: 'ground',
         name: 'M163 火神防空自走砲',
@@ -516,15 +506,15 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
         typeTag: 'us_m270_atacms',
       },
       {
-        id: 'req-ground-m109a6',
+        id: 'req-ground-m109a3',
         category: 'ground',
-        name: 'M109A6 帕拉丁 155mm 數位自走砲',
-        cost: 540,
+        name: 'M109A3 155mm 自走榴彈砲',
+        cost: 500,
         era: 'era5',
-        badge: '數位射控·極速反砲擊 (Counter-Battery)',
-        desc: '美國陸軍現代數位化主力自走重砲！裝備 39倍徑 155mm M284 榴彈砲與 AFATDS 數位野戰砲兵戰術射控系統，可在 4800m 射程內於 60 秒內完成「停車-射控解算-首發開火-轉移陣地」，配備反砲兵音響/雷達逆推，主動對敵方開火之重砲與火箭陣地實施毀滅性反砲擊覆蓋！',
-        statsDesc: 'HP: 3800 | 155mm M284 數位砲兵 (4800m) | 全自動反砲兵雷達逆推打擊',
-        typeTag: 'us_m109a6_paladin',
+        badge: '39倍徑 155mm · 反砲擊 (Counter-Battery)',
+        desc: '1980 年代駐西德美軍師屬砲兵主力：M109A3 換裝 39 倍徑 M185 155mm 砲管，配合 AN/TPQ-37 火砲定位雷達逆推敵砲位，對開火的敵方重砲與火箭陣地實施反砲擊覆蓋。',
+        statsDesc: 'HP: 3600 | 155mm M185 (39倍徑) | 反砲兵雷達逆推打擊',
+        typeTag: 'us_m109a3_83',
       },
       {
         id: 'req-ground-atacms-nuclear',
@@ -680,6 +670,30 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
         desc: '以鐵絲網圍起的收容營區，收押俘獲的敵方飛行員與艦員（每座 80 人），審訊所得持續轉為研究點數 RP。',
         statsDesc: '容量 80 人 | 每名戰俘 +0.03 RP/s | 需步兵在場構工',
         typeTag: 'pow_camp',
+        requiresIsland: true,
+      },
+      {
+        id: 'req-fac-motor-pool',
+        category: 'installations',
+        name: '調車場 (Motor Pool)',
+        cost: 220,
+        era: 'era5',
+        badge: '裝甲 / 車輛 / 火砲增援集結點',
+        desc: '工兵整平的車輛集結與整備場，有加油、維修與裝卸設備。戰車、裝甲車、自走砲、牽引火砲與防空車輛的增援只能在 HQ 或調車場集結。',
+        statsDesc: '呼叫裝甲與車輛增援 | 需工兵在場構工',
+        typeTag: 'motor_pool',
+        requiresIsland: true,
+      },
+      {
+        id: 'req-fac-farp',
+        category: 'installations',
+        name: 'FARP 前進加油彈藥補給點',
+        cost: 150,
+        era: 'era5',
+        badge: '直升機 / 垂直起降機前進基地',
+        desc: '前進加油彈藥補給點：清出起降坪、鋪上油囊與彈藥架，讓武裝與運輸直升機（以及獵鷹式）在前線就地加油掛彈，不必飛回航艦或機場。',
+        statsDesc: '僅限直升機與垂直起降機 | 可轉場 / 轉降 / 出擊 | 需工兵',
+        typeTag: 'farp',
         requiresIsland: true,
       },
     ];
@@ -929,7 +943,7 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-air-assault',
         category: 'ground',
-        name: 'USMC 空中突擊/直升機機降突擊排 (1965)',
+        name: '陸戰隊 空中突擊排',
         cost: 160,
         era: 'era4',
         badge: '垂直機動+M16步槍',
@@ -940,7 +954,7 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-m48',
         category: 'ground',
-        name: 'USMC M48A3 巴頓主力戰車排',
+        name: '陸戰隊 M48A3 巴頓主力戰車排',
         cost: 350,
         era: 'era4',
         badge: '90mm M41主砲+重裝甲',
@@ -951,7 +965,7 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-m551',
         category: 'ground',
-        name: 'US Army M551 謝里登裝甲騎兵排',
+        name: '美陸軍 M551 謝里登裝甲騎兵排',
         cost: 280,
         era: 'era4',
         badge: '152mm砲射飛彈兩用砲',
@@ -962,7 +976,7 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-ontos',
         category: 'ground',
-        name: 'USMC M50 昂圖斯六聯無後座力砲戰車排',
+        name: '陸戰隊 M50 昂圖斯六聯無後座力砲戰車排',
         cost: 260,
         era: 'era4',
         badge: '6聯裝106mm無後座力砲',
@@ -973,7 +987,7 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-usmc-lvtp5a1',
         category: 'ground',
-        name: 'USMC LVTP-5A1 兩棲重裝步戰車排',
+        name: '陸戰隊 LVTP-5A1 兩棲重裝步戰車排',
         cost: 290,
         era: 'era4',
         badge: '水陸兩棲+重載機步',
@@ -984,7 +998,7 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-artillery',
         category: 'ground',
-        name: 'USMC M114 155mm 重榴彈砲排',
+        name: '陸戰隊 M114 155mm 重榴彈砲排',
         cost: 250,
         era: 'era4',
         badge: '全島重砲射程覆蓋',
@@ -1027,6 +1041,17 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       },
       {
         id: 'req-ground-chaparral-sam',
+        category: 'ground',
+        name: 'MIM-72 榭樹野戰履帶防空飛彈排',
+        cost: 380,
+        era: 'era5',
+        badge: '4聯裝響尾蛇防空飛彈',
+        desc: '前線機動野戰防空傘！履帶車載四聯裝紅外線尋標防空飛彈發射架，自動偵測並打擊 1600m 範圍內掠空敵戰鬥機與強擊機！',
+        statsDesc: 'HP: 1300 | MIM-72 紅外導引飛彈 (1600m防空) | 前線自動防禦攔截',
+        typeTag: 'chaparral_sam',
+      },
+      {
+        id: 'req-ground-chaparral-sam-65',
         category: 'ground',
         name: 'MIM-72 榭樹野戰履帶防空飛彈排',
         cost: 380,
@@ -1167,6 +1192,30 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
         desc: '以鐵絲網圍起的收容營區，收押俘獲的敵方飛行員與艦員（每座 80 人），審訊所得持續轉為研究點數 RP。',
         statsDesc: '容量 80 人 | 每名戰俘 +0.03 RP/s | 需步兵在場構工',
         typeTag: 'pow_camp',
+        requiresIsland: true,
+      },
+      {
+        id: 'req-fac-motor-pool',
+        category: 'installations',
+        name: '調車場 (Motor Pool)',
+        cost: 220,
+        era: 'era4',
+        badge: '裝甲 / 車輛 / 火砲增援集結點',
+        desc: '工兵整平的車輛集結與整備場，有加油、維修與裝卸設備。戰車、裝甲車、自走砲、牽引火砲與防空車輛的增援只能在 HQ 或調車場集結。',
+        statsDesc: '呼叫裝甲與車輛增援 | 需工兵在場構工',
+        typeTag: 'motor_pool',
+        requiresIsland: true,
+      },
+      {
+        id: 'req-fac-farp',
+        category: 'installations',
+        name: 'FARP 前進加油彈藥補給點',
+        cost: 150,
+        era: 'era4',
+        badge: '直升機 / 垂直起降機前進基地',
+        desc: '前進加油彈藥補給點：清出起降坪、鋪上油囊與彈藥架，讓武裝與運輸直升機（以及獵鷹式）在前線就地加油掛彈，不必飛回航艦或機場。',
+        statsDesc: '僅限直升機與垂直起降機 | 可轉場 / 轉降 / 出擊 | 需工兵',
+        typeTag: 'farp',
         requiresIsland: true,
       },
     ];
@@ -1654,9 +1703,20 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
         typeTag: 'us_m4_calliope',
       },
       {
+        id: 'req-ground-m4a3e8',
+        category: 'ground',
+        name: '美陸軍 M4A3E8「Easy Eight」薛曼戰車排',
+        cost: 300,
+        era: 'era3',
+        badge: '76mm M1A2 · HVSS 懸吊',
+        desc: '韓戰美軍數量最多的戰車：76mm 長砲管配 HVAP 穿甲彈足以擊穿 T-34/85，水平渦形彈簧懸吊在山地泥濘中機動可靠，價格比潘興便宜、補給更容易。',
+        statsDesc: 'HP: 3000 | 76mm M1A2 | 機動可靠 | 價格實惠',
+        typeTag: 'us_armor_m4a3e8',
+      },
+      {
         id: 'req-ground-m26-pershing',
         category: 'ground',
-        name: 'US Army M26 潘興重戰車排',
+        name: '美陸軍 M26 潘興重戰車排',
         cost: 380,
         era: 'era3',
         badge: '90mm M3 戰車砲',
@@ -1918,6 +1978,18 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       requiresIsland: true,
     },
     {
+      id: 'req-fac-motor-pool',
+      category: 'installations',
+      name: '調車場 (Motor Pool)',
+      cost: 220,
+      era: era,
+      badge: '裝甲 / 車輛 / 火砲增援集結點',
+      desc: '工兵整平的車輛集結與整備場，有加油、維修與裝卸設備。戰車、裝甲車、自走砲、牽引火砲與防空車輛的增援只能在 HQ 或調車場集結。',
+      statsDesc: '呼叫裝甲與車輛增援 | 需工兵在場構工',
+      typeTag: 'motor_pool',
+      requiresIsland: true,
+    },
+    {
       id: 'req-fac-forward-airfield',
       category: 'installations',
       name: '前進野戰機場 (Airfield)',
@@ -1963,4 +2035,27 @@ function withMissingWorks(items: RequisitionItem[], era: Era): RequisitionItem[]
   ];
   const have = new Set(items.filter((i) => i.category === 'installations').map((i) => i.typeTag));
   return [...items, ...works.filter((w) => !have.has(w.typeTag))];
+}
+
+/** 防禦構工 cards, every era: wire, trenches and traps by the infantry, minefields by engineers. */
+function withFieldWorks(items: RequisitionItem[], era: Era): RequisitionItem[] {
+  const card = (typeTag: 'obstacle' | 'trench' | 'trap' | 'minefield', label: string, cost: number, badge: string, statsDesc: string): RequisitionItem => ({
+    id: `req-fw-${typeTag}`,
+    category: 'installations',
+    name: `${label} · ${fieldWorkName(typeTag, era, 'player')}`,
+    cost,
+    era,
+    badge,
+    desc: FIELD_WORK_DESC[typeTag],
+    statsDesc,
+    typeTag,
+    requiresIsland: true,
+  });
+  return [
+    ...items,
+    card('obstacle', '阻絕施設', 60, '遲滯敵軍突擊', '長 170m 阻絕帶 | 敵軍穿越減速 55~70% | 需步兵在場構工 (約 25 秒)'),
+    card('trench', '壕溝', 80, '步兵掩體', '長 140m 射擊壕 | 壕內步兵空襲減傷 70% · 直射掩護 50% | 需步兵在場構工 (約 35 秒)'),
+    card('trap', '陷阱', 40, '一次性詭雷', '敵步兵觸發: 傷亡 12% · 重度壓制 | 需步兵在場構工 (約 10 秒)'),
+    card('minefield', '雷區', 140, '反戰車 / 反人員', `150×90m 雷區 · 14 枚 | 敵軍觸雷: 車輛重創 · 步兵殺傷 | 需工兵在場佈雷 (約 40 秒)`),
+  ];
 }

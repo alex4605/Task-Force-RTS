@@ -43,7 +43,6 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   opfor_infantry_45: 0.5, // Type 99 + Type 96 LMG
   opfor_mortar_platoon: 2.8, // Type 97 81mm mortar
   opfor_infantry_ambush: 0.3,
-  opfor_infantry_patrol: 0.4,
   opfor_type95_tank: 1.0, // Type 98 37mm
   opfor_type97_tank: 1.2, // Type 1 47mm
   opfor_field_artillery: 10.8, // Type 91 10cm howitzer
@@ -68,6 +67,7 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   usmc_armor_m48: 2.0, // M41 90mm
   usmc_ontos_m50: 1.1, // M40 106mm recoilless rifle
   us_m26_pershing: 2.0, // M3 90mm
+  us_armor_m4a3e8: 1.8, // M1A2 76mm
   us_m551_sheridan: 2.0, // M81 152mm gun-launcher (HEAT / canister in Vietnam)
   usmc_lvtp5a1: 1.5,
   opfor_vietnam_sapper: 0.2,
@@ -111,6 +111,7 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   opfor_su100: 15.4, // D-10S 100mm, indirect
   us_m109_spg: 14.6, // M126 155mm
   opfor_2s3: 18.5, // 2A33 152mm
+  us_m109a3_83: 18.1, // M185 155mm (M549 RAP ~24 km)
   us_m109a6_paladin: 24, // M284 155mm
   opfor_2s19: 24.7, // 2A64 152mm
   // Air defence vehicles
@@ -127,6 +128,10 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   us_army_rifle_45: 0.5,
   usmc_m4a3r3_flame: 0.15, // flame gun
   us_m24_chaffee: 1.3, // M6 75mm
+  us_redeye_team: 4.5, // FIM-43C
+  us_stinger_team: 4.8, // FIM-92A
+  opfor_sa7_strela: 4.2, // 9K32M Strela-2M
+  opfor_igla_team: 5.0, // 9K310 Igla-1
   usmc_90mm_aa_42: 1.8, // 90mm M1 (slant range engaged)
   usmc_40mm_bofors_45: 1.3, // 40mm M1
   us_m16_quad50: 1.2, // M45 quad .50, effective AA
@@ -179,6 +184,9 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   opfor_ija_banzai_45: 0.3, // lunge mines, bayonets
   opfor_pva_infantry_50: 0.4, // PPSh / Mosin / grenades
   opfor_zis3_76: 2.0, // ZiS-3 direct fire
+  opfor_ija_type92_70: 1.5, // Type 92 battalion gun, direct and indirect fire
+  opfor_ija_type98_aa: 1.2, // Type 98 20mm
+  opfor_bm13_katyusha: 8.5, // M-13 132mm rocket
   opfor_su76m: 2.0, // ZiS-3Sh 76mm
   opfor_vc_guerrilla_65: 0.4, // SKS / AK / B-40
   opfor_rpg_team_65: 0.3, // RPG-2 / RPG-7
@@ -198,6 +206,20 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   au_sasr_66: 0.5, // L1A1 / M16
   nl_leopard1: 2.5, // L7 105mm
   nl_infantry_83: 0.6, // FN FAL / MAG
+  frg_jaeger_83: 0.6,
+  frg_heimatschutz_83: 0.55,
+  opfor_giyutai_45: 0.3, // Type 38 rifles, grenades, bamboo spears
+  sof_lrrp_65: 0.45, // M16 / CAR-15 / M79
+  opfor_rail_troops_83: 0.5, // AKS-74 for the guard section
+  opfor_mvd_vv_83: 0.55, // AK-74 / PKM
+  fr_infantry_83: 0.6,
+  fr_amx30b2: 2.6,
+  uk_infantry_83: 0.6,
+  arvn_rfpf_65: 0.45,
+  opfor_nlf_main_force_65: 0.45,
+  rok_police_50: 0.4,
+  opfor_kpa_infantry_50: 0.42,
+  si_scouts_42: 0.35,
   frg_luchs: 1.5, // 20mm Rh 202
   uk_sas_83: 0.55, // M16A2 / GPMG
   usmc_paramarine_42: 0.45, // Reising / Garand / BAR

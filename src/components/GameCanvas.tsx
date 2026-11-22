@@ -1,3 +1,4 @@
+import { onAirfield } from '../game/airfieldLayout';
 import React, { useRef, useEffect, useCallback } from 'react';
 import { GameEngine } from '../game/engine';
 import { VectorRenderer, Camera, OrderMarker } from '../game/renderer';
@@ -291,18 +292,24 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       renderer.drawOcean(cameraRef.current, engine.worldSize, flagship ? flagship.pos : undefined);
       renderer.drawIslands(engine.islands, cameraRef.current, engine.worldSize);
       renderer.drawStrongholds(engine.islands, cameraRef.current);
+      renderer.drawWhales(engine.whales, cameraRef.current);
       renderer.drawImpactScars(engine.impacts, cameraRef.current);
+      renderer.drawFieldWorks(engine.fieldWorks, cameraRef.current);
       if (engine.showRadarCoverage) renderer.drawRadarCoverage(engine.getRadarCoverage(), cameraRef.current);
       renderer.drawSonobuoys(engine.sonobuoys, cameraRef.current);
+      renderer.drawEw(engine.esmContacts, engine.jamZones, cameraRef.current);
+      renderer.drawSeaDecoys(engine.decoys, cameraRef.current, engine.wind);
       renderer.drawShips(
         [...engine.playerShips, ...engine.enemyShips, ...(engine.alliedShips || [])],
         cameraRef.current,
         engine.selectedUnitIds
       );
+      renderer.drawConstructionSites(engine.constructionSites, cameraRef.current);
       renderer.drawGroundWrecks(engine.groundWrecks, cameraRef.current);
       renderer.drawGroundUnits(engine.groundUnits, cameraRef.current, engine.selectedUnitIds);
       renderer.drawAircraft(engine.aircraft, cameraRef.current, engine.selectedUnitIds);
       renderer.drawProjectiles(engine.projectiles, cameraRef.current);
+      renderer.drawAirDecoys(engine.decoys, cameraRef.current);
       renderer.drawImpacts(engine.impacts, cameraRef.current);
       renderer.drawParticles(engine.particles, cameraRef.current);
       // Draw Downed Pilot SAR Life Rafts
@@ -724,7 +731,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         // Check if clicked an installation (Battalion CP or Airfield)
         for (const isl of engine.islands) {
           const hitBattalionCp = isl.installations.find(
-            (inst) => (inst.type === 'battalion_cp' || inst.type === 'command_post') && !inst.isDestroyed && dist(worldPos, inst.pos) < 85
+            (inst) => (inst.type === 'battalion_cp' || inst.type === 'command_post' || (inst.type === 'motor_pool' && inst.side === 'player')) && !inst.isDestroyed && dist(worldPos, inst.pos) < 85
           );
           if (hitBattalionCp) {
             onSelectAirfacility?.('battalion_cp', hitBattalionCp.id);
@@ -732,7 +739,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
 
           const hitAirfieldInst = isl.installations.find(
-            (inst) => (inst.type === 'airfield' || inst.type === 'radar_station') && !inst.isDestroyed && dist(worldPos, inst.pos) < 65
+            (inst) =>
+              !inst.isDestroyed &&
+              (inst.type === 'airfield' ? onAirfield(inst, worldPos) : inst.type === 'radar_station' && dist(worldPos, inst.pos) < 65)
           );
           const hasAirfield = isl.installations.some((i) => i.type === 'airfield' && !i.isDestroyed);
           if (hitAirfieldInst || ((isl.isFriendlyBase || hasAirfield) && isPointInPolygon(worldPos, isl.points))) {
@@ -901,6 +910,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         if (engine.aircraft.some((a) => a.side === 'player' && a.state !== 'shot_down' && engine.selectedUnitIds.includes(a.id))) {
           engine.toggleDippingSonar();
         }
+      } else if (e.key === 'y' || e.key === 'Y') {
+        // EMCON: selected ships go radar-silent (or radiate again)
+        engine.toggleEmcon();
+      } else if (e.key === 'k' || e.key === 'K') {
+        // Selected submarines launch their MOSS simulators
+        engine.launchMossSelected();
+      } else if (e.key === 'z' || e.key === 'Z') {
+        // Foxholes: the selected infantry dig in where they stand (or climb out)
+        engine.toggleFoxholes();
       } else if (e.key === 'v' || e.key === 'V') {
         // Escort: pick the friendly aircraft the selected fighters protect
         if (engine.aircraft.some((a) => a.side === 'player' && a.state !== 'shot_down' && engine.selectedUnitIds.includes(a.id))) {

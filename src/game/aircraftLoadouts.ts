@@ -200,7 +200,6 @@ const LOADOUTS: Partial<Record<AircraftModel, readonly Store[]>> = {
   tornado_ids: [s('bombs_snakeye_retarded', 4), s('cbu_cluster_bombs', 2), s('clean_guns')], // JP233
   mirage2000: [s('aim7_sparrow', 2), s('aim9_sidewinder', 2), s('clean_guns')], // Super 530D + Magic II
   jaguar_gr1: [s('bombs_snakeye_retarded', 4), s('gbu10_laser_paveway', 2), s('clean_guns')],
-  viggen_ja37: [s('rgm84_harpoon', 2), s('clean_guns')], // RBS-15F
 };
 
 function storesFor(model: AircraftModel, era: Era): Store[] {
@@ -214,10 +213,6 @@ function storesFor(model: AircraftModel, era: Era): Store[] {
 /** Stores the airframe carried in this era, its default first. */
 export function getModelPayloads(model: AircraftModel, era: Era): AircraftPayloadType[] {
   return storesFor(model, era).map((st) => st.payload);
-}
-
-export function getDefaultPayload(model: AircraftModel, era: Era): AircraftPayloadType {
-  return storesFor(model, era)[0].payload;
 }
 
 /** The requested store if this airframe carried it, otherwise its historical default. */
