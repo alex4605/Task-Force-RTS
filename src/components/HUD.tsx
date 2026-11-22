@@ -113,7 +113,7 @@ interface HUDProps {
   convoyReinforceTimer?: number;
   nextConvoyEscort?: 'ss' | 'dd' | 'cl' | 'ca';
   /** Friendly airfields with their own aircraft stock, HQ island first. */
-  airfields?: { id: string; name: string; isHQ: boolean; rotaryOnly?: boolean; planes: Record<string, number> }[];
+  airfields?: { id: string; name: string; isHQ: boolean; rotaryOnly?: boolean; planes: Record<string, number>; repair?: number }[];
   onTransferPlanes?: (model: AircraftModel, count: number, fromId: string, toId: string) => void;
   onLaunchAirbaseSortie?: (model: AircraftModel, count: number, payload?: AircraftPayloadType, airfieldId?: string) => void;
   onToggleTransportEmbark?: (transportId: string) => void;
@@ -330,7 +330,7 @@ export const HUD: React.FC<HUDProps> = ({
   const [afbFerryTo, setAfbFerryTo] = useState('');
   const ferryBases = useMemo(
     () => [
-      ...airfields.map((a) => ({ id: a.id, name: `${a.isHQ ? '🏛️ ' : '🛬 '}${a.name}`, isCarrier: false })),
+      ...airfields.map((a) => ({ id: a.id, name: `${a.isHQ ? '🏛️ ' : '🛬 '}${a.name}${a.repair !== undefined ? `（跑道搶修 ${Math.floor(a.repair * 100)}%，抵達後盤旋待命）` : ''}`, isCarrier: false })),
       ...carriers.map((c) => ({ id: c.id, name: `⚓ ${c.name}`, isCarrier: true })),
     ],
     [airfields, carriers]

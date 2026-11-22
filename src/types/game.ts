@@ -1951,8 +1951,10 @@ export interface Installation {
   cratered?: { progress: number };
   /** Destroyed outright by a nuclear burst (only rebuilding by engineers brings it back). */
   nuclearDestroyed?: boolean;
-  /** Rebuild progress of a nuclear-destroyed airfield, 0..1. */
+  /** Rebuild progress of a destroyed installation (engineers on site), 0..1. */
   rebuildProgress?: number;
+  /** Engineers are repairing this damaged installation (for the start / finish reports). */
+  underRepair?: boolean;
   /** A FARP: an airfield for helicopters and V/STOL jets only. */
   rotaryOnly?: boolean;
   /** Built on what was a civilian site (airport, station): drawn as such. */

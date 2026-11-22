@@ -2924,6 +2924,7 @@ export class GameEngine {
     this.updateStrongholds(effectiveDt);
     this.updateShipAviation(effectiveDt);
     this.updateConstruction(effectiveDt);
+    this.updateInstallationRepair(effectiveDt);
     this.updateAirfieldDamage(effectiveDt);
     this.updateAirfieldControl(effectiveDt);
     this.updateCivilControl(effectiveDt);
@@ -5642,6 +5643,15 @@ export class GameEngine {
     return undefined;
   }
 
+  /** Friendly airfield by id, also while its runway is cratered and under repair (a ferry destination). */
+  private findFriendlyAirfieldIncludingRepair(id: string): Installation | undefined {
+    for (const isl of this.islands) {
+      const inst = isl.installations.find((x) => x.id === id && x.type === 'airfield' && x.side === 'player' && !x.isDestroyed);
+      if (inst) return inst;
+    }
+    return undefined;
+  }
+
   /** Every intact friendly airfield, the HQ island's first. */
   public getFriendlyAirfields(): Installation[] {
     const all = this.islands.flatMap((isl) => isl.installations.filter((x) => x.type === 'airfield' && x.side === 'player' && !x.isDestroyed));
@@ -5734,8 +5744,13 @@ export class GameEngine {
     };
     if (fromId === toId) return fail('⚠️ 轉場出發地與目的地相同。');
     const fromPos = this.getAirBasePos(fromId);
-    const toPos = this.getAirBasePos(toId);
-    if (!fromPos || !toPos) return fail('⚠️ 轉場基地不存在或已被摧毀。');
+    const toField = this.findFriendlyAirfieldIncludingRepair(toId);
+    const toPos = this.getAirBasePos(toId) ?? toField?.pos;
+    if (!fromPos) {
+      const cr = this.findFriendlyAirfieldIncludingRepair(fromId)?.cratered;
+      return fail(cr ? `⚠️ 出發機場跑道搶修中（${Math.floor(cr.progress * 100)}%），暫時無法起飛。` : '⚠️ 出發基地不存在或已被摧毀。');
+    }
+    if (!toPos) return fail('⚠️ 目的地基地不存在、已被摧毀或已失守。');
     const toCarrier = this.findFriendlyCarrier(toId);
     if (this.findFriendlyAirfield(toId)?.rotaryOnly && !isRotaryOrVstol(model)) return fail(`⚠️ FARP 只能收容直升機與垂直起降機。`);
     if (toCarrier && !deckAccepts(toCarrier, model)) return fail(`⚠️「${toCarrier.name}」只能收容自己的艦載直升機 / 水上飛機。`);
@@ -5762,7 +5777,7 @@ export class GameEngine {
     const heading = Math.atan2(toPos.y - fromPos.y, toPos.x - fromPos.x);
     const sqId = `sq-ferry-${model}-${Date.now()}`;
     const fromName = fromCarrier?.name ?? this.findFriendlyAirfield(fromId)?.name ?? fromId;
-    const toName = toCarrier?.name ?? this.findFriendlyAirfield(toId)?.name ?? toId;
+    const toName = toCarrier?.name ?? toField?.name ?? toId;
     for (let k = 0; k < count; k++) {
       this.aircraft.push({
         id: `ferry-${model}-${Date.now()}-${k}-${Math.floor(Math.random() * 1e6)}`,
@@ -5800,7 +5815,9 @@ export class GameEngine {
       sourceName: fromName,
       targetName: toName,
       actionType: 'recon_spotted',
-      text: `🛫【轉場起飛】${count} 架 ${model.toUpperCase()} 自「${fromName}」起飛轉場前往「${toName}」，抵達降落後即計入該基地庫存。`,
+      text: toField?.cratered
+        ? `🛫【轉場起飛】${count} 架 ${modelLabel(model)} 自「${fromName}」轉場前往「${toName}」。目的地跑道搶修中（${Math.floor(toField.cratered.progress * 100)}%），機隊將在上空盤旋待命，修復後降落（派工兵到機場可大幅加快搶修）。`
+        : `🛫【轉場起飛】${count} 架 ${modelLabel(model)} 自「${fromName}」起飛轉場前往「${toName}」，抵達降落後即計入該基地庫存。`,
     });
     return true;
   }
@@ -5811,6 +5828,18 @@ export class GameEngine {
    */
   private updateFerryFlight(dt: number, i: number, plane: Aircraft): boolean {
     if (!plane.ferryTo) return false;
+    const repairing = this.findFriendlyAirfieldIncludingRepair(plane.ferryTo);
+    if (repairing?.cratered) {
+      // Runway still cratered: fly there and orbit until the strip reopens
+      // The move order steers for a point a little ahead on a 200 m circle over the field
+      const c = repairing.pos;
+      const bearing = Math.atan2(plane.pos.y - c.y, plane.pos.x - c.x);
+      const ahead = dist(plane.pos, c) > 320 ? 0 : 0.7;
+      plane.altitude = Math.min(0.85, plane.altitude + dt * 0.2);
+      plane.state = 'cruising';
+      plane.order = { type: 'move', targetPos: { x: c.x + Math.cos(bearing + ahead) * 200, y: c.y + Math.sin(bearing + ahead) * 200 } };
+      return false;
+    }
     let pos = this.getAirBasePos(plane.ferryTo);
     if (!pos) {
       plane.ferryTo = this.findFriendlyAirfield(this.hqAirfieldId) ? this.hqAirfieldId : this.getFriendlyAirfields()[0]?.id;
@@ -5818,6 +5847,7 @@ export class GameEngine {
       pos = plane.ferryTo ? this.getAirBasePos(plane.ferryTo) : undefined;
       if (!pos) return false;
     }
+    plane.state = 'cruising';
     plane.order = { type: 'move', targetPos: { ...pos } };
     plane.targetHeading = Math.atan2(pos.y - plane.pos.y, pos.x - plane.pos.x);
     plane.altitude = Math.min(0.85, plane.altitude + dt * 0.2);
@@ -11748,6 +11778,55 @@ export class GameEngine {
     }
   }
 
+  /** Site types that are troops or civilian property, not facilities engineers maintain. */
+  private static readonly NOT_REPAIRABLE = new Set<string>(['infantry_squad', 'infantry_platoon', 'tank_platoon', 'tank_battalion', 'hidden_tunnel', 'city', 'town', 'settlement', 'refugee_camp']);
+  private repairTimer = 0;
+
+  /**
+   * Engineers keep our facilities running: with an engineer platoon within BUILDER_RADIUS a damaged
+   * facility is patched up (about 90 s from wrecked to whole with one platoon, faster with more), and
+   * one that was knocked out is rebuilt in about two-thirds of its original build time. Airfields
+   * with cratered runways have their own repair (updateAirfieldDamage); fields are only rebuilt here
+   * after conventional loss, never after a nuclear burst.
+   */
+  private updateInstallationRepair(dt: number): void {
+    this.repairTimer -= dt;
+    if (this.repairTimer > 0) return;
+    const T = 0.5;
+    this.repairTimer = T;
+    const engineers = this.groundUnits.filter((u) => this.canBuild(u, 'engineer'));
+    if (engineers.length === 0) return;
+    for (const isl of this.islands) {
+      for (const inst of isl.installations) {
+        if (inst.side !== 'player' || GameEngine.NOT_REPAIRABLE.has(inst.type) || inst.cratered || inst.nuclearDestroyed) continue;
+        if (!inst.isDestroyed && inst.health >= inst.maxHealth) continue;
+        const n = engineers.filter((u) => dist(u.pos, inst.pos) <= BUILDER_RADIUS).length;
+        if (n === 0) continue;
+        if (inst.isDestroyed) {
+          const total = Math.max(60, (buildTime(inst.type) || 150) * 0.66);
+          inst.rebuildProgress = (inst.rebuildProgress ?? 0) + (T / total) * buildRate(n);
+          if (inst.rebuildProgress < 1) continue;
+          inst.isDestroyed = false;
+          inst.rebuildProgress = undefined;
+          inst.health = inst.maxHealth * 0.5;
+          this.islandsVersion++;
+          this.addBannerAlert(`🏗️【重建完成】「${inst.name}」恢復運作（50%）`, 'player', 'capture', 4);
+          this.addCombatLog({ category: 'naval', sourceSide: 'player', sourceName: '工兵', targetName: inst.name, actionType: 'recon_spotted', text: `🏗️【重建完成】工兵重建「${inst.name}」，恢復運作（耐久 50%，工兵留在現場會繼續修復）。` });
+          continue;
+        }
+        if (!inst.underRepair) {
+          inst.underRepair = true;
+          this.addCombatLog({ category: 'naval', sourceSide: 'player', sourceName: '工兵', targetName: inst.name, actionType: 'recon_spotted', text: `🔧【搶修】工兵開始修復「${inst.name}」（${Math.round((inst.health / inst.maxHealth) * 100)}%）。` });
+        }
+        inst.health = Math.min(inst.maxHealth, inst.health + (inst.maxHealth / 90) * T * buildRate(n));
+        if (inst.health >= inst.maxHealth) {
+          inst.underRepair = undefined;
+          this.addCombatLog({ category: 'naval', sourceSide: 'player', sourceName: '工兵', targetName: inst.name, actionType: 'recon_spotted', text: `🛠️【修復完成】「${inst.name}」已修復至完好。` });
+        }
+      }
+    }
+  }
+
   /** Engineer works under way: progress while engineers are on site, then enter service. */
   public constructionSites: { inst: Installation; islandId: string; progress: number; total: number; itemName: string; builders: number }[] = [];
 
@@ -12040,6 +12119,8 @@ export class GameEngine {
         const sapper = isEngineerType(u.type);
         if (w.kind === 'trench') {
           if (!hostile && foot) u.fieldCover = 'trench';
+          // Engineers blow in and fill the enemy's trenches
+          else if (hostile && sapper) w.health -= 120 * T;
         } else if (w.kind === 'obstacle') {
           if (!hostile) continue;
           u.obstacleSlow = Math.min(u.obstacleSlow ?? 1, foot ? 0.45 : 0.3);
@@ -12082,6 +12163,8 @@ export class GameEngine {
                 ? `🧹【雷區清除】「${w.name}」已被${w.side === 'enemy' ? '我軍' : '敵軍'}排除或引爆殆盡。`
                 : w.kind === 'obstacle'
                 ? `🚧【阻絕突破】「${w.name}」已被${w.side === 'enemy' ? '我軍' : '敵軍'}開闢通路。`
+                : w.kind === 'trench'
+                ? `🕳️【工事破壞】「${w.name}」已被${w.side === 'enemy' ? '我軍' : '敵軍'}炸毀填平。`
                 : `💥「${w.name}」已失效。`,
           });
         }

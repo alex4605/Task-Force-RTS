@@ -505,6 +505,7 @@ export default function App() {
           isHQ: a.id === engine.hqAirfieldId,
           rotaryOnly: !!a.rotaryOnly,
           planes: engine.getAirfieldPool(a.id),
+          repair: a.cratered?.progress,
         }))}
         onTransferPlanes={(model, count, fromId, toId) => {
           engine.transferAircraft(model, count, fromId, toId);
