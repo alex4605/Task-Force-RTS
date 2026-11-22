@@ -14604,7 +14604,7 @@ export class GameEngine {
       const p = target as Projectile;
       const isSSM = p.type === 'missile_ssm';
       const targetLabel = isSSM ? 'MGM-140 ATACMS 戰術彈道飛彈' : '我方反艦/巡弋飛彈';
-      this.addBannerAlert(`🚨【S-300 PMU 導向飛彈截擊！】敵「${inst.name}」48N6 高超音速防空飛彈發射！攔截 ${targetLabel}！`, 'enemy', 'alert', 5.0);
+      if (this.logAllowed(`s300ban|${inst.id}`, 15)) this.addBannerAlert(`🚨【S-300 PMU 導向飛彈截擊！】敵「${inst.name}」48N6 高超音速防空飛彈發射！攔截 ${targetLabel}！`, 'enemy', 'alert', 5.0);
     } else {
       this.addBannerAlert(`🚨【S-300 長程防空飛彈警報！】敵「${inst.name}」發射 48N6 高超音速防空飛彈！射程 4200m 全面鎖定！`, 'enemy', 'alert', 5.5);
     }
@@ -14762,7 +14762,7 @@ export class GameEngine {
       const p = target as Projectile;
       const isSSM = p.type === 'missile_ssm';
       const targetLabel = isSSM ? 'MGM-140 ATACMS 戰術飛彈' : '我方反艦/巡弋飛彈';
-      this.addCombatLog({
+      if (this.logAllowed(`ssamlog|${ship.id}`, 6)) this.addCombatLog({
         category: 'aa',
         sourceSide: 'enemy',
         sourceName: `${ship.name} (${samModel})`,
@@ -15795,9 +15795,9 @@ export class GameEngine {
     });
 
     if (isAntiMissile) {
-      this.addBannerAlert(`🚀【防空飛彈緊急攔截！】「${ship.name}」發射 ${samModel} 攔截${targetName}！`, ship.side === 'enemy' ? 'enemy' : 'player', 'alert', 5.0);
+      if (this.logAllowed(`samban|${ship.id}`, 15)) this.addBannerAlert(`🚀【防空飛彈緊急攔截！】「${ship.name}」發射 ${samModel} 攔截${targetName}！`, ship.side === 'enemy' ? 'enemy' : 'player', 'alert', 5.0);
     }
-    this.addCombatLog({
+    if (this.logAllowed(`samlog|${ship.id}`, 6)) this.addCombatLog({
       category: 'aa',
       sourceSide: ship.side,
       sourceName: `${ship.name} (${samModel})`,
@@ -20351,7 +20351,7 @@ export class GameEngine {
               inst.health -= actualDmg;
 
               soundEngine.playExplosion(true);
-              this.addCombatLog({
+              if (this.logAllowed(`bombhit|${attacker}|${inst.id}`, 8)) this.addCombatLog({
                 category: 'air',
                 sourceSide: proj.side,
                 sourceName: attacker,
@@ -20391,7 +20391,7 @@ export class GameEngine {
                 });
               }
 
-              this.addCombatLog({
+              if (this.logAllowed(`bombnm|${attacker}|${inst.id}`, 8)) this.addCombatLog({
                 category: 'air',
                 sourceSide: proj.side,
                 sourceName: attacker,
