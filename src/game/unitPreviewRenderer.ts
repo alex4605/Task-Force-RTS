@@ -684,6 +684,7 @@ const EXPLICIT_SILHOUETTE_CLASS: Record<string, GroundSilhouetteClass> = {
   us_m1a1_pack_75: 'towed',
   us_m102_105: 'towed',
   us_m106_65: 'spg',
+  opfor_2s9_nona_83: 'spg',
   us_m106a2_83: 'spg',
   sof_coastwatcher_42: 'infantry',
   sof_alamo_scouts_45: 'infantry',

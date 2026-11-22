@@ -26,13 +26,21 @@ export const GROUND_UNIT_STATS: Record<GroundUnitType, GroundUnitStats> = {
   opfor_infantry_42: { health: 1500, armor: 0.30, speed: 3.8, damage: 68, reloadTime: 1.3 },
   opfor_infantry_45: { health: 1900, armor: 0.38, speed: 4.2, damage: 92, reloadTime: 1.1 },
   opfor_mortar_platoon: { health: 1750, armor: 0.32, speed: 3.2, damage: 190, reloadTime: 2.0 },
+  opfor_ija_knee_mortar_42: { health: 1200, armor: 0.24, speed: 3.6, damage: 110, reloadTime: 1.4 },
+  opfor_ija_mortar_320_45: { health: 1500, armor: 0.3, speed: 1.6, damage: 320, reloadTime: 9.0 },
+  opfor_kpa_mortar_120_50: { health: 1650, armor: 0.3, speed: 2.8, damage: 300, reloadTime: 2.8 },
+  opfor_pva_mortar_82_50: { health: 1450, armor: 0.28, speed: 3.6, damage: 190, reloadTime: 2.0 },
+  opfor_vc_mortar_60_65: { health: 1150, armor: 0.24, speed: 4.0, damage: 120, reloadTime: 1.4 },
+  opfor_pavn_mortar_82_65: { health: 1450, armor: 0.28, speed: 3.6, damage: 200, reloadTime: 2.0 },
+  opfor_pavn_mortar_120_65: { health: 1650, armor: 0.3, speed: 2.8, damage: 310, reloadTime: 2.8 },
+  opfor_2b14_mortar_83: { health: 1500, armor: 0.3, speed: 3.8, damage: 220, reloadTime: 1.8 },
+  opfor_2s9_nona_83: { health: 2500, armor: 0.5, speed: 5.8, damage: 340, reloadTime: 2.6, isAmphibious: true },
   opfor_infantry_ambush: { health: 1500, armor: 0.32, speed: 5.5, damage: 110, reloadTime: 1.2 }, // Fast ambush sprint!
   opfor_type95_tank: { health: 2100, armor: 0.48, speed: 5.4, damage: 180, reloadTime: 2.2 },
   opfor_type97_tank: { health: 2800, armor: 0.60, speed: 4.6, damage: 290, reloadTime: 2.5 },
   opfor_field_artillery: { health: 2400, armor: 0.40, speed: 2.5, damage: 240, reloadTime: 3.2 },
   usmc_korea_rifle: { health: 2100, armor: 0.38, speed: 4.2, damage: 105, reloadTime: 1.0 },
   us_army_infantry_korea: { health: 2200, armor: 0.40, speed: 4.4, damage: 110, reloadTime: 1.0 },
-  us_army_armor_korea: { health: 3500, armor: 0.74, speed: 5.0, damage: 400, reloadTime: 2.3 },
   usmc_lvtp5: { health: 2800, armor: 0.58, speed: 4.8, damage: 250, reloadTime: 2.0, isAmphibious: true },
   usmc_patton_m46: { health: 3400, armor: 0.72, speed: 5.2, damage: 380, reloadTime: 2.3 },
   usmc_howitzer_155: { health: 2600, armor: 0.45, speed: 2.2, damage: 450, reloadTime: 3.8 },
@@ -220,6 +228,7 @@ export const GROUND_UNIT_STATS: Record<GroundUnitType, GroundUnitStats> = {
 
 /** Indirect-fire units: towed and self-propelled guns, rocket artillery and ballistic missiles. */
 export const ARTILLERY_UNIT_TYPES: ReadonlySet<GroundUnitType> = new Set<GroundUnitType>([
+  'opfor_2s9_nona_83',
   'us_m106_65',
   'us_m106a2_83',
   'us_m1a1_pack_75',

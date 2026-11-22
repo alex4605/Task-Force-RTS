@@ -616,6 +616,14 @@ export function drawMortarSection(ctx: CanvasRenderingContext2D, type: string, p
       : KITS.us_83
     : /42|45/.test(type)
     ? KITS.ija
+    : /kpa/.test(type)
+    ? KITS.kpa
+    : /pva/.test(type)
+    ? KITS.pva
+    : /vc_/.test(type)
+    ? KITS.vc
+    : /pavn|_65$/.test(type)
+    ? KITS.nva
     : KITS.soviet;
   ctx.fillStyle = '#37474F';
   ctx.beginPath();

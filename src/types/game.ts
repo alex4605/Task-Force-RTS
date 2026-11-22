@@ -61,7 +61,6 @@ export type GroundUnitType =
   | 'usmc_rifle_45'      // 時代二 1945 USMC 陸戰隊步槍排 (M1加蘭德 / 巴祖卡 / 火焰噴射器)
   | 'usmc_korea_rifle'   // 時代三 1950-53 USMC 陸戰第1師突擊排 (M1加蘭德 / M20超級巴祖卡)
   | 'us_army_infantry_korea' // 時代三 美國陸軍前線突擊步兵排 (M14/無後座力砲)
-  | 'us_army_armor_korea'    // 時代三 美國陸軍前線裝甲排 (M46巴頓/M4A3E8薛曼)
   | 'usmc_air_assault_65' // 時代四 1965 USMC 陸戰隊空中突擊排 (M16A1 / M60 / M79 / 垂直機動空降)
   | 'us_army_rifle_platoon_65' // 時代四 美陸軍常規步槍排 (M16A1 / M60 / M79)
   | 'us_army_m113_mech'        // 時代四 M113 裝甲運兵機械化步兵排
@@ -233,6 +232,15 @@ export type GroundUnitType =
   | 'opfor_zsu23_shilka'  // 時代四 ZSU-23-4 石勒喀河 4聯裝雷達導引防空自走砲
   | 'opfor_zu23_aa'       // 時代四 ZU-23-2 雙管防空砲陣地
   | 'opfor_mortar_platoon' // 迫擊砲排
+  | 'opfor_ija_knee_mortar_42' // 時代一/二 八九式重擲彈筒班 (膝射迫擊砲)
+  | 'opfor_ija_mortar_320_45'  // 時代二 九八式臼砲 320mm (硫磺島 · 沖繩)
+  | 'opfor_kpa_mortar_120_50'  // 時代三 朝鮮人民軍 PM-38 120mm 迫擊砲連
+  | 'opfor_pva_mortar_82_50'   // 時代三 中國人民志願軍 82mm 迫擊砲排
+  | 'opfor_vc_mortar_60_65'    // 時代四 越共 60mm 迫擊砲組
+  | 'opfor_pavn_mortar_82_65'  // 時代四 越南人民軍 82mm 迫擊砲排
+  | 'opfor_pavn_mortar_120_65' // 時代四 越南人民軍 120mm 重迫擊砲連
+  | 'opfor_2b14_mortar_83'     // 時代五 蘇軍 2B14 托盤 82mm 迫擊砲排
+  | 'opfor_2s9_nona_83'        // 時代五 蘇軍空降兵 2S9 Nona-S 120mm 自走迫擊砲
   | 'opfor_infantry_ambush' // 隱蔽坑道突擊衝鋒部隊
   | 'opfor_type95_tank'    // 敵軍九五式輕戰車小隊
   | 'opfor_type97_tank'    // 敵軍九七式改中戰車中隊

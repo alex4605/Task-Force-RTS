@@ -7353,7 +7353,7 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-front-tank-1', 'us_army_armor_korea', '美陸軍第70戰車營 M46 巴頓戰車第1排', 'player', 'era3', { x: 6800, y: 7400 }),
+        ...createGroundUnit('us-army-front-tank-1', 'us_m26_pershing', '美陸軍第70戰車營 M26 潘興戰車第1排', 'player', 'era3', { x: 6800, y: 7400 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
@@ -7370,7 +7370,9 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
       createGroundUnit('opfor-cont-inf-2', 'opfor_coldwar_infantry', '朝鮮人民軍第4步兵師 突擊第2排', 'enemy', 'era3', { x: 8800, y: 5000 }),
       createGroundUnit('opfor-cont-tank-1', 'opfor_t34_85', '朝鮮人民軍第105戰車師 T-34/85 戰車排', 'enemy', 'era3', { x: 9100, y: 4700 }),
       createGroundUnit('opfor-cont-su100-1', 'opfor_su100', '朝鮮人民軍 SU-100 自走砲連', 'enemy', 'era3', { x: 9300, y: 4650 }),
-      createGroundUnit('opfor-cont-flak-1', 'opfor_s60_flak', '第24高射砲團 S-60 57mm 高射砲連', 'enemy', 'era3', { x: 9400, y: 4500 })
+      createGroundUnit('opfor-cont-flak-1', 'opfor_s60_flak', '第24高射砲團 S-60 57mm 高射砲連', 'enemy', 'era3', { x: 9400, y: 4500 }),
+      createGroundUnit('opfor-cont-mortar-1', 'opfor_kpa_mortar_120_50', '朝鮮人民軍第4步兵師 PM-38 120mm 迫擊砲連', 'enemy', 'era3', { x: 8950, y: 4900 }),
+      createGroundUnit('opfor-cont-mortar-2', 'opfor_pva_mortar_82_50', '志願軍第42軍 82mm 迫擊砲排', 'enemy', 'era3', { x: 8450, y: 5450 })
     );
   } else if (era === 'era4') {
     // 時代四 (1965-1973):
@@ -7428,7 +7430,9 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
       createGroundUnit('opfor-cont-tank-1', 'opfor_t54_tank', '越南人民軍第203裝甲團 T-54 戰車排', 'enemy', 'era4', { x: 9100, y: 4700 }),
       createGroundUnit('opfor-cont-pt76-1', 'opfor_pt76_amphib', '越南人民軍第198裝甲營 PT-76 水陸戰車排', 'enemy', 'era4', { x: 8900, y: 5400 }),
       createGroundUnit('opfor-cont-2s3-1', 'opfor_m46_130mm', '越南人民軍第164砲兵團 M-46 130mm 加農砲連', 'enemy', 'era4', { x: 9350, y: 4800 }),
-      createGroundUnit('opfor-cont-mortar-1', 'opfor_mortar_platoon', '越南人民軍 120mm 重迫擊砲連', 'enemy', 'era4', { x: 9300, y: 4900 }),
+      createGroundUnit('opfor-cont-mortar-1', 'opfor_pavn_mortar_120_65', '越南人民軍 120mm 重迫擊砲連', 'enemy', 'era4', { x: 9300, y: 4900 }),
+      createGroundUnit('opfor-cont-mortar-2', 'opfor_pavn_mortar_82_65', '越南人民軍第320師 82mm 迫擊砲排', 'enemy', 'era4', { x: 8700, y: 5300 }),
+      createGroundUnit('opfor-cont-mortar-3', 'opfor_vc_mortar_60_65', '越共地方部隊 60mm 迫擊砲組', 'enemy', 'era4', { x: 8150, y: 6000 }),
       createGroundUnit('opfor-cont-flak-1', 'opfor_zsu23_shilka', '越南人民軍 ZSU-23-4 石勒喀河 防空砲連', 'enemy', 'era4', { x: 9400, y: 4500 }),
       createGroundUnit('opfor-cont-zsu57-1', 'opfor_zsu57_2', '越南人民軍 ZSU-57-2 自走高射砲連', 'enemy', 'era4', { x: 9050, y: 4950 }),
       createGroundUnit('opfor-cont-sa6-1', 'opfor_sa6_kub', '蘇軍顧問團 2K12 立方體 (SA-6) 防空飛彈連', 'enemy', 'era4', { x: 9700, y: 4300 }),
@@ -7498,6 +7502,8 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
       createGroundUnit('opfor-cont-t72-1', 'opfor_t72b', '蘇軍第39近衛摩托化步兵師 T-72B 戰車排', 'enemy', 'era5', { x: 8800, y: 5000 }),
       createGroundUnit('opfor-cont-bmp2-1', 'opfor_bmp2', '蘇軍近衛摩托化步兵 BMP-2 步兵戰車排', 'enemy', 'era5', { x: 8300, y: 5800 }),
       createGroundUnit('opfor-cont-inf-1', 'opfor_motor_rifle_83', '蘇軍 摩托化步兵排', 'enemy', 'era5', { x: 7900, y: 6300 }),
+      createGroundUnit('opfor-cont-mortar-1', 'opfor_2b14_mortar_83', '蘇軍第39近衛摩步師 2B14 托盤 82mm 迫擊砲排', 'enemy', 'era5', { x: 8100, y: 6050 }),
+      createGroundUnit('opfor-cont-nona-1', 'opfor_2s9_nona_83', '蘇軍第103近衛空降師 2S9 Nona-S 自走迫擊砲排', 'enemy', 'era5', { x: 8700, y: 5450 }),
       createGroundUnit('opfor-cont-2s19-1', 'opfor_2s19', '蘇軍近衛砲兵師 2S19 姆斯塔-S 152mm 自走砲連', 'enemy', 'era5', { x: 9200, y: 4650 }),
       createGroundUnit('opfor-cont-2s1-1', 'opfor_2s1', '蘇軍 2S1 石竹 122mm 自走砲連', 'enemy', 'era5', { x: 9100, y: 4700 }),
       createGroundUnit('opfor-cont-bm21-1', 'opfor_bm21_grad', '蘇軍第39近衛摩托化步兵師 BM-21 冰雹火箭砲營', 'enemy', 'era5', { x: 9250, y: 4550 }),
@@ -7675,6 +7681,20 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
           { x: center.x - 20, y: center.y - 50 }
         )
       );
+
+      // Each garrison also has its own mortars, the era's commonest kinds
+      const r = Math.random();
+      const pitPick: [GroundUnitType, string] =
+        era === 'era5'
+          ? r < 0.3 ? ['opfor_2s9_nona_83', '蘇軍近衛空降師 2S9 Nona-S 120mm 自走迫擊砲排'] : ['opfor_2b14_mortar_83', '蘇軍摩步營 2B14 托盤 82mm 迫擊砲排']
+          : era === 'era4'
+          ? r < 0.35 ? ['opfor_vc_mortar_60_65', '越共 60mm 迫擊砲組'] : r < 0.75 ? ['opfor_pavn_mortar_82_65', '越南人民軍 82mm 迫擊砲排'] : ['opfor_pavn_mortar_120_65', '越南人民軍 120mm 重迫擊砲連']
+          : era === 'era3'
+          ? r < 0.55 ? ['opfor_pva_mortar_82_50', '志願軍 82mm 迫擊砲排'] : ['opfor_kpa_mortar_120_50', '朝鮮人民軍 PM-38 120mm 迫擊砲連']
+          : era === 'era2' && r < 0.2
+          ? ['opfor_ija_mortar_320_45', '九八式臼砲 320mm 臼砲隊']
+          : ['opfor_ija_knee_mortar_42', '八九式重擲彈筒班'];
+      groundUnits.push(createGroundUnit(`opfor-pit-mortar-${i}`, pitPick[0], `${islShortName} · ${pitPick[1]}`, 'enemy', era, { x: center.x - 55, y: center.y + 35 }));
 
       if (era === 'era5' || era === 'era4' || era === 'era3' || era === 'era2' || i <= 2) {
         const artType: GroundUnitType =

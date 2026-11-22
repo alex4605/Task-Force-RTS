@@ -17381,7 +17381,7 @@ export class GameEngine {
             order: { type: 'move', targetPos: targetObj },
           },
           {
-            ...createGroundUnit(`us-army-wave-tank-${ts}`, 'us_army_armor_korea', '美陸軍第70戰車營 M46 巴頓戰車排', 'player', 'era3', {
+            ...createGroundUnit(`us-army-wave-tank-${ts}`, 'us_armor_m4a3e8', '美陸軍第70戰車營 M4A3E8 薛曼戰車排', 'player', 'era3', {
               x: spawnBase.x - 30 + (Math.random() - 0.5) * 40,
               y: spawnBase.y + 30 + (Math.random() - 0.5) * 40,
             }),
@@ -21107,7 +21107,7 @@ export class GameEngine {
       'opfor_pt76_amphib', 'opfor_t54_tank', 'opfor_zsu23_shilka', 'opfor_s60_flak', 'opfor_ks19_heavy',
       'opfor_zsu57_2', 'opfor_sa6_kub', 'opfor_sa9_strela1', 'opfor_sa8_osa', 'opfor_sa11_buk', 'opfor_sa15_tor', 'opfor_btr_zd',
       'opfor_tunguska', 'opfor_strela10', 'opfor_t72b', 'opfor_t80b', 'opfor_bmp2',
-      'usmc_armor_m3', 'usmc_armor_m4', 'usmc_patton_m46', 'us_army_armor_korea',
+      'usmc_armor_m3', 'usmc_armor_m4', 'usmc_patton_m46',
       'usmc_duster_m42', 'usmc_armor_m48', 'usmc_ontos_m50', 'us_m551_sheridan', 'us_m26_pershing', 'us_armor_m4a3e8', 'us_m1a1_abrams', 'us_army_m113_mech', 'us_army_chaparral_sam',
       'usmc_m4a3r3_flame', 'us_m24_chaffee', 'us_m16_quad50', 'us_m113_acav', 'us_avenger', 'au_matilda', 'cw_centurion', 'arvn_m41',
       'frg_marder', 'frg_leopard2', 'uk_challenger1', 'uk_warrior',
