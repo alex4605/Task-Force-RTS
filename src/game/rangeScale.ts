@@ -43,7 +43,6 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   opfor_infantry_45: 0.5, // Type 99 + Type 96 LMG
   opfor_mortar_platoon: 2.8, // Type 97 81mm mortar
   opfor_infantry_ambush: 0.3,
-  opfor_infantry_patrol: 0.4,
   opfor_type95_tank: 1.0, // Type 98 37mm
   opfor_type97_tank: 1.2, // Type 1 47mm
   opfor_field_artillery: 10.8, // Type 91 10cm howitzer

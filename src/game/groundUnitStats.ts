@@ -27,7 +27,6 @@ export const GROUND_UNIT_STATS: Record<GroundUnitType, GroundUnitStats> = {
   opfor_infantry_45: { health: 1900, armor: 0.38, speed: 4.2, damage: 92, reloadTime: 1.1 },
   opfor_mortar_platoon: { health: 1750, armor: 0.32, speed: 3.2, damage: 190, reloadTime: 2.0 },
   opfor_infantry_ambush: { health: 1500, armor: 0.32, speed: 5.5, damage: 110, reloadTime: 1.2 }, // Fast ambush sprint!
-  opfor_infantry_patrol: { health: 1650, armor: 0.35, speed: 4.0, damage: 75, reloadTime: 1.2 },
   opfor_type95_tank: { health: 2100, armor: 0.48, speed: 5.4, damage: 180, reloadTime: 2.2 },
   opfor_type97_tank: { health: 2800, armor: 0.60, speed: 4.6, damage: 290, reloadTime: 2.5 },
   opfor_field_artillery: { health: 2400, armor: 0.40, speed: 2.5, damage: 240, reloadTime: 3.2 },
@@ -337,5 +336,4 @@ export const BATTERY_ECHELON_TYPES: ReadonlySet<GroundUnitType> = new Set<Ground
 export const COMPANY_ECHELON_TYPES: ReadonlySet<GroundUnitType> = new Set<GroundUnitType>([
   'opfor_vietnam_sapper',
   'opfor_infantry_ambush',
-  'opfor_infantry_patrol',
 ]);

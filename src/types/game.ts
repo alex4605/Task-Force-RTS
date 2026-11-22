@@ -227,7 +227,6 @@ export type GroundUnitType =
   | 'opfor_zu23_aa'       // 時代四 ZU-23-2 雙管防空砲陣地
   | 'opfor_mortar_platoon' // 迫擊砲排
   | 'opfor_infantry_ambush' // 隱蔽坑道突擊衝鋒部隊
-  | 'opfor_infantry_patrol' // 敵軍機動步兵大隊
   | 'opfor_type95_tank'    // 敵軍九五式輕戰車小隊
   | 'opfor_type97_tank'    // 敵軍九七式改中戰車中隊
   | 'opfor_t34_85'         // 時代三 T-34/85 突擊裝甲排
@@ -1509,7 +1508,6 @@ export type AircraftNation =
   | 'rok'          // Republic of Korea Air Force
   | 'west_germany' // Luftwaffe / Marineflieger Balkenkreuz
   | 'france'       // Armée de l'Air cocarde
-  | 'sweden'       // Flygvapnet (drawn by the Viggen silhouette itself)
   | 'australia'    // RAAF: Pacific blue/white 1942-46, RAF-style in Korea, red kangaroo from 1956
   | 'new_zealand'  // RNZAF: Pacific blue/white 1942-46, RAF-style afterwards
   | 'canada'       // RCAF / RCN: RAF-style roundel until 1965, maple leaf afterwards
@@ -1672,7 +1670,6 @@ export type AircraftModel =
   | 'tornado_adv' // Panavia Tornado ADV F.3 (狂風長程防空截擊機 · 4x Skyflash SARH)
   | 'mirage2000'  // Dassault Mirage 2000C (法國空軍幻象 2000C · 2x Super 530D SARH)
   | 'jaguar_gr1'  // SEPECAT Jaguar GR.1 (美洲豹超音速攻擊機 · 翼頂響尾蛇 + 雷射炸彈)
-  | 'viggen_ja37' // Saab JA 37 Viggen (瑞典空軍「雷」式戰鬥攻擊機 · 2x RBS-15F 重反艦)
   // Era 5 OPFOR Soviet Navy & Air Force (蘇聯海空軍冷戰終極打擊部隊)
   | 'tu95'   // Tu-95 Bear (熊式長程戰略飛彈轟炸機 · 掠海遠程超音速巡弋飛彈突襲)
   | 'tu22m3' // Tu-22M3 Backfire-C (逆火超音速變後掠翼轟炸機 · 3x Kh-22 暴風雨超音速反艦飽和突襲)
@@ -2227,9 +2224,6 @@ export type CombatLogCategory = 'all' | 'air' | 'naval' | 'aa' | 'sunk';
 export interface CombatDiceRoll {
   dieType: 'd100' | 'd20';
   roll: number;
-  targetScore: number;
-  result: 'crit' | 'hit' | 'near_miss' | 'miss';
-  rollDesc: string;
 }
 
 export interface CombatLogEntry {
@@ -2415,7 +2409,6 @@ export interface PendingMissileLaunch {
   isSeaSkimming?: boolean;
   delayRemaining: number;
   salvoIndex: number;
-  salvoTotal: number;
   ashmVariant?: AshmVariant;
   ashmProfile?: AshmFlightProfile;
   salvoGroupId?: string;

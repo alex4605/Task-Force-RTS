@@ -1986,9 +1986,7 @@ function drawAircraftPreview(
     m === 'ah1' ||
     m === 'uh1' ||
     m === 'ch53' ||
-    m === 'ch47' ||
     m === 'sh3f' ||
-    m === 'sh3' ||
     m === 'sh2' ||
     m === 'ka27' ||
     m === 'mi24' ||
@@ -2015,9 +2013,9 @@ function drawAircraftPreview(
     m === 'p3' ||
     m === 'il38';
 
-  const isAwacs = m === 'e2c' || m === 'e3a' || m === 'e2' || m === 'e1' || m === 'a50' || m === 'aew_ad3w' || m === 'ad3w';
-  const isDelta = m === 'mirage3' || m === 'mirage2000' || m === 'mig21' || m === 'a4' || m === 'su7' || m === 'viggen_ja37';
-  const isSwingWing = m === 'f14a' || m === 'f111' || m === 'tornado_gr1' || m === 'tornado_ids' || m === 'tornado_adv' || m === 'su24' || m === 'tu22m3';
+  const isAwacs = m === 'e2c' || m === 'e3a' || m === 'e1' || m === 'a50' || m === 'aew_ad3w' || m === 'ad3w';
+  const isDelta = m === 'mirage3' || m === 'mirage2000' || m === 'mig21' || m === 'a4' || m === 'su7';
+  const isSwingWing = m === 'f14a' || m === 'f111' || m === 'tornado_gr1' || m === 'tornado_ids' || m === 'tornado_adv' || m === 'tu22m3';
   const isTwinBoom = m === 'p38' || m === 'ov10' || m === 'f82';
   const isJet =
     isDelta ||
@@ -2053,8 +2051,6 @@ function drawAircraftPreview(
     m === 'mig17' ||
     m === 'mig19' ||
     m === 'mig23' ||
-    m === 'mig25' ||
-    m === 'mig29' ||
     m === 'su25' ||
     m === 'su27' ||
     m === 'yak38' ||
@@ -2225,7 +2221,7 @@ function drawAircraftPreview(
     ctx.fillRect(-22, -4, 3, 2.2);
     ctx.fillRect(-22, 1.8, 3, 2.2);
   } else if (isDelta) {
-    // Pure Delta (Mirage III/2000, MiG-21, A-4) or Canard Delta (Viggen)
+    // Pure Delta (Mirage III/2000, MiG-21, A-4)
     ctx.fillStyle = bodyFill;
     ctx.strokeStyle = primaryStroke;
     ctx.lineWidth = 1.4;
@@ -2237,15 +2233,6 @@ function drawAircraftPreview(
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
-    if (m === 'viggen_ja37') {
-      ctx.beginPath();
-      ctx.moveTo(15, 0);
-      ctx.lineTo(7, -8);
-      ctx.lineTo(7, 8);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-    }
     ctx.beginPath();
     ctx.moveTo(22, 0);
     ctx.lineTo(10, -2.8);

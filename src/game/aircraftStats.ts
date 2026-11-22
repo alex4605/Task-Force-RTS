@@ -123,7 +123,6 @@ const AIRCRAFT_BASE_STATS: Partial<Record<AircraftModel, AircraftBaseStats>> = {
   tornado_adv: { health: 750 },
   mirage2000: { health: 720 },
   jaguar_gr1: { health: 650 },
-  viggen_ja37: { health: 780 },
   tu95: { health: 2400 },
   tu22m3: { health: 2000 },
   yak38: { health: 560 },

@@ -216,7 +216,6 @@ const AIR_EW: Partial<Record<AircraftModel, Row>> = {
   buccaneer: { dispenser: 'ALE-40', chaff: 30, flares: 30, salvo: 2, jammer: { name: 'AN/ALQ-101', power: 0.45 } },
   sea_harrier: { dispenser: 'ALE-40', chaff: 30, flares: 30, salvo: 2 },
   f4f_phantom: { dispenser: 'ALE-40', chaff: 30, flares: 30, salvo: 2, jammer: { name: 'AN/ALQ-131', power: 0.4 } },
-  viggen_ja37: { dispenser: 'BOZ 投放莢艙', chaff: 24, flares: 24, salvo: 2, jammer: { name: 'Ericsson U95', power: 0.35 } },
   mig29a: { dispenser: '2x BVP-30-26M (60 發)', chaff: 30, flares: 30, salvo: 2, jammer: { name: 'Gardeniya 干擾莢艙', power: 0.45 }, rwr: 'SPO-15 白樺' },
   su27: { dispenser: 'APP-50 (96 發)', chaff: 48, flares: 48, salvo: 2, jammer: { name: 'Sorbtsiya 翼尖干擾莢艙', power: 0.55 }, rwr: 'SPO-15 白樺' },
   mig23: { dispenser: '2x BVP-30-26M', chaff: 30, flares: 30, salvo: 2, jammer: { name: 'SPS-141 Siren 干擾機', power: 0.3 }, rwr: 'SPO-15 白樺' },

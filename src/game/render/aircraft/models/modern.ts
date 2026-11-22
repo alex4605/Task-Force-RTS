@@ -1670,72 +1670,6 @@ function drawJaguarGr1(rc: RenderContext, plane: Aircraft, _color: string): void
   drawNationalInsignia(rc, plane, -3, -9, 3);
 }
 
-function drawViggenJa37(rc: RenderContext, _plane: Aircraft, _color: string): void {
-  const ctx = rc.ctx;
-
-  // ════ Saab JA 37 Viggen: Double Delta with Foreplane Canards, RBS-15F ════
-  ctx.fillStyle = '#061322';
-  // Muscular delta fuselage with big Volvo RM8B afterburning turbofan
-  ctx.beginPath();
-  ctx.moveTo(18, 0);
-  ctx.lineTo(10, -3.4);
-  ctx.lineTo(-13, -4.5);
-  ctx.lineTo(-17, 0);
-  ctx.lineTo(-13, 4.5);
-  ctx.lineTo(10, 3.4);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-
-  // Distinctive Foreplane Canards with flaps (前置主翼鴨翼)
-  ctx.fillStyle = '#0D2234';
-  ctx.beginPath();
-  ctx.moveTo(10, -2.5);
-  ctx.lineTo(6, -8.5);
-  ctx.lineTo(4, -8.5);
-  ctx.lineTo(6, -2.5);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(10, 2.5);
-  ctx.lineTo(6, 8.5);
-  ctx.lineTo(4, 8.5);
-  ctx.lineTo(6, 2.5);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-
-  // Main Double Delta Wing
-  ctx.beginPath();
-  ctx.moveTo(3, -3.5);
-  ctx.lineTo(0, -9);
-  ctx.lineTo(-13, -17);
-  ctx.lineTo(-14, 0);
-  ctx.lineTo(-13, 17);
-  ctx.lineTo(0, 9);
-  ctx.lineTo(3, 3.5);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-
-  // Canopy glint
-  ctx.fillStyle = 'rgba(128, 222, 234, 0.58)';
-  ctx.fillRect(5, -1.4, 5, 2.8);
-
-  // Swedish Air Force Tre Kronor (Three Crowns) roundel
-  ctx.fillStyle = '#0D47A1';
-  ctx.beginPath();
-  ctx.arc(-5, -9, 3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#FFD54F';
-  ctx.beginPath();
-  ctx.arc(-5, -10, 0.9, 0, Math.PI * 2);
-  ctx.arc(-6, -8.2, 0.9, 0, Math.PI * 2);
-  ctx.arc(-4, -8.2, 0.9, 0, Math.PI * 2);
-  ctx.fill();
-}
-
 export const MODERN_DRAWERS: AircraftDrawerTable = {
   f14a: drawF14a,
   fa18a: drawFa18a,
@@ -1769,5 +1703,4 @@ export const MODERN_DRAWERS: AircraftDrawerTable = {
   tornado_adv: drawTornadoAdv,
   mirage2000: drawMirage2000,
   jaguar_gr1: drawJaguarGr1,
-  viggen_ja37: drawViggenJa37,
 };

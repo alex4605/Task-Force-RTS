@@ -176,7 +176,6 @@ export const AIRCRAFT_GUNS: Record<AircraftModel, GunBattery | null> = {
   tornado_adv: nose('1x 27mm 毛瑟 BK-27', g('27', 1, 180)),
   mirage2000: nose('2x 30mm DEFA 554', g('30', 2, 250)),
   jaguar_gr1: nose('2x 30mm ADEN', g('30', 2, 300)),
-  viggen_ja37: nose('1x 30mm 奧利岡 KCA', g('30', 1, 150)),
   canberra: null,
   buccaneer: null,
   sea_harrier: wing('2x 30mm ADEN 吊艙', g('30', 2, 260)),

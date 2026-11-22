@@ -2373,7 +2373,6 @@ export class GameEngine {
         isSeaSkimming: options.isSeaSkimming,
         delayRemaining: baseDelay + s * stagger,
         salvoIndex: s,
-        salvoTotal: salvoCount,
         ashmVariant: options.ashmVariant,
         ashmProfile: isLead ? 'datalink_leader' : options.ashmProfile,
         salvoGroupId,
@@ -4496,9 +4495,6 @@ export class GameEngine {
             diceRoll: {
               dieType: 'd100',
               roll: 99,
-              targetScore: 40,
-              result: 'crit',
-              rollDesc: '櫻花1200kg特裝彈頭以400節極速貫穿裝甲甲板',
             },
             text: `💥【櫻花火箭撞擊引爆！】1200kg特裝穿甲彈頭高速撞擊「${targetShip.name}」！造成毀滅性重創 (-${actualDmg} HP)！全艦陷入火海！`,
           });
@@ -4654,9 +4650,6 @@ export class GameEngine {
               diceRoll: {
                 dieType: 'd100',
                 roll: 95,
-                targetScore: 50,
-                result: 'crit',
-                rollDesc: '神風特攻機攜帶250kg航彈撞入甲板',
               },
               text: `💥【神風特攻撞擊命中！】敵機直接撞擊「${targetShip.name}」引爆250kg航彈！造成重創 (-${actualDmg} HP)！`,
             });
@@ -7866,13 +7859,6 @@ export class GameEngine {
           diceRoll: {
             dieType: 'd100',
             roll,
-            targetScore: threshold,
-            result: isCrit ? 'crit' : 'hit',
-            rollDesc: isEra3AA
-              ? `3吋自動砲VT近炸 D100: ${roll} vs 門檻 ${threshold} [${isCrit ? '自動射控致命殉爆' : '高頻速射截擊'}]`
-              : isEra2AA
-              ? `VT近炸信管感應 D100: ${roll} vs 門檻 ${threshold} [${isCrit ? '致命近炸殉爆' : '破片彈幕攔截'}]`
-              : `D100防空擲骰: ${roll} vs 門檻 ${threshold} [${isCrit ? '致命破片殉爆' : '破片截擊'}]`,
           },
           text: isCrit
             ? (isEra3AA
@@ -7951,9 +7937,6 @@ export class GameEngine {
           diceRoll: {
             dieType: 'd100',
             roll: 99,
-            targetScore: 50,
-            result: 'crit',
-            rollDesc: '空中打爆一式陸攻並引爆機腹櫻花火箭彈',
           },
           text: `🎯【長程截擊大捷】巡邏空優戰機凌空打爆敵「一式陸攻」！機腹掛載之櫻花火箭特攻彈連環殉爆！特遣艦隊化險為夷！獲得 +200 分，+${gainTxt}！`,
         });
@@ -7973,9 +7956,6 @@ export class GameEngine {
           diceRoll: {
             dieType: 'd100',
             roll: 98,
-            targetScore: 60,
-            result: 'crit',
-            rollDesc: '防空雷達導引近炸信管凌空打爆櫻花火箭',
           },
           text: `🎯【神風櫻花擊落！】艦隊集中防空火網凌空打爆高速來襲之「櫻花火箭反艦飛彈」！獲得 +150 分，+${gainTxt}！`,
         });
@@ -7995,9 +7975,6 @@ export class GameEngine {
           diceRoll: {
             dieType: 'd100',
             roll: actualRoll,
-            targetScore: actualThresh,
-            result: 'crit',
-            rollDesc: `D100擊墜: ${actualRoll} vs 門檻 ${actualThresh}`,
           },
           text: `🎯【神風特攻阻截成功】防空火網於半空中粉碎來襲「${pName}」！成功化解特攻撞擊！獲得 +100 分，+${gainTxt}！`,
         });
@@ -8017,9 +7994,6 @@ export class GameEngine {
           diceRoll: {
             dieType: 'd100',
             roll: actualRoll,
-            targetScore: actualThresh,
-            result: 'crit',
-            rollDesc: '穿透高空高速阻截擊落MiG-15',
           },
           text: `🎯【空戰擊落 MiG-15！】我方戰機穿透高空攔截，以 20mm 機砲精準咬尾擊落敵方「MiG-15 噴射戰鬥機」！獲得 +120 分，+${gainTxt}！`,
         });
@@ -8053,9 +8027,6 @@ export class GameEngine {
           diceRoll: {
             dieType: 'd100',
             roll: actualRoll,
-            targetScore: actualThresh,
-            result: 'crit',
-            rollDesc: `D100擊墜擲骰: ${actualRoll} vs 門檻 ${actualThresh}`,
           },
           text: `✈️【敵機擊落 · 擲骰判定】🎲 D100: ${actualRoll} (門檻 ${actualThresh})！成功擊墜敵方「${pName}」！獲得 +75 分，+${gainTxt}！`,
         });
@@ -20079,38 +20050,32 @@ export class GameEngine {
         let rollVal = 0;
         let rollTarget = 0;
         let dieType: 'd100' | 'd20' = 'd100';
-        let rollDesc = '';
 
         if (isBomb) {
           dieType = 'd100';
           rollVal = Math.floor(Math.random() * 100) + 1;
           rollTarget = 45;
           isCrit = rollVal >= 80;
-          rollDesc = `D100投彈命中擲骰: ${rollVal} vs 門檻 45 [${isCrit ? '致命爆擊貫穿' : '直接命中'}]`;
         } else if (isTorpedo) {
           dieType = 'd100';
           rollVal = Math.floor(Math.random() * 100) + 1;
           rollTarget = 38;
           isCrit = rollVal >= 85;
-          rollDesc = `D100雷擊引信擲骰: ${rollVal} vs 門檻 38 [${isCrit ? '撕裂龍骨爆擊' : '水線破甲'}]`;
         } else if (proj.type === 'rocket') {
           dieType = 'd20';
           rollVal = Math.floor(Math.random() * 20) + 1;
           rollTarget = 10;
           isCrit = rollVal >= 19;
-          rollDesc = `D20火箭齊射擲骰: ${rollVal} vs DC 10 [${isCrit ? '上層建築暴擊' : '命中'}]`;
         } else if (proj.type === 'shell') {
           dieType = 'd20';
           rollVal = Math.floor(Math.random() * 20) + 1;
           rollTarget = 11;
           isCrit = rollVal >= 19;
-          rollDesc = `D20艦砲彈道擲骰: ${rollVal} vs DC 11 [${isCrit ? '核心艙爆擊' : '貫穿裝甲'}]`;
         } else if (proj.type === 'missile_ashm') {
           dieType = 'd20';
           rollVal = Math.floor(Math.random() * 20) + 1;
           rollTarget = 9;
           isCrit = rollVal >= 18;
-          rollDesc = `D20反艦飛彈終端貫穿擲骰: ${rollVal} vs DC 9 [${isCrit ? '彈藥庫/輪機艙殉爆' : '裝甲帶貫穿'}]`;
         }
 
         const rawArmor = Math.min(0.85, Math.max(0, ship.armor || 0));
@@ -20207,9 +20172,6 @@ export class GameEngine {
             diceRoll: {
               dieType,
               roll: rollVal,
-              targetScore: rollTarget,
-              result: isCrit ? 'crit' : 'hit',
-              rollDesc,
             },
             text: isCrit
               ? `🎲【致命穿甲爆擊 D100: ${rollVal} / 門檻 ${rollTarget}】${attacker} 航彈直穿「${targetShipName}」防護甲板引爆彈藥庫！造成 ${actualDmg} 點毀滅性打擊！`
@@ -20227,9 +20189,6 @@ export class GameEngine {
             diceRoll: {
               dieType,
               roll: rollVal,
-              targetScore: rollTarget,
-              result: isCrit ? 'crit' : 'hit',
-              rollDesc,
             },
             text: isCrit
               ? `🦈🎲【魚雷撕裂龍骨暴擊】${attacker} 魚雷重擊撕裂「${targetShipName}」龍骨造成嚴重進水！造成 ${actualDmg} 點毀滅傷害！`
@@ -20247,9 +20206,6 @@ export class GameEngine {
             diceRoll: {
               dieType: 'd100',
               roll: 96,
-              targetScore: 40,
-              result: 'crit',
-              rollDesc: '刺蝟彈撞擊引信接觸引爆',
             },
             text: `🦔💥【刺蝟砲直接接觸引爆】${attacker} 接觸「${targetShipName}」耐壓殼引爆！造成 ${actualDmg} 點致命水下穿甲重創！`,
           });
@@ -20265,9 +20221,6 @@ export class GameEngine {
             diceRoll: {
               dieType,
               roll: rollVal,
-              targetScore: rollTarget,
-              result: isCrit ? 'crit' : 'hit',
-              rollDesc,
             },
             text: `🚀🎲【火箭彈齊射命中】${attacker} 火箭命中「${targetShipName}」上層建築！造成 ${actualDmg} 點破壞！`,
           });
@@ -20283,9 +20236,6 @@ export class GameEngine {
             diceRoll: {
               dieType,
               roll: rollVal,
-              targetScore: rollTarget,
-              result: isCrit ? 'crit' : 'hit',
-              rollDesc,
             },
             text: isCrit
               ? `💥🚀【反艦飛彈致命貫穿爆擊 D20: ${rollVal}】${attacker} 貫穿「${targetShipName}」水線/上層艦橋引爆燃料起火！造成 ${actualDmg} 點重創！`
@@ -20303,9 +20253,6 @@ export class GameEngine {
             diceRoll: {
               dieType,
               roll: rollVal,
-              targetScore: rollTarget,
-              result: isCrit ? 'crit' : 'hit',
-              rollDesc,
             },
             text: `🎯🎲【艦砲命中】${attacker} 砲彈貫穿「${targetShipName}」外裝甲！造成 ${actualDmg} 點傷害！`,
           });
@@ -20355,9 +20302,6 @@ export class GameEngine {
           diceRoll: {
             dieType: 'd100',
             roll: nearRoll,
-            targetScore: 25,
-            result: 'near_miss',
-            rollDesc: `D100近失衝擊擲骰: ${nearRoll}`,
           },
           text: `💦🎲【近失彈水壓衝擊 D100: ${nearRoll}】${attacker} 炸彈落入「${targetShipName}」艦側海面，劇烈沖天水柱與爆破震盪造成 ${nearMissDmg} 點破片傷害！`,
         });
@@ -20494,9 +20438,6 @@ export class GameEngine {
                 diceRoll: {
                   dieType: 'd100',
                   roll,
-                  targetScore: hitThreshold,
-                  result: isApBomb ? 'crit' : 'hit',
-                  rollDesc: `D100工事直擊檢定: ${roll} vs 門檻 ${hitThreshold} [${isApBomb ? '超重AP穿甲直擊' : '頂蓋穿透直擊'}]`,
                 },
                 text: `🎯🎲【工事頂蓋直擊 D100: ${roll} / 門檻 ${hitThreshold}】${attacker} 航彈精準洞穿「${inst.name}」混凝土工事頂部！造成 ${actualDmg} 點直擊重創！`,
               });
@@ -20534,9 +20475,6 @@ export class GameEngine {
                 diceRoll: {
                   dieType: 'd100',
                   roll,
-                  targetScore: hitThreshold,
-                  result: 'near_miss',
-                  rollDesc: `D100土堤偏斜檢定: ${roll} vs 門檻 ${hitThreshold} [掩體吸收衝擊]`,
                 },
                 text: `🛡️🎲【掩體防護/散佈偏斜 D100: ${roll} / 門檻 ${hitThreshold}】${attacker} 落彈於「${inst.name}」土堤外側！掩體沙袋大幅吸收爆風 (-${actualDmg} HP)，砲位暫時受震壓制！`,
               });

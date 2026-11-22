@@ -45,7 +45,6 @@ export const AIRCRAFT_NATION: Record<AircraftModel, AircraftNation> = {
   // NATO Europe
   f4f_phantom: 'west_germany', tornado_ids: 'west_germany', f104g: 'west_germany',
   mirage3: 'france', mirage2000: 'france',
-  viggen_ja37: 'sweden',
   // Soviet Union / Warsaw Pact
   mig15: 'ussr', tu14: 'ussr', yak9: 'ussr', la11: 'ussr', il10: 'ussr', mig17: 'ussr', mig19: 'ussr', mig21: 'ussr',
   su7: 'ussr', il28: 'ussr', tu16: 'ussr', tu95: 'ussr', tu22m3: 'ussr', yak38: 'ussr', ka27: 'ussr',
@@ -70,8 +69,6 @@ export function drawNationalInsignia(rc: RenderContext, plane: Aircraft, x: numb
     case 'uk':
       drawRAFRoundel(rc, x, y, r);
       break;
-    case 'sweden':
-      break; // Tre Kronor roundel is part of the Viggen silhouette
     case 'rok':
       drawROKAFRoundel(rc, x, y, r);
       break;

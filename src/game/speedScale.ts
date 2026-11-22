@@ -215,7 +215,6 @@ export const AIRCRAFT_CRUISE_KMH: Record<AircraftModel, number> = {
   tornado_adv: 950,
   mirage2000: 1000,
   jaguar_gr1: 850,
-  viggen_ja37: 1000,
   // Late Cold War
   f14a: 980,
   f15a: 1000,

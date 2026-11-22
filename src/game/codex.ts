@@ -82,8 +82,8 @@ const SUFFIX_ERA: [RegExp, Era][] = [
   [/_6\d$|_7\d$/, 'era4'],
   [/_8\d$/, 'era5'],
   // Pacific War base types that predate the era-suffixed roster
-  [/^(usmc_engineer|usmc_artillery_105|opfor_mortar_platoon|opfor_infantry_ambush|opfor_infantry_patrol|opfor_type95_tank|opfor_type97_tank|opfor_field_artillery)$/, 'era1'],
-  [/^(usmc_engineer|usmc_artillery_105|opfor_mortar_platoon|opfor_infantry_ambush|opfor_infantry_patrol|opfor_type95_tank|opfor_type97_tank|opfor_field_artillery)$/, 'era2'],
+  [/^(usmc_engineer|usmc_artillery_105|opfor_mortar_platoon|opfor_infantry_ambush|opfor_type95_tank|opfor_type97_tank|opfor_field_artillery)$/, 'era1'],
+  [/^(usmc_engineer|usmc_artillery_105|opfor_mortar_platoon|opfor_infantry_ambush|opfor_type95_tank|opfor_type97_tank|opfor_field_artillery)$/, 'era2'],
 ];
 
 /** "時代四 越南共和國陸軍 M41A3 …" → "越南共和國陸軍 M41A3 …" */

@@ -363,8 +363,7 @@ function drawPlaneBody(rc: RenderContext, plane: Aircraft, isPlayer: boolean, co
       plane.model === 'tornado_ids' ||
       plane.model === 'tornado_adv' ||
       plane.model === 'mirage2000' ||
-      plane.model === 'jaguar_gr1' ||
-      plane.model === 'viggen_ja37';
+      plane.model === 'jaguar_gr1';
 
     if (isJet && plane.state !== 'landing') {
       const flamePulse = (Math.sin(rc.time * 30 + (plane.id.charCodeAt(0) || 0)) + 1) * 0.5;
@@ -983,7 +982,7 @@ const AIRCRAFT_PROPULSION: Record<AircraftModel, Propulsion> = {
   mig19: 'jet', mig21: 'jet', su7: 'jet', tu16: 'jet', f14a: 'jet', fa18a: 'jet', a6e: 'jet', ea6b: 'jet',
   av8b: 'jet', a10a: 'jet', f15a: 'jet', f16a: 'jet', f111: 'jet', meteor: 'jet', a37b: 'jet', f5a: 'jet',
   f104g: 'jet', mirage3: 'jet', hunter_fga9: 'jet', tornado_gr1: 'jet', tornado_ids: 'jet',
-  tornado_adv: 'jet', mirage2000: 'jet', jaguar_gr1: 'jet', viggen_ja37: 'jet', tu22m3: 'jet', yak38: 'jet',
+  tornado_adv: 'jet', mirage2000: 'jet', jaguar_gr1: 'jet', tu22m3: 'jet', yak38: 'jet',
   mig29a: 'jet', su27: 'jet', su25: 'jet', f84: 'jet', mig23: 'jet', f100: 'jet', mig31: 'jet', buccaneer: 'jet', sea_harrier: 'jet',
   // podded_jet
   b52: 'podded_jet', tu14: 'podded_jet', il28: 'podded_jet', s3a: 'podded_jet', e3a: 'podded_jet',
