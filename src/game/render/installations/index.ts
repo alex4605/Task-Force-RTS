@@ -5,6 +5,8 @@ import { INSTALLATION_DRAWERS } from './bodies';
 import { airfieldFootprint } from '../../airfieldLayout';
 
 // Draw Installation
+const SPHERE_LABEL: ReadonlySet<string> = new Set(['settlement', 'town', 'city', 'civil_hospital', 'copra_plantation', 'civil_wharf', 'sugar_mill', 'power_plant', 'pagoda', 'factory']);
+
 export function drawInstallation(rc: RenderContext, inst: Installation, island?: Island) {
   const ctx = rc.ctx;
   ctx.save();
@@ -101,7 +103,7 @@ export function drawInstallation(rc: RenderContext, inst: Installation, island?:
   }
 
   // Whose sphere a village or town is in (our troops holding the ground round it make it ours)
-  if (inst.controlledBy && (inst.type === 'settlement' || inst.type === 'town' || inst.type === 'city' || inst.type === 'civil_hospital')) {
+  if (inst.controlledBy && SPHERE_LABEL.has(inst.type)) {
     ctx.font = 'bold 8px monospace';
     ctx.textAlign = 'center';
     ctx.fillStyle = inst.controlledBy === 'player' ? '#81D4FA' : '#FF8A80';

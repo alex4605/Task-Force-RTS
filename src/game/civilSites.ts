@@ -1,4 +1,4 @@
-import { Era, Island, Vector2D } from '../types/game';
+import { Era, InstallationType, Island, Vector2D } from '../types/game';
 import { dist, isPointInPolygon, makeInstallation } from './procedural';
 import { TERRAIN, TerrainMap } from './terrain/terrainMap';
 
@@ -153,4 +153,120 @@ export function addCivilHospitals(islands: Island[], map: TerrainMap, era: Era):
       break;
     }
   }
+}
+
+type EconomySite = { type: InstallationType; name: string; desc: string; coast?: boolean; health: number };
+
+/** Each era's civilian economy that the armies fought over (historical places of the theatre). */
+const ECONOMY: Record<Era, EconomySite[]> = {
+  era1: [
+    { type: 'copra_plantation', name: '(中立) 利華兄弟 倫加椰乾種植園 (Lever Brothers)', desc: '椰乾種植園 · 我方勢力範圍時產出 RP / MP · 友方村落可募集土著偵察兵', health: 1200 },
+    { type: 'copra_plantation', name: '(中立) 伯恩斯·菲爾普 椰乾種植園 (Burns Philp)', desc: '椰乾種植園 · 我方勢力範圍時產出 RP / MP', health: 1200 },
+    { type: 'civil_wharf', name: '(中立) 圖拉吉 民用碼頭 (Tulagi)', desc: '民用碼頭 · 控制時提供時間值 TP (縮短運補時程)', coast: true, health: 1500 },
+  ],
+  era2: [
+    { type: 'sugar_mill', name: '(中立) 南洋興發 查蘭卡諾亞製糖所 (Chalan Kanoa)', desc: '製糖所與甘蔗鐵道 · 控制時產出 RP / PP', health: 2200 },
+    { type: 'copra_plantation', name: '(中立) 南洋興發 椰乾種植園', desc: '椰乾種植園 · 我方勢力範圍時產出 RP / MP', health: 1200 },
+    { type: 'civil_wharf', name: '(中立) 加拉班 民用碼頭 (Garapan)', desc: '民用碼頭 · 控制時提供時間值 TP', coast: true, health: 1500 },
+  ],
+  era3: [
+    { type: 'power_plant', name: '(中立) 赴戰江水力發電所 (Pujŏn)', desc: '水力發電廠 · 控制時產出 RP / PP · 敵方控制時供應其地方部隊', health: 3200 },
+    { type: 'civil_wharf', name: '(中立) 元山 漁港 (Wŏnsan)', desc: '漁港碼頭 · 控制時提供時間值 TP', coast: true, health: 1500 },
+  ],
+  era4: [
+    { type: 'pagoda', name: '(中立) 天姥寺 (Thiên Mụ)', desc: '佛寺 · 受保護文化設施 (攻擊將造成附帶損害) · 我方勢力範圍時提供政治值 PP', health: 1800 },
+    { type: 'pagoda', name: '(中立) 慈曇寺 (Từ Đàm)', desc: '佛寺 · 受保護文化設施 · 我方勢力範圍時提供政治值 PP', health: 1800 },
+    { type: 'civil_wharf', name: '(中立) 峴港 漁港 (Đà Nẵng)', desc: '漁港碼頭 · 控制時提供時間值 TP', coast: true, health: 1500 },
+  ],
+  era5: [
+    { type: 'factory', name: '(中立) 福斯汽車 漢諾威廠 (VW Werk Hannover)', desc: '工業區 · 控制時產出 RP / TP · 我方控制時可募集國土防衛軍', health: 3600 },
+    { type: 'factory', name: '(中立) 大陸集團 輪胎廠 (Continental)', desc: '工業區 · 控制時產出 RP / TP', health: 3200 },
+    { type: 'power_plant', name: '(中立) 梅倫燃煤電廠 (Kraftwerk Mehrum)', desc: '燃煤發電廠 · 控制時產出 RP / PP', health: 3800 },
+  ],
+};
+
+const PROTECTED: ReadonlySet<InstallationType> = new Set(['pagoda']);
+
+/**
+ * Places the era's civilian economic sites beside the towns and villages: plantations and mills
+ * inland, wharves on the shore. They start neutral; the side whose troops hold the ground round
+ * one takes it into its sphere (engine civil-control tick).
+ */
+export function addCivilEconomy(islands: Island[], map: TerrainMap, era: Era): void {
+  const anchors: Vector2D[] = [
+    ...islands.flatMap((i) => i.installations.filter((t) => t.type === 'town' || t.type === 'city' || t.type === 'settlement').map((t) => t.pos)),
+    ...map.districts.filter((d) => d.kind === 'city' || d.kind === 'town' || d.kind === 'settlement' || d.kind === 'village').map((d) => d.center),
+  ];
+  if (anchors.length === 0) return;
+  const placed: Vector2D[] = [];
+  const nearWater = (p: Vector2D) => {
+    for (let k = 0; k < 12; k++) {
+      const a = (k / 12) * Math.PI * 2;
+      const t = map.at(p.x + Math.cos(a) * 45, p.y + Math.sin(a) * 45);
+      if (t === TERRAIN.water || t === TERRAIN.lagoon) return true;
+    }
+    return false;
+  };
+  const add = (site: EconomySite, n: number, isl: Island, pos: Vector2D, angle: number) => {
+    placed.push(pos);
+    isl.installations.push(
+      makeInstallation({
+        id: `civil-econ-${era}-${n}`,
+        type: site.type,
+        name: site.name,
+        weaponDesc: site.desc,
+        pos,
+        angle,
+        health: site.health,
+        armor: 0.3,
+        side: 'neutral',
+        isCivilian: PROTECTED.has(site.type) || undefined,
+      })
+    );
+  };
+  ECONOMY[era].forEach((site, n) => {
+    const before = placed.length;
+    for (let a0 = 0; a0 < anchors.length && placed.length === before; a0++) {
+      const anchor = anchors[(a0 + n * 3) % anchors.length];
+      const isl = islands.find((i) => isPointInPolygon(anchor, i.points));
+      if (!isl) continue;
+      let pos: Vector2D | null = null;
+      search: for (let r = site.coast ? 80 : 150; r <= 420; r += 40) {
+        for (let k = 0; k < 16; k++) {
+          const a = (k / 16) * Math.PI * 2 + n;
+          const p = { x: anchor.x + Math.cos(a) * r, y: anchor.y + Math.sin(a) * r };
+          if (!dryLand(map, p) || !isPointInPolygon(p, isl.points)) continue;
+          if (site.coast !== nearWater(p) && site.coast) continue;
+          if (isl.installations.some((i) => dist(i.pos, p) < 120) || placed.some((q) => dist(q, p) < 500)) continue;
+          pos = p;
+          break search;
+        }
+      }
+      if (!pos) continue;
+      add(site, n, isl, pos, Math.atan2(pos.y - anchor.y, pos.x - anchor.x));
+    }
+    // A wharf with no town on the shore: walk the coastline of the inhabited islands instead
+    if (placed.length === before && site.coast) {
+      const inhabited = islands.filter((i) => anchors.some((p) => isPointInPolygon(p, i.points)));
+      // The mainland polygon runs along the map border: only a real shore counts
+      let W = 0;
+      for (const i of islands) for (const q of i.points) W = Math.max(W, q.x, q.y);
+      const inside = (p: Vector2D) => p.x > 400 && p.y > 400 && p.x < W - 400 && p.y < W - 400;
+      for (const isl of inhabited) {
+        const step = Math.max(1, Math.floor(isl.points.length / 60));
+        for (let k = 0; k < isl.points.length && placed.length === before; k += step) {
+          const c = isl.points[k];
+          const a = Math.atan2(isl.center.y - c.y, isl.center.x - c.x);
+          for (const inward of [30, 60, 90]) {
+            const p = { x: c.x + Math.cos(a) * inward, y: c.y + Math.sin(a) * inward };
+            if (!inside(p) || !dryLand(map, p) || !nearWater(p) || !isPointInPolygon(p, isl.points)) continue;
+            if (isl.installations.some((i) => dist(i.pos, p) < 120) || placed.some((q) => dist(q, p) < 500)) continue;
+            add(site, n, isl, p, a + Math.PI);
+            break;
+          }
+        }
+        if (placed.length > before) break;
+      }
+    }
+  });
 }

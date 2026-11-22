@@ -1,6 +1,7 @@
 // Per-type installation artwork. Each drawer runs with the canvas translated to the installation's position.
 import { Era, Installation, InstallationType, Island } from '../../../types/game';
 import { drawBunkerSite, drawCacheSite, drawCoastalGunSite, drawFanSongSite, drawFerrySite, drawRadarSite, drawRadioSite, drawSamBatterySite, drawTunnelSite, drawWatchtowerSite } from './groundSites';
+import { drawCivilWharf, drawCopraPlantation, drawFactory, drawPagoda, drawPowerPlant, drawSugarMill } from './civilEconomy';
 import { drawAirfieldSite, drawMajorPortSite, drawPontoonPierSite, drawRailStationSite, drawRepairDockSite } from './aviationPorts';
 import { drawAmmoDepotSite, drawBattalionCpSite, drawCivilHospitalSite, drawCommandPostSite, drawFieldHospitalSite, drawMotorPoolSite, drawSupplyDepotSite } from './support';
 import { RenderContext } from '../context';
@@ -1097,6 +1098,12 @@ export const INSTALLATION_DRAWERS: Record<InstallationType, InstallationDrawer> 
   supply_depot: drawSupplyDepotSite,
   field_hospital: drawFieldHospitalSite,
   civil_hospital: drawCivilHospitalSite,
+  copra_plantation: drawCopraPlantation,
+  civil_wharf: drawCivilWharf,
+  sugar_mill: drawSugarMill,
+  power_plant: drawPowerPlant,
+  pagoda: drawPagoda,
+  factory: drawFactory,
   motor_pool: drawMotorPoolSite,
   rail_station: drawRailStationSite,
   pow_camp: drawPowCamp,

@@ -65,6 +65,8 @@ export const TANK_PLANS: TankPlan[] = [
   { match: /churchill/, L: 7.44, W: 3.25, track: 0.62, nose: 'flat', noseLen: 0.4, turret: { x: 0.5, len: 2.4, wid: 2.2, shape: 'cast', bustle: 0.2 }, gun: { bore: 75, len: 2.7 }, cupola: { x: -0.35, y: 0.45, r: 0.35 }, loaderHatch: true, engineDeck: 2.3, skirts: true, driver: 1 },
   // Leopard 1: cast turret with the long L7 105mm and thermal sleeve
   { match: /leopard1/, L: 7.09, W: 3.25, track: 0.55, nose: 'glacis', noseLen: 1.0, turret: { x: 0.0, len: 3.4, wid: 3.0, shape: 'cast', bustle: 0.5 }, gun: { bore: 105, len: 5.4, evac: 0.55 }, cupola: { x: -0.5, y: 0.7, r: 0.42 }, loaderHatch: true, engineDeck: 2.4, skirts: true, driver: 1 },
+  // AMX-30B2: low hull, cast turret, CN-105-F1 105mm without a fume extractor (thermal sleeve)
+  { match: /amx30/, L: 6.59, W: 3.1, track: 0.57, nose: 'glacis', noseLen: 1.0, turret: { x: 0.1, len: 3.2, wid: 2.9, shape: 'cast', bustle: 0.6 }, gun: { bore: 105, len: 5.6 }, cupola: { x: -0.4, y: 0.7, r: 0.4 }, loaderHatch: true, engineDeck: 2.2, driver: 1 },
   // Matilda Frog: the Australian flame conversion, a stubby flame projector in place of the 2pdr
   { match: /matilda_frog/, L: 5.61, W: 2.59, track: 0.35, nose: 'flat', noseLen: 0.5, turret: { x: 0.3, len: 1.9, wid: 1.7, shape: 'cast', bustle: 0.25 }, gun: { bore: 110, len: 2.1 }, cupola: { x: -0.35, y: 0.35, r: 0.3 }, engineDeck: 1.8, skirts: true, driver: 0 },
   // Matilda II: armoured skirts over the tracks, small cast turret, 2pdr

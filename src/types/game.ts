@@ -183,6 +183,16 @@ export type GroundUnitType =
   | 'au_sasr_66'              // 時代四 澳洲特種空勤團巡邏隊 (SASR)
   | 'nl_leopard1'             // 時代五 荷蘭第1軍 豹1V 戰車排
   | 'nl_infantry_83'          // 時代五 荷蘭第1軍 機械化步兵排
+  | 'frg_jaeger_83'             // 時代五 西德獵兵營 獵兵排 (輕步兵 · G3 / MG3 / MILAN)
+  | 'frg_heimatschutz_83'       // 時代五 西德國土防衛軍 (Heimatschutz) 防衛排
+  | 'fr_infantry_83'            // 時代五 法國第2軍 機械化步兵排 (VAB · FAMAS · MILAN)
+  | 'fr_amx30b2'                // 時代五 法國第2軍 AMX-30B2 戰車排
+  | 'uk_infantry_83'            // 時代五 英國萊茵軍團 機械化步兵排 (FV432 · SLR / L7 GPMG)
+  | 'arvn_rfpf_65'              // 時代四 越南共和國地方軍/民團 (RF/PF) 排
+  | 'opfor_nlf_main_force_65'   // 時代四 越南南方民族解放陣線 (越共) 主力營 排
+  | 'rok_police_50'             // 時代三 大韓民國警察 戰鬥警察大隊 排
+  | 'opfor_kpa_infantry_50'     // 時代三 朝鮮人民軍 步兵排 (PPSh-41 / DP-28)
+  | 'si_scouts_42'              // 時代一 所羅門群島保衛隊 土著偵察兵 (Clemens 偵察隊)
   | 'frg_luchs'               // 時代五 西德山貓式 8x8 裝甲偵察車
   | 'uk_sas_83'               // 時代五 英國第22特種空勤團 (SAS) 巡邏隊
   | 'usmc_paramarine_42'      // 時代一 陸戰隊第1傘兵營 傘兵排 (Paramarines)
@@ -1866,6 +1876,12 @@ export type InstallationType =
   | 'rail_station'       // (原)民用鐵路車站 (地面部隊進駐即可控制 · 我方控制時鐵路縮短運補時程 · 提供時間值 TP)
   | 'motor_pool'         // 調車場 (車輛集結整備場 · 呼叫裝甲/車輛/火砲增援)
   | 'pow_camp'           // 戰俘營 (雙方皆有：我方構工建造、敵方預設於後方)
+  | 'copra_plantation'   // 椰乾種植園 (時代一/二 · 勢力範圍時產出 RP/MP)
+  | 'civil_wharf'        // 民用碼頭/漁港 (控制時產出時間值 TP)
+  | 'sugar_mill'         // 南洋興發 製糖所 (時代二 · RP)
+  | 'power_plant'        // 發電廠 (時代三 水力 / 時代五 燃煤 · RP/PP)
+  | 'pagoda'             // 佛寺 (時代四 · 受保護文化設施 · PP)
+  | 'factory'            // 工業區/工廠 (時代五 · RP/TP)
   | 'civil_hospital'     // 中立民間醫院 (教會醫院 / 市立醫院 · 我方勢力範圍時救治附近部隊並提供政治值 PP)
   | 'refugee_camp'       // 戰地難民收容營 (聯合國/紅十字帳篷區，遭受火力攻擊扣除 15 CP)
   // 時代四特種防空與前進雷達作戰設施 (Era 4 Cold War / Vietnam Installations)

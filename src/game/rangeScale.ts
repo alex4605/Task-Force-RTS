@@ -202,6 +202,16 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   au_sasr_66: 0.5, // L1A1 / M16
   nl_leopard1: 2.5, // L7 105mm
   nl_infantry_83: 0.6, // FN FAL / MAG
+  frg_jaeger_83: 0.6,
+  frg_heimatschutz_83: 0.55,
+  fr_infantry_83: 0.6,
+  fr_amx30b2: 2.6,
+  uk_infantry_83: 0.6,
+  arvn_rfpf_65: 0.45,
+  opfor_nlf_main_force_65: 0.45,
+  rok_police_50: 0.4,
+  opfor_kpa_infantry_50: 0.42,
+  si_scouts_42: 0.35,
   frg_luchs: 1.5, // 20mm Rh 202
   uk_sas_83: 0.55, // M16A2 / GPMG
   usmc_paramarine_42: 0.45, // Reising / Garand / BAR

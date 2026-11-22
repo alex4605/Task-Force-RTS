@@ -5,9 +5,10 @@ import { AlliedHost, AlliedOps } from './allied/alliedOps';
 import { fitsInHold, formatHold, holdUsed, shipHold } from './naval/lift';
 import { isRotaryOrVstol, rollBailout, shipRaftGroups } from './aircrew';
 import { deckAccepts, shipAviation } from './shipAviation';
-import { CIVIL_HOSPITAL_RADIUS, addCivilHospitals, addCivilTransport } from './civilSites';
+import { CIVIL_HOSPITAL_RADIUS, addCivilEconomy, addCivilHospitals, addCivilTransport } from './civilSites';
 import { FOXHOLE_DIG_S, SPOT_RANGE, insideFieldWork, isFieldWorkTag, makeFieldWork, placeEnemyFieldWorks } from './fieldWorks';
 import { WHALE_NAME, spawnWhales, updateWhales } from './whales';
+import { localRulesFor, pickForce } from './localForces';
 import { AircraftEw, DECOY_BLOOM, DECOY_LIFE, ShipEw, aircraftEw, decoyStrength, emitterName, irJamBreakRate, jamBreakRate, radarEccm, seductionChance, seekerProfile, shipEw } from './ew';
 import { clearAirfieldFootprints, findAirfieldSite, nudgeOffAirfield, onAirfield } from './airfieldLayout';
 import { canDipSonar, dippingSonarRange } from './asw';
@@ -188,6 +189,9 @@ const GARRISON_POSITION_TYPES = new Set<string>(['bunker_nest', 'infantry_squad'
 
 /** Small craft a machine gun or a tank gun can usefully engage (landing craft, patrol and river boats). */
 const SMALL_CRAFT_TYPES = new Set<string>(['lcvp', 'lcm8', 'lcac', 'lsm_r', 'lst', 'patrol_boat', 'pbr', 'river_gunboat', 'komar_ptg', 'osa']);
+
+/** Civilian places that fall into the sphere of whoever holds the ground round them. */
+const SPHERE_SITES: ReadonlySet<string> = new Set(['settlement', 'town', 'city', 'civil_hospital', 'copra_plantation', 'civil_wharf', 'sugar_mill', 'power_plant', 'pagoda', 'factory']);
 
 /** Hull types that dive. */
 const SUBMARINE_TYPES: ReadonlySet<string> = new Set(['submarine', 'ssn_la', 'ssgn_oscar', 'foxtrot']);
@@ -962,6 +966,12 @@ export class GameEngine {
       city: { mp: 0.4, rp: 0.2, pp: 0.1 },
       rail_station: { tp: 0.6, rp: 0.1 },
       civil_hospital: { pp: 0.12 },
+      copra_plantation: { rp: 0.1, mp: 0.04 },
+      civil_wharf: { tp: 0.35 },
+      sugar_mill: { rp: 0.18, pp: 0.03 },
+      power_plant: { rp: 0.22, pp: 0.05 },
+      pagoda: { pp: 0.15 },
+      factory: { rp: 0.3, tp: 0.12 },
     };
     for (const isl of this.islands) {
       for (const i of isl.installations) {
@@ -993,7 +1003,7 @@ export class GameEngine {
     for (const isl of this.islands) {
       for (const inst of isl.installations) {
         const isTransport = inst.type === 'rail_station';
-        if (inst.isDestroyed || !(isTransport || inst.type === 'settlement' || inst.type === 'town' || inst.type === 'city' || inst.type === 'civil_hospital')) continue;
+        if (inst.isDestroyed || !(isTransport || SPHERE_SITES.has(inst.type))) continue;
         const r = isTransport ? 300 : (inst.civilianZoneRadius ?? 120) + 220;
         const friendly = ground.some((u) => (u.side === 'player' || u.side === 'allied') && dist(u.pos, inst.pos) < r);
         const hostile = ground.some((u) => u.side === 'enemy' && dist(u.pos, inst.pos) < r);
@@ -1154,6 +1164,7 @@ export class GameEngine {
     const sectorMap = getTerrainMap(this.islands, this.worldSize, era);
     addCivilTransport(this.islands, sectorMap, era);
     addCivilHospitals(this.islands, sectorMap, era);
+    addCivilEconomy(this.islands, sectorMap, era);
     // Nothing stands on a runway
     clearAirfieldFootprints(this.islands);
     // The defenders' wire, trenches, traps and mines; whales out in the deep water
@@ -1166,6 +1177,7 @@ export class GameEngine {
     this.alliedOps = this.makeAlliedOps();
     this.enemyShips = generated.enemyShips;
     this.steerDest.clear();
+    this.localMuster.clear();
     this.decoys = [];
     this.esmContacts = [];
     this.jamZones = [];
@@ -2911,6 +2923,7 @@ export class GameEngine {
     this.updateAirfieldControl(effectiveDt);
     this.updateCivilControl(effectiveDt);
     this.updateFieldWorks(effectiveDt);
+    this.updateLocalForces(effectiveDt);
     this.updateCivilHospitals(effectiveDt);
     this.updateWhalePods(effectiveDt);
     this.updateAircraft(effectiveDt);
@@ -11986,6 +11999,74 @@ export class GameEngine {
     }
   }
 
+  // ── Local forces raised from held civilian sites (localForces.ts) ─────────────
+  private localForceTimer = 0;
+  private localMuster = new Map<string, { next: number; ids: string[] }>();
+  private localSerial = 0;
+
+  /**
+   * Every few minutes a town, village, works or station in a side's hands musters a local unit for
+   * that side (our places raise allied militia, police or territorials; the enemy's raise
+   * guerrillas, garrison sections or motor-rifle detachments), up to a few per site and only
+   * while the place is not being fought over.
+   */
+  private updateLocalForces(dt: number): void {
+    this.localForceTimer -= dt;
+    if (this.localForceTimer > 0) return;
+    this.localForceTimer = 1;
+    const alive = new Set<string>();
+    for (const u of this.groundUnits) if (!u.isDestroyed) alive.add(u.id);
+    const total = { player: 0, enemy: 0 };
+    for (const st of this.localMuster.values()) {
+      st.ids = st.ids.filter((id) => alive.has(id));
+    }
+    for (const isl of this.islands) {
+      for (const inst of isl.installations) {
+        if (inst.isDestroyed) continue;
+        const holder = inst.type === 'rail_station' ? inst.side : inst.controlledBy;
+        const rule = localRulesFor(this.era, inst.type, holder);
+        if (!rule) continue;
+        const h = rule.holder;
+        let st = this.localMuster.get(inst.id);
+        const wait = () => rule.every[0] + Math.random() * (rule.every[1] - rule.every[0]);
+        if (!st) {
+          st = { next: this.gameTime + wait(), ids: [] };
+          this.localMuster.set(inst.id, st);
+        }
+        total[h] += st.ids.length;
+        if (this.gameTime < st.next) continue;
+        st.next = this.gameTime + wait();
+        if (st.ids.length >= rule.cap || total[h] >= 10) continue;
+        const contested = this.groundUnits.some((u) => !u.isDestroyed && !u.embarkedInShipId && this.isHostile(u.side, h) && dist(u.pos, inst.pos) < 450);
+        if (contested) continue;
+        let pos: Vector2D | null = null;
+        for (let k = 0; k < 10 && !pos; k++) {
+          const a = Math.random() * Math.PI * 2;
+          const r = 60 + Math.random() * 60;
+          const p = { x: inst.pos.x + Math.cos(a) * r, y: inst.pos.y + Math.sin(a) * r };
+          const t = this.terrain.at(p.x, p.y);
+          if (t !== TERRAIN.water && t !== TERRAIN.lagoon && t !== TERRAIN.lake && t !== TERRAIN.river && isPointInPolygon(p, isl.points)) pos = p;
+        }
+        if (!pos) continue;
+        const f = pickForce(rule);
+        const side: ShipSide = h === 'player' ? 'allied' : 'enemy';
+        const unit = createGroundUnit(`local-${++this.localSerial}-${inst.id}`, f.type, f.name, side, this.era, pos);
+        this.groundUnits.push(unit);
+        st.ids.push(unit.id);
+        total[h]++;
+        const place = inst.name.replace('(中立) ', '').replace('(原)', '').split(' (')[0];
+        this.addCombatLog({
+          category: 'naval',
+          sourceSide: h,
+          sourceName: place,
+          targetName: f.name,
+          actionType: 'recon_spotted',
+          text: h === 'player' ? `🏘️【地方部隊集結】「${place}」在我方勢力範圍內，募集「${f.name}」協防。` : `⚠️【敵地方武裝】敵方控制的「${place}」出現「${f.name}」。`,
+        });
+      }
+    }
+  }
+
   private updateFieldWorks(dt: number): void {
     this.fieldWorkTimer -= dt;
     if (this.fieldWorkTimer > 0) return;
@@ -17419,8 +17500,8 @@ export class GameEngine {
     const extraPool: [GroundUnitType, string][] = isEra5
       ? [['opfor_t64b', '蘇軍第20近衛集團軍 T-64B 戰車排'], ['opfor_btr70', '蘇軍摩步 BTR-70 裝甲運兵排'], ['opfor_bmd1', '蘇軍第103近衛空降師 BMD-1 傘兵戰車排'], ['opfor_spetsnaz_83', 'GRU 特種偵察排 (Spetsnaz)'], ['opfor_igla_team', '蘇軍摩步營 9K310 針-1 (SA-16) 防空小組']]
       : isEra4
-      ? [['opfor_vc_guerrilla_65', '越共第9師 地方游擊隊'], ['opfor_rpg_team_65', 'PAVN B-40/B-41 火箭筒組'], ['opfor_dshk_aa', 'PAVN DShK 12.7mm 防空機槍組'], ['opfor_sa7_strela', 'PAVN 9K32 箭-2 (SA-7) 肩射防空小組']]
-      : [['opfor_pva_infantry_50', '中國人民志願軍第39軍 步兵排'], ['opfor_su76m', 'KPA SU-76M 自走突擊砲排'], ['opfor_zis3_76', 'KPA ZiS-3 76mm 加農砲連']];
+      ? [['opfor_nlf_main_force_65', '越南南方民族解放陣線 第5師 主力營 排'], ['opfor_vc_guerrilla_65', '越共第9師 地方游擊隊'], ['opfor_rpg_team_65', 'PAVN B-40/B-41 火箭筒組'], ['opfor_dshk_aa', 'PAVN DShK 12.7mm 防空機槍組'], ['opfor_sa7_strela', 'PAVN 9K32 箭-2 (SA-7) 肩射防空小組']]
+      : [['opfor_kpa_infantry_50', '朝鮮人民軍 第105戰車師 步兵排'], ['opfor_pva_infantry_50', '中國人民志願軍第39軍 步兵排'], ['opfor_su76m', 'KPA SU-76M 自走突擊砲排'], ['opfor_zis3_76', 'KPA ZiS-3 76mm 加農砲連']];
     const [extraType, extraName] = extraPool[Math.floor(Math.random() * extraPool.length)];
     waveUnits.push(
       createGroundUnit(`opfor-wave-x-${ts}`, extraType, extraName, 'enemy', this.era, {
