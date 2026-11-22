@@ -1,6 +1,7 @@
 import { Era, InstallationType, Island, Vector2D } from '../types/game';
 import { dist, isPointInPolygon, makeInstallation } from './procedural';
 import { TERRAIN, TerrainMap } from './terrain/terrainMap';
+import { placeNameByLatitude } from './placeNames';
 
 /**
  * Civilian transport the armies fought over: railway stations on the mainland lines and the
@@ -39,6 +40,7 @@ export function addCivilTransport(islands: Island[], map: TerrainMap, era: Era):
   const names = [...(STATION_NAMES[era] ?? [])];
   const rails = map.roads.filter((r) => r.kind === 'rail');
   const towns = map.districts.filter((d) => d.kind === 'city' || d.kind === 'town');
+  const usedNames = new Set<string>();
   let n = 0;
   for (const town of towns) {
     if (names.length === 0 || n >= 3) break;
@@ -60,7 +62,7 @@ export function addCivilTransport(islands: Island[], map: TerrainMap, era: Era):
       makeInstallation({
         id: `civil-station-${n}`,
         type: 'rail_station',
-        name: names.shift()!,
+        name: placeNameByLatitude(era, 'station', pos, usedNames) ?? names.shift()!,
         weaponDesc: '原民用鐵路車站 · 我方控制時鐵路縮短運補時程 · 提供時間值 TP · 由地面部隊進駐即可控制',
         pos,
         angle: best.a,
@@ -89,7 +91,7 @@ export function addCivilTransport(islands: Island[], map: TerrainMap, era: Era):
         makeInstallation({
           id: 'civil-airport',
           type: 'airfield',
-          name: airportName,
+          name: placeNameByLatitude(era, 'airport', p, new Set()) ?? airportName,
           weaponDesc: '原民用機場 · 由地面部隊進駐即可控制，我方控制後可作為航空站使用',
           pos: p,
           health: 4200,
@@ -124,6 +126,7 @@ export function addCivilHospitals(islands: Island[], map: TerrainMap, era: Era):
   const towns = map.districts
     .filter((d) => d.kind === 'city' || d.kind === 'town' || d.kind === 'settlement' || d.kind === 'village')
     .sort((a, b) => b.radius - a.radius);
+  const usedHospitals = new Set<string>();
   let n = 0;
   for (const town of towns) {
     if (names.length === 0) break;
@@ -136,11 +139,12 @@ export function addCivilHospitals(islands: Island[], map: TerrainMap, era: Era):
       if (!dryLand(map, pos) || !isPointInPolygon(pos, isl.points)) continue;
       if (isl.installations.some((i) => !i.isCivilian && dist(i.pos, pos) < 160)) continue;
       if (islands.some((il) => il.installations.some((i) => i.type === 'civil_hospital' && dist(i.pos, pos) < 1500))) continue;
+      const fallback = names.shift()!;
       isl.installations.push(
         makeInstallation({
           id: `civil-hospital-${n++}`,
           type: 'civil_hospital',
-          name: names.shift()!,
+          name: placeNameByLatitude(era, 'hospital', pos, usedHospitals) ?? fallback,
           weaponDesc: '中立民間醫院 · 受國際法保護 (攻擊將造成附帶損害) · 我方勢力範圍時救治 520m 內部隊並提供政治值 PP',
           pos,
           angle: a,
@@ -155,7 +159,15 @@ export function addCivilHospitals(islands: Island[], map: TerrainMap, era: Era):
   }
 }
 
-type EconomySite = { type: InstallationType; name: string; desc: string; coast?: boolean; health: number };
+type EconomySite = {
+  type: InstallationType;
+  name: string;
+  desc: string;
+  coast?: boolean;
+  health: number;
+  /** The real place on the theatre map: the nearest towns to it are tried first. */
+  near?: Vector2D;
+};
 
 /** Each era's civilian economy that the armies fought over (historical places of the theatre). */
 const ECONOMY: Record<Era, EconomySite[]> = {
@@ -170,18 +182,18 @@ const ECONOMY: Record<Era, EconomySite[]> = {
     { type: 'civil_wharf', name: '(中立) 加拉班 民用碼頭 (Garapan)', desc: '民用碼頭 · 控制時提供時間值 TP', coast: true, health: 1500 },
   ],
   era3: [
-    { type: 'power_plant', name: '(中立) 赴戰江水力發電所 (Pujŏn)', desc: '水力發電廠 · 控制時產出 RP / PP · 敵方控制時供應其地方部隊', health: 3200 },
-    { type: 'civil_wharf', name: '(中立) 元山 漁港 (Wŏnsan)', desc: '漁港碼頭 · 控制時提供時間值 TP', coast: true, health: 1500 },
+    { type: 'power_plant', name: '(中立) 赴戰江水力發電所 (Pujŏn)', desc: '水力發電廠 · 控制時產出 RP / PP · 敵方控制時供應其地方部隊', health: 3200, near: { x: 11500, y: 1600 } },
+    { type: 'civil_wharf', name: '(中立) 元山 漁港 (Wŏnsan)', desc: '漁港碼頭 · 控制時提供時間值 TP', coast: true, health: 1500, near: { x: 6800, y: 6400 } },
   ],
   era4: [
-    { type: 'pagoda', name: '(中立) 天姥寺 (Thiên Mụ)', desc: '佛寺 · 受保護文化設施 (攻擊將造成附帶損害) · 我方勢力範圍時提供政治值 PP', health: 1800 },
-    { type: 'pagoda', name: '(中立) 慈曇寺 (Từ Đàm)', desc: '佛寺 · 受保護文化設施 · 我方勢力範圍時提供政治值 PP', health: 1800 },
-    { type: 'civil_wharf', name: '(中立) 峴港 漁港 (Đà Nẵng)', desc: '漁港碼頭 · 控制時提供時間值 TP', coast: true, health: 1500 },
+    { type: 'pagoda', name: '(中立) 天姥寺 (Thiên Mụ)', desc: '佛寺 · 受保護文化設施 (攻擊將造成附帶損害) · 我方勢力範圍時提供政治值 PP', health: 1800, near: { x: 6800, y: 6400 } },
+    { type: 'pagoda', name: '(中立) 慈曇寺 (Từ Đàm)', desc: '佛寺 · 受保護文化設施 · 我方勢力範圍時提供政治值 PP', health: 1800, near: { x: 7500, y: 6100 } },
+    { type: 'civil_wharf', name: '(中立) 峴港 漁港 (Đà Nẵng)', desc: '漁港碼頭 · 控制時提供時間值 TP', coast: true, health: 1500, near: { x: 6400, y: 8400 } },
   ],
   era5: [
-    { type: 'factory', name: '(中立) 福斯汽車 漢諾威廠 (VW Werk Hannover)', desc: '工業區 · 控制時產出 RP / TP · 我方控制時可募集國土防衛軍', health: 3600 },
-    { type: 'factory', name: '(中立) 大陸集團 輪胎廠 (Continental)', desc: '工業區 · 控制時產出 RP / TP', health: 3200 },
-    { type: 'power_plant', name: '(中立) 梅倫燃煤電廠 (Kraftwerk Mehrum)', desc: '燃煤發電廠 · 控制時產出 RP / PP', health: 3800 },
+    { type: 'factory', name: '(中立) 福斯汽車 漢諾威廠 (VW Werk Hannover)', desc: '工業區 · 控制時產出 RP / TP · 我方控制時可募集國土防衛軍', health: 3600, near: { x: 7900, y: 10800 } },
+    { type: 'factory', name: '(中立) 大陸集團 輪胎廠 (Continental)', desc: '工業區 · 控制時產出 RP / TP', health: 3200, near: { x: 8600, y: 12800 } },
+    { type: 'power_plant', name: '(中立) 梅倫燃煤電廠 (Kraftwerk Mehrum)', desc: '燃煤發電廠 · 控制時產出 RP / PP', health: 3800, near: { x: 9000, y: 11400 } },
   ],
 };
 
@@ -207,13 +219,15 @@ export function addCivilEconomy(islands: Island[], map: TerrainMap, era: Era): v
     }
     return false;
   };
+  const usedWharves = new Set<string>();
   const add = (site: EconomySite, n: number, isl: Island, pos: Vector2D, angle: number) => {
     placed.push(pos);
+    const name = site.type === 'civil_wharf' ? placeNameByLatitude(era, 'wharf', pos, usedWharves) ?? site.name : site.name;
     isl.installations.push(
       makeInstallation({
         id: `civil-econ-${era}-${n}`,
         type: site.type,
-        name: site.name,
+        name,
         weaponDesc: site.desc,
         pos,
         angle,
@@ -226,8 +240,11 @@ export function addCivilEconomy(islands: Island[], map: TerrainMap, era: Era): v
   };
   ECONOMY[era].forEach((site, n) => {
     const before = placed.length;
-    for (let a0 = 0; a0 < anchors.length && placed.length === before; a0++) {
-      const anchor = anchors[(a0 + n * 3) % anchors.length];
+    const order = site.near
+      ? [...anchors].sort((a, b) => dist(a, site.near!) - dist(b, site.near!))
+      : anchors.map((_, a0) => anchors[(a0 + n * 3) % anchors.length]);
+    for (let a0 = 0; a0 < order.length && placed.length === before; a0++) {
+      const anchor = order[a0];
       const isl = islands.find((i) => isPointInPolygon(anchor, i.points));
       if (!isl) continue;
       let pos: Vector2D | null = null;
@@ -248,14 +265,21 @@ export function addCivilEconomy(islands: Island[], map: TerrainMap, era: Era): v
     // A wharf with no town on the shore: walk the coastline of the inhabited islands instead
     if (placed.length === before && site.coast) {
       const inhabited = islands.filter((i) => anchors.some((p) => isPointInPolygon(p, i.points)));
+      if (site.near) {
+        const gap = (i: Island) => Math.min(...i.points.map((q) => dist(q, site.near!)));
+        inhabited.sort((a, b) => gap(a) - gap(b));
+      }
       // The mainland polygon runs along the map border: only a real shore counts
       let W = 0;
       for (const i of islands) for (const q of i.points) W = Math.max(W, q.x, q.y);
       const inside = (p: Vector2D) => p.x > 400 && p.y > 400 && p.x < W - 400 && p.y < W - 400;
       for (const isl of inhabited) {
         const step = Math.max(1, Math.floor(isl.points.length / 60));
-        for (let k = 0; k < isl.points.length && placed.length === before; k += step) {
-          const c = isl.points[k];
+        // Walk the shore nearest the site's real place first
+        const shore = isl.points.filter((_, k) => k % step === 0);
+        if (site.near) shore.sort((a, b) => dist(a, site.near!) - dist(b, site.near!));
+        for (let k = 0; k < shore.length && placed.length === before; k++) {
+          const c = shore[k];
           const a = Math.atan2(isl.center.y - c.y, isl.center.x - c.x);
           for (const inward of [30, 60, 90]) {
             const p = { x: c.x + Math.cos(a) * inward, y: c.y + Math.sin(a) * inward };

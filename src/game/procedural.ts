@@ -2,6 +2,7 @@ import { addEnemyPowCamp } from './pow';
 import { applyHistoricalAswFit } from './asw';
 import { addIslandSettlements, naturalizeCoast, naturalizeIslands } from './coastline';
 import { applyMainlandTemplate } from './terrain/theaters';
+import { OUTER_ISLANDS, STAGING_BASE, applyEraPlaceNames } from './placeNames';
 import {
   Island,
   IslandStronghold,
@@ -1767,7 +1768,7 @@ export function generateFriendlyBaseIsland(
     makeInstallation({
       id: 'friendly-base-afb',
       type: 'airfield',
-      name: '友軍前進航空基地 (AFB Henderson Field)',
+      name: STAGING_BASE[era].airfield,
       weaponDesc: '雙跑道全天候後勤航空站 · 提供機隊補充與長程空中打擊',
       pos: { x: center.x + 20, y: center.y - 20 },
       angle: -Math.PI / 4,
@@ -1951,7 +1952,7 @@ export function generateFriendlyBaseIsland(
 
   return {
     id: 'friendly-base-island',
-    name: 'Espiritu Santo Staging Base (友軍前線後勤與空軍基地)',
+    name: STAGING_BASE[era].island,
     center,
     radius: baseRadius,
     points,
@@ -4920,27 +4921,27 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
       era === 'era5'
         ? '北約北方集團軍前進聯合作戰指揮中心 [NATO NORTHAG HQ]'
         : era === 'era4'
-        ? '美軍 MACV 峴港前進指揮中心 [MACV Da Nang HQ]'
+        ? '美軍第3兩棲陸戰隊 (III MAF) 峴港前進指揮中心 [III MAF Da Nang HQ]'
         : '美陸軍前線指揮中心 [Mainland Allied HQ]';
     const hqDesc =
       era === 'era5'
         ? '北約歐洲盟軍最高司令部前線地下指揮掩體 · 戰術C3I通信數據鏈與空地作戰指管樞紐'
         : era === 'era4'
-        ? '美軍軍事援助越南司令部 · 前線雷達導引通信中心與戰術任務指管部'
+        ? '美軍第3兩棲陸戰隊司令部 (III MAF) · 第一軍區前線雷達導引通信中心與戰術任務指管部'
         : '地下花崗岩加固防核指揮掩體 · 戰術通信與前線陸軍部隊整備中心';
 
     const afbName =
       era === 'era5'
-        ? '拉姆施泰因北約戰術前進空軍基地 (Ramstein AFB / USAFE)'
+        ? '阿爾霍恩北約前進作戰基地 (Ahlhorn FOL / 2ATAF)'
         : era === 'era4'
         ? '峴港空軍基地 (Da Nang Air Base / 366th TFW)'
-        : '遠東空軍大陸前進航空基地 (K-18 Suwon/Osan AFB)';
+        : '聯合國軍 前進野戰航空基地 (陸戰隊第1航空聯隊 / 美國遠東空軍第5航空軍)';
     const afbDesc =
       era === 'era5'
-        ? '北約核心全天候重型戰術空軍基地 · 部署 A-10A, F-15A, F-16A, E-3A, F-111, B-52, C-130'
+        ? '北約第2戰術空軍 前進作戰基地 · 部署 A-10A, 龍捲風 GR1, F-16A, 獵鷹 (Jaguar), C-130'
         : era === 'era4'
-        ? '雙跑道全天候重型空軍航空基地 · 部署 F-4E, F-105, B-52, A-7, OV-10, UH-1, AH-1'
-        : '雙跑道全天候後勤航空站 · USAAF 第5航空隊 F-86 軍刀機與天襲者起降基地';
+        ? '雙跑道全天候重型空軍航空基地 · 部署 F-4C/D, A-1E, OV-10, O-2A, AC-47, UH-1, AH-1'
+        : '雙跑道全天候後勤航空站 · 美國遠東空軍第5航空軍與陸戰隊 F4U 海盜、F9F 黑豹、AD 天襲者起降基地';
 
     addAlliedMainlandBases(continent, alliedHqPos, hqName, hqDesc, afbName, afbDesc);
 
@@ -4958,8 +4959,9 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
     islands.push(continent);
 
     // 2個外海戰略長條形屏障島 (具備連續山脊、長條雨林帶與雙倍雷達/岸防設施)
-    const outIsl1Name = era === 'era4' ? 'Hon Me Island (昏果島戰略海防雷達前哨島)' : 'Wonsan Outer Bastion (元山外海要塞屏障島)';
-    const outIsl2Name = era === 'era4' ? 'Con Co Island (白龍尾要塞飛彈陣地島)' : 'Chodo Radar Outpost (椒島雷達前哨島)';
+    const [outer1, outer2] = OUTER_ISLANDS[era];
+    const outIsl1Name = outer1.name;
+    const outIsl2Name = outer2.name;
     
     const outIsland1 = generateOrganicIsland(
       'island-wonsan',
@@ -4980,7 +4982,7 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
         ],
         width: 140,
         height: 195,
-        peaks: [{ pos: { x: 3800, y: 8600 }, elevation: 195, label: '昏果島頂峰雷達崖 [Hon Me Peak 195m]' }],
+        peaks: [{ pos: { x: 3800, y: 8600 }, elevation: 195, label: outer1.peak }],
       },
     ];
     outIsland1.forestBelts = [
@@ -5017,7 +5019,7 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
         ],
         width: 130,
         height: 180,
-        peaks: [{ pos: { x: 3200, y: 5200 }, elevation: 180, label: '白龍尾山脊觀測哨 [Con Co Peak 180m]' }],
+        peaks: [{ pos: { x: 3200, y: 5200 }, elevation: 180, label: outer2.peak }],
       },
     ];
     outIsland2.forestBelts = [
@@ -5135,13 +5137,15 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
       ? Math.PI * 0.45 // Heading Southeast into the gulf/strait
       : (Math.PI * 3) / 4; addEnemyTaskForce(era, enemyShips, enemyCenter, enemyHeading);
 
+  applyEraPlaceNames(era, islands);
+
   const briefingName =
     era === 'era5'
-      ? `GIUK Gap & Barents Sea 1983-1991 (Sector ${sectorNumber})`
+      ? `North Sea & German Bight 1983-1991 (Sector ${sectorNumber})`
       : era === 'era4'
       ? `Gulf of Tonkin & Yankee Station 1965-1973 (Sector ${sectorNumber})`
       : era === 'era3'
-      ? `Korea Strait & Wonsan Gulf 1950-1953 (Sector ${sectorNumber})`
+      ? `Sea of Japan & Wonsan Gulf 1950-1953 (Sector ${sectorNumber})`
       : SECTOR_NAMES[(sectorNumber - 1) % SECTOR_NAMES.length];
 
   return {
@@ -5161,10 +5165,10 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
           : era === 'era2'
           ? 'Western Pacific & Philippine Sea 1944-45'
           : era === 'era3'
-          ? 'Far East & Korean Peninsula 1950-1953 (韓戰遠東特遣隊)'
+          ? 'North-East Korea 1950-1953 (韓戰東海岸 · 元山—咸興)'
           : era === 'era4'
-          ? 'Gulf of Tonkin & Yankee Station 1965-1973 (越戰北部灣特遣隊)'
-          : 'GIUK Gap & North Atlantic 1983-1991 (北大西洋神盾攻勢作戰)',
+          ? 'Vietnam & Yankee Station 1965-1973 (越戰 · 北部灣與第一軍區)'
+          : 'North Sea & Northern Germany 1983-1991 (北海與北德平原聯合作戰)',
       briefing:
         era === 'era1'
           ? '【1942 瓜達爾卡納爾戰役】美軍第16/61特遣艦隊 (USS Enterprise CV-6, San Francisco, Atlanta) 奉命進入鐵底灣與所羅門群島海域，尋殲日軍南雲第一航空艦隊 (翔鶴、比叡、鳥海、秋月) 與摧毀島嶼要塞防線！'
@@ -5174,7 +5178,7 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
           ? '【1950~1953 韓戰與遠東冷戰戰役】美海軍第77特遣艦隊 (USS Oriskany CV-34 SCB-27A, USS Missouri BB-63, Des Moines, Gearing) 進駐元山與日本海戰區！全面出動 F9F 黑豹、F2H 女妖噴射機、AD-1 天襲者、AD-3W 全域空中預警機與 HO3S-1 搜救直升機。假想敵冷戰遠東聯軍集結 MiG-15 噴射機、Tu-14 噴射轟炸機、53式魚雷快艇群與 T-34/85、IS-3 重戰車堅固防線！'
           : era === 'era4'
           ? '【1965~1973 越戰與北部灣特遣作戰】美海軍第77特遣艦隊旗艦小鷹號超級航艦 (CV-63 USS Kitty Hawk)、貝爾納普號飛彈巡洋艦 (CG-26)、查爾斯·亞當斯號飛彈驅逐艦 (DDG-2) 與硫磺島號兩棲突擊艦 (LPH-2) 駛入北部灣洋基站！全域實裝超音速噴射打擊群 (F-4B/J, F-8, A-6, A-4, B-52, F-105)、空空/空艦/反輻射導引飛彈系統與直升機立體垂直包圍！全面壓制北越 SA-2 導針防空飛彈營、扇歌射控雷達與冥河反艦飛彈快艇！'
-          : '【1983~1991 假想第三次世界大戰 · 格陵蘭-冰島-英國斷口 (GIUK) 與巴倫支海前線】美海軍大西洋打擊艦隊 (USS Nimitz CVN-68, Ticonderoga CG-47, Virginia CGN-38, Iowa BB-61 近代化改裝, Spruance, Kidd, Perry, Los Angeles 核潛艦, Austin 船塢艦與 LCAC 氣墊艇) 推進大洋！迎戰蘇聯紅海軍北方艦隊主力 (基輔號航母、基洛夫號核動力巡洋艦、現代級、無畏級與奧斯卡級飛彈核潛艇)。敵方集結 Tu-22M3 逆火、Tu-95 熊式、MiG-29A、Su-27、T-80B 與 T-72B，發動大規模飽和超音速反艦巡弋飛彈齊射！神盾 SM-2MR、方陣 CIWS 與 F-14A 鳳凰飛彈準備全力接戰！',
+          : '【1983~1991 假想第三次世界大戰 · 德意志灣與北德平原前線 (什勒斯維希-霍爾斯坦 / 易北河)】美海軍大西洋打擊艦隊 (USS Nimitz CVN-68, Ticonderoga CG-47, Virginia CGN-38, Iowa BB-61 近代化改裝, Spruance, Kidd, Perry, Los Angeles 核潛艦, Austin 船塢艦與 LCAC 氣墊艇) 推進大洋！迎戰蘇聯紅海軍北方艦隊主力 (基輔號航母、基洛夫號核動力巡洋艦、現代級、無畏級與奧斯卡級飛彈核潛艇)。敵方集結 Tu-22M3 逆火、Tu-95 熊式、MiG-29A、Su-27、T-80B 與 T-72B，發動大規模飽和超音速反艦巡弋飛彈齊射！神盾 SM-2MR、方陣 CIWS 與 F-14A 鳳凰飛彈準備全力接戰！',
       primaryObjective:
         era === 'era1'
           ? '擊沉日軍正規航母翔鶴號與護衛主力艦，摧毀島嶼核心設施'
