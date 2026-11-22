@@ -40,7 +40,13 @@ export function seekerProfile(p: Projectile, era: Era): SeekerProfile {
   if (p.type === 'torpedo') {
     if (p.wakeHoming || has(att, '尾流', '53-65')) return { name: '53-65K 尾流自導', band: 'wake', eccm: 1, irccm: 0, hoj: false, fov: 0.6 };
     const eccm = era === 'era5' ? (p.side === 'enemy' ? 0.35 : has(att, 'Mk 48', 'ADCAP') ? 0.6 : 0.5) : era === 'era4' ? 0.25 : era === 'era3' ? 0.1 : 0;
-    const name = era === 'era5' ? (p.side === 'enemy' ? 'SET-65 / USET-80 聲導' : 'Mk 46 Mod 5 / Mk 48 聲導') : era === 'era4' ? 'Mk 44 / Mk 46 Mod 0 聲導' : 'Mk 24 FIDO / Mk 32 聲導';
+    const enemy = p.side === 'enemy';
+    const name =
+      era === 'era5'
+        ? enemy ? 'SET-65 / USET-80 聲導' : 'Mk 46 Mod 5 / Mk 48 聲導'
+        : era === 'era4'
+        ? enemy ? 'SET-53 / SAET-60 聲導' : 'Mk 44 / Mk 46 Mod 0 聲導'
+        : enemy ? 'SET-53 聲導' : 'Mk 24 FIDO / Mk 32 聲導';
     return { name, band: 'acoustic', eccm, irccm: 0, hoj: false, fov: 0.8 };
   }
   // Anti-ship missiles: by variant
@@ -62,7 +68,13 @@ export function seekerProfile(p: Projectile, era: Era): SeekerProfile {
     const [name, e] = t[v] ?? ['反艦飛彈主動雷達', 0.3];
     return { name, band: 'radar', eccm: p.datalinkLost ? e * 0.5 : e, irccm: 0, hoj: v === 'p700_granit' || v === 'p500_bazalt', fov: 0.5 };
   }
-  if (g === 'laser') return { name: '雷射導引', band: 'laser', eccm: 1, irccm: 1, hoj: false, fov: 0.3 };
+  // Rocket-delivered ASW torpedoes in their air stage: no seeker to fool until they enter the water
+  if (p.isASROC) return { name: 'ASROC / Ikara / Malafon 火箭助飛段', band: 'tv', eccm: 1, irccm: 1, hoj: false, fov: 0.3 };
+  if (has(att, 'BGM-109', 'UGM-109', '戰斧', 'Tomahawk')) return { name: 'BGM-109 戰斧 (TERCOM / DSMAC)', band: 'tv', eccm: 1, irccm: 1, hoj: false, fov: 0.3 };
+  if (g === 'laser') {
+    const wire = has(att, 'TOW', '拖式', 'MILAN', 'Konkurs', '競賽', '龍式', 'Dragon', 'Malyutka', '嬰兒', 'HOT', 'Shturm', '突擊', 'Kobra', '9M112', 'Refleks', '9M119', 'Svir');
+    return { name: wire ? 'SACLOS 線導/指令反戰車飛彈' : '雷射導引', band: 'laser', eccm: 1, irccm: 1, hoj: false, fov: 0.3 };
+  }
   if (g === 'tv') return { name: '電視導引', band: 'tv', eccm: 1, irccm: 0.6, hoj: false, fov: 0.3 };
   if (g === 'anti_radiation' || g === 'passive_radar_arm') {
     return { name: has(att, 'HARM', 'AGM-88') ? 'AGM-88 HARM' : has(att, 'Kh-31', 'Kh-58') ? 'Kh-31P / Kh-58 反輻射' : 'AGM-45 百舌鳥', band: 'arm', eccm: 0.5, irccm: 0, hoj: true, fov: 0.6 };
@@ -74,7 +86,9 @@ export function seekerProfile(p: Projectile, era: Era): SeekerProfile {
     if (has(att, 'SA-7', 'Strela-2', '箭-2', '9K32', 'Redeye', '紅眼')) [name, irccm] = ['9K32 箭-2 / 紅眼 (未冷卻 PbS)', 0];
     else if (has(att, 'Stinger', '刺針')) [name, irccm] = ['FIM-92 刺針 (POST 雙色)', 0.5];
     else if (has(att, 'Igla', '針', 'SA-14', 'SA-16', 'Strela-3')) [name, irccm] = ['9K38 針式 / 箭-3 (冷卻尋標)', 0.35];
-    else if (has(att, 'Chaparral', '小檞樹', 'Strela-10', 'SA-13')) [name, irccm] = ['MIM-72 / 箭-10', era === 'era5' ? 0.3 : 0.15];
+    else if (has(att, 'Strela-1', 'SA-9', '箭-1')) [name, irccm] = ['9K31 箭-1 (SA-9 未冷卻 PbS)', 0];
+    else if (has(att, 'Chaparral', '榭樹', 'MIM-72')) [name, irccm] = ['MIM-72 榭樹', era === 'era5' ? 0.3 : 0.1];
+    else if (has(att, 'Strela-10', 'SA-13', '箭-10')) [name, irccm] = ['9K35 箭-10 (SA-13 雙頻)', 0.35];
     else if (has(att, 'R-73', 'AA-11')) [name, irccm] = ['R-73 (AA-11 射手)', 0.55];
     else if (has(att, 'R-60', 'AA-8')) [name, irccm] = ['R-60 (AA-8 蚜蟲)', 0.25];
     else if (has(att, 'AIM-9L', 'AIM-9M', '9L', '9M')) [name, irccm] = ['AIM-9L/M 全向紅外', 0.5];
@@ -90,6 +104,13 @@ export function seekerProfile(p: Projectile, era: Era): SeekerProfile {
   else if (has(att, 'S-300', '48N6', '5V55', '堡壘', 'Fort')) [name, eccm, hoj] = ['S-300 TVM', 0.66, true];
   else if (has(att, 'SA-2', 'S-75', '導針', 'Guideline', 'Fan Song', '扇歌')) [name, eccm] = ['SA-2 導針 (扇歌 指令導引)', 0.1];
   else if (has(att, 'SA-3', 'S-125', '涅瓦', 'Goa')) [name, eccm] = ['SA-3 (低打 指令導引)', 0.22];
+  else if (has(att, 'Kub', 'SA-6', '增益', '立方體')) [name, eccm] = ['2K12 Kub (SA-6 連續波半主動)', 0.42];
+  else if (has(att, 'Tor-M', 'Tor (', 'SA-15', '道爾')) [name, eccm] = ['9K330 Tor (SA-15 相控陣指令)', 0.62];
+  else if (has(att, 'Buk', 'SA-11', '山毛櫸')) [name, eccm] = ['9K37 Buk (SA-11 半主動)', 0.55];
+  else if (has(att, 'Osa', 'SA-8', '黃蜂')) [name, eccm] = ['9K33 Osa (SA-8 指令/光學)', 0.45];
+  else if (has(att, 'Sea Cat', '海貓')) [name, eccm] = ['Sea Cat (目視指令導引)', 0.85];
+  else if (has(att, 'Sea Slug', '海蛞蝓')) [name, eccm] = ['Sea Slug (雷達波束駕束)', 0.3];
+  else if (has(att, 'SA-N-3', 'Goblet', '戈布勒', 'M-11')) [name, eccm] = ['M-11 Shtorm (SA-N-3 戈布勒)', 0.35];
   else if (has(att, 'Hawk', '霍克', '鷹式')) [name, eccm] = ['MIM-23 霍克 半主動', era === 'era5' ? 0.45 : 0.3];
   else if (has(att, 'SM-2', '神盾', 'Standard', 'SM-1', 'Terrier', 'Tartar', '韃靼', '小獵犬')) [name, eccm, hoj] = era === 'era5' ? ['SM-2 / SM-1 標準', 0.55, true] : ['小獵犬 / 韃靼', 0.25, false];
   else if (has(att, 'Sea Dart', '海標槍')) [name, eccm] = ['海標槍', 0.4];
@@ -125,17 +146,26 @@ export interface AircraftEw {
   maws?: boolean;
 }
 
-type Row = Partial<AircraftEw> & { chaff?: number; flares?: number };
+/** A fit row; `eras` limits it to the years it was carried (default: Vietnam onward). */
+type Row = Partial<AircraftEw> & { chaff?: number; flares?: number; eras?: Era[] };
+const WW2: Era[] = ['era2'];
+const KOREA: Era[] = ['era3'];
 const ALE29 = 'AN/ALE-29 箔條/熱焰彈投放器';
 const ALE39 = 'AN/ALE-39 投放器 (60 發)';
 const ALE40 = 'AN/ALE-40 投放器';
 const M130 = 'M130 熱焰彈投放器';
 
 const AIR_EW: Partial<Record<AircraftModel, Row>> = {
-  // Era 2–3 heavy bombers: "Window"/"Rope" chaff bundles and Carpet jammers over Japan and Korea
-  b29: { dispenser: '"Rope" / "Window" 箔條束', chaff: 160, flares: 0, salvo: 8, jammer: { name: 'AN/APQ-2/-9 "Carpet" 干擾機', power: 0.35 } },
-  b24: { dispenser: '"Window" 箔條束', chaff: 80, flares: 0, salvo: 6 },
-  lancaster: { dispenser: '"Window" 箔條束', chaff: 120, flares: 0, salvo: 8, jammer: { name: '"Mandrel" 干擾機', power: 0.25 } },
+  // Era 2–3: "Window"/"Rope" chaff and Carpet jammers over Japan and Korea; the IJN's own
+  // 欺瞞紙 (gimanshi) chaff on night torpedo raids; APR-1 intercept receivers on Black Cats
+  b29: { dispenser: '"Rope" / "Window" 箔條束', chaff: 160, flares: 0, salvo: 8, jammer: { name: 'AN/APQ-2/-9 "Carpet" 干擾機', power: 0.35 }, eras: ['era2', 'era3'] },
+  b24: { dispenser: '"Window" 箔條束', chaff: 80, flares: 0, salvo: 6, eras: WW2 },
+  b17_late: { dispenser: '"Window" 箔條束', chaff: 48, flares: 0, salvo: 6, eras: WW2 },
+  lancaster: { dispenser: '"Window" 箔條束', chaff: 120, flares: 0, salvo: 8, jammer: { name: '"Mandrel" 干擾機', power: 0.25 }, eras: WW2 },
+  g4m: { dispenser: '欺瞞紙 (錫箔箔條)', chaff: 24, flares: 0, salvo: 4, eras: WW2 },
+  jill: { dispenser: '欺瞞紙 (錫箔箔條)', chaff: 12, flares: 0, salvo: 3, eras: WW2 },
+  pby: { esm: { name: 'AN/APR-1 雷達截收機 (黑貓)', factor: 1.3 }, eras: WW2 },
+  af_guardian: { esm: { name: 'AN/APR-9 截收機 (AF-2W 獵手)', factor: 1.3 }, eras: KOREA },
   // Era 4 (Vietnam)
   f4b: { dispenser: ALE29, chaff: 20, flares: 10, salvo: 2, jammer: { name: 'AN/ALQ-51 欺騙干擾', power: 0.3 }, rwr: 'AN/APR-25/27' },
   f4j: { dispenser: ALE29, chaff: 20, flares: 10, salvo: 2, jammer: { name: 'AN/ALQ-100 欺騙干擾', power: 0.35 }, rwr: 'AN/APR-25/27' },
@@ -150,6 +180,13 @@ const AIR_EW: Partial<Record<AircraftModel, Row>> = {
   ah1: { dispenser: M130, chaff: 0, flares: 30, salvo: 2 },
   ac47: { dispenser: '手拋 Mk 24 照明/誘餌彈', chaff: 0, flares: 24, salvo: 2 },
   tu16: { dispenser: 'ASO-16 箔條投放器', chaff: 48, flares: 0, salvo: 4, jammer: { name: 'SPS-5 Fasol 干擾機', power: 0.4 } },
+  // Vietnam-era radar homing and warning receivers without dispensers
+  f100: { rwr: 'AN/APR-25 RHAW', eras: ['era4'] },
+  f104g: { rwr: 'AN/APR-25 RHAW', eras: ['era4'] },
+  mig17: { rwr: 'Sirena-2 警報器', eras: ['era4'] },
+  mig19: { rwr: 'Sirena-2 警報器', eras: ['era4'] },
+  su7: { rwr: 'Sirena-2 警報器' },
+  il28: { rwr: 'Sirena-2 警報器', eras: ['era4'] },
   // Era 5
   f14a: { dispenser: ALE39, chaff: 30, flares: 30, salvo: 2, jammer: { name: 'AN/ALQ-100/126 欺騙干擾', power: 0.45 }, rwr: 'AN/ALR-45/67' },
   fa18a: { dispenser: ALE39, chaff: 30, flares: 30, salvo: 2, jammer: { name: 'AN/ALQ-126B 欺騙干擾', power: 0.5 }, rwr: 'AN/ALR-67' },
@@ -191,15 +228,29 @@ const AIR_EW: Partial<Record<AircraftModel, Row>> = {
   a50: { chaff: 0, flares: 0, salvo: 0, esm: { name: 'Shmel ESM', factor: 1.8 } },
   il38: { chaff: 0, flares: 0, salvo: 0, esm: { name: 'Wet Eye ESM 偵蒐', factor: 1.5 } },
   mig21: { chaff: 0, flares: 0, salvo: 0, rwr: 'SPO-2 警報器' },
+  f5a: { dispenser: ALE40, chaff: 30, flares: 15, salvo: 2, rwr: 'AN/ALR-46', eras: ['era5'] },
+  yak38: { rwr: 'SPO-10 Sirena-3 警報器', eras: ['era5'] },
 };
 
 /** The electronic-warfare fit of an aircraft type in an era (no dispensers before Vietnam). */
+const AIR_EW_CACHE = new Map<string, AircraftEw>();
+
 export function aircraftEw(model: AircraftModel, era: Era): AircraftEw {
+  const key = `${model}|${era}`;
+  let fit = AIR_EW_CACHE.get(key);
+  if (!fit) {
+    fit = buildAircraftEw(model, era);
+    AIR_EW_CACHE.set(key, fit);
+  }
+  return fit;
+}
+
+function buildAircraftEw(model: AircraftModel, era: Era): AircraftEw {
   const row = AIR_EW[model];
-  // WWII / Korean bombers' chaff only where that was used; MiG-21 RWR only from Vietnam on
-  if (row && (era === 'era2' || era === 'era3') && (model === 'b29' || model === 'b24' || model === 'lancaster')) return { salvo: 6, ...row, chaff: row.chaff ?? 0, flares: 0 };
-  if (!row || era === 'era1' || era === 'era2' || era === 'era3') return { chaff: 0, flares: 0, salvo: 0 };
-  return { chaff: 0, flares: 0, salvo: 2, ...row };
+  const valid = row && (row.eras ? row.eras.includes(era) : era === 'era4' || era === 'era5');
+  if (!row || !valid) return { chaff: 0, flares: 0, salvo: 0 };
+  const { eras: _eras, ...fit } = row;
+  return { chaff: 0, flares: 0, salvo: 2, ...fit };
 }
 
 // ── Ship suites ───────────────────────────────────────────────────────────────
@@ -235,7 +286,11 @@ export function shipEw(ship: Pick<Ship, 'type' | 'side' | 'subVariant'>, era: Er
     if (!big) return {};
     return enemy ? { esm: { name: 'E-27 逆探 (電波探知機)', factor: 1.3 } } : { esm: { name: 'DBM / ARC 雷達截收機', factor: 1.3 }, jammer: /^(carrier|battleship|cruiser)$/.test(t) ? { name: 'TDY 干擾機', power: 0.2 } : undefined };
   }
-  if (era === 'era3') return enemy ? {} : { esm: { name: 'WLR-1 截收機', factor: 1.4 }, noisemaker: /^(destroyer|carrier|cruiser|battleship)$/.test(t) ? { name: 'T-Mk 6 Fanfare 拖曳噪音器', count: 2, towed: true } : undefined };
+  if (era === 'era3') {
+    // Soviet 1950s cruisers and destroyers carried the Bizan-4 intercept receiver
+    if (enemy) return /^(cruiser|destroyer|sverdlov)$/.test(t) ? { esm: { name: 'Bizan-4 偵收機', factor: 1.3 } } : {};
+    return { esm: { name: 'WLR-1 截收機', factor: 1.4 }, noisemaker: /^(destroyer|carrier|cruiser|battleship)$/.test(t) ? { name: 'T-Mk 6 Fanfare 拖曳噪音器', count: 2, towed: true } : undefined };
+  }
   if (era === 'era4') {
     if (enemy) {
       if (t === 'kashin' || t === 'kynda') return { esm: { name: 'Watch Dog 電子偵測', factor: 1.4 }, jammer: { name: 'Top Hat 干擾機', power: 0.25 }, decoys: { name: 'PK-16 箔條發射器', chaff: 16, ir: 0, reload: 14 } };
@@ -252,7 +307,7 @@ export function shipEw(ship: Pick<Ship, 'type' | 'side' | 'subVariant'>, era: Er
   }
   // Era 5
   if (enemy) {
-    if (t === 'cgn_kirov' || t === 'cvhg_kiev') return { esm: { name: 'Rum Tub / Side Globe 電子偵測', factor: 2 }, jammer: { name: 'Bell 系列 (Bell Shroud/Squat) 干擾機', power: 0.55 }, decoys: { name: 'PK-2 誘餌發射器', chaff: 24, ir: 8, reload: 10 } };
+    if (t === 'cgn_kirov' || t === 'cvhg_kiev' || t === 'cg_slava') return { esm: { name: 'Rum Tub / Side Globe 電子偵測', factor: 2 }, jammer: { name: 'Bell 系列 (Bell Shroud/Squat) 干擾機', power: 0.55 }, decoys: { name: 'PK-2 誘餌發射器', chaff: 24, ir: 8, reload: 10 } };
     if (t === 'dd_sovremenny' || t === 'dd_udaloy') return { esm: { name: 'Bell Shroud 電子偵測', factor: 1.8 }, jammer: { name: 'Bell Squat 干擾機', power: 0.45 }, decoys: { name: 'PK-10 誘餌發射器', chaff: 20, ir: 10, reload: 8 } };
     if (t === 'kashin' || t === 'kynda' || t === 'petya') return { esm: { name: 'Watch Dog 電子偵測', factor: 1.5 }, decoys: { name: 'PK-16 箔條發射器', chaff: 16, ir: 0, reload: 12 } };
     return {};
@@ -272,6 +327,8 @@ export function shipEw(ship: Pick<Ship, 'type' | 'side' | 'subVariant'>, era: Er
 export function radarEccm(enemySide: boolean, era: Era): number {
   if (era === 'era5') return enemySide ? 0.4 : 0.55; // frequency agility, SPY-1 sidelobe blanking
   if (era === 'era4') return enemySide ? 0.12 : 0.3; // Fan Song / Bar Lock vs SPS-48
+  // 1944–53: CIC operators learned to read through Window; the IJN's and the KPA's sets could not
+  if (era === 'era2' || era === 'era3') return enemySide ? 0.05 : 0.25;
   return 0.05;
 }
 
@@ -322,7 +379,13 @@ export function decoyStrength(kind: DecoyKind, age: number): number {
  * `beam`: target crossing the missile's line of sight (Doppler notch) 0..1; `rear`: missile
  * coming from behind the target 0..1 (flares work best against a tail chase).
  */
-export function seductionChance(kind: DecoyKind, seeker: SeekerProfile, strength: number, opts: { beam?: number; rear?: number; jamming?: boolean } = {}): number {
+export function seductionChance(kind: DecoyKind, seeker: SeekerProfile, strength: number, opts: { beam?: number; rear?: number; jamming?: boolean; rejected?: number } = {}): number {
+  // A seeker that has already rejected decoys holds its target more firmly (range/velocity gates settled)
+  const settled = Math.pow(0.6, opts.rejected ?? 0);
+  return settled * baseSeduction(kind, seeker, strength, opts);
+}
+
+function baseSeduction(kind: DecoyKind, seeker: SeekerProfile, strength: number, opts: { beam?: number; rear?: number; jamming?: boolean }): number {
   const band = decoyBand(kind);
   if (band === 'ir') {
     if (seeker.band !== 'ir') return 0;
@@ -333,8 +396,12 @@ export function seductionChance(kind: DecoyKind, seeker: SeekerProfile, strength
     if (seeker.band !== 'radar') return 0;
     // A home-on-jam seeker follows the jammer, not the chaff
     const jam = opts.jamming ? (seeker.hoj ? 0.5 : 1.2) : 1;
-    const notch = 1 + 0.5 * (opts.beam ?? 0);
-    return Math.min(0.9, DECOY_POWER[kind] * strength * (1 - seeker.eccm) * jam * notch);
+    const beam = opts.beam ?? 0;
+    const notch = 1 + 0.5 * beam;
+    // Pulse-Doppler and TVM seekers gate on closing speed: aircraft chaff stops dead in the air and
+    // drops out of the gate unless the target is beaming (notching) at the same moment
+    const doppler = kind === 'chaff' && seeker.eccm >= 0.45 ? (beam > 0.7 ? 1 : 0.25) : 1;
+    return Math.min(0.9, DECOY_POWER[kind] * strength * (1 - seeker.eccm) * jam * notch * doppler);
   }
   // Acoustic decoys: wake homers are immune
   if (seeker.band !== 'acoustic') return 0;

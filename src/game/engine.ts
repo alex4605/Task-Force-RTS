@@ -5981,10 +5981,17 @@ export class GameEngine {
     return d;
   }
 
+  private shipEwAcc = 0;
+
   private updateEw(dt: number): void {
     this.updateDecoys(dt);
     this.updateJamZones();
-    this.updateShipEw(dt);
+    // Ships' threat scan and decoy / noisemaker decisions at 4 Hz
+    this.shipEwAcc += dt;
+    if (this.shipEwAcc >= 0.25) {
+      this.updateShipEw(this.shipEwAcc);
+      this.shipEwAcc = 0;
+    }
     this.esmTimer -= dt;
     if (this.esmTimer <= 0) {
       this.esmTimer = 1;
@@ -6178,7 +6185,8 @@ export class GameEngine {
       return;
     }
     // Chaff corridor: bombers seeding "Window" while the enemy's radars hold them
-    const bomberish = plane.role === 'level_bomber' || plane.model === 'b52' || plane.model === 'tu22m3' || plane.model === 'tu95';
+    // (In 1944–53 any chaff carried — Window, Rope, the IJN's 欺瞞紙 — went out this way)
+    const bomberish = plane.role === 'level_bomber' || plane.model === 'b52' || plane.model === 'tu22m3' || plane.model === 'tu95' || this.era === 'era2' || this.era === 'era3';
     if (bomberish && (plane.chaffCount ?? 0) > 0 && ((plane.side === 'enemy' ? plane.trackedByPlayer : plane.trackedByEnemy) ?? 0) > 0) {
       const n = Math.min(salvo, plane.chaffCount ?? 0);
       plane.chaffCount = (plane.chaffCount ?? 0) - n;
@@ -6482,7 +6490,7 @@ export class GameEngine {
     const tgtHeading = plane?.heading ?? ship?.heading;
     const beam = plane && tgtHeading !== undefined ? Math.abs(Math.sin(tgtHeading - losT)) : 0;
     const rear = tgtHeading !== undefined ? Math.max(0, Math.cos(tgtHeading - losT)) : 0.5;
-    const cell = ship ? 520 : 260;
+    const cell = ship ? 520 : 180;
     for (const d of this.decoys) {
       if (targetSide ? this.isHostile(d.side, targetSide) : !this.isHostile(proj.side, d.side)) continue;
       if (d.kind === 'noisemaker' || d.kind === 'nixie' || d.kind === 'moss') continue;
@@ -6495,8 +6503,9 @@ export class GameEngine {
       while (off > Math.PI) off -= Math.PI * 2;
       while (off < -Math.PI) off += Math.PI * 2;
       if (Math.abs(off) > seeker.fov) continue;
+      const rejected = proj.seenDecoys?.length ?? 0;
       (proj.seenDecoys ??= []).push(d.id);
-      const p = seductionChance(d.kind, seeker, decoyStrength(d.kind, d.age), { beam, rear, jamming: jammerPower > 0 });
+      const p = seductionChance(d.kind, seeker, decoyStrength(d.kind, d.age), { beam, rear, jamming: jammerPower > 0, rejected });
       if (p > 0 && Math.random() < p) {
         this.seduce(proj, d, plane?.name ?? ship?.name);
         return proj.targetPos ?? targetPos;
@@ -6575,8 +6584,9 @@ export class GameEngine {
       while (off > Math.PI) off -= Math.PI * 2;
       while (off < -Math.PI) off += Math.PI * 2;
       if (Math.abs(off) > seeker.fov) continue;
+      const rejected = proj.seenDecoys?.length ?? 0;
       (proj.seenDecoys ??= []).push(d.id);
-      if (Math.random() < seductionChance(d.kind, seeker, decoyStrength(d.kind, d.age))) {
+      if (Math.random() < seductionChance(d.kind, seeker, decoyStrength(d.kind, d.age), { rejected })) {
         proj.decoyId = d.id;
         proj.isDecoyed = true;
         const owner = this.findShipById(d.ownerId);
@@ -13222,23 +13232,24 @@ export class GameEngine {
     for (const gUnit of this.groundUnits) {
       if (gUnit.isDestroyed || gUnit.cooldown > 0) continue;
 
-      if (gUnit.side !== 'enemy' && (gUnit.type === 'usmc_lav_ad' || gUnit.type === 'us_m163_vads' || gUnit.type === 'us_avenger')) {
+      if (gUnit.side !== 'enemy' && (gUnit.type === 'usmc_lav_ad' || gUnit.type === 'us_avenger')) {
         const targetPlane = this.aircraft.find((a) => this.isHostile(gUnit.side, a.side) && a.state !== 'shot_down' && dist(gUnit.pos, a.pos) <= 2000);
         if (targetPlane) {
           this.fireChaparralSAM(gUnit, targetPlane);
-          gUnit.cooldown = gUnit.type === 'usmc_lav_ad' ? 3.5 : gUnit.type === 'us_avenger' ? 3.0 : 4.0;
+          gUnit.cooldown = gUnit.type === 'usmc_lav_ad' ? 3.5 : 3.0;
         }
-      } else if (gUnit.side !== 'enemy' && (gUnit.type === 'usmc_duster_m42' || gUnit.type === 'us_m16_quad50' || gUnit.type === 'frg_gepard' || gUnit.type === 'usmc_90mm_aa_42' || gUnit.type === 'usmc_40mm_bofors_45')) {
+      } else if (gUnit.side !== 'enemy' && (gUnit.type === 'usmc_duster_m42' || gUnit.type === 'us_m16_quad50' || gUnit.type === 'us_m163_vads' || gUnit.type === 'frg_gepard' || gUnit.type === 'usmc_90mm_aa_42' || gUnit.type === 'usmc_40mm_bofors_45')) {
+        // (M163 VADS is a 20 mm Vulcan gun system: guns only, no missiles)
         // Gun air defence: twin 40mm Bofors (Duster), the quad .50 "meat chopper", radar-laid twin 35mm (Gepard),
         // the towed 90mm M1 and 40mm M1 of the Marine defense / AAA battalions
-        const reach = gUnit.type === 'frg_gepard' || gUnit.type === 'usmc_90mm_aa_42' ? 2000 : gUnit.type === 'usmc_duster_m42' || gUnit.type === 'usmc_40mm_bofors_45' ? 1400 : 1000;
+        const reach = gUnit.type === 'frg_gepard' || gUnit.type === 'usmc_90mm_aa_42' ? 2000 : gUnit.type === 'usmc_duster_m42' || gUnit.type === 'usmc_40mm_bofors_45' || gUnit.type === 'us_m163_vads' ? 1400 : 1000;
         const targetPlane = this.aircraft.find(
           (a) => this.isHostile(gUnit.side, a.side) && a.state !== 'shot_down' && dist(gUnit.pos, a.pos) <= reach && this.aaCanSee(gUnit.pos, a)
         );
         if (targetPlane) {
           gUnit.heading = Math.atan2(targetPlane.pos.y - gUnit.pos.y, targetPlane.pos.x - gUnit.pos.x);
           this.fireFlakBurst(gUnit.pos, targetPlane, gUnit.side);
-          gUnit.cooldown = gUnit.type === 'frg_gepard' ? 0.7 : gUnit.type === 'usmc_90mm_aa_42' ? 1.8 : gUnit.type === 'usmc_duster_m42' || gUnit.type === 'usmc_40mm_bofors_45' ? 1.3 : 0.9;
+          gUnit.cooldown = gUnit.type === 'frg_gepard' || gUnit.type === 'us_m163_vads' ? 0.7 : gUnit.type === 'usmc_90mm_aa_42' ? 1.8 : gUnit.type === 'usmc_duster_m42' || gUnit.type === 'usmc_40mm_bofors_45' ? 1.3 : 0.9;
         }
       } else if (
         gUnit.side === 'enemy' &&
@@ -13367,7 +13378,9 @@ export class GameEngine {
         // 6d. 敵軍 S-300PMU / SA-3 Pechora / SA-2 區域防空飛彈營
         if (inst.side === 'enemy' && (inst.type === 's300_sam_site' || inst.type === 'sa3_sam_site' || inst.type === 'sa2_sam_site')) {
           const isSA3 = inst.type === 'sa3_sam_site';
-          const samRange = isSA3 ? (inst.range || 2900) : 4200;
+          // The S-75 (SA-2) stayed in service through the 1980s: its sites fire SA-2 rounds, not S-300s
+          const isSA2 = inst.type === 'sa2_sam_site';
+          const samRange = isSA3 || isSA2 ? (inst.range || 2900) : 4200;
           const targetPlayerPlane = this.aircraft.find(
             (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= samRange && this.aaCanSee(inst.pos, a)
           );
@@ -13375,13 +13388,16 @@ export class GameEngine {
             if (isSA3) {
               this.fireSA3Missile(inst, targetPlayerPlane, true);
               inst.cooldown = inst.reloadTime || 3.6;
+            } else if (isSA2) {
+              this.fireSA2Missile(inst, targetPlayerPlane, true);
+              inst.cooldown = inst.reloadTime || 4.5;
             } else {
               this.fireS300SAM(inst, targetPlayerPlane);
               inst.cooldown = 6.0;
             }
             continue;
           }
-          if (!isSA3) {
+          if (!isSA3 && !isSA2) {
             const incomingTomahawk = this.projectiles.find(
               (p) => !p.isDead && this.isHostile(inst.side, p.side) && (p.type === 'missile_cruise' || p.type === 'missile_ashm' || p.type === 'missile_ssm' || p.type === 'slbm_trident') && dist(inst.pos, p.pos) <= samRange
             );
@@ -13394,7 +13410,7 @@ export class GameEngine {
         }
 
         // 6e. 敵軍 4K51 邊界 (Rubezh / Redut) 岸置超重型反艦飛彈陣地 (射程 4800m)
-        if (inst.side === 'enemy' && (inst.type === 'coastal_rubezh' || inst.type === 'coastal_gun')) {
+        if (inst.side === 'enemy' && inst.type === 'coastal_rubezh') {
           const targetPlayerShip = nearestTo(
             [...this.playerShips, ...this.alliedShips],
             inst.pos,
@@ -15100,7 +15116,7 @@ export class GameEngine {
       targetEntityType: 'aircraft',
       guidanceType: 'infrared',
       turnRate: 4.8,
-      attackerName: `${unit.name} (MIM-72 榭樹防空飛彈)`,
+      attackerName: `${unit.name} (${unit.type === 'usmc_lav_ad' || unit.type === 'us_avenger' ? 'FIM-92 刺針防空飛彈' : 'MIM-72 榭樹防空飛彈'})`,
     });
     this.addCombatLog({
       category: 'aa',
@@ -16174,6 +16190,8 @@ export class GameEngine {
   }
 
   private fireAAMissile(plane: Aircraft, target: Aircraft | Projectile | { id: string; pos: Vector2D }, aamType: 'aim9' | 'aim7' | 'k13') {
+    // Before the R-23/R-27 generation the VPAF and KPAF fighters carried only the K-13 / R-3S heat-seeker
+    if (plane.side === 'enemy' && this.era !== 'era5') aamType = 'k13';
     const isAntiMissile = !('model' in target);
     const d = dist(plane.pos, target.pos);
 
@@ -16243,7 +16261,7 @@ export class GameEngine {
         ? (aamType === 'aim7'
             ? (plane.side === 'enemy' ? 'R-27ER (AA-10 楊樹) 遠程空空飛彈' : 'AIM-7M 麻雀全天候半主動雷達飛彈')
             : (plane.side === 'enemy' ? 'R-73 (AA-11 射手) 高離軸全向格鬥飛彈' : 'AIM-9L 全向響尾蛇紅外空空飛彈'))
-        : (aamType === 'aim7' ? 'AIM-7 麻雀雷達空空飛彈' : aamType === 'aim9' ? 'AIM-9 響尾蛇紅外飛彈' : 'K-13 (AA-2 環礁) 空空飛彈');
+        : (aamType === 'aim7' ? 'AIM-7 麻雀雷達空空飛彈' : aamType === 'aim9' ? 'AIM-9 響尾蛇紅外飛彈' : 'K-13 / R-3S (AA-2 環礁) 紅外空空飛彈');
 
     this.projectiles.push({
       id: `aam-${Date.now()}-${Math.random()}`,
