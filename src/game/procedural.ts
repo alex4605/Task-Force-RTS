@@ -2,7 +2,7 @@ import { addEnemyPowCamp } from './pow';
 import { applyHistoricalAswFit } from './asw';
 import { addIslandSettlements, naturalizeCoast, naturalizeIslands } from './coastline';
 import { applyMainlandTemplate } from './terrain/theaters';
-import { OUTER_ISLANDS, STAGING_BASE, applyEraPlaceNames } from './placeNames';
+import { OUTER_ISLANDS, STAGING_BASE, applyEraEquipment, applyEraPlaceNames } from './placeNames';
 import {
   Island,
   IslandStronghold,
@@ -1009,11 +1009,11 @@ export function generateOrganicIsland(
     weaponDesc: cp1Desc,
     pos: cp1Pos,
     angle: sh1Angle,
-    health: (era === 'era4' || era === 'era3') ? 4600 : era === 'era2' ? 3800 : 3200,
-    armor: (era === 'era4' || era === 'era3') ? 0.68 : era === 'era2' ? 0.55 : 0.40,
-    range: (era === 'era4' || era === 'era3') ? 780 : era === 'era2' ? 700 : 600,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 4600 : era === 'era2' ? 3800 : 3200,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.68 : era === 'era2' ? 0.55 : 0.40,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 780 : era === 'era2' ? 700 : 600,
     cooldown: 0.8,
-    reloadTime: (era === 'era4' || era === 'era3') ? 1.4 : 1.8,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 1.4 : 1.8,
     side: 'enemy',
     strongholdId: `${id}-sh-1`,
     isASuWOnly: true,
@@ -1046,11 +1046,11 @@ export function generateOrganicIsland(
     weaponDesc: coastalGunDesc,
     pos: { x: cp1Pos.x + 40, y: cp1Pos.y + 30 },
     angle: sh1Angle,
-    health: (era === 'era4' || era === 'era3') ? 4200 : era === 'era2' ? 3500 : 2800,
-    armor: (era === 'era4' || era === 'era3') ? 0.65 : era === 'era2' ? 0.55 : 0.45,
-    range: (era === 'era4' || era === 'era3') ? 1800 : era === 'era2' ? 1600 : 1350,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 4200 : era === 'era2' ? 3500 : 2800,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.65 : era === 'era2' ? 0.55 : 0.45,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 1800 : era === 'era2' ? 1600 : 1350,
     cooldown: 2,
-    reloadTime: (era === 'era4' || era === 'era3') ? 3.4 : era === 'era2' ? 5.6 : 5.0,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 3.4 : era === 'era2' ? 5.6 : 5.0,
     side: 'enemy',
     strongholdId: `${id}-sh-1`,
     isASuWOnly: true,
@@ -1083,11 +1083,11 @@ export function generateOrganicIsland(
     weaponDesc: coastalGun1BDesc,
     pos: { x: cp1Pos.x - 55, y: cp1Pos.y + 20 },
     angle: sh1Angle - 0.4,
-    health: (era === 'era4' || era === 'era3') ? 3400 : era === 'era2' ? 2800 : 2200,
-    armor: (era === 'era4' || era === 'era3') ? 0.60 : era === 'era2' ? 0.50 : 0.40,
-    range: (era === 'era4' || era === 'era3') ? 1500 : era === 'era2' ? 1350 : 1200,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 3400 : era === 'era2' ? 2800 : 2200,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.60 : era === 'era2' ? 0.50 : 0.40,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 1500 : era === 'era2' ? 1350 : 1200,
     cooldown: 1.4,
-    reloadTime: (era === 'era4' || era === 'era3') ? 2.6 : era === 'era2' ? 4.2 : 4.0,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 2.6 : era === 'era2' ? 4.2 : 4.0,
     side: 'enemy',
     strongholdId: `${id}-sh-1`,
     isASuWOnly: true,
@@ -1120,11 +1120,11 @@ export function generateOrganicIsland(
     weaponDesc: flak1Desc,
     pos: { x: cp1Pos.x - 35, y: cp1Pos.y + 45 },
     angle: sh1Angle + 0.5,
-    health: (era === 'era4' || era === 'era3') ? 3200 : era === 'era2' ? 2600 : 2200,
-    armor: (era === 'era4' || era === 'era3') ? 0.55 : era === 'era2' ? 0.45 : 0.38,
-    range: (era === 'era4' || era === 'era3') ? 1200 : era === 'era2' ? 950 : 880,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 3200 : era === 'era2' ? 2600 : 2200,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.55 : era === 'era2' ? 0.45 : 0.38,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 1200 : era === 'era2' ? 950 : 880,
     cooldown: 0.8,
-    reloadTime: (era === 'era4' || era === 'era3') ? 1.0 : era === 'era2' ? 2.0 : 2.4,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 1.0 : era === 'era2' ? 2.0 : 2.4,
     side: 'enemy',
     strongholdId: `${id}-sh-1`,
     isASuWOnly: false,
@@ -1157,11 +1157,11 @@ export function generateOrganicIsland(
     weaponDesc: flak1BDesc,
     pos: { x: cp1Pos.x + 25, y: cp1Pos.y + 55 },
     angle: sh1Angle - 0.3,
-    health: (era === 'era4' || era === 'era3') ? 2800 : era === 'era2' ? 2400 : 1900,
-    armor: (era === 'era4' || era === 'era3') ? 0.50 : era === 'era2' ? 0.42 : 0.35,
-    range: (era === 'era4' || era === 'era3') ? 1000 : era === 'era2' ? 820 : 750,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 2800 : era === 'era2' ? 2400 : 1900,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.50 : era === 'era2' ? 0.42 : 0.35,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 1000 : era === 'era2' ? 820 : 750,
     cooldown: 0.5,
-    reloadTime: (era === 'era4' || era === 'era3') ? 0.8 : era === 'era2' ? 1.6 : 1.8,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.8 : era === 'era2' ? 1.6 : 1.8,
     side: 'enemy',
     strongholdId: `${id}-sh-1`,
     isASuWOnly: false,
@@ -1173,7 +1173,7 @@ export function generateOrganicIsland(
   for (let s = 1; s <= 2; s++) {
     const sqName =
       era === 'era4'
-        ? `越盟前線守備第${s}班 (AK-47 / RPG-7 反戰車組)`
+        ? `北越前線守備第${s}班 (AK-47 / RPG-7 反戰車組)`
         : era === 'era3'
         ? `灘頭守備第${s}班 (地下防空暗堡與重機槍)`
         : era === 'era2'
@@ -1195,11 +1195,11 @@ export function generateOrganicIsland(
       weaponDesc: sqDesc,
       pos: { x: cp1Pos.x + (s === 1 ? 50 : -45), y: cp1Pos.y + (s === 1 ? -40 : -35) },
       angle: sh1Angle,
-      health: (era === 'era4' || era === 'era3') ? 2400 : era === 'era2' ? 1800 : 1400,
-      armor: (era === 'era4' || era === 'era3') ? 0.45 : era === 'era2' ? 0.35 : 0.28,
-      range: (era === 'era4' || era === 'era3') ? 680 : era === 'era2' ? 580 : 500,
+      health: (era === 'era4' || era === 'era3' || era === 'era5') ? 2400 : era === 'era2' ? 1800 : 1400,
+      armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.45 : era === 'era2' ? 0.35 : 0.28,
+      range: (era === 'era4' || era === 'era3' || era === 'era5') ? 680 : era === 'era2' ? 580 : 500,
       cooldown: 0.3,
-      reloadTime: (era === 'era4' || era === 'era3') ? 1.0 : 1.4,
+      reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 1.0 : 1.4,
       side: 'enemy',
       strongholdId: `${id}-sh-1`,
       isASuWOnly: true,
@@ -1235,11 +1235,11 @@ export function generateOrganicIsland(
     weaponDesc: art1Desc,
     pos: { x: cp1Pos.x + 10, y: cp1Pos.y - 65 },
     angle: sh1Angle,
-    health: (era === 'era4' || era === 'era3') ? 3000 : era === 'era2' ? 2500 : 2000,
-    armor: (era === 'era4' || era === 'era3') ? 0.50 : era === 'era2' ? 0.40 : 0.35,
-    range: (era === 'era4' || era === 'era3') ? 1500 : era === 'era2' ? 1250 : 1100,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 3000 : era === 'era2' ? 2500 : 2000,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.50 : era === 'era2' ? 0.40 : 0.35,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 1500 : era === 'era2' ? 1250 : 1100,
     cooldown: 1.6,
-    reloadTime: (era === 'era4' || era === 'era3') ? 3.0 : era === 'era2' ? 3.8 : 4.0,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 3.0 : era === 'era2' ? 3.8 : 4.0,
     side: 'enemy',
     strongholdId: `${id}-sh-1`,
     isASuWOnly: true,
@@ -1291,11 +1291,11 @@ export function generateOrganicIsland(
     weaponDesc: cp2Desc,
     pos: cp2Pos,
     angle: sh2Angle,
-    health: (era === 'era4' || era === 'era3') ? 5200 : era === 'era2' ? 4200 : 3500,
-    armor: (era === 'era4' || era === 'era3') ? 0.70 : era === 'era2' ? 0.55 : 0.42,
-    range: (era === 'era4' || era === 'era3') ? 850 : era === 'era2' ? 750 : 650,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 5200 : era === 'era2' ? 4200 : 3500,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.70 : era === 'era2' ? 0.55 : 0.42,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 850 : era === 'era2' ? 750 : 650,
     cooldown: 0.6,
-    reloadTime: (era === 'era4' || era === 'era3') ? 1.2 : 1.6,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 1.2 : 1.6,
     side: 'enemy',
     strongholdId: `${id}-sh-2`,
     isASuWOnly: true,
@@ -1373,11 +1373,11 @@ export function generateOrganicIsland(
     weaponDesc: tankBnDesc,
     pos: { x: cp2Pos.x - 55, y: cp2Pos.y - 20 },
     angle: sh2Angle,
-    health: (era === 'era4' || era === 'era3') ? 4400 : era === 'era2' ? 3600 : 2800,
-    armor: (era === 'era4' || era === 'era3') ? 0.68 : era === 'era2' ? 0.55 : 0.42,
-    range: (era === 'era4' || era === 'era3') ? 1200 : era === 'era2' ? 1050 : 900,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 4400 : era === 'era2' ? 3600 : 2800,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.68 : era === 'era2' ? 0.55 : 0.42,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 1200 : era === 'era2' ? 1050 : 900,
     cooldown: 1.2,
-    reloadTime: (era === 'era4' || era === 'era3') ? 2.5 : era === 'era2' ? 3.2 : 3.0,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 2.5 : era === 'era2' ? 3.2 : 3.0,
     side: 'enemy',
     strongholdId: `${id}-sh-2`,
     isASuWOnly: true,
@@ -1410,11 +1410,11 @@ export function generateOrganicIsland(
     weaponDesc: flak2Desc,
     pos: { x: cp2Pos.x + 60, y: cp2Pos.y + 40 },
     angle: sh2Angle + 1.2,
-    health: (era === 'era4' || era === 'era3') ? 3600 : era === 'era2' ? 2800 : 2200,
-    armor: (era === 'era4' || era === 'era3') ? 0.58 : era === 'era2' ? 0.48 : 0.38,
-    range: (era === 'era4' || era === 'era3') ? 1350 : era === 'era2' ? 950 : 880,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 3600 : era === 'era2' ? 2800 : 2200,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.58 : era === 'era2' ? 0.48 : 0.38,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 1350 : era === 'era2' ? 950 : 880,
     cooldown: 0.7,
-    reloadTime: (era === 'era4' || era === 'era3') ? 1.4 : era === 'era2' ? 2.0 : 2.2,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 1.4 : era === 'era2' ? 2.0 : 2.2,
     side: 'enemy',
     strongholdId: `${id}-sh-2`,
     isASuWOnly: false,
@@ -1447,11 +1447,11 @@ export function generateOrganicIsland(
     weaponDesc: coastalGun2Desc,
     pos: { x: cp2Pos.x - 70, y: cp2Pos.y + 35 },
     angle: sh2Angle + 0.8,
-    health: (era === 'era4' || era === 'era3') ? 4400 : era === 'era2' ? 3600 : 2800,
-    armor: (era === 'era4' || era === 'era3') ? 0.68 : era === 'era2' ? 0.55 : 0.45,
-    range: (era === 'era4' || era === 'era3') ? 1900 : era === 'era2' ? 1650 : 1400,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 4400 : era === 'era2' ? 3600 : 2800,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.68 : era === 'era2' ? 0.55 : 0.45,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 1900 : era === 'era2' ? 1650 : 1400,
     cooldown: 2.2,
-    reloadTime: (era === 'era4' || era === 'era3') ? 3.8 : era === 'era2' ? 6.0 : 5.5,
+    reloadTime: (era === 'era4' || era === 'era3' || era === 'era5') ? 3.8 : era === 'era2' ? 6.0 : 5.5,
     side: 'enemy',
     strongholdId: `${id}-sh-2`,
     isASuWOnly: true,
@@ -1484,9 +1484,9 @@ export function generateOrganicIsland(
     weaponDesc: radarDesc,
     pos: { x: cp2Pos.x - 30, y: cp2Pos.y + 55 },
     angle: sh2Angle,
-    health: (era === 'era4' || era === 'era3') ? 2800 : era === 'era2' ? 2200 : 1800,
-    armor: (era === 'era4' || era === 'era3') ? 0.45 : era === 'era2' ? 0.35 : 0.28,
-    range: (era === 'era4' || era === 'era3') ? 3800 : era === 'era2' ? 2400 : 2000,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 2800 : era === 'era2' ? 2200 : 1800,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.45 : era === 'era2' ? 0.35 : 0.28,
+    range: (era === 'era4' || era === 'era3' || era === 'era5') ? 3800 : era === 'era2' ? 2400 : 2000,
     side: 'enemy',
     strongholdId: `${id}-sh-2`,
   });
@@ -1517,8 +1517,8 @@ export function generateOrganicIsland(
     weaponDesc: depotDesc,
     pos: { x: cp2Pos.x + 30, y: cp2Pos.y + 60 },
     angle: sh2Angle,
-    health: (era === 'era4' || era === 'era3') ? 3400 : era === 'era2' ? 2600 : 2000,
-    armor: (era === 'era4' || era === 'era3') ? 0.50 : era === 'era2' ? 0.40 : 0.30,
+    health: (era === 'era4' || era === 'era3' || era === 'era5') ? 3400 : era === 'era2' ? 2600 : 2000,
+    armor: (era === 'era4' || era === 'era3' || era === 'era5') ? 0.50 : era === 'era2' ? 0.40 : 0.30,
     side: 'enemy',
     strongholdId: `${id}-sh-2`,
   });
@@ -3688,41 +3688,6 @@ export function createOscarSSGN(id: string, name: string, pos: Vector2D): Ship {
 // ERA 1–5 OPFOR SUBMARINE WOLFPACK CONSTRUCTORS
 // ═══════════════════════════════════════════════════════════════════════
 
-// Era 1 & Era 2: Kriegsmarine Monsun Gruppe Type VIIC / IXD2 U-Boat
-export function createMonsunUBoatSS(id: string, name: string, pos: Vector2D, era: Era): Ship {
-  const heading = (Math.PI * 3) / 4;
-  return createShip({
-    id,
-    name,
-    codeName: era === 'era1' ? 'Monsun Gruppe Type VIIC U-Boat (德國海軍狼群 U型潛艇)' : 'Monsun Gruppe Type IXD2 U-Boat (遠洋重型 U型潛艇)',
-    type: 'submarine',
-    subVariant: 'uboat',
-    side: 'enemy',
-    era,
-    pos: { ...pos },
-    heading,
-    speed: 7.5,
-    maxSpeed: 7, // Type IXD2 Monsun: 6.9 kt submerged on electric motors
-    length: era === 'era1' ? 66 : 78,
-    width: 9,
-    health: era === 'era1' ? 760 : 980,
-    maxHealth: era === 'era1' ? 760 : 980,
-    armor: 0.14,
-    detectionRange: 1900,
-    sonarRange: 900,
-    isSubmerged: true,
-    hasTorpedoes: true,
-    torpedoCooldown: 4,
-    torpedoReloadTime: era === 'era1' ? 18 : 15,
-    turrets: [],
-    detailedArmaments: [
-      { name: '533mm 艦艏/艦艉魚雷管 (5具)', count: 'G7a 蒸氣 / G7e 電動聲自導魚雷', type: 'torpedo', desc: '季風狼群遠洋伏擊魚雷齊射' },
-      { name: 'GHG 群聽水聽器陣列', count: '被動聲學偵測', type: 'asw', desc: '水下隱蔽接敵，開火後才暫時暴露位置' },
-    ],
-    flakCooldown: 0,
-    flakRange: 0,
-  });
-}
 
 // Era 1 & Era 2: IJN 伊號巡潛大型潛艦 (I-19 / I-168 / I-58)
 export function createIjnIBoatSS(id: string, name: string, pos: Vector2D, era: Era): Ship {
@@ -4086,13 +4051,13 @@ export function createSverdlovCL(id: string, name: string, pos: Vector2D): Ship 
   });
 }
 
-// Era 3 SAG Gun Destroyer: Project 56 Kotlin (56型科特林級艦隊驅逐艦)
+// Era 3 SAG Gun Destroyer: Project 30bis Skory (the Pacific Fleet's destroyers of 1950-53)
 export function createKotlinDD(id: string, name: string, pos: Vector2D): Ship {
   const heading = Math.PI * 0.45;
   return createShip({
     id,
     name,
-    codeName: 'Fleet Destroyer (56型科特林級火砲驅逐艦)',
+    codeName: 'Fleet Destroyer (30bis型史可里級火砲驅逐艦)',
     type: 'destroyer',
     side: 'enemy',
     era: 'era3',
@@ -5141,6 +5106,7 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
       : (Math.PI * 3) / 4; addEnemyTaskForce(era, enemyShips, enemyCenter, enemyHeading);
 
   applyEraPlaceNames(era, islands);
+  applyEraEquipment(era, islands);
 
   const briefingName =
     era === 'era5'
@@ -7376,7 +7342,7 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-front-sam-1', 'us_army_chaparral_sam', 'US Army MIM-72 Chaparral (榭樹野戰防空飛彈排)', 'player', 'era4', { x: 6650, y: 7550 }),
+        ...createGroundUnit('us-army-front-sam-1', 'usmc_duster_m42', 'US Army 4th Bn 60th ADA M42 Duster 40mm 防空排', 'player', 'era4', { x: 6650, y: 7550 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
@@ -7395,12 +7361,12 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
       createGroundUnit('opfor-cont-patrol-2', 'opfor_vietnam_sapper', 'PAVN Border Sapper Squad (北越前線工兵滲透排)', 'enemy', 'era4', { x: 7900, y: 6300 }),
       createGroundUnit('opfor-cont-tank-1', 'opfor_t54_tank', 'PAVN 203rd Armored Regt T-54 Plt (T-54主力戰車排)', 'enemy', 'era4', { x: 9100, y: 4700 }),
       createGroundUnit('opfor-cont-pt76-1', 'opfor_pt76_amphib', 'PAVN 198th Amphibious Plt (PT-76兩棲戰車排)', 'enemy', 'era4', { x: 8900, y: 5400 }),
-      createGroundUnit('opfor-cont-2s3-1', 'opfor_2s3', '蘇援 PAVN 2S3 金合歡 152mm 自走榴彈砲連 (反砲兵)', 'enemy', 'era4', { x: 9350, y: 4800 }),
+      createGroundUnit('opfor-cont-2s3-1', 'opfor_m46_130mm', 'PAVN 164th Artillery M-46 130mm 加農砲連 (反砲兵)', 'enemy', 'era4', { x: 9350, y: 4800 }),
       createGroundUnit('opfor-cont-mortar-1', 'opfor_mortar_platoon', 'PAVN 120mm Heavy Mortar Btry (北越120mm重迫擊砲連)', 'enemy', 'era4', { x: 9300, y: 4900 }),
       createGroundUnit('opfor-cont-flak-1', 'opfor_zsu23_shilka', 'PAVN 367th AAA Regt Shilka (ZSU-23-4 雷達防砲連)', 'enemy', 'era4', { x: 9400, y: 4500 }),
       createGroundUnit('opfor-cont-zsu57-1', 'opfor_zsu57_2', 'PAVN ZSU-57-2「雙管57」履帶重型自走防空連', 'enemy', 'era4', { x: 9050, y: 4950 }),
-      createGroundUnit('opfor-cont-sa6-1', 'opfor_sa6_kub', '蘇援 2K12 立方體 (SA-6 Gainful) 履帶防空飛彈連', 'enemy', 'era4', { x: 9700, y: 4300 }),
-      createGroundUnit('opfor-cont-sa9-1', 'opfor_sa9_strela1', '華約 9K31 箭-1 (SA-9 Gaskin) 輪型野戰紅外防空車排', 'enemy', 'era4', { x: 8750, y: 5350 })
+      createGroundUnit('opfor-cont-sa6-1', 'opfor_sa7_strela', 'PAVN 9K32 箭-2 (SA-7) 肩射防空排', 'enemy', 'era4', { x: 9700, y: 4300 }),
+      createGroundUnit('opfor-cont-sa9-1', 'opfor_s60_flak', 'PAVN 367th AAA Div S-60 57mm 雷達防空砲連', 'enemy', 'era4', { x: 8750, y: 5350 })
     );
   } else {
     // 時代五 (1973-1991) 歐戰與現代化冷戰主戰場:
@@ -7412,7 +7378,7 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
       createGroundUnit('us-m1-1', 'us_m1ip_abrams', 'US Army 3rd Armored Div M1IP Plt (M1IP 艾布蘭主戰戰車排)', 'player', 'era5', { x: 2040, y: 12450 }),
       createGroundUnit('us-m60-1', 'us_m60a1_rise', 'USMC 1st Tank Bn M60A1 RISE (反應裝甲主力戰車排)', 'player', 'era5', { x: 2020, y: 12460 }),
       createGroundUnit('us-m198-1', 'us_m198_155', 'US Army 155mm M198 Btry (155mm雙模榴彈砲連)', 'player', 'era5', { x: 2060, y: 12470 }),
-      createGroundUnit('us-lavad-1', 'usmc_lav_ad', 'USMC LAV-AD Air Defense Plt (刺針/加特林防空車)', 'player', 'era5', { x: 2080, y: 12430 }),
+      createGroundUnit('us-lavad-1', 'us_stinger_team', 'USMC 2nd LAAD Bn Stinger Team (刺針低空防空小組)', 'player', 'era5', { x: 2080, y: 12430 }),
       createGroundUnit('us-m163-1', 'us_m163_vads', 'US Army M163 VADS Plt (20mm火神自走防空砲)', 'player', 'era5', { x: 2090, y: 12420 })
     );
 
@@ -7439,7 +7405,7 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-front-ad-1', 'usmc_lav_ad', 'USMC LAV-AD (刺針防空野戰伴隨車排)', 'player', 'era5', { x: 6650, y: 7550 }),
+        ...createGroundUnit('us-army-front-ad-1', 'us_army_chaparral_sam', 'US Army 59th ADA MIM-72 Chaparral (榭樹野戰防空飛彈排)', 'player', 'era5', { x: 6650, y: 7550 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
@@ -7520,7 +7486,7 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
     const isl = islands[i];
     if (isl.id === 'island-mainland') continue; // 大陸已專門配置戰線部隊
     const center = isl.center;
-    const islShortName = isl.name.split(' ')[0] || `島嶼#${i}`;
+    const islShortName = shortPlace(isl.name).replace(/ (Atoll Complex|Barrier Atoll|Caldera Fortress Lagoon|Strategic Coral Atoll|Outer Bastion|Radar Outpost|Bastion|Island)$/, '') || `島嶼#${i}`;
 
     // 每個要塞島嶼部署守備步兵部隊
     const infType: GroundUnitType =
@@ -7599,12 +7565,12 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
         )
       );
 
-      // 迫擊砲排 / S-60 / ZSU-23-4 / ZSU-57-2 / SA-6 / SA-9 / 通古斯卡 / 黃蜂 / 道爾 / BTR-ZD
+      // 迫擊砲排 / S-60 / ZSU-23-4 / ZSU-57-2 / 通古斯卡 / 黃蜂 / 道爾 / BTR-ZD
       const mortarType: GroundUnitType =
         era === 'era5'
           ? (i % 4 === 0 ? 'opfor_sa15_tor' : i % 4 === 1 ? 'opfor_sa8_osa' : i % 4 === 2 ? 'opfor_tunguska' : 'opfor_btr_zd')
           : era === 'era4'
-          ? (i % 3 === 0 ? 'opfor_sa6_kub' : i % 3 === 1 ? 'opfor_zsu57_2' : 'opfor_zsu23_shilka')
+          ? (i % 3 === 0 ? 'opfor_s60_flak' : i % 3 === 1 ? 'opfor_zsu57_2' : 'opfor_zsu23_shilka')
           : era === 'era3'
           ? 'opfor_s60_flak'
           : 'opfor_mortar_platoon';
@@ -7617,8 +7583,6 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
           ? 'BTR-ZD 雙管23mm空降防空自走砲連'
           : mortarType === 'opfor_tunguska'
           ? '2K22 通古斯卡彈砲合一防空連'
-          : mortarType === 'opfor_sa6_kub'
-          ? '2K12 立方體 (SA-6 Gainful) 履帶防空飛彈連'
           : mortarType === 'opfor_zsu57_2'
           ? 'ZSU-57-2「雙管57」履帶重型自走防空砲連'
           : mortarType === 'opfor_zsu23_shilka'
@@ -7642,7 +7606,7 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
           era === 'era5'
             ? (i % 3 === 0 ? 'opfor_2s19' : i % 3 === 1 ? 'opfor_sa11_buk' : 'opfor_2s1')
             : era === 'era4'
-            ? (i % 3 === 0 ? 'opfor_2s3' : i % 3 === 1 ? 'opfor_sa9_strela1' : 'opfor_zu23_aa')
+            ? (i % 3 === 0 ? 'opfor_m46_130mm' : i % 3 === 1 ? 'opfor_sa7_strela' : 'opfor_zu23_aa')
             : era === 'era3'
             ? (i % 2 === 0 ? 'opfor_su100' : 'opfor_ks19_heavy')
             : era === 'era2'
@@ -7655,10 +7619,10 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
             ? '9K37 山毛櫸 (SA-11 Gadfly) 野戰防空飛彈連'
             : artType === 'opfor_2s1'
             ? '2S1 石竹 122mm自走榴彈砲連'
-            : artType === 'opfor_2s3'
-            ? '2S3 金合歡 152mm自走榴彈砲連'
-            : artType === 'opfor_sa9_strela1'
-            ? '9K31 箭-1 (SA-9 Gaskin) 輪型野戰防空連'
+            : artType === 'opfor_m46_130mm'
+            ? 'M-46 130mm 加農砲連'
+            : artType === 'opfor_sa7_strela'
+            ? '9K32 箭-2 (SA-7) 肩射防空排'
             : artType === 'opfor_zu23_aa'
             ? 'ZU-23-2 雙管防空砲兵連'
             : artType === 'opfor_su100'
@@ -7666,7 +7630,7 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
             : artType === 'opfor_ks19_heavy'
             ? 'KS-19 100mm重高射砲連'
             : artType === 'opfor_hummel'
-            ? 'Hummel 150mm重自走砲連 (反砲兵支援)'
+            ? '四式十五糎自走砲 ホロ (反砲兵支援)'
             : '機動野戰重砲隊';
         groundUnits.push(
           createGroundUnit(

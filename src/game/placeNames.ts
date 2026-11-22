@@ -1,4 +1,4 @@
-import { Era, Island, Vector2D } from '../types/game';
+import { Era, InstallationType, Island, Vector2D } from '../types/game';
 
 /**
  * Place names by theatre. Eras 3-5 share one continental layout (enemy in the north-east, the
@@ -212,4 +212,152 @@ export function placeNameByLatitude(era: Era, kind: 'station' | 'hospital' | 'wh
     }
   }
   return undefined;
+}
+
+// ── Era equipment ────────────────────────────────────────────────────────────
+
+/**
+ * Equipment corrections per era for installations the shared generators build: a 1950 Korean
+ * coast has no SAMs or P-12 radars, a 1983 Soviet island garrison no Type 88 AA guns and Type 38
+ * rifles, and a Vietnam base no 1944 SCR-584 fire control. Each entry matches installation ids;
+ * `name` may rewrite the old name, `type` turns an anachronistic SAM site into a gun battery.
+ */
+interface EquipmentFix {
+  id: RegExp;
+  name?: string | ((old: string) => string);
+  desc?: string;
+  type?: InstallationType;
+  range?: number;
+  reloadTime?: number;
+}
+
+const keepLabel = (label: string) => (old: string) => {
+  const tag = old.match(/\[[^\]]+\]$/)?.[0];
+  return tag ? `${label} ${tag}` : label;
+};
+
+const ISLAND = '^island-[a-z]+-';
+const COLD_WAR_SAM: InstallationType[] = ['sa2_sam_site', 'sa3_sam_site', 's300_sam_site'];
+
+const EQUIPMENT: Partial<Record<Era, EquipmentFix[]>> = {
+  era1: [
+    // 1942: 90mm M1 guns laid by SCR-268; no SCR-584 or VT fuzes until 1943-44
+    { id: /^friendly-base-flak-1$/, name: '友軍重型高射砲第1連 (90mm M1 高射砲)', desc: 'SCR-268 雷達射控 90mm 高射砲 · 定時引信彈幕' },
+  ],
+  era3: [
+    { id: new RegExp(`${ISLAND}sh1-artillery$`), name: '野戰重型砲兵陣地 (M-30 122mm 榴彈砲)', desc: 'M-30 122mm 牽引榴彈砲 · 壓制登陸舟艇與灘頭' },
+    { id: new RegExp(`${ISLAND}radar$`), name: 'P-3 (RUS-2) 早期警戒雷達站', desc: '米波早期警戒雷達 · 探測來襲機群並引導 MiG-15 攔截' },
+    { id: new RegExp(`${ISLAND}sh1-coastal-gun$`), name: '岸防砲台 (B-13 130mm 岸防加農砲)', desc: 'B-13 130mm 岸防加農砲 · 封鎖近海航道' },
+    { id: new RegExp(`${ISLAND}sh1-coastal-gun-2$`), name: '側翼岸防砲台 (BS-3 100mm 野戰加農砲)', desc: 'BS-3 100mm 加農砲 · 隱蔽射口壓制近岸登陸艇' },
+    { id: new RegExp(`${ISLAND}sh2-coastal-gun$`), name: '島心高地岸防重砲 (ML-20 152mm 加農榴彈砲)', desc: 'ML-20 152mm 加農榴彈砲 · 制高點長程壓制' },
+    { id: new RegExp(`${ISLAND}sh3-coastal-gun$`), name: '港灣入口岸防砲台 (B-13 130mm 岸防加農砲)', desc: 'B-13 130mm 岸防加農砲 · 封鎖深水航道' },
+    { id: new RegExp(`${ISLAND}sh1-flak$`), name: '高射砲連 (KS-12 85mm 高射砲)', desc: 'KS-12 85mm 高射砲 · PUAZO-6 射控指揮儀' },
+    { id: new RegExp(`${ISLAND}sh3-flak$`), name: '港灣防空砲連 (61-K 37mm 自動高射砲)', desc: '61-K 37mm 自動高射砲 · 攔截低空攻擊機' },
+    // Soviet 57mm S-60 and SON-9 only reached service as the war ended: 37mm 61-K and SON-4 instead
+    {
+      id: /^(enemy-cont-s60-\d|opfor-upper-s60-flak|cont-north-flak-s60|enemy-cont-s60-3|enemy-shilka-2)$/,
+      name: keepLabel('61-K 37mm 自動高射砲連'),
+      desc: '61-K 37mm 自動高射砲 · 攔截低空攻擊機與俯衝轟炸機',
+    },
+    { id: /KS-19|ks19/, name: (o) => o.replace('SON-9', 'SON-4'), desc: 'KS-19 100mm 重型高射砲 · SON-4 雷達射控' },
+    { id: /^opfor-p12-radar$|^opfor-p14-radar$|^cont-north-deep-p14$|^cont-south-deep-radar$|^opfor-prv11-height-finder$/, name: keepLabel('P-3 (RUS-2) 米波早期警戒雷達站'), desc: '米波早期警戒雷達 · 為 MiG-15 攔截與高射砲提供空情' },
+    { id: /^cont-north-coast-radar$/, name: 'P-3 (RUS-2) 北方海防搜索雷達警戒哨 [North Shore Radar]' },
+    { id: /^player-long-tom-175$/, name: '美陸軍 M115 203mm (8吋) 重榴彈砲連 [Heavy Battery]', desc: '8吋重榴彈砲 · 壓制敵方後方砲兵陣地與暗堡群' },
+    { id: /^opfor-rail-freight-yard$/, desc: '北部軍事鐵道幹線終點樞紐 · 吊運 T-34/85 戰車與蘇製軍火彈藥' },
+    { id: /^(opfor-ne-coastal-casemate|enemy-sontra-gun)$/, desc: '懸崖花崗岩半地下重型岸防砲 · 封鎖外海深水航道' },
+    { id: /^opfor-p12-radar$/, desc: '沿海米波預警雷達 · 監控低空海面空情' },
+    { id: /^player-sam-hawk-2$/, name: '美陸軍 90mm M2 高射砲連 [AAA Battery Bravo]', desc: 'SCR-584 雷達射控 90mm 高射砲 · 攔截來襲敵機', type: 'flak_battery', range: 1400, reloadTime: 1.6 },
+    { id: /^cont-south-hawk-site$/, desc: '雙管40mm機動高射砲 · 掩護南部走廊', type: 'flak_battery', range: 1100, reloadTime: 1.0 },
+    { id: /^cont-east-underground-air-hangar$/, desc: '天然花崗岩洞穴防空機庫 · 敵方後備 MiG-15 與整備槽' },
+    { id: /^cont-east-missile-depot$/, desc: '鑿入花崗岩山體的地下重彈藥儲備庫' },
+  ],
+  era4: [
+    { id: new RegExp(`${ISLAND}sh3-flak$`), name: '港口防空砲哨 (61-K 37mm 高射砲)', desc: '61-K 37mm 自動高射砲 · 攔截低空攻擊機' },
+    { id: /^cont-north-coast-radar$/, name: 'P-15 (Flat Face) 北方海防低空搜索雷達哨 [North Shore Radar]' },
+    { id: /^enemy-cont-radar$/, desc: '大型全方位預警雷達天線 · 引導 MiG-21 攔截' },
+    { id: /^cont-south-shore-radar$/, name: 'AN/TPS-43 南部沿海對空對海警戒雷達站 [South Shore Radar Picket]' },
+    { id: /^player-coastal-radar-picket$/, name: '美海軍陸戰隊 AN/TPS-22 沿海警戒雷達哨 [Coastal Radar Picket]' },
+    { id: /^(player-cont-flak-1|friendly-base-flak-1)$/, desc: '雙管40mm自走防空砲 · 掩護基地與車隊' },
+    { id: /^(player-cont-flak-2|friendly-base-flak-2)$/, desc: '四聯裝 .50 重機槍 · 低空密集彈幕' },
+    { id: /^friendly-base-heavy-240-1$/, name: '友軍 M107 175mm 自走加農砲連', desc: 'M107 175mm 長射程加農砲 · 跨海峽遠程砲擊' },
+    { id: /^friendly-base-coastal-1$/, name: '友軍 M110 203mm 自走榴彈砲連', desc: '8吋自走榴彈砲 · 封鎖港灣水道與反登陸火力' },
+    { id: /^friendly-base-artillery-1$/, name: '友軍野戰砲兵連 (M114 155mm / M101 105mm 榴彈砲)' },
+    { id: /^friendly-base-repair-dock-1$/, name: '友軍海軍第1浮動修船塢 (AFDM 中型浮塢)' },
+  ],
+  era5: [
+    // Island garrisons of the Soviet Naval Infantry
+    { id: new RegExp(`${ISLAND}sh1-cp$`), name: (o) => o.replace('灘頭木石野戰指揮掩體', '海岸加固防爆指揮所'), desc: '鋼筋混凝土覆土指揮所 · 有線電與無線電通信樞紐' },
+    { id: new RegExp(`${ISLAND}sh2-cp$`), name: (o) => o.replace('高地守備指揮部', '高地加固指揮部'), desc: '加固混凝土指揮所 · 島嶼守備部隊指揮中樞' },
+    { id: new RegExp(`${ISLAND}sh3-cp$`), desc: '加固海防指揮所 · 守備港口防禦' },
+    { id: new RegExp(`${ISLAND}sh1-coastal-gun$`), name: '岸防砲台 (SM-4-1 130mm 岸防加農砲)', desc: 'SM-4-1 130mm 雙聯長管岸防砲 · 雷達與光學雙模射控' },
+    { id: new RegExp(`${ISLAND}sh1-coastal-gun-2$`), name: '側翼岸防砲台 (MT-12 100mm 加農砲)', desc: 'MT-12 100mm 滑膛加農砲 · 隱蔽射口壓制近岸登陸艇' },
+    { id: new RegExp(`${ISLAND}sh2-coastal-gun$`), name: '高地岸防砲台 (M-46 130mm 加農砲)', desc: 'M-46 130mm 長管加農砲 · 制高點封鎖水道' },
+    { id: new RegExp(`${ISLAND}sh3-coastal-gun$`), name: '港口入口岸防砲台 (M-46 130mm 加農砲)', desc: 'M-46 130mm 加農砲 · 防衛港口航道入口' },
+    { id: new RegExp(`${ISLAND}sh1-flak$`), name: '防空砲排 (ZSU-23-4 石勒喀河)', desc: 'RPK-2 雷達射控四管 23mm 自走防空砲 · 攔截低空攻擊機與直升機' },
+    { id: new RegExp(`${ISLAND}sh1-flak-2$`), name: '防空機砲排 (ZU-23-2 雙聯 23mm)', desc: '雙聯 23mm 機砲 · 低空密集彈幕' },
+    { id: new RegExp(`${ISLAND}sh2-flak$`), name: '高地防空砲連 (ZSU-23-4 石勒喀河)', desc: 'RPK-2 雷達射控四管 23mm 自走防空砲' },
+    { id: new RegExp(`${ISLAND}sh3-flak$`), name: '港口防空砲排 (ZU-23-2 雙聯 23mm)', desc: '雙聯 23mm 機砲 · 防衛港口上空' },
+    { id: new RegExp(`${ISLAND}sh1-squad-\\d$`), name: (o) => o.replace(/\(.*\)$/, '(AK-74 / PKM / RPG-7)'), desc: 'AK-74 突擊步槍、PKM 機槍與 RPG-7 火箭筒 · 混凝土掩體' },
+    { id: new RegExp(`${ISLAND}sh1-artillery$`), desc: 'D-30 122mm 牽引榴彈砲 · 360° 環射壓制登陸舟艇' },
+    { id: new RegExp(`${ISLAND}sh2-tank-bn$`), desc: '125mm 滑膛砲與 BMP-2 30mm 機砲掩體 · 反擊登陸部隊' },
+    { id: new RegExp(`${ISLAND}radar$`), name: 'P-15M (Squat Eye) 低空搜索雷達站', desc: '低空與海面目標搜索 · 為防空與岸防部隊提供目標指示' },
+    { id: new RegExp(`${ISLAND}depot$`), name: '加固掩蔽油彈庫 (物資儲備)', desc: '加固掩蔽所 · 油料與彈藥儲備' },
+    // Soviet front: 1980s air defence and artillery
+    { id: /^enemy-cont-ks19-1$/, name: '2K22 通古斯卡彈砲合一防空連 (第1連)', desc: '雙聯 30mm 機砲 + 9M311 防空飛彈 · 雷達射控' },
+    { id: /^enemy-cont-ks19-2$/, name: '2K22 通古斯卡彈砲合一防空連 (要塞核心)', desc: '雙聯 30mm 機砲 + 9M311 防空飛彈 · 雷達射控' },
+    { id: /^(enemy-cont-ks19-3|enemy-cont-s60-\d|cont-north-flak-s60)$/, name: keepLabel('ZSU-23-4 石勒喀河 自走防空砲連'), desc: 'RPK-2 雷達射控四管 23mm · 攔截低空攻擊機與直升機' },
+    { id: /^enemy-cont-arty-1$/, name: '2S3 阿卡齊亞 152mm 自走榴彈砲連 (前沿砲兵陣地)', desc: '152mm 自走榴彈砲 · 壓制北約進攻矛頭' },
+    { id: /^enemy-cont-arty-2$/, name: '2A65 姆斯塔-B 152mm 牽引榴彈砲連 (縱深火網)', desc: '152mm 牽引榴彈砲 · 覆蓋戰線中央交通要道' },
+    { id: /^opfor-ml20-heavy-arty$/, name: '2A36 風信子-B 152mm 加農砲 [152mm Heavy Battery]', desc: '152mm 長管加農砲 · 極遠射程反制登陸灘頭' },
+    { id: /^enemy-cont-radar$/, name: 'P-37 (Bar Lock) 遠程對空預警雷達站', desc: '大型全方位預警雷達 · 引導 MiG-29 與 Su-27 攔截' },
+    { id: /^enemy-afb-continental$/, desc: '混凝土跑道與加固機堡 · MiG-29、Su-24 與 Su-25 前進作戰基地' },
+    { id: /^cont-north-coast-radar$/, name: 'P-15M (Squat Eye) 北方海防低空搜索雷達哨 [North Shore Radar]' },
+    { id: /^cont-south-shore-radar$/, name: 'AN/TPS-63 南部沿海對海警戒雷達站 [South Shore Radar Picket]' },
+    { id: /^player-coastal-radar-picket$/, name: '美海軍陸戰隊 AN/TPS-63 沿海警戒雷達哨 [Coastal Radar Picket]' },
+    { id: /^player-long-tom-175$/, name: '美陸軍 M270 多管火箭系統連 [MLRS Battery]', desc: '227mm 多管火箭 · 壓制敵方後方砲兵陣地與集結區' },
+    { id: /^player-sam-hawk-2$/, desc: '前進防空連 · 攔截低空突破之敵機' },
+    { id: /^opfor-rail-freight-yard$/, desc: '軍事鐵道幹線終點樞紐 · 吊運 T-80 戰車與軍火彈藥' },
+    { id: /^(opfor-ne-coastal-casemate|enemy-sontra-gun)$/, desc: '海岸半地下重型岸防砲 · 封鎖外海深水航道' },
+    { id: /^opfor-p12-radar$/, desc: '沿海米波預警雷達 · 監控低空海面空情' },
+    { id: /^town-anbyon$/, desc: '平原交通市鎮 · 紅磚街區 · 提供城鎮戰掩體' },
+    { id: /^neutral-se-rice-hamlet$/, desc: '易北河沼澤低地農莊 · 農業平民區 · 誤擊扣政治值' },
+    { id: /^neutral-east-delta-port$/, desc: '內德邊界農村 · 平民居住聚落' },
+    { id: /^cont-buddhist-pagoda$/, desc: '石砌教堂與修道院 · 受保護文化設施 · 嚴禁砲擊 · 誤擊扣政治值' },
+    { id: /^neutral-nw-mountain-village$/, desc: '丘陵田園聚落 · 屬中立平民安全保護區' },
+    { id: /^opfor-nw-acoustic-post$/, desc: '沿海高處雷達監控陣列 · 監控超低空突防戰機' },
+    { id: /^cont-east-trail-depot$/, desc: '森林掩蔽卡車整備場 · 東線後勤補給樞紐' },
+    { id: /^(player-cont-flak-1|friendly-base-flak-1)$/, desc: '雷達射控速射防空砲 · 攔截低空攻擊機與直升機' },
+    { id: /^(player-cont-flak-[23]|friendly-base-flak-2)$/, desc: '機動速射防空砲 · 伴隨掩護指揮所與車隊' },
+    { id: /^player-cont-arty-1$/, desc: '155mm 自走榴彈砲 · 壓制敵軍裝甲突擊' },
+    { id: /^player-cont-arty-2$/, desc: '203mm 自走榴彈砲 · 縱深打擊與反砲兵' },
+    { id: /^friendly-base-heavy-240-1$/, name: '友軍 M110A2 203mm 自走榴彈砲連', desc: '8吋自走榴彈砲 · 跨海峽遠程砲擊' },
+    { id: /^friendly-base-coastal-1$/, name: '友軍 FH70 155mm 牽引榴彈砲連', desc: '英德合作 155mm 榴彈砲 · 封鎖港灣水道與反登陸火力' },
+    { id: /^friendly-base-cp$/, name: '美國陸戰隊第4陸戰遠征旅 前進指揮所 (4th MAB CP)' },
+    { id: /^friendly-base-repair-dock-1$/, name: '友軍海軍第1浮動修船塢 (USS Los Alamos AFDB-7)' },
+  ],
+};
+
+/** Applies the era's equipment corrections; anachronistic SAM sites of 1950 become gun batteries. */
+export function applyEraEquipment(era: Era, islands: Island[]): void {
+  const fixes = EQUIPMENT[era] ?? [];
+  for (const isl of islands) {
+    for (const inst of isl.installations) {
+      if (era === 'era3' && COLD_WAR_SAM.includes(inst.type)) {
+        inst.type = 'flak_battery';
+        inst.range = 1500;
+        inst.reloadTime = 1.5;
+        if (!/KS-19|37mm/.test(inst.name)) inst.name = keepLabel('KS-19 100mm 重型高射砲連')(inst.name);
+        inst.weaponDesc = 'KS-19 100mm 重型高射砲 · SON-4 雷達射控';
+      }
+      if (era === 'era3' && inst.type === 'fan_song_radar') inst.type = 'radar_station';
+      for (const f of fixes) {
+        if (!f.id.test(inst.id) && !(f.id.source.includes('KS-19') && f.id.test(inst.name))) continue;
+        if (f.name) inst.name = typeof f.name === 'string' ? f.name : f.name(inst.name);
+        if (f.desc) inst.weaponDesc = f.desc;
+        if (f.type) inst.type = f.type;
+        if (f.range !== undefined) inst.range = f.range;
+        if (f.reloadTime !== undefined) inst.reloadTime = f.reloadTime;
+      }
+    }
+  }
 }
