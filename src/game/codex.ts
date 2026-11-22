@@ -7,6 +7,7 @@ import { SHIP_DRAFT_M } from './naval/draft';
 import { aircraftEw, shipEw } from './ew';
 import { groundSilhouetteClass } from './unitPreviewRenderer';
 import { LOCAL_FORCES } from './localForces';
+import { AIR_INTRO, GROUND_INTRO, SHIP_INTRO, UnitIntro } from './unitIntro';
 
 /**
  * 圖鑑 (codex): every ground unit, aircraft, ship and installation in the game, with its era,
@@ -222,6 +223,13 @@ const AIR_ROLE_GROUP = (key: string, text: string): string => {
   return '戰鬥機';
 };
 
+/** Intro text replaces the type comment as the note; the comment (eras, sources) stays as a detail line. */
+function withIntro(intro: UnitIntro | undefined, comment: string, extras: string[]): string {
+  if (!intro) return comment;
+  if (comment) extras.unshift(`📋 ${comment}`);
+  return intro[1];
+}
+
 // ── Build ────────────────────────────────────────────────────────────────────
 
 function buildGround(): CodexEntry[] {
@@ -238,11 +246,13 @@ function buildGround(): CodexEntry[] {
     const st = GROUND_UNIT_STATS[type];
     const cls = groundSilhouetteClass(type);
     const km = GROUND_UNIT_RANGE_KM[type];
+    const intro = GROUND_INTRO[type];
+    const extras = localForceNotes(type);
     return {
       kind: 'ground',
       key,
-      title: stripEra(comment) || key,
-      note: comment,
+      title: intro?.[0] ?? (stripEra(comment) || key),
+      note: withIntro(intro, comment, extras),
       eras,
       side,
       nation,
@@ -258,7 +268,7 @@ function buildGround(): CodexEntry[] {
             ...(st.isAmphibious ? [{ label: '兩棲', value: '可涉水' }] : []),
           ]
         : [],
-      extras: localForceNotes(type),
+      extras,
     };
   });
 }
@@ -279,11 +289,12 @@ function buildAircraft(): CodexEntry[] {
         const parts = [ew.dispenser && `${ew.dispenser} (箔條 ${ew.chaff} / 熱焰 ${ew.flares})`, ew.jammer && `ECM ${ew.jammer.name}`, ew.irJammer && `紅外干擾 ${ew.irJammer.name}`, ew.esm && `ESM ${ew.esm.name}`, ew.rwr && `RWR ${ew.rwr}`].filter(Boolean);
         if (parts.length) extras.push(`📡 ${ERA_LABEL[e]}：${parts.join(' · ')}`);
       }
+      const intro = AIR_INTRO[model];
       return {
         kind: 'aircraft',
         key,
-        title: comment.replace(/\s*\(.*$/, '').trim() || key.toUpperCase(),
-        note: comment,
+        title: intro?.[0] ?? (comment.replace(/\s*\(.*$/, '').trim() || key.toUpperCase()),
+        note: withIntro(intro, comment, extras),
         eras,
         side,
         nation: side === 'enemy' ? (eras.some((x) => x === 'era1' || x === 'era2') ? '大日本帝國' : '蘇聯 / 共產陣營') : side === 'allied' ? '盟國' : '美國',
@@ -311,11 +322,13 @@ function buildShips(): CodexEntry[] {
       const parts = [ew.esm && `ESM ${ew.esm.name}`, ew.jammer && `ECM ${ew.jammer.name}`, ew.decoys && `誘餌 ${ew.decoys.name}`, ew.noisemaker && `${ew.noisemaker.name}`, ew.moss && ew.moss.name].filter(Boolean);
       if (parts.length) extras.push(`📡 ${ERA_LABEL[e]}：${parts.join(' · ')}`);
     }
+    const intro = SHIP_INTRO[type];
+    const generalNote = generic ? '各時代通用艦種：實際艦名、武裝與外觀依時代與陣營而定' : '';
     return {
       kind: 'ship',
       key,
-      title: SHIP_TITLE[type] ?? (stripEra(comment) || key),
-      note: comment || (SHIP_TITLE[type] ? '各時代通用艦種：實際艦名、武裝與外觀依時代與陣營而定' : ''),
+      title: intro?.[0] ?? SHIP_TITLE[type] ?? (stripEra(comment) || key),
+      note: withIntro(intro, comment || generalNote, extras),
       eras,
       side,
       nation: side === 'both' ? '各國' : enemy ? (eras.includes('era1') || eras.includes('era2') ? '大日本帝國海軍' : '蘇聯 / 北越') : '美國海軍',

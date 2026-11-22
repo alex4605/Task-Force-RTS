@@ -111,7 +111,7 @@ export const LOCAL_FORCES: Record<Era, LocalForceRule[]> = {
       every: [80, 140],
       cap: 2,
       forces: [
-        { type: 'opfor_vc_guerrilla_65', name: '越共 地方游擊隊 (村游擊組)', weight: 3 },
+        { type: 'opfor_vc_guerrilla_65', name: '越共 村游擊組', weight: 3 },
         { type: 'opfor_nlf_main_force_65', name: '越南南方民族解放陣線 主力營 排', weight: 1 },
       ],
     },
@@ -163,7 +163,7 @@ export const LOCAL_FORCES: Record<Era, LocalForceRule[]> = {
       every: [130, 190],
       cap: 1,
       forces: [
-        { type: 'opfor_mvd_vv_83', name: '蘇聯內務部 內衛部隊 (ВВ МВД) 佔領區警備排', weight: 2 },
+        { type: 'opfor_mvd_vv_83', name: '蘇聯內務部內衛部隊 警備排', weight: 2 },
         { type: 'opfor_motor_rifle_83', name: '蘇軍 摩托化步兵 佔領守備排', weight: 1 },
       ],
     },

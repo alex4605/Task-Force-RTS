@@ -211,7 +211,7 @@ const CLASS_RULES: Array<[RegExp, ClassDrawer]> = [
   [/Hatakaze/, layout([0.04, -0.06], { launcher: 0.3, mack: true })],
   [/Hatsuyuki/, layout([0.0], { deck: 0.22, mack: true })],
   [/Australia|Canberra|Shropshire/, countyHeavyCruiser],
-  [/HMAS Hobart \(荷巴特號輕巡洋艦\)/, leanderCruiser],
+  [/HMAS Hobart 荷巴特號 \(D63\)/, leanderCruiser],
   [/Arunta|Warramunga|Bataan|Cayuga|Cossack/, tribalDestroyer],
   [/Vampire|Defender/, daringDestroyer],
   [/Quilliam|Jervis|Rotoiti|Baekdusan/, singleFunnelEscort],

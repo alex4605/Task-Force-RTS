@@ -20,7 +20,7 @@ export const LIBERATE_CLEAR = 280;
 
 const ENEMY_CAMP_NAME: Record<Era, string> = {
   era1: '日軍戰俘收容所 (IJA POW Compound)',
-  era2: '拉包爾日軍戰俘收容所 (Rabaul POW Compound)',
+  era2: '第32軍 俘虜收容所 (首里)',
   era3: '北韓人民軍戰俘營 (KPA POW Camp)',
   era4: '北越戰俘營「河內希爾頓」分營 (Hỏa Lò Annex)',
   era5: '華約戰俘轉運營 (Warsaw Pact POW Transit Camp)',

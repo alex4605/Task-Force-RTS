@@ -87,10 +87,10 @@ export function naturalizeIslands(islands: Island[], seed: number, skip: (isl: I
 
 // ── Settlements ──────────────────────────────────────────────────────────
 
-/** Village names by theatre: Solomons and Bismarcks; Wonsan harbour; Vietnam's coastal islands; the German Bight. */
+/** Village names by theatre: the Solomons; Saipan, Okinawa and the Keramas; Wonsan harbour; Vietnam's coastal islands; the German Bight. */
 const VILLAGE_NAMES: Record<Era, string[]> = {
   era1: ['科孔布納土著村落 (Kokumbona)', '塔薩法隆加村 (Tassafaronga)', '馬塔尼考村 (Matanikau)', '科利角漁村 (Koli Point)', '馬拉瑙傳教站 (Marau Mission)', '奧拉椰子種植園 (Aola)'],
-  era2: ['拉包爾土著村落 (Rabaul)', '塔拉西村 (Talasea)', '馬努斯漁村 (Manus)', '金貝灣村落 (Kimbe)', '天主教維納波普傳教站 (Vunapope)', '利弗兄弟椰子種植園 (Lever Bros.)'],
+  era2: ['加拉班町 (Garapan)', '查蘭卡諾亞村 (Chalan Kanoa)', '那霸港町 (Naha)', '首里城下町 (Shuri)', '座間味村 (Zamami)', '讀谷村 (Yomitan)'],
   // Wonsan harbour islands held by the UN through the siege of Wonsan (1951-53)
   era3: ['熊島村落 (Ung-do)', '黃土島漁村 (Hwangto-do)', '麗島漁村 (Yo-do)', '薪島漁村 (Sin-do)'],
   // Cu Lao Cham off Hoi An, and Con Co off the DMZ

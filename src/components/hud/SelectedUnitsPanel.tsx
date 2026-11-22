@@ -5,6 +5,7 @@ import { Era } from '../../types/game';
 import { SelectableUnit, isAircraftUnit, isGroundUnit, isShipUnit } from '../../game/airWingCatalog';
 import { groundSilhouetteClass } from '../../game/unitPreviewRenderer';
 import { aircraftEw, shipEw } from '../../game/ew';
+import { AIR_INTRO, GROUND_INTRO, SHIP_INTRO } from '../../game/unitIntro';
 
 const isFootClass = (type: Parameters<typeof groundSilhouetteClass>[0]) => {
   const k = groundSilhouetteClass(type);
@@ -233,6 +234,19 @@ export const SelectedUnitsPanel: React.FC<SelectedUnitsPanelProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* What this unit is: type name and a short history (single selection only, to keep the list compact) */}
+              {selectedUnits.length === 1 && (() => {
+                const intro = isPlane ? AIR_INTRO[u.model] : isGround ? GROUND_INTRO[u.type] : isShip ? SHIP_INTRO[u.type] : undefined;
+                if (!intro) return null;
+                return (
+                  <div className="text-[9.5px] leading-snug text-slate-300 bg-[#071526] border border-[#1E3A5F]/50 rounded px-1.5 py-1">
+                    <span className="text-[#80DEEA] font-semibold">{intro[0]}</span>
+                    <span className="text-slate-500"> · </span>
+                    {intro[1]}
+                  </div>
+                );
+              })()}
 
               {/* Electronic warfare fit (ESM / ECM / decoys) */}
               {isPlane && (() => {

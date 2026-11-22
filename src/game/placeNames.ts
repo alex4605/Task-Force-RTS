@@ -143,7 +143,8 @@ const RENAME: Record<ColdWarEra, Record<string, string>> = {
 /** The rear staging island in the south-west, per theatre. */
 export const STAGING_BASE: Record<Era, { island: string; airfield: string }> = {
   era1: { island: 'Espiritu Santo Staging Base (聖埃斯皮里圖 友軍前線後勤與空軍基地)', airfield: '友軍前進航空基地 (Espiritu Santo Bomber Field No.1)' },
-  era2: { island: 'Espiritu Santo Staging Base (聖埃斯皮里圖 友軍前線後勤與空軍基地)', airfield: '友軍前進航空基地 (Espiritu Santo Pekoe Field)' },
+  // Ulithi: the fleet's forward anchorage for Iwo Jima and Okinawa (Falalop's airstrip)
+  era2: { island: 'Ulithi Staging Base (烏利西 前進艦隊錨地與後勤基地)', airfield: '友軍前進航空基地 (Falalop Airstrip)' },
   era3: { island: 'Koje-do Staging Base (巨濟島 聯合國軍後勤基地)', airfield: '巨濟島 前進航空基地 (Koje-do Airstrip)' },
   era4: { island: 'Côn Sơn Staging Base (昆山島 友軍後勤基地)', airfield: '昆山島 前進航空基地 (Côn Sơn Airstrip)' },
   era5: { island: 'Texel Staging Base (泰瑟爾島 北約後勤基地)', airfield: '泰瑟爾 前進航空基地 (De Cocksdorp)' },

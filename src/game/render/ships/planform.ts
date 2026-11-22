@@ -27,14 +27,14 @@ const CLASS_RATIOS: [RegExp, number][] = [
   [/Yahagi|Agano|Noshiro|Sakawa/, 11.5],
   [/Atlanta|Juneau|CL-5[1-4]/, 10.2],
   [/Des Moines|CA-134/, 9.5],
-  [/Sverdlov/, 9.6],
+  [/Sverdlov|Pozharsky/, 9.6],
   [/Baltimore|Cleveland|Portland|San Francisco|New Orleans|CA-|CL-/, 9.3],
   // Destroyers / escorts
   [/Shimakaze/, 11.6],
   [/Akizuki/, 11.5],
   [/Kagero|Yukikaze|IJN.*Destroyer/, 11.0],
   [/Samuel B|DE-/, 8.5],
-  [/Skory/, 10.0],
+  [/Skory|Smotryashchy|Sposobny|Ozhestochonny|Vnimatelny|Vrazumitelny|Vidny/, 10.0],
   [/Gearing|Frank Knox|Fletcher|Radford|O'Bannon|Johnston|Hoel|DD-[4-8]\d\d\b/, 9.5],
 ];
 

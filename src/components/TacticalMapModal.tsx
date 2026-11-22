@@ -358,7 +358,7 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
       ctx.font = '8px monospace';
       ctx.textAlign = 'center';
       ctx.fillText(
-        isSub ? `[聲吶鎖定] ${ship.codeName || ship.name}` : ship.codeName || ship.name,
+        isSub ? `[聲吶鎖定] ${ship.name}` : ship.name,
         sx,
         sy - 7
       );
@@ -442,7 +442,7 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
       ctx.font = '8px monospace';
       ctx.textAlign = 'center';
       ctx.fillText(
-        isSub && ship.isSpottedByEnemy ? `[暴露] ${ship.codeName || ship.name}` : ship.codeName || ship.name,
+        isSub && ship.isSpottedByEnemy ? `[暴露] ${ship.name}` : ship.name,
         sx,
         sy - 6
       );

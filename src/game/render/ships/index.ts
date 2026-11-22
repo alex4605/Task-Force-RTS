@@ -923,7 +923,7 @@ function drawShipStatus(rc: RenderContext, ship: Ship, zoom: number = 0.65, isSe
 
   // Plate grows with the label up to a cap; longer labels are ellipsized.
   ctx.font = 'bold 9px monospace';
-  const label = ship.codeName || ship.name;
+  const label = ship.name;
   const plateWidth = Math.min(PLATE_MAX_WIDTH, Math.max(barWidth + 34, ctx.measureText(label).width + 12));
 
   // Tactical HUD backing plate for maximum readability against ocean/islands

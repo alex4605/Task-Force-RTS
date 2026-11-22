@@ -943,7 +943,7 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-air-assault',
         category: 'ground',
-        name: 'USMC 空中突擊/直升機機降突擊排 (1965)',
+        name: '陸戰隊 空中突擊排',
         cost: 160,
         era: 'era4',
         badge: '垂直機動+M16步槍',
@@ -954,7 +954,7 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-m48',
         category: 'ground',
-        name: 'USMC M48A3 巴頓主力戰車排',
+        name: '陸戰隊 M48A3 巴頓主力戰車排',
         cost: 350,
         era: 'era4',
         badge: '90mm M41主砲+重裝甲',
@@ -965,7 +965,7 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-m551',
         category: 'ground',
-        name: 'US Army M551 謝里登裝甲騎兵排',
+        name: '美陸軍 M551 謝里登裝甲騎兵排',
         cost: 280,
         era: 'era4',
         badge: '152mm砲射飛彈兩用砲',
@@ -976,7 +976,7 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-ontos',
         category: 'ground',
-        name: 'USMC M50 昂圖斯六聯無後座力砲戰車排',
+        name: '陸戰隊 M50 昂圖斯六聯無後座力砲戰車排',
         cost: 260,
         era: 'era4',
         badge: '6聯裝106mm無後座力砲',
@@ -987,7 +987,7 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-usmc-lvtp5a1',
         category: 'ground',
-        name: 'USMC LVTP-5A1 兩棲重裝步戰車排',
+        name: '陸戰隊 LVTP-5A1 兩棲重裝步戰車排',
         cost: 290,
         era: 'era4',
         badge: '水陸兩棲+重載機步',
@@ -998,7 +998,7 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-artillery',
         category: 'ground',
-        name: 'USMC M114 155mm 重榴彈砲排',
+        name: '陸戰隊 M114 155mm 重榴彈砲排',
         cost: 250,
         era: 'era4',
         badge: '全島重砲射程覆蓋',
@@ -1705,7 +1705,7 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-m4a3e8',
         category: 'ground',
-        name: 'US Army M4A3E8「Easy Eight」薛曼戰車排',
+        name: '美陸軍 M4A3E8「Easy Eight」薛曼戰車排',
         cost: 300,
         era: 'era3',
         badge: '76mm M1A2 · HVSS 懸吊',
@@ -1716,7 +1716,7 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       {
         id: 'req-ground-m26-pershing',
         category: 'ground',
-        name: 'US Army M26 潘興重戰車排',
+        name: '美陸軍 M26 潘興重戰車排',
         cost: 380,
         era: 'era3',
         badge: '90mm M3 戰車砲',
