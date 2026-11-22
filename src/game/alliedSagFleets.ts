@@ -81,6 +81,69 @@ const TRIBAL_DD: Mount[] = [
  */
 const EXTRA_SAG_FLEETS: Record<Era, AlliedSagFleet[]> = {
   era1: [
+    // The Eastern Fleet's capital ships: in 1942 they held the Indian Ocean, a few days' steaming away
+    {
+      title: '英國皇家海軍東方艦隊 (Royal Navy Eastern Fleet SAG)',
+      ships: [
+          {
+            name: 'HMS King George V (喬治五世號戰艦)',
+            codeName: 'HMS KGV (41)',
+            type: 'battleship',
+            length: 128,
+            width: 29,
+            maxHealth: 16000,
+            speed: 18,
+            flakRange: 1400,
+            turrets: [
+              { id: 'kgv-t1', pos: { x: 38, y: 0 }, angle: 0, range: 2600, damage: 1250, cooldown: 0, maxCooldown: 10, caliber: '14吋 Mk VII 四聯裝' },
+              { id: 'kgv-t2', pos: { x: 20, y: 0 }, angle: 0, range: 2600, damage: 850, cooldown: 0, maxCooldown: 9.5, caliber: '14吋 Mk VII 雙聯裝' },
+              { id: 'kgv-t3', pos: { x: -36, y: 0 }, angle: Math.PI, range: 2600, damage: 1250, cooldown: 0, maxCooldown: 10, caliber: '14吋 Mk VII 四聯裝' },
+              { id: 'kgv-dp1', pos: { x: 6, y: -12 }, angle: -Math.PI / 2, range: 1800, damage: 320, cooldown: 0, maxCooldown: 4.0, caliber: '5.25吋 高平兩用雙聯裝' },
+              { id: 'kgv-dp2', pos: { x: 6, y: 12 }, angle: Math.PI / 2, range: 1800, damage: 320, cooldown: 0, maxCooldown: 4.0, caliber: '5.25吋 高平兩用雙聯裝' },
+            ],
+          },
+          {
+            name: 'HMS Sheffield (謝菲爾德號輕巡洋艦)',
+            codeName: 'HMS Sheffield (C24)',
+            type: 'cruiser',
+            length: 98,
+            width: 18,
+            maxHealth: 8200,
+            speed: 22,
+            flakRange: 1200,
+            torpedoCooldown: 28,
+            turrets: [
+              { id: 'sheff-t1', pos: { x: 30, y: 0 }, angle: 0, range: 1800, damage: 420, cooldown: 0, maxCooldown: 5.0, caliber: '6吋 Mk XXIII 三聯裝 (A砲塔)' },
+              { id: 'sheff-t2', pos: { x: 16, y: 0 }, angle: 0, range: 1800, damage: 420, cooldown: 0, maxCooldown: 5.0, caliber: '6吋 Mk XXIII 三聯裝 (B背負砲塔)' },
+              { id: 'sheff-t3', pos: { x: -16, y: 0 }, angle: Math.PI, range: 1800, damage: 420, cooldown: 0, maxCooldown: 5.0, caliber: '6吋 Mk XXIII 三聯裝 (X背負砲塔)' },
+              { id: 'sheff-t4', pos: { x: -28, y: 0 }, angle: Math.PI, range: 1800, damage: 420, cooldown: 0, maxCooldown: 5.0, caliber: '6吋 Mk XXIII 三聯裝 (Y砲塔)' },
+              { id: 'sheff-dp1', pos: { x: 2, y: -8 }, angle: -Math.PI / 2, range: 1600, damage: 240, cooldown: 0, maxCooldown: 3.5, caliber: '4吋 Mk XVI 雙聯高平兩用砲' },
+              { id: 'sheff-dp2', pos: { x: 2, y: 8 }, angle: Math.PI / 2, range: 1600, damage: 240, cooldown: 0, maxCooldown: 3.5, caliber: '4吋 Mk XVI 雙聯高平兩用砲' },
+            ],
+          },
+          {
+            name: 'HMS Jervis (賈維斯號 J級驅逐艦)',
+            codeName: 'HMS Jervis (F00)',
+            type: 'destroyer',
+            length: 68,
+            width: 13,
+            maxHealth: 4200,
+            speed: 26,
+            flakRange: 1000,
+            torpedoCooldown: 20,
+            turrets: [
+              { id: 'jerv-t1', pos: { x: 20, y: 0 }, angle: 0, range: 1500, damage: 280, cooldown: 0, maxCooldown: 3.2, caliber: '4.7吋 Mk XII 雙聯裝 (A砲塔)' },
+              { id: 'jerv-t2', pos: { x: 9, y: 0 }, angle: 0, range: 1500, damage: 280, cooldown: 0, maxCooldown: 3.2, caliber: '4.7吋 Mk XII 雙聯裝 (B背負砲塔)' },
+              { id: 'jerv-t3', pos: { x: -18, y: 0 }, angle: Math.PI, range: 1500, damage: 280, cooldown: 0, maxCooldown: 3.2, caliber: '4.7吋 Mk XII 雙聯裝 (X砲塔)' },
+            ],
+          },
+          sagShip({ name: 'HMS Warspite (厭戰號戰艦 · 東方艦隊旗艦)', codeName: 'HMS Warspite (03)', type: 'battleship', length: 122, width: 28, maxHealth: 15000, speed: 17, flakRange: 1300 }, 'rn-warspite', [
+            [40, 0, '15吋 Mk I 雙聯裝 (A砲塔)', 2600, 880, 6.8], [28, 0, '15吋 Mk I 雙聯裝 (B砲塔)', 2600, 880, 6.8],
+            [-28, 0, '15吋 Mk I 雙聯裝 (X砲塔)', 2600, 880, 6.8], [-40, 0, '15吋 Mk I 雙聯裝 (Y砲塔)', 2600, 880, 6.8],
+            [6, -11, '4吋 Mk XVI 雙聯裝高平砲', 1500, 220, 2.2], [6, 11, '4吋 Mk XVI 雙聯裝高平砲', 1500, 220, 2.2],
+          ]),
+      ],
+    },
     {
       title: 'ABDA 聯合打擊部隊 (ABDA Striking Force · 爪哇海 1942)',
       ships: [

@@ -3689,6 +3689,43 @@ export function createOscarSSGN(id: string, name: string, pos: Vector2D): Ship {
 // ═══════════════════════════════════════════════════════════════════════
 
 
+// Era 1 & Era 2 easter egg: a Kriegsmarine Monsun Gruppe Type IXD2 U-boat out of Penang (from 1943)
+export function createMonsunUBoatSS(id: string, name: string, pos: Vector2D, era: Era): Ship {
+  const heading = (Math.PI * 3) / 4;
+  return createShip({
+    id,
+    name,
+    codeName: era === 'era1' ? 'Monsun Gruppe Type VIIC U-Boat (德國海軍狼群 U型潛艇)' : 'Monsun Gruppe Type IXD2 U-Boat (遠洋重型 U型潛艇)',
+    type: 'submarine',
+    subVariant: 'uboat',
+    side: 'enemy',
+    era,
+    pos: { ...pos },
+    heading,
+    speed: 7.5,
+    maxSpeed: 7, // Type IXD2 Monsun: 6.9 kt submerged on electric motors
+    length: era === 'era1' ? 66 : 78,
+    width: 9,
+    health: era === 'era1' ? 760 : 980,
+    maxHealth: era === 'era1' ? 760 : 980,
+    armor: 0.14,
+    detectionRange: 1900,
+    sonarRange: 900,
+    isSubmerged: true,
+    hasTorpedoes: true,
+    torpedoCooldown: 4,
+    torpedoReloadTime: era === 'era1' ? 18 : 15,
+    turrets: [],
+    detailedArmaments: [
+      { name: '533mm 艦艏/艦艉魚雷管 (5具)', count: 'G7a 蒸氣 / G7e 電動聲自導魚雷', type: 'torpedo', desc: '季風狼群遠洋伏擊魚雷齊射' },
+      { name: 'GHG 群聽水聽器陣列', count: '被動聲學偵測', type: 'asw', desc: '水下隱蔽接敵，開火後才暫時暴露位置' },
+    ],
+    flakCooldown: 0,
+    flakRange: 0,
+  });
+}
+
+
 // Era 1 & Era 2: IJN 伊號巡潛大型潛艦 (I-19 / I-168 / I-58)
 export function createIjnIBoatSS(id: string, name: string, pos: Vector2D, era: Era): Ship {
   const heading = (Math.PI * 3) / 4;
@@ -7365,7 +7402,7 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
       createGroundUnit('opfor-cont-mortar-1', 'opfor_mortar_platoon', 'PAVN 120mm Heavy Mortar Btry (北越120mm重迫擊砲連)', 'enemy', 'era4', { x: 9300, y: 4900 }),
       createGroundUnit('opfor-cont-flak-1', 'opfor_zsu23_shilka', 'PAVN 367th AAA Regt Shilka (ZSU-23-4 雷達防砲連)', 'enemy', 'era4', { x: 9400, y: 4500 }),
       createGroundUnit('opfor-cont-zsu57-1', 'opfor_zsu57_2', 'PAVN ZSU-57-2「雙管57」履帶重型自走防空連', 'enemy', 'era4', { x: 9050, y: 4950 }),
-      createGroundUnit('opfor-cont-sa6-1', 'opfor_sa7_strela', 'PAVN 9K32 箭-2 (SA-7) 肩射防空排', 'enemy', 'era4', { x: 9700, y: 4300 }),
+      createGroundUnit('opfor-cont-sa6-1', 'opfor_sa6_kub', '蘇軍顧問團 2K12 立方體 (SA-6 Gainful) 履帶防空飛彈連', 'enemy', 'era4', { x: 9700, y: 4300 }),
       createGroundUnit('opfor-cont-sa9-1', 'opfor_s60_flak', 'PAVN 367th AAA Div S-60 57mm 雷達防空砲連', 'enemy', 'era4', { x: 8750, y: 5350 })
     );
   } else {
@@ -7501,7 +7538,9 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
         : 'opfor_vietnam_sapper';
     const infName =
       era === 'era5'
-        ? '蘇聯海軍步兵突擊排 (83年編裝)'
+        ? isl.id === 'island-chodo'
+          ? '波蘭人民軍 第7盧日采海軍突擊師 登陸排' // the Polish naval assault division was meant for the Danish and German coast
+          : '蘇聯海軍步兵突擊排 (83年編裝)'
         : era === 'era1'
         ? 'IJN 2nd SNLF Rifle Plt (海軍特別陸戰隊)'
         : era === 'era2'
@@ -7606,11 +7645,11 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
           era === 'era5'
             ? (i % 3 === 0 ? 'opfor_2s19' : i % 3 === 1 ? 'opfor_sa11_buk' : 'opfor_2s1')
             : era === 'era4'
-            ? (i % 3 === 0 ? 'opfor_m46_130mm' : i % 3 === 1 ? 'opfor_sa7_strela' : 'opfor_zu23_aa')
+            ? (i % 3 === 0 ? (Math.random() < 0.2 ? 'opfor_2s3' : 'opfor_m46_130mm') : i % 3 === 1 ? 'opfor_sa7_strela' : 'opfor_zu23_aa')
             : era === 'era3'
             ? (i % 2 === 0 ? 'opfor_su100' : 'opfor_ks19_heavy')
             : era === 'era2'
-            ? (i % 2 === 0 ? 'opfor_hummel' : 'opfor_field_artillery')
+            ? (Math.random() < 0.15 ? 'opfor_hummel' : 'opfor_field_artillery')
             : 'opfor_field_artillery';
         const artName =
           artType === 'opfor_2s19'
@@ -7621,6 +7660,8 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
             ? '2S1 石竹 122mm自走榴彈砲連'
             : artType === 'opfor_m46_130mm'
             ? 'M-46 130mm 加農砲連'
+            : artType === 'opfor_2s3'
+            ? '蘇軍 2S3 金合歡 152mm 自走榴彈砲連'
             : artType === 'opfor_sa7_strela'
             ? '9K32 箭-2 (SA-7) 肩射防空排'
             : artType === 'opfor_zu23_aa'
@@ -7630,7 +7671,12 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
             : artType === 'opfor_ks19_heavy'
             ? 'KS-19 100mm重高射砲連'
             : artType === 'opfor_hummel'
-            ? '四式十五糎自走砲 ホロ (反砲兵支援)'
+            ? // IJA self-propelled guns were few (the Ho-Ro); once in a while a German Hummel shipped by blockade runner
+              Math.random() < 0.3
+              ? '德國軍事顧問團 Hummel 150mm 自走砲 (封鎖突破船運抵)'
+              : '四式十五糎自走砲 ホロ (反砲兵支援)'
+            : era === 'era2'
+            ? '九六式十五糎榴彈砲隊'
             : '機動野戰重砲隊';
         groundUnits.push(
           createGroundUnit(

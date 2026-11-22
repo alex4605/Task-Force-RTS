@@ -1051,6 +1051,17 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
         typeTag: 'chaparral_sam',
       },
       {
+        id: 'req-ground-chaparral-sam-65',
+        category: 'ground',
+        name: 'MIM-72 榭樹野戰履帶防空飛彈排',
+        cost: 380,
+        era: 'era4',
+        badge: '4聯裝響尾蛇防空飛彈',
+        desc: '前線機動野戰防空傘！履帶車載四聯裝紅外線尋標防空飛彈發射架，自動偵測並打擊 1600m 範圍內掠空敵戰鬥機與強擊機！',
+        statsDesc: 'HP: 1300 | MIM-72 紅外導引飛彈 (1600m防空) | 前線自動防禦攔截',
+        typeTag: 'chaparral_sam',
+      },
+      {
         id: 'req-ground-m109',
         category: 'ground',
         name: 'M109 155mm 履帶自走榴彈砲',
