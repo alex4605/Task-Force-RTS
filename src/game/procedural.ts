@@ -7420,7 +7420,7 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-paladin-1', 'us_m109a6_paladin', 'US Army 3rd Inf Div M109A6 帕拉丁 155mm 數位自走砲連', 'player', 'era5', { x: 6450, y: 7700 }),
+        ...createGroundUnit('us-army-paladin-1', 'us_m109a3_83', 'US Army 3rd Armored Div M109A3 155mm 自走榴彈砲連', 'player', 'era5', { x: 6450, y: 7700 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       }

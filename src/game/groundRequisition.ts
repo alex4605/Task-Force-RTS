@@ -72,6 +72,7 @@ const GROUND_REQUISITIONS: Record<string, Resolver> = {
   us_m1a1_abrams: fixed('us_m1a1_abrams', 'M1A1 艾布蘭主力戰車排'),
   us_m44_spg: fixed('us_m44_spg', 'M44 155mm 自走榴彈砲 (反砲兵急速射擊)'),
   us_m109_spg: fixed('us_m109_spg', 'M109 155mm 自走榴彈砲 (長程反砲兵壓制)'),
+  us_m109a3_83: fixed('us_m109a3_83', 'M109A3 155mm 自走榴彈砲 (反砲兵壓制)'),
   us_m109a6_paladin: fixed('us_m109a6_paladin', 'M109A6 帕拉丁 155mm 數位自走砲'),
   us_atacms_nuclear: fixed('us_atacms_nuclear', 'MGM-140B 核武裝 ATACMS 戰術飛彈車 (W70/W85熱核彈頭)'),
   // Additional formations

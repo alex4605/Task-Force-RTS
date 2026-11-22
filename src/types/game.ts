@@ -77,7 +77,8 @@ export type GroundUnitType =
   | 'us_m7_priest'       // 時代二 M7 Priest 牧師式 105mm 自走砲 (SPG · 反砲擊 Counter-Battery)
   | 'us_m44_spg'         // 時代三 M44 155mm 自走榴彈砲 (SPG · 反砲擊 Counter-Battery)
   | 'us_m109_spg'        // 時代四 M109 155mm 自走榴彈砲 (SPG · 反砲擊 Counter-Battery)
-  | 'us_m109a6_paladin'  // 時代五 M109A6 Paladin 帕拉丁 155mm 數位自走砲 (SPG · 數位反砲擊)
+  | 'us_m109a3_83'       // 時代五 M109A3 155mm 自走榴彈砲 (SPG · M185 39倍徑 · 反砲擊)
+  | 'us_m109a6_paladin'  // 時代六 (1991-2014 · 保留待擴充) M109A6 Paladin 帕拉丁 155mm 數位自走砲
   | 'usmc_patton_m46'    // 時代三 USMC M46 巴頓 (Patton) 90mm主力戰車排
   | 'usmc_howitzer_155'  // 時代三 美軍 M114 155mm 重榴彈砲排
   | 'usmc_duster_m42'    // 時代三 M42 清道夫雙管40mm防空自走砲 (Duster)
@@ -96,7 +97,7 @@ export type GroundUnitType =
   | 'us_m1ip_abrams'      // 時代五 M1IP 艾布蘭主力戰車 (105mm M68A1 / 複合裝甲 / 燃氣渦輪高速穿插)
   | 'us_m1a1_abrams'     // 時代五 M1A1 艾布蘭 (120mm M256 滑膛砲 · 1985 起 · 沙漠風暴主力)
   | 'us_m198_155'         // 時代五 M198 155mm 牽引重榴彈砲 (雙模砲擊：遠程曲射+直瞄平射坦克殺手)
-  | 'usmc_lav_ad'         // 時代五 LAV-AD 輪型防空車 (25mm格林火神 + 刺針防空飛彈)
+  | 'usmc_lav_ad'         // 時代六 (1991-2014 · 保留待擴充) LAV-AD 輪型防空車 (25mm格林火神 + 刺針防空飛彈)
   | 'us_m163_vads'        // 時代五 M163 火神防空自走砲 (20mm M61A1 履帶極速密集彈幕)
   | 'us_m2_bradley'       // 時代五 M2 布雷德利裝甲機步戰車 (25mm M242 巨蝮鏈砲 + 雙聯裝 BGM-71 TOW 重型反戰車飛彈)
   | 'us_m270_mlrs'        // 時代五 M270 多管火箭系統 (Steel Rain 鋼鐵之雨 · M39 集束子母彈廣域飽和)

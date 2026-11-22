@@ -111,6 +111,7 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   opfor_su100: 15.4, // D-10S 100mm, indirect
   us_m109_spg: 14.6, // M126 155mm
   opfor_2s3: 18.5, // 2A33 152mm
+  us_m109a3_83: 18.1, // M185 155mm (M549 RAP ~24 km)
   us_m109a6_paladin: 24, // M284 155mm
   opfor_2s19: 24.7, // 2A64 152mm
   // Air defence vehicles

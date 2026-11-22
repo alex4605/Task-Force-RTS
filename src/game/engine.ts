@@ -17401,7 +17401,7 @@ export class GameEngine {
         ];
 
     if (Math.random() < 0.5) {
-      const spgType: GroundUnitType = isEra5 ? 'us_m109a6_paladin' : isEra4 ? 'us_m109_spg' : 'us_m44_spg';
+      const spgType: GroundUnitType = isEra5 ? 'us_m109a3_83' : isEra4 ? 'us_m109_spg' : 'us_m44_spg';
       const spgName = isEra5
         ? 'US Army M109A3 155mm 自走榴彈砲 (反砲擊火力群)'
         : isEra4
