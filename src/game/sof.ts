@@ -15,6 +15,7 @@ export const SOF_TYPES: ReadonlySet<GroundUnitType> = new Set<GroundUnitType>([
   'sof_udt_50',
   'sof_seal_65',
   'sof_macv_sog_65',
+  'sof_lrrp_65',
   'sof_force_recon_83',
   'sof_seal_83',
   'sof_ranger_83',
@@ -27,6 +28,7 @@ export const SOF_TYPES: ReadonlySet<GroundUnitType> = new Set<GroundUnitType>([
 const RECON_SOF: ReadonlySet<GroundUnitType> = new Set<GroundUnitType>([
   'sof_coastwatcher_42',
   'sof_alamo_scouts_45',
+  'sof_lrrp_65',
   'sof_macv_sog_65',
   'sof_force_recon_83',
 ]);

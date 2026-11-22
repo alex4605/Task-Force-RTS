@@ -133,7 +133,15 @@ function localForceNotes(type: GroundUnitType): string[] {
   for (const era of Object.keys(LOCAL_FORCES) as Era[]) {
     for (const r of LOCAL_FORCES[era]) {
       if (r.forces.some((f) => f.type === type)) {
-        out.push(`🏘️ ${ERA_LABEL[era]}：${r.holder === 'player' ? '我方' : '敵方'}控制的 ${r.sites.map(siteName).join('、')} 會募集此部隊`);
+        const sites = r.sites.map(siteName).join('、');
+        const odds = r.chance !== undefined ? `（低機率 ${Math.round(r.chance * 100)}%）` : '';
+        out.push(
+          (r.fightsFor ?? 'holder') === 'holder'
+            ? `🏘️ ${ERA_LABEL[era]}：${r.holder === 'player' ? '我方' : '敵方'}控制的 ${sites} 會募集此部隊`
+            : r.holder === 'player'
+            ? `🕵️ ${ERA_LABEL[era]}：我方控制但 ${r.unguarded ?? 0}m 內無我軍警戒的 ${sites}，可能遭此部隊滲透${odds}`
+            : `🎖️ ${ERA_LABEL[era]}：敵控且無敵軍警戒的 ${sites} 外圍，可能有此部隊潛入敵後${odds}`
+        );
       }
     }
   }

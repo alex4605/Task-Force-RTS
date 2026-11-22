@@ -8,7 +8,7 @@ import { deckAccepts, shipAviation } from './shipAviation';
 import { CIVIL_HOSPITAL_RADIUS, addCivilEconomy, addCivilHospitals, addCivilTransport } from './civilSites';
 import { FOXHOLE_DIG_S, SPOT_RANGE, insideFieldWork, isFieldWorkTag, makeFieldWork, placeEnemyFieldWorks } from './fieldWorks';
 import { WHALE_NAME, spawnWhales, updateWhales } from './whales';
-import { localRulesFor, pickForce } from './localForces';
+import { LocalForceRule, localRulesFor, pickForce, raisedFor } from './localForces';
 import { AircraftEw, DECOY_BLOOM, DECOY_LIFE, ShipEw, aircraftEw, decoyStrength, emitterName, irJamBreakRate, jamBreakRate, radarEccm, seductionChance, seekerProfile, shipEw } from './ew';
 import { clearAirfieldFootprints, findAirfieldSite, nudgeOffAirfield, onAirfield } from './airfieldLayout';
 import { canDipSonar, dippingSonarRange } from './asw';
@@ -12001,7 +12001,7 @@ export class GameEngine {
 
   // ── Local forces raised from held civilian sites (localForces.ts) ─────────────
   private localForceTimer = 0;
-  private localMuster = new Map<string, { next: number; ids: string[] }>();
+  private localMuster = new Map<string, { next: number; ids: string[]; side?: 'player' | 'enemy'; rule?: string }>();
   private localSerial = 0;
 
   /**
@@ -12019,52 +12019,71 @@ export class GameEngine {
     const total = { player: 0, enemy: 0 };
     for (const st of this.localMuster.values()) {
       st.ids = st.ids.filter((id) => alive.has(id));
+      if (st.side) total[st.side] += st.ids.length;
     }
     for (const isl of this.islands) {
       for (const inst of isl.installations) {
         if (inst.isDestroyed) continue;
         const holder = inst.type === 'rail_station' ? inst.side : inst.controlledBy;
-        const rule = localRulesFor(this.era, inst.type, holder);
-        if (!rule) continue;
-        const h = rule.holder;
-        let st = this.localMuster.get(inst.id);
-        const wait = () => rule.every[0] + Math.random() * (rule.every[1] - rule.every[0]);
-        if (!st) {
-          st = { next: this.gameTime + wait(), ids: [] };
-          this.localMuster.set(inst.id, st);
+        for (const { rule, index } of localRulesFor(this.era, inst.type, holder)) {
+          this.musterAt(isl, inst, rule, `${inst.id}#${index}`, `${index}`, total);
         }
-        total[h] += st.ids.length;
-        if (this.gameTime < st.next) continue;
-        st.next = this.gameTime + wait();
-        if (st.ids.length >= rule.cap || total[h] >= 10) continue;
-        const contested = this.groundUnits.some((u) => !u.isDestroyed && !u.embarkedInShipId && this.isHostile(u.side, h) && dist(u.pos, inst.pos) < 450);
-        if (contested) continue;
-        let pos: Vector2D | null = null;
-        for (let k = 0; k < 10 && !pos; k++) {
-          const a = Math.random() * Math.PI * 2;
-          const r = 60 + Math.random() * 60;
-          const p = { x: inst.pos.x + Math.cos(a) * r, y: inst.pos.y + Math.sin(a) * r };
-          const t = this.terrain.at(p.x, p.y);
-          if (t !== TERRAIN.water && t !== TERRAIN.lagoon && t !== TERRAIN.lake && t !== TERRAIN.river && isPointInPolygon(p, isl.points)) pos = p;
-        }
-        if (!pos) continue;
-        const f = pickForce(rule);
-        const side: ShipSide = h === 'player' ? 'allied' : 'enemy';
-        const unit = createGroundUnit(`local-${++this.localSerial}-${inst.id}`, f.type, f.name, side, this.era, pos);
-        this.groundUnits.push(unit);
-        st.ids.push(unit.id);
-        total[h]++;
-        const place = inst.name.replace('(中立) ', '').replace('(原)', '').split(' (')[0];
-        this.addCombatLog({
-          category: 'naval',
-          sourceSide: h,
-          sourceName: place,
-          targetName: f.name,
-          actionType: 'recon_spotted',
-          text: h === 'player' ? `🏘️【地方部隊集結】「${place}」在我方勢力範圍內，募集「${f.name}」協防。` : `⚠️【敵地方武裝】敵方控制的「${place}」出現「${f.name}」。`,
-        });
       }
     }
+  }
+
+  private musterAt(isl: Island, inst: Installation, rule: LocalForceRule, key: string, ruleKey: string, total: Record<'player' | 'enemy', number>): void {
+    const h = rule.holder;
+    const side = raisedFor(rule);
+    const wait = () => rule.every[0] + Math.random() * (rule.every[1] - rule.every[0]);
+    let st = this.localMuster.get(key);
+    if (!st) {
+      st = { next: this.gameTime + wait(), ids: [], side, rule: ruleKey };
+      this.localMuster.set(key, st);
+    }
+    if (this.gameTime < st.next) return;
+    st.next = this.gameTime + wait();
+    if (st.ids.length >= rule.cap || total[side] >= 10) return;
+    if (rule.limit !== undefined) {
+      let n = 0;
+      for (const o of this.localMuster.values()) if (o.rule === ruleKey) n += o.ids.length;
+      if (n >= rule.limit) return;
+    }
+    if (rule.chance !== undefined && Math.random() >= rule.chance) return;
+    const near = (r: number, pred: (u: GroundUnit) => boolean) =>
+      this.groundUnits.some((u) => !u.isDestroyed && !u.embarkedInShipId && pred(u) && dist(u.pos, inst.pos) < r);
+    // Never while the place is being fought over
+    if (near(450, (u) => this.isHostile(u.side, h))) return;
+    // Infiltration and LRRP inserts only where the holder keeps no troops of its own
+    if (rule.unguarded !== undefined && near(rule.unguarded, (u) => !this.isHostile(u.side, h))) return;
+    let pos: Vector2D | null = null;
+    const r0 = rule.unguarded !== undefined ? 160 : 60;
+    for (let k = 0; k < 10 && !pos; k++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = r0 + Math.random() * 60;
+      const p = { x: inst.pos.x + Math.cos(a) * r, y: inst.pos.y + Math.sin(a) * r };
+      const t = this.terrain.at(p.x, p.y);
+      if (t !== TERRAIN.water && t !== TERRAIN.lagoon && t !== TERRAIN.lake && t !== TERRAIN.river && isPointInPolygon(p, isl.points)) pos = p;
+    }
+    if (!pos) return;
+    const f = pickForce(rule);
+    // Our places raise allied (AI) units; an LRRP team behind the lines is ours to direct
+    const unitSide: ShipSide = side === 'enemy' ? 'enemy' : isSof(f.type) ? 'player' : 'allied';
+    const unit = createGroundUnit(`local-${++this.localSerial}-${inst.id}`, f.type, f.name, unitSide, this.era, pos);
+    this.groundUnits.push(unit);
+    st.ids.push(unit.id);
+    total[side]++;
+    const place = inst.name.replace('(中立) ', '').replace('(原)', '').split(' (')[0];
+    const text =
+      side === h
+        ? h === 'player'
+          ? `🏘️【地方部隊】${place} 募集「${f.name}」協防`
+          : `⚠️【敵地方武裝】敵控 ${place} 出現「${f.name}」`
+        : side === 'enemy'
+        ? `🕵️【後方滲透】${place} 無我軍警戒，「${f.name}」滲透入村！`
+        : `🎖️【敵後偵察】「${f.name}」已潛入敵控 ${place} 外圍，可供指揮偵察`;
+    this.addCombatLog({ category: 'naval', sourceSide: side, sourceName: place, targetName: f.name, actionType: 'recon_spotted', text });
+    if (side !== h) this.addBannerAlert(text, side, 'capture', 5.0);
   }
 
   private updateFieldWorks(dt: number): void {

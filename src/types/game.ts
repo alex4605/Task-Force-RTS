@@ -193,6 +193,10 @@ export type GroundUnitType =
   | 'rok_police_50'             // 時代三 大韓民國警察 戰鬥警察大隊 排
   | 'opfor_kpa_infantry_50'     // 時代三 朝鮮人民軍 步兵排 (PPSh-41 / DP-28)
   | 'si_scouts_42'              // 時代一 所羅門群島保衛隊 土著偵察兵 (Clemens 偵察隊)
+  | 'opfor_giyutai_45'          // 時代二 國民義勇隊 (在留邦人 / 地區義勇隊 · 竹槍、三八式、手榴彈)
+  | 'sof_lrrp_65'               // 時代四 美陸軍 長程偵察巡邏隊 (LRRP · 第75遊騎兵團前身)
+  | 'opfor_rail_troops_83'      // 時代五 蘇軍 鐵道兵 (Железнодорожные войска) 搶修/警衛排
+  | 'opfor_mvd_vv_83'           // 時代五 蘇聯內務部 內衛部隊 (ВВ МВД) 後方警備排
   | 'frg_luchs'               // 時代五 西德山貓式 8x8 裝甲偵察車
   | 'uk_sas_83'               // 時代五 英國第22特種空勤團 (SAS) 巡邏隊
   | 'usmc_paramarine_42'      // 時代一 陸戰隊第1傘兵營 傘兵排 (Paramarines)

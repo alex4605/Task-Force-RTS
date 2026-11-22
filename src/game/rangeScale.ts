@@ -204,6 +204,10 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   nl_infantry_83: 0.6, // FN FAL / MAG
   frg_jaeger_83: 0.6,
   frg_heimatschutz_83: 0.55,
+  opfor_giyutai_45: 0.3, // Type 38 rifles, grenades, bamboo spears
+  sof_lrrp_65: 0.45, // M16 / CAR-15 / M79
+  opfor_rail_troops_83: 0.5, // AKS-74 for the guard section
+  opfor_mvd_vv_83: 0.55, // AK-74 / PKM
   fr_infantry_83: 0.6,
   fr_amx30b2: 2.6,
   uk_infantry_83: 0.6,
