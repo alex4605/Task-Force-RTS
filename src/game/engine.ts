@@ -170,12 +170,17 @@ function pickModel(models: readonly AircraftModel[], weights: readonly number[])
 const FULL_LOAD_TONS: Partial<Record<string, number>> = {
   carrier: 32000, cve: 10400, cv63: 80000, cvn: 100000, lph: 18000, kiev: 43000, cvhg_kiev: 43000,
   battleship: 45000, kongo: 37000, bb_iowa_mod: 57000,
-  cruiser: 12500, chokai: 13000, sverdlov: 16000, kynda: 5500, cg: 7900, cg_tico: 9600, cg_virginia: 11000, kirov: 24000, slava: 11500,
-  destroyer: 2200, akizuki: 3700, dd: 4000, ddg: 4500, dd_spruance: 8000, ddg_kidd: 9600, kashin: 4500, sovremenny: 7900, udaloy: 7500,
+  cruiser: 12500, chokai: 13000, sverdlov: 16000, kynda: 5500, cg: 7900, cg_tico: 9600, cg_virginia: 11000, cgn_kirov: 24000, cg_slava: 11500,
+  destroyer: 2200, akizuki: 3700, dd: 4000, ddg: 4500, dd_spruance: 8000, ddg_kidd: 9600, kashin: 4500, dd_sovremenny: 7900, dd_udaloy: 7500,
   ffg: 4000, ffg_ohp: 4100, riga: 1500, petya: 1100, krivak: 3500,
-  komar_ptg: 70, osa: 245, patrol_boat: 50,
+  komar_ptg: 70, osa: 245, patrol_boat: 50, pbr: 9, river_gunboat: 50,
   lst: 4000, lcvp: 13, lcm8: 107, lpd: 17000, lcac: 180, lsm_r: 1000,
-  ssn_la: 6900, foxtrot: 2500, ohio_ssbn: 18750,
+  ssn_la: 6900, foxtrot: 2500, ssgn_oscar: 19400, ohio_ssbn: 18750,
+};
+
+/** Submerged displacement of the boats that share the generic 'submarine' hull type. */
+const SUB_TONS: Partial<Record<string, number>> = {
+  uboat: 1200, ijn_sub: 3650, whiskey: 1350, zulu: 2350, foxtrot: 2500, kilo: 3950, victor3: 7250, akula: 12770, oscar2: 19400, ssn_la: 6900,
 };
 
 /** Defensive positions that keep firing for whoever holds them. */
@@ -880,6 +885,16 @@ export class GameEngine {
     this.combatLogsVersion++;
   }
 
+  /** Throttle for repetitive reports: true at most once per `seconds` of game time per key. */
+  private logGate = new Map<string, number>();
+  private logAllowed(key: string, seconds: number): boolean {
+    const last = this.logGate.get(key);
+    if (last !== undefined && this.gameTime - last < seconds) return false;
+    this.logGate.set(key, this.gameTime);
+    if (this.logGate.size > 3000) this.logGate.clear();
+    return true;
+  }
+
   public addBannerAlert(
     text: string,
     side: 'player' | 'enemy',
@@ -1217,11 +1232,12 @@ export class GameEngine {
     {
       const terrain = this.terrain;
       this.navGrid.setDepthModel((x, y) => terrain.depthAt(x, y));
-      // Ships placed by the scenario in water too shallow for them move to the nearest deep enough water
-      for (const ship of [...this.playerShips, ...this.enemyShips]) {
+      // Ships placed by the scenario on land, or in water too shallow for them, move to the nearest
+      // deep enough water (beaching craft excepted)
+      for (const ship of [...this.playerShips, ...this.enemyShips, ...this.alliedShips]) {
         const need = requiredDepth(ship);
         const d = terrain.depthAt(ship.pos.x, ship.pos.y);
-        if (need > 0 && d > 0 && d < need) ship.pos = this.navGrid.projectToWalkableWater(ship.pos, need);
+        if (need > 0 && d < need) ship.pos = this.navGrid.projectToWalkableWater(ship.pos, need);
       }
     }
     this.spawnEnemyRiverPatrols();
@@ -6512,10 +6528,11 @@ export class GameEngine {
       }
     }
 
-    // Jamming: the target's own jammer, and stand-off jamming over a command-guided SAM's site
+    // Jamming: the target's own jammer, and stand-off jamming over the launching SAM site or ship
+    // (its fire-control radar is blinded whatever it is shooting at, aircraft or incoming missiles)
     let power = jammerPower;
-    if (proj.guidanceType === 'command_radar' && targetSide) {
-      for (const z of this.jamZones) if (z.side === targetSide && dist(z.pos, proj.originPos) < z.radius) power = Math.max(power, z.power);
+    if (proj.type === 'missile_sam' && seeker.band === 'radar') {
+      for (const z of this.jamZones) if (this.isHostile(proj.side, z.side) && dist(z.pos, proj.originPos) < z.radius) power = Math.max(power, z.power * (proj.guidanceType === 'command_radar' ? 1 : 0.7));
     }
     if (power > 0 && distT > 350) {
       const rate = jamBreakRate(seeker, power);
@@ -11681,12 +11698,13 @@ export class GameEngine {
       for (const inst of isl.installations) {
         if (inst.type !== 'airfield') continue;
         if (inst.isDestroyed && !inst.nuclearDestroyed) {
-          // Conventional: knocked out, not gone
+          // Conventional: knocked out, not gone (re-cratered while under repair: no second report)
+          const already = Boolean(inst.cratered);
           inst.isDestroyed = false;
           inst.health = Math.max(1, inst.maxHealth * 0.08);
-          inst.cratered = { progress: 0 };
+          inst.cratered = { progress: already ? Math.min(inst.cratered!.progress, 0.3) : 0 };
           this.islandsVersion++;
-          this.addCombatLog({
+          if (!already) this.addCombatLog({
             category: 'air',
             sourceSide: inst.side === 'enemy' ? 'player' : 'enemy',
             sourceName: '航空情報',
@@ -16076,7 +16094,7 @@ export class GameEngine {
     });
 
     soundEngine.playKlaxon();
-    this.addBannerAlert(`🚨【SAM 飛彈警報！】敵「${inst.name}」發射 SA-2 導向飛彈鎖定「${targetPlane.name.split(' ')[0]}」！`, 'enemy', 'alert', 5.5);
+    if (this.logAllowed(`sam-banner|${inst.id}`, 15)) this.addBannerAlert(`🚨【SAM 飛彈警報！】敵「${inst.name}」發射 SA-2 導向飛彈鎖定「${targetPlane.name.split(' ')[0]}」！`, 'enemy', 'alert', 5.5);
     this.addCombatLog({
       category: 'aa',
       sourceSide: 'enemy',
@@ -18267,7 +18285,8 @@ export class GameEngine {
   }
 
   private spawnTokyoExpressDD() {
-    const spawnPos: Vector2D = { x: 8600, y: 1400 };
+    const rawPos: Vector2D = { x: 8600, y: 1400 };
+    const spawnPos: Vector2D = this.navGrid ? this.navGrid.projectToWalkableWater(rawPos, 8) : rawPos;
     const ddNames = ['IJN Kagero (陽炎號)', 'IJN Shigure (時雨號)', 'IJN Yukikaze (雪風號)', 'IJN Fubuki (吹雪號)'];
     const name = ddNames[Math.floor(Math.random() * ddNames.length)];
     const dd = createTokyoExpressDD(`tokyo-express-${Date.now()}`, name, spawnPos);
@@ -18333,53 +18352,51 @@ export class GameEngine {
   // 四時代 OPFOR 水面打擊群 (Surface Action Group - SAG) 週期出擊
   // ══════════════════════════════════════════════════════════
   private spawnOpforSagSortie() {
-    // 嚴格確保水面特混打擊群 (SAG) 誕生於開闊深海大洋，絕不重疊任何島嶼或大陸陸地！
-    let spawnPos: Vector2D = { x: 2600, y: 1800 };
-    let validWaterFound = false;
-
-    for (let attempt = 0; attempt < 60; attempt++) {
-      let testX: number;
-      let testY: number;
-
-      if (this.era === 'era4' || this.era === 'era5') {
-        // 大陸地形時代：大陸西側沿海分界線約在 X = 4900，西側開闊海域 (X: 1800 ~ 4400, Y: 1200 ~ 4000) 均為安全大洋
-        testX = 1800 + Math.random() * 2600;
-        testY = 1200 + Math.random() * 2800;
-      } else {
-        // 海島時代 (Era 1~3)：東外海開闊深水水域 (X: 7200 ~ 10500, Y: 1000 ~ 3200)
-        testX = 7200 + Math.random() * 3200;
-        testY = 1000 + Math.random() * 2200;
+    // The surface action group comes in from open, deep water: away from every coast (checked on
+    // the terrain grid, so a mainland coast counts), clear of our base, and as far from our fleet
+    // as the sea allows.
+    const map = this.terrain;
+    const W = this.worldSize;
+    const openSea = (p: Vector2D) => {
+      for (const [dx, dy] of [[0, 0], [350, 0], [-350, 0], [0, 350], [0, -350], [250, 250], [-250, -250], [250, -250], [-250, 250]]) {
+        const x = p.x + dx;
+        const y = p.y + dy;
+        if (x < 300 || y < 300 || x > W - 300 || y > W - 300) return false;
+        if (map.at(x, y) !== TERRAIN.water || map.depthAt(x, y) < 30) return false;
       }
-
-      // 遠離我軍出發泊地基地至少 2800m
-      if (this.friendlyBase && dist({ x: testX, y: testY }, this.friendlyBase.center) < 2800) {
-        continue;
-      }
-
-      // 驗證是否重疊任何島嶼地形或大陸多邊形
-      let onLand = false;
-      for (const isl of this.islands) {
-        if (isPointInPolygon({ x: testX, y: testY }, isl.points) || dist({ x: testX, y: testY }, isl.center) < isl.radius + 250) {
-          onLand = true;
-          break;
-        }
-      }
-
-      if (!onLand) {
-        spawnPos = { x: testX, y: testY };
-        validWaterFound = true;
-        break;
+      return true;
+    };
+    const fleet = this.getFlagship()?.pos ?? this.friendlyBase?.center ?? { x: W / 2, y: W / 2 };
+    let spawnPos: Vector2D | null = null;
+    let best = -1;
+    for (let attempt = 0; attempt < 220; attempt++) {
+      const p = { x: 500 + Math.random() * (W - 1000), y: 500 + Math.random() * (W - 1000) };
+      if (this.friendlyBase && dist(p, this.friendlyBase.center) < 2800) continue;
+      const d = dist(p, fleet);
+      if (d < 3500 || !openSea(p)) continue;
+      // Far from our fleet, but not always the farthest corner
+      const score = Math.min(d, 9000) + Math.random() * 1500;
+      if (score > best) {
+        best = score;
+        spawnPos = p;
       }
     }
-
-    if (!validWaterFound) {
-      spawnPos = (this.era === 'era4' || this.era === 'era5') ? { x: 2800, y: 2200 } : { x: 8800, y: 1600 };
+    if (!spawnPos) {
+      const raw = { x: fleet.x < W / 2 ? W - 900 : 900, y: fleet.y < W / 2 ? W - 900 : 900 };
+      spawnPos = this.navGrid ? this.navGrid.projectToWalkableWater(raw, 12) : raw;
     }
 
     soundEngine.playKlaxon();
     const firstNew = this.enemyShips.length;
     this.spawnOpforSagShips(spawnPos);
     this.scaleOpforSag(this.enemyShips.slice(firstNew), spawnPos);
+    // Formation offsets can still put a hull on a reef or a spit: move each onto water deep enough
+    if (this.navGrid) {
+      for (const sh of this.enemyShips.slice(firstNew)) {
+        const need = requiredDepth(sh);
+        if (need > 0 && this.terrain.depthAt(sh.pos.x, sh.pos.y) < need) sh.pos = this.navGrid.projectToWalkableWater(sh.pos, need);
+      }
+    }
   }
 
   /**
@@ -19341,13 +19358,18 @@ export class GameEngine {
       }
     }
 
-    // F. 撞擊島嶼陸地 (僅反艦飛彈受陸地地形阻擋，巡弋飛彈與戰術彈道飛彈自由飛越/灌頂俯衝)
+    // F. 撞擊地形 (反艦飛彈): a sea-skimmer cruising at 15–60 m clears beaches, reef flats and low
+    // coastal plain but flies into hills, ridges and built-up areas; a high-diving Kh-22 or a
+    // P-700 leader at altitude clears all but mountains. Cruise and ballistic missiles fly over.
     if (!proj.isDead && proj.type === 'missile_ashm') {
-      for (const isl of this.islands) {
-        if (isPointInPolygon(proj.pos, isl.points)) {
+      const tt = this.terrain.at(proj.pos.x, proj.pos.y);
+      if (tt !== TERRAIN.water && tt !== TERRAIN.lagoon) {
+        const groundM = this.terrain.elevationAt(proj.pos.x, proj.pos.y) * 1500;
+        const high = (proj.missileAltitude ?? 0.1) >= 0.5;
+        const obstacle = tt === TERRAIN.mountain || (!high && (tt === TERRAIN.hill || tt === TERRAIN.urban || groundM > 60));
+        if (obstacle || (high && groundM > 900)) {
           this.detonateProjectile(proj);
           proj.isDead = true;
-          break;
         }
       }
     }
@@ -20136,7 +20158,7 @@ export class GameEngine {
               ? `💥🚀【反艦飛彈致命貫穿爆擊 D20: ${rollVal}】${attacker} 貫穿「${targetShipName}」水線/上層艦橋引爆燃料起火！造成 ${actualDmg} 點重創！`
               : `💥🚀【反艦飛彈直接命中「${targetShipName}」】${attacker} 突破近迫防禦命中目標艦體，造成 ${actualDmg} 點裝甲破壞！`,
           });
-        } else if (proj.type === 'shell') {
+        } else if (proj.type === 'shell' && (isCrit || this.logAllowed(`gun|${attacker}|${targetShipName}`, 6))) {
           this.addCombatLog({
             category: 'naval',
             sourceSide: proj.side,
@@ -20392,7 +20414,7 @@ export class GameEngine {
             const actualDmg = Math.round(proj.damage * (1 - armorFactor * 0.7) * warheadVsInstallation(proj.warhead, armorFactor >= 0.6));
             inst.health -= actualDmg;
 
-            this.addCombatLog({
+            if (this.logAllowed(`inst|${attacker}|${inst.id}`, 6)) this.addCombatLog({
               category: proj.type === 'rocket' ? 'air' : 'naval',
               sourceSide: proj.side,
               sourceName: attacker,
@@ -20473,8 +20495,8 @@ export class GameEngine {
         unit.suppressionTimer = 6.0;
         unit.isPinned = unit.suppression >= 75;
 
-        // Combat Log 戰況播報
-        this.addCombatLog({
+        // Combat Log 戰況播報 (one report per firer and unit every few seconds)
+        if (unit.health <= 0 || this.logAllowed(`blast|${attacker}|${unit.id}`, 6)) this.addCombatLog({
           category: proj.type === 'bomb' ? 'air' : 'naval',
           sourceSide: proj.side,
           sourceName: attacker,
@@ -20816,7 +20838,7 @@ export class GameEngine {
     }
 
     const shipName = ship.codeName || ship.name;
-    const tonnage = FULL_LOAD_TONS[ship.type] ?? (this.isSubmarine(ship) ? 1850 : 3500);
+    const tonnage = (ship.subVariant ? SUB_TONS[ship.subVariant] : undefined) ?? FULL_LOAD_TONS[ship.type] ?? (this.isSubmarine(ship) ? 2400 : 3500);
     this.spawnShipRafts(ship, shipName, tonnage);
 
     if (ship.side === 'enemy') {
