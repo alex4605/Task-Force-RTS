@@ -37,16 +37,13 @@ export interface AlliedHost {
 }
 
 interface LandingGroup {
-  id: string;
   escortId?: string;
   transportIds: string[];
-  cargo: GroundUnit[];
   /** Which craft carries which units; each craft beaches and unloads on its own. */
   cargoByShip: Record<string, GroundUnit[]>;
   landed: number;
   island: Island;
   offshore: Vector2D;
-  land: Vector2D;
   home: Vector2D;
   phase: 'transit' | 'withdraw';
   age: number;
@@ -361,7 +358,7 @@ export class AlliedOps {
     } else {
       cargo.forEach((u, i) => (cargoByShip[transports[i % transports.length].id] ??= []).push(u));
     }
-    this.groups.push({ id: `lg-${ts}`, escortId: escort?.id, transportIds: transports.map((t) => t.id), cargo, cargoByShip, landed: 0, island, offshore, land, home, phase: 'transit', age: 0, progress: {} });
+    this.groups.push({ escortId: escort?.id, transportIds: transports.map((t) => t.id), cargoByShip, landed: 0, island, offshore, home, phase: 'transit', age: 0, progress: {} });
     h.banner(`⚓【盟軍搶灘支隊出航】${cargoDef.title}：${escort ? escort.name + ' 護航，' : ''}${useLst ? `戰車登陸艦${transports.length > 1 ? ` + LCVP ×${transports.length - 1}` : ''}` : `LCVP 登陸艇 ×${transports.length}`} 載運 ${cargo.length} 個排駛向「${island.name.split(' (')[0]}」！`);
   }
 

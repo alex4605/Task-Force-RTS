@@ -39,7 +39,6 @@ import {
   Vector2D,
   Turret,
   SectorIntel,
-  FleetFormation,
   GameScore,
   Era,
   UnitOrder,
@@ -659,7 +658,6 @@ export class GameEngine {
   /** Our men held by the enemy beyond its camps' room. */
   public enemyPowsInField = 0;
   private powCheckTimer = 0;
-  public hasAD3WOnStation: boolean = false;
 
   // ══════════════════════════════════════════════════════════
   // 時代三戰術核打擊全景視覺系統 (Era 3 Tactical Nuclear Strike System)
@@ -674,7 +672,6 @@ export class GameEngine {
   // 砲兵發射聲測/雷達軌跡特徵庫 (Artillery Signatures for Counter-Battery)
   // ══════════════════════════════════════════════════════════
   public artillerySignatures: { id: string; pos: Vector2D; side: ShipSide; attackerName: string; timestamp: number; weaponType: string }[] = [];
-  private sessionToken: number = 0;
 
   // Friendly Airbase (AFB) plane reserve pool & replenishment
   /** HQ island airfield's stock; every reinforcement, replenishment and purchase lands here first. */
@@ -797,7 +794,6 @@ export class GameEngine {
   private lastAaaBurstSoundTime: number = 0;
 
   public selectedUnitIds: string[] = [];
-  public formation: FleetFormation = 'independent_rts';
 
   public score: GameScore = {
     enemyShipsSunk: 0,
@@ -847,7 +843,7 @@ export class GameEngine {
   public combatLogsVersion: number = 0;
   public islandsVersion: number = 0;
   /** Campaign escalation from objectives taken (see escalation.ts). */
-  public escalation: Escalation = { progress: 0, tier: 0, captured: 0, total: 0 };
+  public escalation: Escalation = { progress: 0, tier: 0 };
   private escalationTimer = 0;
   /** Mainland installations taken from the enemy. */
   private capturedInstallations = 0;
@@ -1177,7 +1173,7 @@ export class GameEngine {
     this.economy = new Economy();
     this.economyRateTimer = 0;
     this.lastFriendlyLossWeight = 0;
-    this.escalation = { progress: 0, tier: 0, captured: 0, total: 0 };
+    this.escalation = { progress: 0, tier: 0 };
     this.capturedInstallations = 0;
     this.enemyDiversionCooldown = 0;
     this.isPaused = true;
@@ -1185,7 +1181,6 @@ export class GameEngine {
     this.combatLogs = [];
     this.recentLogText.clear();
     this.combatLogsVersion++;
-    this.sessionToken++;
     this.islandsVersion++;
     this.selectedUnitIds = [];
     this.nuclearFlash = 0;
@@ -1194,7 +1189,6 @@ export class GameEngine {
     this.hasOpforRetaliatedNuke = false;
     this.opforNukeCheckTimer = 0;
     this.artillerySignatures = [];
-    this.hasAD3WOnStation = false;
     this.sonarLogCooldowns = {};
     this.sonobuoys = [];
     this.pendingMissileLaunches = [];
@@ -2696,25 +2690,6 @@ export class GameEngine {
   public togglePause(): boolean {
     this.isPaused = !this.isPaused;
     return this.isPaused;
-  }
-
-  // Fleet Rudder & Speed
-  public setFleetSpeed(speedKnots: number) {
-    const selectedShips = this.playerShips.filter((s) => this.selectedUnitIds.includes(s.id));
-    const targets = selectedShips.length > 0 ? selectedShips : [this.getFlagship()].filter(Boolean) as Ship[];
-    targets.forEach((s) => {
-      s.targetSpeed = speedKnots;
-    });
-  }
-
-  public steerRudder(dir: 'port' | 'starboard') {
-    const selectedShips = this.playerShips.filter((s) => this.selectedUnitIds.includes(s.id));
-    const targets = selectedShips.length > 0 ? selectedShips : [this.getFlagship()].filter(Boolean) as Ship[];
-    const delta = dir === 'port' ? -0.35 : 0.35;
-    targets.forEach((s) => {
-      s.targetHeading += delta;
-      s.order = { type: 'idle' };
-    });
   }
 
   // ══════════════════════════════════════════════════════════
@@ -4707,7 +4682,6 @@ export class GameEngine {
 
     if (plane.disengageTimer <= 0) {
       plane.isHitAndRunActive = false;
-      plane.hitAndRunStage = 'ingress';
       plane.speed = plane.maxSpeed;
       // Re-target nearest hostile aircraft or naval ship to begin next slashing pass
       const nextTarget = this.aircraft.find((a) => this.isHostile(plane.side, a.side) && a.state !== 'shot_down' && this.isAirTrackedBy(a, plane.side));
@@ -7104,7 +7078,6 @@ export class GameEngine {
         heading: angle,
         isDead: false,
         trail: [],
-        isHedgehog: true,
         isDepthFused: true,
         arcAltitude: 0,
         attackerName: `${ship.name} ${label}`,
@@ -7173,7 +7146,6 @@ export class GameEngine {
         heading: launchAngle,
         isDead: false,
         trail: [],
-        isHedgehog: true,
         isDepthFused: spec.depthFused,
         arcAltitude: 0,
         attackerName: `${ship.name} ${spec.label}`,
@@ -9366,7 +9338,6 @@ export class GameEngine {
       // 散兵坑 / 壕溝: field cover counts as hard cover like a built-up area
       this.updateFoxhole(unit, dt, inUrban);
       unit.isInUrbanCover = inUrban || unit.fieldCover !== undefined;
-      unit.urbanCoverFactor = unit.isInUrbanCover ? 0.5 : 1.0;
 
       this.refreshGroundTerrainInfo(unit);
 
@@ -9381,7 +9352,6 @@ export class GameEngine {
       } else if ((unit.suppression ?? 0) > 0) {
         unit.suppression = Math.max(0, (unit.suppression ?? 0) - 8.0 * dt);
       }
-      unit.isSuppressed = (unit.suppression ?? 0) >= 30;
       unit.isPinned = (unit.suppression ?? 0) >= 75;
 
       // RTS Navigation (混亂壓制狀態下速度減緩 60%)
@@ -9777,7 +9747,6 @@ export class GameEngine {
         targetGround.organization = Math.max(0, targetGround.organization - Math.max(3, Math.round(unit.damage / 26)));
         targetGround.suppression = Math.min(100, (targetGround.suppression || 0) + Math.max(16, Math.round(unit.damage / 16)));
         targetGround.suppressionTimer = 5.0;
-        targetGround.isSuppressed = targetGround.suppression >= 30;
         targetGround.isPinned = targetGround.suppression >= 75;
         unit.cooldown = unit.disorganized ? unit.reloadTime * 2 : unit.reloadTime;
       }
@@ -10022,7 +9991,6 @@ export class GameEngine {
         targetUnit.organization = Math.max(0, targetUnit.organization - Math.max(4, Math.round(unit.damage / 24)));
         targetUnit.suppression = Math.min(100, (targetUnit.suppression || 0) + Math.max(16, Math.round(unit.damage / 16)));
         targetUnit.suppressionTimer = 5.0;
-        targetUnit.isSuppressed = targetUnit.suppression >= 30;
         targetUnit.isPinned = targetUnit.suppression >= 75;
       }
 
@@ -11461,7 +11429,6 @@ export class GameEngine {
     u.strength = Math.max(0, Math.round((u.health / u.maxHealth) * 100));
     u.suppression = Math.min(100, (u.suppression ?? 0) + supp);
     u.suppressionTimer = 5;
-    u.isSuppressed = u.suppression >= 30;
     u.isPinned = u.suppression >= 75;
     u.organization = Math.max(0, (u.organization ?? 100) - org);
     if (u.organization < 20) u.disorganized = true;
@@ -12259,7 +12226,6 @@ export class GameEngine {
       (a) => a.side === 'player' && (a.model === 'ad3w' || a.role === 'aew') && a.state !== 'shot_down' && a.state !== 'landing'
     );
 
-    this.hasAD3WOnStation = !!activeAEW;
 
     if (activeAEW) {
       // 擴大破霧鎖定半徑 (6,500m) - 僅偵測水面艦艇，水下潛艦需由反潛機艦偵獲
@@ -12647,7 +12613,6 @@ export class GameEngine {
             const decoyChance = this.getAshmChaffDecoyChance(incomingAshm);
             if (Math.random() < decoyChance) {
               incomingAshm.isDecoyed = true;
-              incomingAshm.decoyTargetPos = { ...cloudPos };
               incomingAshm.targetPos = { ...cloudPos };
               if (incomingAshm.isLeadMissile) {
                 this.handleAshmLeaderDestroyed(incomingAshm);
@@ -13373,7 +13338,6 @@ export class GameEngine {
                   : 0.76;
               if (Math.random() < decoyChance) {
                 incomingThreat.isDecoyed = true;
-                incomingThreat.decoyTargetPos = { ...cloudPos };
                 incomingThreat.targetPos = { ...cloudPos };
                 incomingThreat.targetEntityId = undefined;
                 if (incomingThreat.isLeadMissile) {
@@ -17616,8 +17580,6 @@ export class GameEngine {
         maxCooldown: gun ? reload : t.maxCooldown ?? t.reloadTime ?? 4.0,
         barrelCount: t.barrelCount ?? 2,
         angle: t.angle,
-        arcMin: -Math.PI * 0.85,
-        arcMax: Math.PI * 0.85,
         damage: gun?.damage ?? t.damage,
         id: t.id,
         };
@@ -17960,7 +17922,6 @@ export class GameEngine {
     if (plane.model !== 'mig21' && plane.model !== 'mig17' && plane.model !== 'mig19') return;
 
     plane.isHitAndRunActive = true;
-    plane.hitAndRunStage = 'disengaging';
     plane.disengageTimer = 5.2 + Math.random() * 1.8;
 
     // 計算背向交火點之脫離航向 (Bug-out Heading)
@@ -19248,7 +19209,6 @@ export class GameEngine {
           u.suppression = Math.min(100, (u.suppression || 0) + (proj.isBeamTracer ? 20 : 12));
           this.spawnImpact(proj, 'land');
           u.suppressionTimer = 5.0;
-          u.isSuppressed = u.suppression >= 30;
           u.isPinned = u.suppression >= 75;
 
           proj.isDead = true;
@@ -20123,7 +20083,6 @@ export class GameEngine {
         const hitSuppression = proj.type === 'bomb' ? 45 : proj.type === 'rocket' ? 35 : 25;
         unit.suppression = Math.min(100, (unit.suppression || 0) + hitSuppression);
         unit.suppressionTimer = 6.0;
-        unit.isSuppressed = unit.suppression >= 30;
         unit.isPinned = unit.suppression >= 75;
 
         // Combat Log 戰況播報
@@ -20343,7 +20302,6 @@ export class GameEngine {
             // 核電磁脈衝 (EMP) 衝擊波造成電子射控與指揮壓制
             u.suppression = 100;
             u.suppressionTimer = 10.0;
-            u.isSuppressed = true;
             u.isPinned = true;
             u.disorganized = true;
             u.organization = Math.max(0, u.organization - 45);

@@ -130,12 +130,6 @@ export class NavalNavigationGrid {
     }
   }
 
-  /** Shallowest water in the cell holding `pos` (m). */
-  public depthAt(pos: Vector2D): number {
-    const { gx, gy } = this.worldToCell(pos);
-    return this.minDepth[gy * this.cols + gx];
-  }
-
   /** Runs a query for a ship needing `depth` metres of water (0 = depth ignored). */
   public withDepth<T>(depth: number, fn: () => T): T {
     const prev = this.needDepth;

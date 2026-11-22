@@ -13,11 +13,6 @@ export function isRiverine(ship: Ship): boolean {
   return ship.type === 'pbr' || ship.type === 'lcm8' || ship.type === 'lcvp' || ship.type === 'river_gunboat';
 }
 
-/** Depth of a river channel (m) from its width. */
-export function riverDepthM(width: number): number {
-  return 1.5 + width * 0.12;
-}
-
 interface RiverGraph {
   nodes: Vector2D[];
   /** Adjacency: node → [neighbour, length]. */

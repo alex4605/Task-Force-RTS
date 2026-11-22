@@ -353,8 +353,6 @@ export interface App6Options {
   fn: App6Function;
   echelon: Echelon;
   mobility: Mobility;
-  /** Operational condition from strength: drawn as a bar under the frame (green / yellow / red). */
-  condition?: number;
   /** Dim the whole symbol (suppressed / pinned). */
   dim?: boolean;
   /** Frame fill override (allied formations: green, to tell them from the player's own blue). */
@@ -386,11 +384,6 @@ export function drawApp6(ctx: CanvasRenderingContext2D, o: App6Options): void {
   const bottom = frameBottom(o.affiliation);
   drawMobility(ctx, o.mobility, bottom + 1.4);
   ctx.restore();
-}
-
-/** Symbol extents for placing labels and bars around it. */
-export function app6Extents(a: Affiliation): { top: number; bottom: number } {
-  return { top: frameTop(a) - 6.5, bottom: frameBottom(a) + 5.5 };
 }
 
 // ════════════════════════════════════════════════════════════════════════════

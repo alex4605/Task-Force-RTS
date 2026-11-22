@@ -329,11 +329,6 @@ function tileHasLand(map: TerrainMap, wx: number, wy: number, size: number): boo
   return false;
 }
 
-/** Finishes every tile the current view needs (tests and screenshots only). */
-export function flushTerrainTiles(rc: RenderContext, map: TerrainMap, camera: Camera): void {
-  drawGroundTiles(rc, map, camera, Infinity);
-}
-
 function tracePolygon(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[]): void {
   for (let i = 0; i < pts.length; i++) {
     if (i === 0) ctx.moveTo(pts[i].x, pts[i].y);

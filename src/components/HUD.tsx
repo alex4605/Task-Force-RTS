@@ -83,8 +83,6 @@ interface HUDProps {
   onLaunchModel: (model: AircraftModel, count?: number, payload?: AircraftPayloadType, carrierId?: string) => void;
   onOrderSelected: (type: 'move' | 'attack' | 'patrol' | 'rtb' | 'idle') => void;
   onStopUnits: () => void;
-  onSetSpeed: (speed: number) => void;
-  onSteer: (dir: 'port' | 'starboard') => void;
   intel: SectorIntel | null;
   score: GameScore;
   onOpenBriefing: () => void;

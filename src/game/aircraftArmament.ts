@@ -250,11 +250,6 @@ export function burstBullets(battery: GunBattery): BulletSpec[] {
   }));
 }
 
-/** Penetration of a gun round against armour, by its damage class (used on the projectile). */
-export function calibreVsArmour(cal: GunCalibre | undefined): number {
-  return cal ? CALIBRE_VS_ARMOUR[cal] : 0.1;
-}
-
 // ── Rockets ───────────────────────────────────────────────────────────────────────────────────
 
 export type RocketKind = 'hvar' | 'rp3' | 'rs82' | 'type3' | 'ffar' | 'zuni' | 'sneb' | 's5' | 's8' | 's24' | 'hydra';
@@ -301,7 +296,6 @@ export function rocketsPerSalvo(rounds: number, payload: AircraftPayloadType): n
 export interface BombSpec {
   label: string;
   /** Weight of each bomb (lb). */
-  weightLb: number;
   damage: number;
   blast: number;
   armourPiercing?: boolean;
@@ -311,7 +305,6 @@ export interface BombSpec {
 function bombOf(label: string, weightLb: number, armourPiercing = false): BombSpec {
   return {
     label,
-    weightLb,
     damage: Math.round(1650 * Math.pow(weightLb / 1000, 0.85)),
     blast: Math.round(58 * Math.cbrt(weightLb / 1000)),
     armourPiercing,
@@ -403,29 +396,6 @@ export function warheadVsShip(warhead: Warhead | undefined): number {
     case 'cluster': return 0.5;
     case 'heat': return 0.85;
     default: return 1;
-  }
-}
-
-/** The warhead class of a store. */
-export function payloadWarhead(payload: AircraftPayloadType | undefined): Warhead {
-  switch (payload) {
-    case 'bomb_1600':
-    case 'bomb_1600_ap':
-    case 'tiny_tim_rocket':
-    case 'rgm84_harpoon':
-    case 'heli_asm':
-      return 'ap';
-    case 'agm65_maverick':
-    case 'hellfire_missiles':
-    case 'tow_missiles':
-      return 'heat';
-    case 'cbu_cluster_bombs':
-      return 'cluster';
-    case 'napalm_canister':
-    case 'blu27_napalm':
-      return 'incendiary';
-    default:
-      return 'he';
   }
 }
 

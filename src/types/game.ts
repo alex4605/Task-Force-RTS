@@ -275,8 +275,6 @@ export interface GroundUnit {
   order: UnitOrder;
   embarkedInShipId?: string; // If embarked aboard LCVP or LST
   isAmphibious?: boolean;   // LVT can traverse both water and land!
-  canBuildAirfield?: boolean; // Seabees can build forward airstrip on islands!
-  buildCooldown?: number;
   isBanzaiCharging?: boolean;
   isDestroyed: boolean;
   // 陸軍雙參數系統 (Dual Parameters System)
@@ -286,12 +284,10 @@ export interface GroundUnit {
   maxStrength: number;        // 最大建制度 (通常為 100)
   isSupplied?: boolean;       // 全島補給線是否連通 (需島上有運作中港口或基石)
   isSurrendered?: boolean;    // 是否已繳械投降 (組織度歸零遭包圍觸發)
-  surrenderTimer?: number;    // 投降收押倒數
   disorganized?: boolean;     // 混亂狀態 (組織度 < 20%)
   isNPCAlliedFrontline?: boolean; // 時代三 美國陸軍自動前線進攻部隊
   echelon?: 'platoon' | 'company' | 'battery' | 'battalion'; // NATO APP-6 編制階級標記
   isInUrbanCover?: boolean; // 處於城市/城鎮/定居點掩體內 (空襲減傷70%、步火減傷50%)
-  urbanCoverFactor?: number; // 掩蔽防護乘數
   /** 散兵坑: dig-in progress 0..1 (1 = dug in, cannot move until it climbs out). */
   foxhole?: number;
   /** Cover from field works this tick: inside a friendly trench or dug into its own foxhole. */
@@ -301,7 +297,6 @@ export interface GroundUnit {
   // 漸進式火力壓制系統 (Progressive Suppression System: 0~100%, 30%~80% 移速懲罰)
   suppression?: number; // 0 to 100%
   suppressionTimer?: number; // 遭火力射擊倒數
-  isSuppressed?: boolean; // suppression > 25 (減速30%~50%)
   isPinned?: boolean; // suppression > 65 (減速50%~80%)
   // 雙模砲兵打擊 (Dual-Mode Artillery: 直瞄平射 < 700m vs 遠程曲射 > 700m)
   isArtillery?: boolean;
@@ -309,7 +304,6 @@ export interface GroundUnit {
   // 跨時代自走砲 (SPG) 與反砲擊 (Counter-Battery Fire)
   isSPG?: boolean;
   isCounterBatteryFiring?: boolean;
-  counterBatteryTarget?: Vector2D;
   isNuclearTEL?: boolean;
   isMLRS?: boolean;
   /** What the ground under the unit does to it (refreshed every tick; shown in the unit panel). */
@@ -334,18 +328,13 @@ export type ShipSide = 'player' | 'enemy' | 'neutral' | 'allied';
 export interface Turret {
   relX: number;
   relY: number;
-  pos?: Vector2D;
   caliber: string;
   range: number;
   cooldown: number;
   reloadTime: number;
-  maxCooldown?: number;
   barrelCount: number;
   angle: number;
-  arcMin: number;
-  arcMax: number;
   damage: number;
-  id?: string;
 }
 
 export type UnitOrderType = 'idle' | 'move' | 'attack' | 'patrol' | 'rtb' | 'escort';
@@ -371,7 +360,6 @@ export interface ShipArmamentSpec {
   name: string;
   count: string;
   type: 'main' | 'secondary' | 'aa' | 'torpedo' | 'asw';
-  caliber?: string;
   desc?: string;
 }
 
@@ -500,7 +488,6 @@ export interface Ship {
   samModel?: string;
   maxSAMs?: number;
   readySAMs?: number;
-  isLPH?: boolean;
   isAmphibious?: boolean;
   // 艦載 ASROC 反潛火箭與 Mk 32 艦側三聯裝魚雷管 (Shipboard ASROC & SVTT)
   hasASROC?: boolean;
@@ -516,7 +503,6 @@ export interface Ship {
   chaffCooldown?: number;
   // 近迫防空彈幕與反艦飛彈警報冷卻 (Point Defense AAA Barrage & Alarm)
   pointDefenseCooldown?: number;
-  lastMissileAlarmTime?: number;
   // 時代五 CIWS 近迫防衛與反艦飛彈系統 (Era 5 CIWS & Anti-Ship Missiles)
   hasCIWS?: boolean;
   ciwsCooldown?: number;
@@ -524,7 +510,6 @@ export interface Ship {
   ciwsType?: 'phalanx' | 'ak630';
   ciwsMounts?: number; // 獨立射控 CIWS 砲座數量 (Iowa: 4座, Tico: 2座, Kirov: 8座)
   ciwsTargetId?: string; // 史實單一閉環射控追瞄鎖定中的反艦飛彈 ID (一次打一顆)
-  ciwsBurstTimer?: number; // 點射爆發計時
   hasHarpoon?: boolean;
   harpoonCooldown?: number;
   harpoonRange?: number;
@@ -663,7 +648,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '航速+15% · 盤旋敏捷 · 強化空戰咬尾火力',
     purposeBadge: '【空中制空截擊】',
     blastRadius: 0,
-    cpCost: 0,
     visualTag: '[純機槍/機砲流線構型]',
   },
   hvar_rockets: {
@@ -679,7 +663,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '超遠距500m齊射 · 壓制驅逐艦與防空工事',
     purposeBadge: '【遠程火箭壓制】',
     blastRadius: 42,
-    cpCost: 0,
     visualTag: '[雙翼下 8聯裝導軌]',
   },
   bomb_500: {
@@ -695,7 +678,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '各式戰機通用 · 直擊重創850 (近失彈激起水柱)',
     purposeBadge: '【戰術俯衝轟炸】',
     blastRadius: 45,
-    cpCost: 0,
     visualTag: '[機腹中線掛架 500lb]',
   },
   bomb_1000: {
@@ -711,7 +693,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '極高貫穿 · 直擊破甲1650 · 航母戰列艦剋星',
     purposeBadge: '【重甲穿甲破壞】',
     blastRadius: 55,
-    cpCost: 0,
     visualTag: '[重型梯形掛架 1000lb]',
   },
   bombs_dual_500: {
@@ -727,7 +708,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '雙彈覆蓋打擊 · 迅速癱瘓輕艦與防砲',
     purposeBadge: '【雙重面狀殺傷】',
     blastRadius: 48,
-    cpCost: 0,
     visualTag: '[雙翼根雙掛架 2x500lb]',
   },
   bomb_1600: {
@@ -743,7 +723,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '超重型終極破甲 · 直擊毀滅傷害2400',
     purposeBadge: '【主力艦穿甲絕殺】',
     blastRadius: 65,
-    cpCost: 0,
     visualTag: '[重型加強桁架 1600lb]',
   },
   aerial_torpedo: {
@@ -759,7 +738,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '水中高速340kt · 水線破甲 · 忽略65%裝甲 · 致命重創1450',
     purposeBadge: '【水線穿甲魚雷】',
     blastRadius: 50,
-    cpCost: 0,
     visualTag: '[半埋入機腹重型魚雷]',
   },
   depth_bombs: {
@@ -775,7 +753,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '大面積反潛 · 徹底肅清敵方潛水艇',
     purposeBadge: '【反潛密集轟殺】',
     blastRadius: 40,
-    cpCost: 0,
     visualTag: '[彈艙 4聯裝深水炸彈]',
   },
   scout_fuel: {
@@ -791,7 +768,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '視野+60% · 友艦艦砲射程與命中+25%',
     purposeBadge: '【校射戰場偵察】',
     blastRadius: 0,
-    cpCost: 0,
     visualTag: '[雙浮筒長程航空副油箱]',
   },
   scout_depth_charge: {
@@ -807,7 +783,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '空中偵巡 + 反潛獵殺',
     purposeBadge: '【巡邏反潛兩用】',
     blastRadius: 36,
-    cpCost: 0,
     visualTag: '[浮筒兩側雙輕型深彈]',
   },
   bombs_carpet_250: {
@@ -823,7 +798,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '極大散佈範圍 · 徹底粉碎敵防砲與步兵工事',
     purposeBadge: '【地毯面狀毀滅】',
     blastRadius: 52,
-    cpCost: 0,
     visualTag: '[全彈艙 24枚連環掛架]',
   },
   bombs_quad_500: {
@@ -839,7 +813,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '兼具穿透與面打擊 · 迅速癱瘓敵港口與水面艦',
     purposeBadge: '【高爆工事拆除】',
     blastRadius: 58,
-    cpCost: 0,
     visualTag: '[彈艙 16枚雙排500lb]',
   },
   bombs_dual_1000: {
@@ -855,7 +828,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '極限高空穿甲 · 重創敵戰列艦大和號與大鳳號',
     purposeBadge: '【重甲要塞穿甲】',
     blastRadius: 68,
-    cpCost: 0,
     visualTag: '[彈艙 8枚千磅穿甲彈]',
   },
   bomb_1600_ap: {
@@ -871,7 +843,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '毀滅性裝甲貫穿 · 超重裝甲巨艦剋星',
     purposeBadge: '【地下碉堡貫穿】',
     blastRadius: 76,
-    cpCost: 0,
     visualTag: '[彈艙 4枚1600lb巨彈]',
   },
   mixed_bombs_rockets: {
@@ -887,7 +858,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '超遠距火箭壓制 + 俯衝投彈直擊 · 多功能通用',
     purposeBadge: '【海空防空壓制】',
     blastRadius: 46,
-    cpCost: 0,
     visualTag: '[翼下火箭 + 機腹雙彈]',
   },
   asw_depth_bombs: {
@@ -903,7 +873,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '反潛專精 · 忽視水下隱蔽 · 撕裂潛艇龍骨',
     purposeBadge: '【專門獵殺潛水艦】',
     blastRadius: 48,
-    cpCost: 0,
     visualTag: '[機腹 6聯裝重深彈]',
   },
   tiny_tim_rocket: {
@@ -919,7 +888,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '重裝要塞與戰艦剋星 · 500m 遠程直射 · 貫穿重裝甲',
     purposeBadge: '【防空要塞粉碎】',
     blastRadius: 56,
-    cpCost: 0,
     visualTag: '[雙翼下 11.75吋巨型火箭]',
   },
   napalm_canister: {
@@ -935,7 +903,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '範圍燃燒 · 摧毀步兵陣地與防空砲 · 壓制組織度',
     purposeBadge: '【廣域陣地焦土】',
     blastRadius: 62,
-    cpCost: 0,
     visualTag: '[機翼兩側鋁製凝固汽油罐]',
   },
   asw_torpedo: {
@@ -951,7 +918,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '主動聲自導 · 精準命中伏擊潛艇 · 忽視迴避',
     purposeBadge: '【主動聲自導反潛】',
     blastRadius: 45,
-    cpCost: 0,
     visualTag: '[流線聲導反潛魚雷]',
   },
   bomb_2000: {
@@ -967,7 +933,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '極限爆破 · 摧毀重型港口工事與戰列艦',
     purposeBadge: '【港口工事極限爆破】',
     blastRadius: 86,
-    cpCost: 0,
     visualTag: '[機腹 2000lb 巨型低阻彈]',
   },
   tactical_nuke: {
@@ -999,7 +964,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '紅外線主動追蹤 · 格鬥高命中率 · 雙機編隊防空',
     purposeBadge: '【紅外線格鬥飛彈】',
     blastRadius: 35,
-    cpCost: 0,
     visualTag: '[雙翼側掛 4x AIM-9]',
   },
   aim7_sparrow: {
@@ -1015,7 +979,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '超視距攔截 · 兼具反飛彈攔截能力 · 重創大型空中目標',
     purposeBadge: '【超視距雷達截擊】',
     blastRadius: 45,
-    cpCost: 0,
     visualTag: '[機腹半埋 4x AIM-7]',
   },
   agm12_bullpup: {
@@ -1031,7 +994,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '精確打擊 · 穿透重裝甲 · 毀滅水面戰艦與橋樑',
     purposeBadge: '【精確導引空艦飛彈】',
     blastRadius: 65,
-    cpCost: 0,
     visualTag: '[翼下 2x AGM-12 犢牛犬]',
   },
   agm45_shrike: {
@@ -1047,7 +1009,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '自動鎖定敵雷達陣地 · 摧毀雷達即癱瘓周邊所有 SAM 防空飛彈',
     purposeBadge: '【反輻射野鼬壓制】',
     blastRadius: 55,
-    cpCost: 0,
     visualTag: '[野鼬雙翼 4x AGM-45]',
   },
   agm62_walleye: {
@@ -1063,7 +1024,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '光學電視高精度鎖定 · 避開低空防空砲火 · 850lb 聚能穿透戰鬥部',
     purposeBadge: '【電視導引精確滑翔】',
     blastRadius: 70,
-    cpCost: 0,
     visualTag: '[機腹掛架 2x AGM-62 鼓眼魚]',
   },
   bombs_snakeye_retarded: {
@@ -1079,7 +1039,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '超低空高速突防 · 密集覆蓋敵艦與防空陣地',
     purposeBadge: '【超低空高速突擊】',
     blastRadius: 60,
-    cpCost: 0,
     visualTag: '[翼下多聯裝掛架 12x 蛇眼]',
   },
   b52_megaton_carpet: {
@@ -1111,7 +1070,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '低空懸停密接支援 · 迅速掃除步兵、防空砲與登陸灘頭威脅',
     purposeBadge: '【密接火箭壓制】',
     blastRadius: 50,
-    cpCost: 0,
     visualTag: '[兩側短翼 2x 19聯裝火箭巢]',
   },
   helo_assault_troops: {
@@ -1127,7 +1085,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '無視灘頭地形限制 · 任意陸地機降 · 奪取內陸要塞與制高點',
     purposeBadge: '【直升機垂直機降】',
     blastRadius: 0,
-    cpCost: 0,
     visualTag: '[機艙搭載全副武裝陸戰隊]',
   },
   c1_paratroopers: {
@@ -1143,7 +1100,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '遠程高速戰術空投 · 降落傘覆蓋敵後要害 · 加速戰區推進',
     purposeBadge: '【高空傘兵突降】',
     blastRadius: 0,
-    cpCost: 0,
     visualTag: '[機尾跳板空投傘兵群]',
   },
   para_sof_team: {
@@ -1159,7 +1115,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '隱蔽滲透 · 敵後偵察與爆破',
     purposeBadge: '【特戰傘降】',
     blastRadius: 0,
-    cpCost: 0,
     visualTag: '[機尾跳板 · 特戰小組]',
   },
   para_pack_howitzer: {
@@ -1175,7 +1130,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '空降頭堡即有砲兵火力支援',
     purposeBadge: '【空降砲兵】',
     blastRadius: 0,
-    cpCost: 0,
     visualTag: '[貨艙重裝空投平台]',
   },
   heavy_drop_sheridan: {
@@ -1191,7 +1145,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '空降部隊的裝甲火力 · 152mm 砲 / 橡樹棍飛彈',
     purposeBadge: '【戰車空投】',
     blastRadius: 0,
-    cpCost: 0,
     visualTag: '[低空抽取傘 · 重裝墊板]',
   },
   helo_sling_artillery: {
@@ -1207,7 +1160,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '砲兵直接機降內陸 · 不受灘頭限制',
     purposeBadge: '【直升機吊掛】',
     blastRadius: 0,
-    cpCost: 0,
     visualTag: '[機腹吊鉤 · 155mm 榴彈砲]',
   },
   helo_vehicle_lift: {
@@ -1223,7 +1175,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '快速部署反裝甲火力',
     purposeBadge: '【車輛機降】',
     blastRadius: 0,
-    cpCost: 0,
     visualTag: '[機艙裝載悍馬]',
   },
   asw_acoustic_torpedo: {
@@ -1239,7 +1190,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '主動高頻聲納導引 · 專克潛艇 · 傘降精確入水',
     purposeBadge: '【主動聲自導獵潛】',
     blastRadius: 52,
-    cpCost: 0,
     visualTag: '[機腹/側架 2x Mk 46 聲導魚雷]',
   },
   b52_megaton_nuke: {
@@ -1287,7 +1237,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '末日絕望突襲 · 考驗特遣隊遠距防空防禦',
     purposeBadge: '【敵軍絕望核突襲】',
     blastRadius: 480,
-    cpCost: 0,
     visualTag: '[Il-28 機腹外露核彈]',
   },
   aim7_aim9_combo: {
@@ -1303,7 +1252,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '遠距超視距雷達攔截 + 近身紅外格鬥雙重切換 · 完美空優制空',
     purposeBadge: '【遠近兼具雙重制空】',
     blastRadius: 40,
-    cpCost: 0,
     visualTag: '[機腹半埋 2x 麻雀 + 翼下 2x 響尾蛇]',
   },
   gbu10_laser_paveway: {
@@ -1319,7 +1267,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '雷射精準導引 · 穿透超重裝甲碉堡 · 毀滅高價值岸防要塞',
     purposeBadge: '【外科手術穿甲破障】',
     blastRadius: 75,
-    cpCost: 0,
     visualTag: '[翼下掛架 2x GBU-10 雷射尋標彈首]',
   },
   cbu_cluster_bombs: {
@@ -1335,7 +1282,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '80m 超大爆炸半徑 · 多點連鎖震盪 · 快速癱瘓分散防空陣地',
     purposeBadge: '【防空工事廣域掃除】',
     blastRadius: 82,
-    cpCost: 0,
     visualTag: '[翼下 4x CBU-24 橄欖綠集束莢艙]',
   },
   blu27_napalm: {
@@ -1351,7 +1297,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '超大範圍火海持續燃燒 · 摧毀陣地士氣 · 壓制地面一切輕防空',
     purposeBadge: '【焦土火海持續灼燒】',
     blastRadius: 78,
-    cpCost: 0,
     visualTag: '[雙翼掛架 4x BLU-27 鋁製火球罐]',
   },
   agm78_standard_arm: {
@@ -1367,7 +1312,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '3600m 超遠視距壓制 · 記憶抗雷達關機 · 直接破壞雷達站與SAM陣地',
     purposeBadge: '【超長程野鼬雷達獵殺】',
     blastRadius: 65,
-    cpCost: 0,
     visualTag: '[翼下掛架 2x AGM-78 白色大型飛彈]',
   },
   mer_iron_bombs: {
@@ -1383,7 +1327,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '18枚連環低阻密集投擲 · 巨大面狀殺傷 · 粉碎一切陸地建築',
     purposeBadge: '【多聯彈幕走廊覆蓋】',
     blastRadius: 92,
-    cpCost: 0,
     visualTag: '[雙翼 MER 複式六聯掛架 18彈]',
   },
   heli_asm: {
@@ -1399,7 +1342,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '直升機 ASuW · 約 25–34 km 射程 · 掠海紅外/半主動導引',
     purposeBadge: '【直升機反水面作戰 ASuW】',
     blastRadius: 30,
-    cpCost: 0,
     visualTag: '[機身兩側 2x 輕型反艦飛彈]',
   },
   rgm84_harpoon: {
@@ -1415,7 +1357,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '超遠程4200m射程 · 掠海雷達尋標 · 終端穿甲高爆',
     purposeBadge: '【遠程掠海反艦穿甲】',
     blastRadius: 60,
-    cpCost: 0,
     visualTag: '[機翼掛架 2x AGM-84 掠海飛彈]',
   },
   aim54_phoenix: {
@@ -1431,7 +1372,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '5000m 超視距主動雷達導引 · 具反飛彈攔截能力 · 一擊必殺',
     purposeBadge: '【超長程空優與反飛彈攔截】',
     blastRadius: 45,
-    cpCost: 0,
     visualTag: '[機腹半埋 4x AIM-54 巨型飛彈]',
   },
   p700_granit: {
@@ -1447,7 +1387,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '2.5馬赫超音速 · 7噸巨型彈頭 · 忽略70%裝甲 · 毀滅航艦',
     purposeBadge: '【航艦毀滅重型超音速】',
     blastRadius: 95,
-    cpCost: 0,
     visualTag: '[垂直傾斜發射井 巨型衝壓巡弋飛彈]',
   },
   kh22_burya: {
@@ -1463,7 +1402,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '4馬赫天頂大俯衝 · 1000kg 高爆成型戰鬥部 · 破甲無敵',
     purposeBadge: '【高空超音速天頂俯衝】',
     blastRadius: 90,
-    cpCost: 0,
     visualTag: '[機腹半埋 Kh-22 巨型超音速飛彈]',
   },
   agm65_maverick: {
@@ -1479,7 +1417,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '精確光學導引 · 破甲深度巨大 · 專克重戰車與岸防砲台',
     purposeBadge: '【光學精確外科反裝甲】',
     blastRadius: 55,
-    cpCost: 0,
     visualTag: '[翼下三聯掛架 4x AGM-65 小牛]',
   },
   agm88_harm: {
@@ -1495,7 +1432,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '3.5馬赫高速獵殺 · 摧毀一切雷達發射源 · 野鼬核心裝備',
     purposeBadge: '【超高速雷達信號獵殺】',
     blastRadius: 65,
-    cpCost: 0,
     visualTag: '[翼下掛架 2x AGM-88 HARM]',
   },
   tow_missiles: {
@@ -1511,7 +1447,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '精確光學線導 · 連續點穴攻擊 · 陸戰隊對地核心',
     purposeBadge: '【光學線導點穴反裝甲】',
     blastRadius: 40,
-    cpCost: 0,
     visualTag: '[兩側短翼 2x 四聯拖式飛彈發射管]',
   },
   hellfire_missiles: {
@@ -1527,7 +1462,6 @@ export const PAYLOAD_CATALOG: Record<AircraftPayloadType, PayloadOption> = {
     pros: '高拋弧線攻頂 · 雷射照射導引 · 瞬間擊毀重裝甲群',
     purposeBadge: '【雷射半主動弧線攻頂】',
     blastRadius: 50,
-    cpCost: 0,
     visualTag: '[短翼 2x 四聯地獄火發射導軌]',
   },
 };
@@ -1825,22 +1759,17 @@ export interface Aircraft {
   payloadName?: string;
   carrierId?: string;
   shootCooldown: number;
-  strafeTarget?: Vector2D;
   deathTimer?: number;
   wingmanOffset: Vector2D;
   name: string;
   isKamikaze?: boolean;
   hasOhkaAttached?: boolean;
-  ohkaCarrierId?: string;
-  carpetBombTimer?: number;
-  carpetBombDropsLeft?: number;
   // 直線穿透轟炸走廊屬性 (Straight-Line Bombing Run Corridor)
   bombingRunHeading?: number;
   bombingRunTarget?: Vector2D;
   bombingDropsTotal?: number;
   bombingDropsLeft?: number;
   bombingDropCooldown?: number;
-  bombingPassedTargetDist?: number;
   missionType?: EnemyAirMissionType;
   nation?: AircraftNation; // 機徽覆寫：同一機型由不同國家操作時 (如日本航空自衛隊 F-15J)
   /** Flown from a cruiser's / destroyer's own deck (AI recovers it to the same ship). */
@@ -1856,14 +1785,12 @@ export interface Aircraft {
   trackedByPlayer?: number;
   /** Seconds the enemy side's air picture still holds this aircraft. */
   trackedByEnemy?: number;
-  isWinchester?: boolean;
   // 半主動雷達導引機頭照射狀態 (SARH Nose Radar Illumination)
   sarhIlluminatingTargetId?: string;
   sarhHoldTimer?: number;
   // 轟炸機與攻擊機自衛機槍火力 (Defensive Tail/Dorsal Gunners)
   hasDefensiveTurret?: boolean;
   rearGunnerCooldown?: number;
-  tailGunnerCooldown?: number;
   hasFiredRockets?: boolean;
   // 戰機多元墜毀物理與解體模式 (Multi-mode Aircraft Crash Physics)
   crashMode?: 'smoke' | 'burn' | 'breakup' | 'spin';
@@ -1902,7 +1829,6 @@ export interface Aircraft {
   isHitAndRunActive?: boolean;
   disengageTimer?: number;
   bugOutHeading?: number;
-  hitAndRunStage?: 'ingress' | 'slashing' | 'disengaging';
   /** Turn points an escalated raid flies before running in on its target. */
   ingress?: Vector2D[];
 }
@@ -2084,7 +2010,6 @@ export type ProjectileType =
   | 'missile_arm'   // 反輻射飛彈 (AGM-45 百靈鳥 / AGM-88 HARM / Kh-31P) - 專門追蹤雷達信號
   | 'missile_cruise' // 巡弋飛彈 (戰斧 TLAM / 陸基 GLCM / RK-55 石榴石 / 潛射戰斧) - 長程精確外科手術打擊
   | 'missile_ssm'   // 地對地戰術彈道/巡弋飛彈 (9K72 飛毛腿-B Scud-B / 9K79 圓點 Tochka-U / ATACMS)
-  | 'missile_nuclear_ssm' // 核彈頭戰術彈道飛彈 (MGM-52 Lance / 核飛毛腿)
   | 'slbm_trident'  // 俄亥俄級潛射彈道核飛彈 (UGM-133 Trident II D5)
   | 'slbm_r39';     // 颱風級潛射彈道核飛彈 (R-39 Rif)
 
@@ -2138,11 +2063,9 @@ export interface Projectile {
   warhead?: 'he' | 'ap' | 'heat' | 'cluster' | 'incendiary' | 'gun';
   /** Fraction of a gun round's or rocket's damage that gets through tank armour. */
   vsArmour?: number;
-  targetEntityName?: string;
   isNapalm?: boolean;
   isTinyTim?: boolean;
   isAcousticHoming?: boolean;
-  isHedgehog?: boolean;
   /** Squid / Limbo / Bofors / RBU rounds sink to a set depth instead of needing a contact hit. */
   isDepthFused?: boolean;
   arcAltitude?: number;
@@ -2154,9 +2077,7 @@ export interface Projectile {
   targetEntityType?: 'aircraft' | 'ship' | 'installation' | 'projectile' | 'ground';
   guidanceType?: 'ir' | 'sarh' | 'radio' | 'tv' | 'anti_radiation' | 'passive_radar_arm' | 'active_radar' | 'command_radar' | 'semi_active_radar' | 'radar_homing' | 'infrared' | 'laser';
   turnRate?: number;
-  fuelTimer?: number;
   isInterceptionMissile?: boolean;
-  isAirDrop?: boolean;
   isSeaSkimming?: boolean;
   // ASROC 反潛火箭助飛魚雷與聲自導魚雷 (ASROC & Acoustic Homing Torpedo)
   isASROC?: boolean;
@@ -2165,8 +2086,6 @@ export interface Projectile {
   acousticPingTimer?: number;
   sarhIlluminatorId?: string; // 機頭/艦載射控雷達照射源 ID
   isDecoyed?: boolean; // 被箔條雲/熱焰彈誘騙偏航
-  decoyTargetPos?: Vector2D;
-  launchTime?: number;
   // 時代五 ATACMS / MLRS 戰術陸基火箭特徵
   isClusterSubmunition?: boolean;
   clusterBombletsCount?: number;
@@ -2180,7 +2099,6 @@ export interface Projectile {
   missileHealth?: number;
   maxMissileHealth?: number;
   flakHitAccum?: number;
-  timeInPointDefenseZone?: number;
   // 歷史反艦飛彈 (AShM) 學說差異化欄位
   ashmVariant?: AshmVariant;
   ashmProfile?: AshmFlightProfile;
@@ -2205,11 +2123,9 @@ export interface Particle {
   type:
     | 'spark'
     | 'smoke'
-    | 'flak'
     | 'flak_puff'
     | 'splash'
     | 'shockwave'
-    | 'torpedo_bubble'
     | 'shrapnel'
     | 'geyser'
     | 'tracer'
@@ -2222,12 +2138,9 @@ export interface Particle {
     | 'gun_smoke';
   shape?: 'circle' | 'line' | 'ring';
   length?: number;
-  scale?: number;
   rot?: number;
   rotSpeed?: number;
 }
-
-export type FleetFormation = 'circular_screen' | 'line_ahead' | 'wedge_strike' | 'independent_rts';
 
 export interface SectorIntel {
   sectorNumber: number;
@@ -2237,10 +2150,6 @@ export interface SectorIntel {
   briefing: string;
   primaryObjective: string;
   secondaryObjective: string;
-  isVictory?: boolean;
-  isDefeat?: boolean;
-  starsEarned?: number;
-  isCompleted?: boolean;
 }
 
 export interface FleetUpgrades {
@@ -2250,7 +2159,6 @@ export interface FleetUpgrades {
   carrierCapacityLevel: number;
   artilleryDamageLevel: number;
   depthChargeSonarLevel: number;
-  unlockedF8F?: boolean; // Era 2 Bearcat elite interceptor
 }
 
 export interface GameScore {
@@ -2292,7 +2200,6 @@ export interface CombatLogEntry {
     | 'bomb_hit'
     | 'bomb_crit'
     | 'bomb_near_miss'
-    | 'bomb_miss'
     | 'torpedo_hit'
     | 'rocket_hit'
     | 'gun_hit'

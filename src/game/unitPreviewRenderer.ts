@@ -13,7 +13,6 @@ export type UnitPreviewKind = 'ship' | 'aircraft' | 'ground' | 'installation';
 export interface UnitPreviewOptions {
   payloadType?: AircraftPayloadType;
   compact?: boolean;
-  isPlayer?: boolean;
   /** Era of the card (ships: draws the exact class the card delivers in that era). */
   era?: Era;
 }

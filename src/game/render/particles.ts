@@ -15,8 +15,8 @@ export function drawParticles(rc: RenderContext, particles: Particle[], camera: 
     ctx.save();
     ctx.globalAlpha = alpha;
 
-    if (p.type === 'flak_puff' || p.type === 'flak') {
-      drawAirburst(ctx, p, p.type === 'flak' ? 0.8 : 1);
+    if (p.type === 'flak_puff') {
+      drawAirburst(ctx, p);
     } else if (p.type === 'muzzle_flash') {
       drawMuzzleFlash(ctx, p);
     } else if (p.type === 'gun_smoke') {
@@ -192,10 +192,10 @@ function hash01(seed: number, k: number): number {
  * detonation smoke that drifts and thins. Colour comes from the particle (black for US 5"/38 and
  * 90 mm, brown-grey for Japanese and Soviet charges).
  */
-function drawAirburst(ctx: CanvasRenderingContext2D, p: Particle, scale: number) {
+function drawAirburst(ctx: CanvasRenderingContext2D, p: Particle) {
   const prog = 1 - p.life / p.maxLife; // 0 = detonation, 1 = dissipated
   const seed = p.rot ?? 0;
-  const R = p.radius * scale;
+  const R = p.radius;
   ctx.save();
   ctx.translate(p.x, p.y);
   ctx.globalAlpha = 1;

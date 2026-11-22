@@ -2012,8 +2012,6 @@ export function createGroundUnit(
     isSPG,
     isMLRS,
     isNuclearTEL,
-    canBuildAirfield: type === 'usmc_engineer',
-    buildCooldown: 0,
     isDestroyed: false,
     organization: 100,
     maxOrganization: 100,
@@ -2021,7 +2019,6 @@ export function createGroundUnit(
     maxStrength: 100,
     isSupplied: true,
     isSurrendered: false,
-    surrenderTimer: 0,
     disorganized: false,
     echelon,
   };
@@ -2450,7 +2447,6 @@ export function createLPHIwoJima(id: string, name: string, pos: Vector2D): Ship 
     maxHealth: 4800,
     armor: 0.32,
     detectionRange: 3800,
-    isLPH: true,
     isAmphibious: true,
     hasChaffLauncher: true,
     chaffCooldown: 0,
@@ -3194,7 +3190,6 @@ export function createAustinLPD(id: string, name: string, pos: Vector2D): Ship {
     armor: 0.30,
     detectionRange: 3800,
     isAmphibious: true,
-    isLPH: true,
     hasCIWS: true,
     ciwsCooldown: 0,
     ciwsRange: 1100,
@@ -9663,8 +9658,6 @@ export function createTurret(
     cooldown: Math.random() * 1.5,
     barrelCount,
     angle: initialAngle,
-    arcMin: -Math.PI * 0.85,
-    arcMax: Math.PI * 0.85,
     damage,
   };
 }

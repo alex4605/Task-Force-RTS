@@ -58,8 +58,6 @@ export function crewOf(model: AircraftModel): number {
   return CREW[model] ?? 1;
 }
 
-export const isHelicopter = (model: AircraftModel) => HELICOPTERS.has(model);
-
 /** Can use a FARP: helicopters and the V/STOL jets. */
 export const isRotaryOrVstol = (model: AircraftModel) => HELICOPTERS.has(model) || model === 'av8b' || model === 'yak38' || model === 'sea_harrier';
 

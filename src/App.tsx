@@ -247,14 +247,6 @@ export default function App() {
     engine.stopUnits();
   };
 
-  const handleSetSpeed = (knots: number) => {
-    engine.setFleetSpeed(knots);
-  };
-
-  const handleSteer = (dir: 'port' | 'starboard') => {
-    engine.steerRudder(dir);
-  };
-
   const handleToggleMute = () => {
     const muted = soundEngine.toggleMute();
     setIsMuted(muted);
@@ -448,8 +440,6 @@ export default function App() {
         onLaunchModel={handleLaunchModel}
         onOrderSelected={handleOrderSelected}
         onStopUnits={handleStopUnits}
-        onSetSpeed={handleSetSpeed}
-        onSteer={handleSteer}
         intel={intel}
         score={score}
         onOpenBriefing={() => setIsBriefingOpen(true)}

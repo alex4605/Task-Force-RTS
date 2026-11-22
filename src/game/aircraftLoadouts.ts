@@ -216,10 +216,6 @@ export function getModelPayloads(model: AircraftModel, era: Era): AircraftPayloa
   return storesFor(model, era).map((st) => st.payload);
 }
 
-export function getDefaultPayload(model: AircraftModel, era: Era): AircraftPayloadType {
-  return storesFor(model, era)[0].payload;
-}
-
 /** The requested store if this airframe carried it, otherwise its historical default. */
 export function resolvePayload(model: AircraftModel, requested: AircraftPayloadType | undefined, era: Era): AircraftPayloadType {
   const stores = storesFor(model, era);
