@@ -39,6 +39,25 @@ export function makeInstallation(spec: InstallationSpec): Installation {
   return { angle: 0, range: 0, cooldown: 0, reloadTime: 0, ...spec, maxHealth: spec.health, isDestroyed: false };
 }
 
+/**
+ * The nearest item to `from` that passes `keep`, in one pass and without allocating. Distance is
+ * compared first, so the (often costly) predicate only runs on candidates closer than the best so
+ * far. Ties go to the earlier item, as with a stable sort.
+ */
+export function nearestTo<T extends { pos: Vector2D }>(items: readonly T[], from: Vector2D, keep?: (t: T) => boolean): T | undefined {
+  let best: T | undefined;
+  let bestD = Infinity;
+  for (const t of items) {
+    const dx = t.pos.x - from.x;
+    const dy = t.pos.y - from.y;
+    const d = dx * dx + dy * dy;
+    if (d >= bestD || (keep && !keep(t))) continue;
+    best = t;
+    bestD = d;
+  }
+  return best;
+}
+
 export function dist(a: Vector2D, b: Vector2D): number {
   const dx = a.x - b.x;
   const dy = a.y - b.y;

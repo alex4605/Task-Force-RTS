@@ -96,6 +96,7 @@ type RadarTargetEntity = Installation | Ship | GroundUnit;
 import {
   generateSector,
   isPointInPolygon,
+  nearestTo,
   isPointOnIslandLand,
   dist,
   distToShipHull,
@@ -176,10 +177,13 @@ const FULL_LOAD_TONS: Partial<Record<string, number>> = {
 };
 
 /** Defensive positions that keep firing for whoever holds them. */
-const FIELD_WORK_TYPES = new Set<string>(['bunker_nest', 'infantry_squad', 'infantry_platoon', 'tank_platoon', 'tank_battalion', 'command_post', 'battalion_cp']);
+const GARRISON_POSITION_TYPES = new Set<string>(['bunker_nest', 'infantry_squad', 'infantry_platoon', 'tank_platoon', 'tank_battalion', 'command_post', 'battalion_cp']);
 
 /** Small craft a machine gun or a tank gun can usefully engage (landing craft, patrol and river boats). */
 const SMALL_CRAFT_TYPES = new Set<string>(['lcvp', 'lcm8', 'lcac', 'lsm_r', 'lst', 'patrol_boat', 'pbr', 'river_gunboat', 'komar_ptg', 'osa']);
+
+/** Hull types that dive. */
+const SUBMARINE_TYPES: ReadonlySet<string> = new Set(['submarine', 'ssn_la', 'ssgn_oscar', 'foxtrot']);
 
 export class GameEngine {
   public sectorNumber: number = 1;
@@ -385,6 +389,18 @@ export class GameEngine {
   /** Whether an observer can find this unit at all (special forces stay hidden until close or firing). */
   private canSpotGround(observer: Vector2D, u: GroundUnit): boolean {
     return canSpotUnit(observer, u, concealment(this.terrain, u.pos));
+  }
+
+  /**
+   * Whether a shooter can see and engage a ground unit: the cheap range reject first, then
+   * concealment, and the terrain line-of-sight walk only for units that are actually seen.
+   */
+  private canHitGround(from: Vector2D, range: number, u: GroundUnit, indirect: boolean): boolean {
+    const dx = u.pos.x - from.x;
+    const dy = u.pos.y - from.y;
+    const maxReach = range * 1.25;
+    if (dx * dx + dy * dy > maxReach * maxReach) return false;
+    return this.canSpotGround(from, u) && canEngageGround(this.terrain, from, range, u.pos, indirect);
   }
 
   private canEngageGroundAt(from: Vector2D, range: number, to: Vector2D, indirect: boolean): boolean {
@@ -773,7 +789,7 @@ export class GameEngine {
   }
 
   public isSubmarine(s: Ship): boolean {
-    return s.type === 'submarine' || s.type === 'ssn_la' || s.type === 'ssgn_oscar' || s.type === 'foxtrot';
+    return SUBMARINE_TYPES.has(s.type);
   }
   private civilianCollateralCooldowns: Record<string, number> = {};
   // 反艦飛彈防空火網與近迫防空警報冷卻 (Anti-Ship Missile AAA Barrage & Defensive Alarm Throttling)
@@ -1148,6 +1164,7 @@ export class GameEngine {
     this.alliedShips = [];
     this.alliedOps = this.makeAlliedOps();
     this.enemyShips = generated.enemyShips;
+    this.steerDest.clear();
     this.groundUnits = generated.groundUnits;
     this.sectorIntel = generated.briefing;
     this.aircraft = [];
@@ -3248,6 +3265,18 @@ export class GameEngine {
   // ══════════════════════════════════════════════════════════
   /** The player's working repair docks, listed once per tick (every ship asks every frame). */
   private dockCache: { t: number; docks: Installation[] } = { t: -1, docks: [] };
+  /** Refugee camps with a marked perimeter (cover like a built-up area), refreshed once per tick. */
+  private campCache: { t: number; camps: Installation[] } = { t: -1, camps: [] };
+  private refugeeCamps(): Installation[] {
+    if (this.campCache.t !== this.gameTime) {
+      this.campCache = {
+        t: this.gameTime,
+        camps: this.islands.flatMap((i) => i.installations).filter((inst) => !inst.isDestroyed && inst.type === 'refugee_camp' && (inst.civilianZoneRadius || 0) > 0),
+      };
+    }
+    return this.campCache.camps;
+  }
+
   private playerRepairDocks(): Installation[] {
     if (this.dockCache.t !== this.gameTime) {
       this.dockCache = {
@@ -3395,13 +3424,22 @@ export class GameEngine {
     return false;
   }
 
+  /** Goal each enemy ship's current sea-lane path was planned for. */
+  private steerDest = new Map<string, Vector2D>();
+
   private getEnemySteerPoint(ship: Ship, dest: Vector2D): Vector2D {
     if (!this.navGrid) return dest;
     const dTotal = dist(ship.pos, dest);
     if (dTotal < 520) return dest;
-    if (!ship.order.waypoints || ship.order.waypoints.length === 0 || (ship.repathCooldown || 0) <= 0 || ship.navStuck) {
-      ship.order.waypoints = this.navGrid.findPath(ship.pos, dest, requiredDepth(ship));
-      ship.order.activeWaypointIndex = 0;
+    const lastDest = this.steerDest.get(ship.id);
+    const noPath = !ship.order.waypoints || ship.order.waypoints.length === 0 || ship.navStuck;
+    if (noPath || (ship.repathCooldown || 0) <= 0) {
+      // Re-plan only when the goal has moved (a chased target) or the ship is stuck
+      if (noPath || !lastDest || dist(lastDest, dest) > 250) {
+        ship.order.waypoints = this.navGrid.findPath(ship.pos, dest, requiredDepth(ship));
+        ship.order.activeWaypointIndex = 0;
+        this.steerDest.set(ship.id, { x: dest.x, y: dest.y });
+      }
       ship.repathCooldown = 3.5;
       ship.navStuck = false;
     }
@@ -3425,7 +3463,7 @@ export class GameEngine {
     }
 
     if (this.isSubmarine(ship)) {
-      let target: Ship | undefined = hostiles.sort((a, b) => dist(ship.pos, a.pos) - dist(ship.pos, b.pos))[0];
+      let target: Ship | undefined = nearestTo(hostiles, ship.pos);
       if (!target) target = flagship;
       if (!target) return;
 
@@ -3605,9 +3643,7 @@ export class GameEngine {
 
       if (!target || dist(ship.pos, target.pos) > effectiveRange) {
         target =
-          targetShips
-            .filter((s) => !s.isSunk && this.isGunTarget(s, ship.side) && dist(ship.pos, s.pos) <= effectiveRange && this.seaLineClear(ship.pos, s.pos))
-            .sort((a, b) => dist(ship.pos, a.pos) - dist(ship.pos, b.pos))[0] || null;
+          nearestTo(targetShips, ship.pos, (s) => !s.isSunk && dist(ship.pos, s.pos) <= effectiveRange && this.isGunTarget(s, ship.side) && this.seaLineClear(ship.pos, s.pos)) || null;
       }
 
       // Rules of engagement: a player ship told to hold fire at ships only shoots on order
@@ -8831,24 +8867,29 @@ export class GameEngine {
             // the troops and only turn on ships when no enemy troops are in reach
             const fieldGuns = inst.type !== 'coastal_gun';
             const findGroundTarget = () =>
-              this.groundUnits
-                .filter((u) => !u.isDestroyed && !u.embarkedInShipId && this.isHostile(inst.side, u.side) && this.canSpotGround(inst.pos, u) && this.canEngageGroundAt(inst.pos, inst.range, u.pos, fieldGuns))
-                .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
+              nearestTo(
+                this.groundUnits,
+                inst.pos,
+                (u) => !u.isDestroyed && !u.embarkedInShipId && this.isHostile(inst.side, u.side) && this.canHitGround(inst.pos, inst.range, u, fieldGuns)
+              );
             const earlyGround = fieldGuns ? findGroundTarget() : undefined;
             const shipTarget = earlyGround
               ? undefined
-              : this.enemyShips
-                  .filter((s) => !s.isSunk && this.isHostile(inst.side, s.side) && (!this.isSubmarine(s) || Boolean(s.isSpotted)) && dist(inst.pos, s.pos) <= this.coastalReach(inst.pos, inst.range))
-                  .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
+              : nearestTo(
+                  this.enemyShips,
+                  inst.pos,
+                  (s) => !s.isSunk && this.isHostile(inst.side, s.side) && (!this.isSubmarine(s) || Boolean(s.isSpotted)) && dist(inst.pos, s.pos) <= this.coastalReach(inst.pos, inst.range)
+                );
 
             const groundTarget = earlyGround ?? (!shipTarget ? findGroundTarget() : undefined);
 
             const instTarget =
               !shipTarget && !groundTarget && inst.type === 'coastal_gun'
-                ? this.islands
-                    .flatMap((isl) => isl.installations)
-                    .filter((other) => !other.isDestroyed && !other.isCivilian && this.isHostile(inst.side, other.side) && dist(inst.pos, other.pos) <= inst.range)
-                    .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0]
+                ? nearestTo(
+                    this.islands.flatMap((isl) => isl.installations),
+                    inst.pos,
+                    (other) => !other.isDestroyed && !other.isCivilian && this.isHostile(inst.side, other.side) && dist(inst.pos, other.pos) <= inst.range
+                  )
                 : undefined;
 
             const targetEntity: Ship | GroundUnit | Installation | undefined = shipTarget || groundTarget || instTarget;
@@ -8898,7 +8939,7 @@ export class GameEngine {
           }
           // Captured or allied field works (bunkers, MG posts, dug-in tanks) fight for their new
           // owner below; other friendly facilities carry no direct-fire weapons.
-          if (!FIELD_WORK_TYPES.has(inst.type)) continue;
+          if (!GARRISON_POSITION_TYPES.has(inst.type)) continue;
         }
 
         // ══════════════════════════════════════════════════════════
@@ -8913,18 +8954,18 @@ export class GameEngine {
         // A headquarters' guard platoon covers its own perimeter, not the whole valley
         const reach = inst.type === 'command_post' || inst.type === 'battalion_cp' ? Math.min(inst.range || 600, 650) : inst.range;
         const findShip = () =>
-          (inst.side === 'enemy' ? [...this.playerShips, ...this.alliedShips] : this.enemyShips)
-            .filter(
-              (s) =>
-                !s.isSunk &&
-                this.isHostile(inst.side, s.side) &&
-                (!smallArms || SMALL_CRAFT_TYPES.has(s.type)) &&
-                (!this.isSubmarine(s) || (!smallArms && Boolean(inst.side === 'enemy' ? s.isSpottedByEnemy : s.isSpotted))) &&
-                dist(inst.pos, s.pos) <= this.coastalReach(inst.pos, reach)
-            )
-            .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
+          nearestTo(
+            inst.side === 'enemy' ? [...this.playerShips, ...this.alliedShips] : this.enemyShips,
+            inst.pos,
+            (s) =>
+              !s.isSunk &&
+              this.isHostile(inst.side, s.side) &&
+              (!smallArms || SMALL_CRAFT_TYPES.has(s.type)) &&
+              (!this.isSubmarine(s) || (!smallArms && Boolean(inst.side === 'enemy' ? s.isSpottedByEnemy : s.isSpotted))) &&
+              dist(inst.pos, s.pos) <= this.coastalReach(inst.pos, reach)
+          );
         const findGround = () =>
-          this.groundUnits.find((u) => this.isHostile(inst.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && this.canSpotGround(inst.pos, u) && this.canEngageGroundAt(inst.pos, reach, u.pos, inst.type === 'towed_artillery'));
+          this.groundUnits.find((u) => this.isHostile(inst.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && this.canHitGround(inst.pos, reach, u, inst.type === 'towed_artillery'));
         let shipTarget: Ship | undefined;
         let groundTarget: GroundUnit | undefined | null;
         if (inst.type === 'coastal_gun') {
@@ -9108,6 +9149,7 @@ export class GameEngine {
     // ══════════════════════════════════════════════════════════
     // 1. 全島補給線連通判定與工兵急造棧橋港自動升級 (Island Supply & Port Evolution)
     // ══════════════════════════════════════════════════════════
+    const camps = this.refugeeCamps();
     const islandSupplyMap = new Map<string, { playerSupplied: boolean; enemySupplied: boolean; hasHospital: boolean; hasDepot: boolean; hasMajorPort: boolean }>();
 
     for (const isl of this.islands) {
@@ -9313,16 +9355,13 @@ export class GameEngine {
       // ══════════════════════════════════════════════════════════
       // Built-up area from the terrain map; refugee camps keep their marked perimeter
       let inUrban = this.terrain.isUrban(unit.pos.x, unit.pos.y);
-      for (const isl of inUrban ? [] : this.islands) {
-        for (const inst of isl.installations) {
-          if (!inst.isDestroyed && inst.type === 'refugee_camp' && (inst.civilianZoneRadius || 0) > 0) {
-            if (dist(unit.pos, inst.pos) <= inst.civilianZoneRadius!) {
-              inUrban = true;
-              break;
-            }
+      if (!inUrban) {
+        for (const camp of camps) {
+          if (dist(unit.pos, camp.pos) <= camp.civilianZoneRadius!) {
+            inUrban = true;
+            break;
           }
         }
-        if (inUrban) break;
       }
       // 散兵坑 / 壕溝: field cover counts as hard cover like a built-up area
       this.updateFoxhole(unit, dt, inUrban);
@@ -9482,8 +9521,7 @@ export class GameEngine {
         this.isHostile(unit.side, u.side) &&
         !u.isDestroyed &&
         !u.embarkedInShipId &&
-        this.canSpotGround(unit.pos, u) &&
-        (unit.isBanzaiCharging ? dist(unit.pos, u.pos) <= 1200 : this.canEngageGroundAt(unit.pos, unit.range, u.pos, indirectFire))
+        (unit.isBanzaiCharging ? dist(unit.pos, u.pos) <= 1200 && this.canSpotGround(unit.pos, u) : this.canHitGround(unit.pos, unit.range, u, indirectFire))
     );
 
     // 局部反突擊判定: 若同一島嶼或1600m內有美軍或盟軍登陸部隊，敵機動部隊主動逼近
@@ -9753,7 +9791,7 @@ export class GameEngine {
 
     const indirectFire = this.isIndirectFire(unit);
     const enemyGround = this.groundUnits.find(
-      (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && this.canSpotGround(unit.pos, u) && this.canEngageGroundAt(unit.pos, unit.range, u.pos, indirectFire)
+      (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && this.canHitGround(unit.pos, unit.range, u, indirectFire)
     );
     // Special forces: demolition parties go for the installations first
     const sabotage = isSof(unit.type) ? this.findSabotageTarget(unit) : null;
@@ -12963,15 +13001,11 @@ export class GameEngine {
 
         // 6e. 敵軍 4K51 邊界 (Rubezh / Redut) 岸置超重型反艦飛彈陣地 (射程 4800m)
         if (inst.side === 'enemy' && (inst.type === 'coastal_rubezh' || inst.type === 'coastal_gun')) {
-          const targetPlayerShip = [...this.playerShips, ...this.alliedShips]
-            .filter(
-              (s) =>
-                !s.isSunk &&
-                !this.isSubmarine(s) &&
-                this.isHostile(inst.side, s.side) &&
-                dist(inst.pos, s.pos) <= this.coastalReach(inst.pos, 4800)
-            )
-            .sort((a, b) => dist(inst.pos, a.pos) - dist(inst.pos, b.pos))[0];
+          const targetPlayerShip = nearestTo(
+            [...this.playerShips, ...this.alliedShips],
+            inst.pos,
+            (s) => !s.isSunk && !this.isSubmarine(s) && this.isHostile(inst.side, s.side) && dist(inst.pos, s.pos) <= this.coastalReach(inst.pos, 4800)
+          );
           if (targetPlayerShip) {
             this.fireSovietSaturationSalvo(inst, targetPlayerShip, 8);
             inst.cooldown = 36.0;
@@ -14802,17 +14836,24 @@ export class GameEngine {
     const mainland = this.islands.find((i) => i.id === 'island-mainland');
     if (!mainland) return;
 
+    // One pass over the troops on land per installation (squared distances, stop once both sides are seen)
+    const troops = this.groundUnits.filter((u) => !u.isDestroyed && !u.embarkedInShipId && (u.side === 'player' || u.side === 'enemy'));
+    const R2 = 120 * 120;
     for (const inst of mainland.installations) {
       // Airfields are contested over their whole strip (updateAirfieldControl)
       if (inst.isDestroyed || inst.type === 'airfield') continue;
-      const nearbyFriendly = this.groundUnits.filter(
-        (u) => !u.isDestroyed && !u.embarkedInShipId && u.side === 'player' && dist(u.pos, inst.pos) <= 120
-      );
-      const nearbyHostile = this.groundUnits.filter(
-        (u) => !u.isDestroyed && !u.embarkedInShipId && u.side === 'enemy' && dist(u.pos, inst.pos) <= 120
-      );
+      let friendly: GroundUnit | undefined;
+      let hostile = false;
+      for (const u of troops) {
+        const dx = u.pos.x - inst.pos.x;
+        const dy = u.pos.y - inst.pos.y;
+        if (dx * dx + dy * dy > R2) continue;
+        if (u.side === 'player') friendly ??= u;
+        else hostile = true;
+        if (friendly && hostile) break;
+      }
 
-      if (nearbyFriendly.length > 0 && nearbyHostile.length === 0) {
+      if (friendly && !hostile) {
         if (inst.side !== 'player') {
           inst.captureProgress = (inst.captureProgress || 0) + 12 * dt;
           if (inst.captureProgress >= 100) {
@@ -14826,14 +14867,14 @@ export class GameEngine {
             this.addCombatLog({
               category: 'sunk',
               sourceSide: 'player',
-              sourceName: nearbyFriendly[0].name,
+              sourceName: friendly.name,
               targetName: inst.name,
               actionType: 'installation_down',
               text: `🚩【大陸設施控制】友軍地面部隊成功奪取並控制戰略設施「${inst.name}」！繳獲戰地物資 +${gainTxt}！`,
             });
           }
         }
-      } else if (nearbyHostile.length > 0 && nearbyFriendly.length === 0) {
+      } else if (hostile && !friendly) {
         if (inst.side !== 'enemy') {
           inst.captureProgress = (inst.captureProgress || 0) + 10 * dt;
           if (inst.captureProgress >= 100) {
