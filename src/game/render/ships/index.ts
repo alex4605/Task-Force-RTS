@@ -1028,6 +1028,6 @@ function drawDatum(rc: RenderContext, ship: Ship): void {
 }
 
 /** A ship's hull and deck artwork alone, at the current transform (for menu icons). */
-export function drawShipIcon(rc: RenderContext, ship: Ship): void {
-  drawHull(rc, planView(ship), '#E0F7FA', '#80DEEA');
+export function drawShipIcon(rc: RenderContext, ship: Ship, hullColor = '#E0F7FA', detailColor = '#80DEEA'): void {
+  drawHull(rc, planView(ship), hullColor, detailColor);
 }

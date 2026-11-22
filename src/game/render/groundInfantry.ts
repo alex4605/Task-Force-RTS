@@ -605,7 +605,18 @@ export function drawInfantryTeam(ctx: CanvasRenderingContext2D, type: string, pa
 
 /** 82mm mortar section: baseplate, tube on its bipod, ready rounds and a crew of three. */
 export function drawMortarSection(ctx: CanvasRenderingContext2D, type: string, pal: PlanPalette): void {
-  const kit = /42|45/.test(type) ? KITS.ija : KITS.soviet;
+  const us = /^us/.test(type);
+  const kit = us
+    ? /_(42|45)$/.test(type)
+      ? KITS.usmc_ww2
+      : /_50$/.test(type)
+      ? KITS.us_korea
+      : /_65$/.test(type)
+      ? KITS.us_vietnam
+      : KITS.us_83
+    : /42|45/.test(type)
+    ? KITS.ija
+    : KITS.soviet;
   ctx.fillStyle = '#37474F';
   ctx.beginPath();
   ctx.arc(-1, 0, 2.2, 0, Math.PI * 2);

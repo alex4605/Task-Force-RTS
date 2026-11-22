@@ -625,7 +625,7 @@ export function getAlliedSagFleet(era: Era): AlliedSagFleet {
           ],
         },
         {
-          name: 'FGS Bremen 不萊梅號 (F122)',
+          name: 'FGS Bremen 不萊梅號 (F207)',
           codeName: 'FGS Bremen (F207)',
           type: 'ffg_ohp',
           length: 84,

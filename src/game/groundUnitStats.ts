@@ -207,11 +207,21 @@ export const GROUND_UNIT_STATS: Record<GroundUnitType, GroundUnitStats> = {
   us_cav_air_assault_65: { health: 2200, armor: 0.4, speed: 4.8, damage: 115, reloadTime: 0.9 },
   us_m1a1_pack_75: { health: 1300, armor: 0.25, speed: 2.6, damage: 240, reloadTime: 3.0 },
   us_m102_105: { health: 1500, armor: 0.28, speed: 2.6, damage: 320, reloadTime: 3.0 },
+  // Mortars: quick, plunging fire at short range; the heavy 4.2-inch hits harder but further back
+  usmc_mortar_81_42: { health: 1450, armor: 0.28, speed: 3.4, damage: 190, reloadTime: 2.0 },
+  us_mortar_42in_45: { health: 1550, armor: 0.28, speed: 3.0, damage: 290, reloadTime: 2.6 },
+  usmc_mortar_42in_50: { health: 1600, armor: 0.3, speed: 3.0, damage: 300, reloadTime: 2.6 },
+  usmc_mortar_81_65: { health: 1500, armor: 0.3, speed: 3.6, damage: 210, reloadTime: 1.9 },
+  us_m106_65: { health: 2600, armor: 0.55, speed: 5.6, damage: 300, reloadTime: 2.4, isAmphibious: true },
+  usmc_mortar_m252_83: { health: 1550, armor: 0.32, speed: 3.8, damage: 230, reloadTime: 1.8 },
+  us_m106a2_83: { health: 2700, armor: 0.56, speed: 5.6, damage: 320, reloadTime: 2.3, isAmphibious: true },
   uk_milan_team: { health: 1500, armor: 0.3, speed: 4.2, damage: 560, reloadTime: 3.2 },
 };
 
 /** Indirect-fire units: towed and self-propelled guns, rocket artillery and ballistic missiles. */
 export const ARTILLERY_UNIT_TYPES: ReadonlySet<GroundUnitType> = new Set<GroundUnitType>([
+  'us_m106_65',
+  'us_m106a2_83',
   'us_m1a1_pack_75',
   'us_m102_105',
   'opfor_m46_130mm',

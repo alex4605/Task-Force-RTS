@@ -9730,3 +9730,42 @@ export function isPointOnIslandLand(point: Vector2D, island: Island): boolean {
   return true;
 }
 
+
+/** The era's own task force and the enemy's main fleet, as the encyclopedia shows them (positions are dummies). */
+export function codexFleetShips(era: Era): { player: Ship[]; enemy: Ship[] } {
+  const player: Ship[] = [];
+  const enemy: Ship[] = [];
+  addPlayerTaskForce(era, { x: 0, y: 0 }, 0, player);
+  addEnemyTaskForce(era, enemy, { x: 0, y: 0 }, 0);
+  // Ships that join later: surface action groups, wolfpacks and river craft (names as the engine gives them)
+  const o = { x: 0, y: 0 };
+  if (era === 'era1') {
+    enemy.push(
+      createSendaiCL('cx-sendai', 'IJN Sendai 川內號', o),
+      createTokyoExpressDD('cx-murasame', 'IJN Murasame 村雨號', o),
+      createIjnIBoatSS('cx-i26', 'IJN 伊-26', o, era),
+      createMonsunUBoatSS('cx-u178', 'U-178 (季風群)', o, era)
+    );
+  } else if (era === 'era2') {
+    enemy.push(createAkizukiDD('cx-fuyutsuki', 'IJN Fuyutsuki 冬月號', o, era), createIjnIBoatSS('cx-i58', 'IJN 伊-58', o, era), createMonsunUBoatSS('cx-u195', 'U-195 (季風群)', o, era));
+  } else if (era === 'era3') {
+    enemy.push(
+      createSverdlovCL('cx-sverdlov', 'Sverdlov 斯維爾德洛夫號', o),
+      createKotlinDD('cx-smotr', 'Smotryashchy 警戒號', o),
+      createSovietWhiskeySS('cx-zulu', '祖魯級潛艦 B-62', o, 'zulu'),
+      createRiverGunboat('cx-junk-kp', '朝鮮人民軍 武裝機帆船 江-21', o, era)
+    );
+  } else if (era === 'era4') {
+    enemy.push(createKyndaCG('cx-grozny', 'Grozny 威嚴號', o), createPetyaFFG('cx-petya', '佩佳級護衛艦 SKR-1', o), createRiverGunboat('cx-junk-vn', '越南人民海軍 武裝機帆船 T-11', o, era));
+  } else if (era === 'era5') {
+    enemy.push(
+      createKashinDDG('cx-warszawa', 'ORP Warszawa 華沙號', o),
+      createRigaFFG('cx-thalmann', 'Ernst Thälmann 台爾曼號', o),
+      createSovietVictor3SSN('cx-victor', '勝利III級潛艦 K-255', o, 'victor3'),
+      createSovietVictor3SSN('cx-akula', '阿庫拉級潛艦 K-284', o, 'akula'),
+      createKiloSS('cx-kilo', '基洛級潛艦 B-400', o),
+      createRiverGunboat('cx-shmel', '熊蜂級河川砲艇 BK-12', o, era)
+    );
+  }
+  return { player, enemy };
+}

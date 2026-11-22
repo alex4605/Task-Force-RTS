@@ -1,3 +1,4 @@
+import { modelLabel } from '../game/unitIntro';
 import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { splitLogText } from '../game/logFormat';
 import { CostTag, ResourceBar, affords, itemCost, itemCostText, shortfallText, stockOf } from './hud/resources';
@@ -1781,11 +1782,37 @@ export const HUD: React.FC<HUDProps> = ({
                 </select>
               </div>
 
-              {afbStockOnly && afbModels.every((p) => (airbaseStock[p.id] || 0) === 0) && (
-                <div className="text-[10px] font-mono text-slate-400 bg-[#051A18] border border-[#1E3A5F] rounded px-3 py-2">
-                  此機場目前無在庫飛機：從其他機場「轉場至」此處，或點「顯示全部機型」查看全部機型。
-                </div>
-              )}
+              {afbStockOnly && afbModels.every((p) => (airbaseStock[p.id] || 0) === 0) && (() => {
+                // An empty field (a captured or newly built one): offer what the other fields hold, flown in by ferry
+                const sources = airfields.filter((a) => a.id !== activeAirfield?.id);
+                const offers = sources.flatMap((src) =>
+                  Object.entries(src.planes)
+                    .filter(([m, n]) => (n || 0) > 0 && (!activeAirfield?.rotaryOnly || isRotaryOrVstol(m as AircraftModel)))
+                    .map(([m, n]) => ({ src, model: m as AircraftModel, n: n || 0 }))
+                );
+                return (
+                  <div className="text-[10px] font-mono text-slate-300 bg-[#051A18] border border-[#1E3A5F] rounded px-3 py-2 space-y-1.5">
+                    <div>
+                      🛬 此機場目前無在庫飛機（奪取或新建的機場起始為空）。從其他基地轉場進駐後即可由此出擊
+                      {activeAirfield?.repair !== undefined && <span className="text-amber-300">；跑道搶修中 {Math.floor(activeAirfield.repair * 100)}%，轉場機會先盤旋待命</span>}：
+                    </div>
+                    {offers.length === 0 && <div className="text-slate-500">其他機場也沒有在庫飛機。</div>}
+                    <div className="flex flex-wrap gap-1">
+                      {offers.slice(0, 18).map(({ src, model, n }) => (
+                        <button
+                          key={`${src.id}-${model}`}
+                          type="button"
+                          onClick={() => activeAirfield && onTransferPlanes?.(model, Math.min(2, n), src.id, activeAirfield.id)}
+                          className="px-1.5 py-0.5 rounded border border-[#1E3A5F] bg-[#0B1E34] hover:bg-[#153252] text-[#80DEEA]"
+                          title={`自「${src.name}」轉場 ${Math.min(2, n)} 架 ${modelLabel(model)} 至此機場`}
+                        >
+                          🛫 {modelLabel(model)} ×{Math.min(2, n)} <span className="text-slate-500">← {src.isHQ ? 'HQ' : src.name.split(' (')[0].slice(0, 10)}（{n}）</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
               {/* AFB Aircraft Cards with Draggable and Wheel Scroll */}
               <DraggableScrollContainer className="gap-2 pb-1">
                 {afbModels

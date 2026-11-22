@@ -212,6 +212,13 @@ export type GroundUnitType =
   | 'us_cav_air_assault_65'   // 時代四 第1騎兵師(空中機動) 空中突擊排
   | 'us_m1a1_pack_75'         // 時代二/三 M1A1 75mm 空降山砲排 (傘降綑包)
   | 'us_m102_105'             // 時代四/五 M102 105mm 空降輕型榴彈砲排
+  | 'usmc_mortar_81_42'       // 時代一/二 M1 81mm 迫擊砲排 (陸戰隊營屬武器連)
+  | 'us_mortar_42in_45'       // 時代二 M2 4.2吋 化學迫擊砲連 (陸軍化學迫擊砲營 · 沖繩)
+  | 'usmc_mortar_42in_50'     // 時代三 M2 4.2吋 重迫擊砲連 (團屬)
+  | 'usmc_mortar_81_65'       // 時代四 M29 81mm 迫擊砲排
+  | 'us_m106_65'              // 時代四 M106 4.2吋 自走迫擊砲 (M113 底盤)
+  | 'usmc_mortar_m252_83'     // 時代五 M252 81mm 迫擊砲排
+  | 'us_m106a2_83'            // 時代五 M106A2 107mm 自走迫擊砲
   | 'uk_milan_team'         // 時代五 英國萊茵軍團 MILAN 反戰車飛彈組
   // OPFOR 歷史各時代守軍
   | 'opfor_infantry_42'  // 時代一 日軍海軍特別陸戰隊步槍排 (SNLF)

@@ -230,6 +230,13 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   us_cav_air_assault_65: 0.5, // M16 / M60 / M79
   us_m1a1_pack_75: 8.8, // M1A1 75mm pack howitzer
   us_m102_105: 11.5, // M102 105mm
+  usmc_mortar_81_42: 3.0, // M1 81mm (light HE)
+  us_mortar_42in_45: 4.0, // M2 4.2-inch
+  usmc_mortar_42in_50: 4.0, // M2 4.2-inch
+  usmc_mortar_81_65: 3.6, // M29A1 81mm
+  us_m106_65: 5.6, // M30 4.2-inch on M106
+  usmc_mortar_m252_83: 5.6, // M252 81mm
+  us_m106a2_83: 6.8, // M30 107mm with M329A2
   uk_milan_team: 1.95, // MILAN
 };
 

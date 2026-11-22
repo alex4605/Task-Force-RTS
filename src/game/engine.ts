@@ -492,8 +492,8 @@ export class GameEngine {
       this.era === 'era5'
         ? ['熊蜂級河川砲艇 BK-12', '熊蜂級河川砲艇 BK-16', '熊蜂級河川砲艇 BK-31']
         : this.era === 'era4'
-        ? ['越南人民海軍 武裝機帆船 (T-11)', '越南人民海軍 武裝機帆船 (T-14)', '游擊隊 武裝舢舨 (Delta-3)', '游擊隊 武裝舢舨 (Delta-7)']
-        : ['朝鮮人民軍 武裝機帆船 (江-21)', '朝鮮人民軍 武裝機帆船 (江-24)', '朝鮮人民軍 武裝機帆船 (江-27)'];
+        ? ['越南人民海軍 武裝機帆船 T-11', '越南人民海軍 武裝機帆船 T-14', '解放陣線 武裝舢舨 Delta-3', '解放陣線 武裝舢舨 Delta-7']
+        : ['朝鮮人民軍 武裝機帆船 江-21', '朝鮮人民軍 武裝機帆船 江-24', '朝鮮人民軍 武裝機帆船 江-27'];
     stations.forEach((pos, k) => {
       const boat = createRiverGunboat(`enemy-river-${k}-${Date.now()}`, names[k % names.length], pos, this.era);
       boat.riverHome = { ...pos };
@@ -18744,30 +18744,30 @@ export class GameEngine {
       let sub: Ship;
       if (this.era === 'era1' || this.era === 'era2') {
         sub = useUBoat
-          ? createMonsunUBoatSS(`wolfpack-uboat-${ts}-${i}`, `Kriegsmarine U-${178 + i * 7} 季風遠洋潛艇`, subPos, this.era)
-          : createIjnIBoatSS(`wolfpack-ijn-${ts}-${i}`, `IJN 伊-${19 + i * 7} 號巡潛型潛艦`, subPos, this.era);
+          ? createMonsunUBoatSS(`wolfpack-uboat-${ts}-${i}`, `U-${178 + i * 7} (季風群)`, subPos, this.era)
+          : createIjnIBoatSS(`wolfpack-ijn-${ts}-${i}`, `IJN 伊-${19 + i * 7}`, subPos, this.era);
       } else if (this.era === 'era3') {
         const isZulu = i === 0 && Math.random() < 0.45;
         sub = createSovietWhiskeySS(
           `wolfpack-whiskey-${ts}-${i}`,
-          isZulu ? `蘇聯 Project 611 Zulu級 遠洋潛艦 B-${62 + i}` : `蘇聯 Project 613 Whiskey級 潛艦 S-${80 + i * 4}`,
+          isZulu ? `祖魯級潛艦 B-${62 + i}` : `威士忌級潛艦 S-${80 + i * 4}`,
           subPos,
           isZulu ? 'zulu' : 'whiskey'
         );
       } else if (this.era === 'era4') {
-        sub = createFoxtrotSS(`wolfpack-foxtrot-${ts}-${i}`, `蘇聯 Project 641 Foxtrot級 柴電潛艦 B-${39 + i}`, subPos);
+        sub = createFoxtrotSS(`wolfpack-foxtrot-${ts}-${i}`, `狐步級潛艦 B-${39 + i}`, subPos);
       } else {
         // Era 5: Victor III / Akula SSN or occasional Oscar II SSGN lead
         if (i === 0 && Math.random() < 0.35) {
-          sub = createOscarSSGN(`wolfpack-oscar-${ts}-${i}`, `蘇聯 Project 949A 奧斯卡 II 級巡弋核潛艦 K-${132 + i}`, subPos);
+          sub = createOscarSSGN(`wolfpack-oscar-${ts}-${i}`, `奧斯卡II級潛艦 K-${132 + i}`, subPos);
         } else {
           const r = Math.random();
           const isAkula = r < 0.35;
           if (r > 0.75) {
-            sub = createKiloSS(`wolfpack-kilo-${ts}-${i}`, `蘇聯 Project 877 Kilo 基洛級靜音柴電潛艦 B-${400 + i}`, subPos);
+            sub = createKiloSS(`wolfpack-kilo-${ts}-${i}`, `基洛級潛艦 B-${400 + i}`, subPos);
           } else sub = createSovietVictor3SSN(
             `wolfpack-ssn-${ts}-${i}`,
-            isAkula ? `蘇聯 Project 971 Akula 阿庫拉級核動力攻擊潛艦 K-${284 + i}` : `蘇聯 Project 671RTM Victor III 核動力攻擊潛艦 K-${255 + i}`,
+            isAkula ? `阿庫拉級潛艦 K-${284 + i}` : `勝利III級潛艦 K-${255 + i}`,
             subPos,
             isAkula ? 'akula' : 'victor3'
           );
