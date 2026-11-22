@@ -4,6 +4,7 @@ import { Anchor, HelpCircle, Plane, Radio, Shield } from 'lucide-react';
 import { Era } from '../../types/game';
 import { SelectableUnit, isAircraftUnit, isGroundUnit, isShipUnit } from '../../game/airWingCatalog';
 import { groundSilhouetteClass } from '../../game/unitPreviewRenderer';
+import { aircraftEw, shipEw } from '../../game/ew';
 
 const isFootClass = (type: Parameters<typeof groundSilhouetteClass>[0]) => {
   const k = groundSilhouetteClass(type);
@@ -33,6 +34,8 @@ interface SelectedUnitsPanelProps {
   /** Lower / raise the dipping sonar of the selected ASW helicopters (D). */
   onToggleDipping?: () => void;
   onToggleFoxhole?: () => void;
+  onToggleEmcon?: () => void;
+  onLaunchMoss?: () => void;
   onSetGunRoe?: (key: 'ships' | 'installations' | 'ground', value: boolean) => void;
   onCancelCap?: () => void;
   isDesignatingSonobuoy: boolean;
@@ -59,6 +62,8 @@ export const SelectedUnitsPanel: React.FC<SelectedUnitsPanelProps> = ({
   onSetGunRoe,
   onToggleDipping,
   onToggleFoxhole,
+  onToggleEmcon,
+  onLaunchMoss,
   onCancelCap,
   isDesignatingSonobuoy,
   onStartSonobuoyDesignation,
@@ -228,6 +233,33 @@ export const SelectedUnitsPanel: React.FC<SelectedUnitsPanelProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Electronic warfare fit (ESM / ECM / decoys) */}
+              {isPlane && (() => {
+                const ew = aircraftEw(u.model, era);
+                if (!ew.dispenser && !ew.jammer && !ew.esm && !ew.irJammer) return null;
+                return (
+                  <div className="text-[9px] text-amber-200/90 border-t border-[#1E3A5F]/40 pt-0.5 space-y-0.5">
+                    {ew.dispenser && <div>🎆 {ew.dispenser}：箔條 {u.chaffCount ?? ew.chaff} · 熱焰 {u.flareCount ?? ew.flares}</div>}
+                    {ew.jammer && <div>⚡ ECM：{ew.jammer.name}{ew.jammer.standoff ? '（遠距支援干擾）' : ''}</div>}
+                    {ew.irJammer && <div>🔥 紅外干擾：{ew.irJammer.name}</div>}
+                    {ew.esm && <div>📶 ESM：{ew.esm.name}</div>}
+                  </div>
+                );
+              })()}
+              {isShip && (() => {
+                const ew = shipEw(u, era);
+                if (!ew.esm && !ew.jammer && !ew.decoys && !ew.noisemaker && !ew.moss) return null;
+                return (
+                  <div className="text-[9px] text-amber-200/90 border-t border-[#1E3A5F]/40 pt-0.5 space-y-0.5">
+                    {ew.esm && <div>📶 ESM：{ew.esm.name}{u.emcon ? ' · 📴 EMCON 靜默中' : ''}</div>}
+                    {ew.jammer && <div>⚡ ECM：{ew.jammer.name}</div>}
+                    {ew.decoys && <div>🎆 {ew.decoys.name}：箔條 {u.decoyChaff ?? ew.decoys.chaff}{ew.decoys.ir > 0 ? ` · 紅外 ${u.decoyIr ?? ew.decoys.ir}` : ''}</div>}
+                    {ew.noisemaker && <div>🔊 {ew.noisemaker.name}：{u.noisemakers ?? ew.noisemaker.count}{u.nixieOut ? '（施放中）' : ''}</div>}
+                    {ew.moss && <div>🐟 {ew.moss.name}：{u.mossLeft ?? ew.moss.count}</div>}
+                  </div>
+                );
+              })()}
 
               {/* Ground Unit Dual Parameters & Supply Line Status */}
               {isGround && (
@@ -569,6 +601,29 @@ export const SelectedUnitsPanel: React.FC<SelectedUnitsPanelProps> = ({
             </button>
           );
         })()}
+        {selectedUnits.some((u) => isShipUnit(u) && u.side === 'player' && !u.isSunk && !!shipEw(u, era).esm && !['submarine', 'ssn_la', 'foxtrot', 'ssgn_oscar'].includes(u.type)) && (() => {
+          const silent = selectedUnits.some((u) => isShipUnit(u) && u.emcon);
+          return (
+            <button
+              type="button"
+              onClick={() => onToggleEmcon?.()}
+              className={`mt-1 w-full py-1.5 px-2 rounded text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all shadow-md whitespace-nowrap border ${silent ? 'bg-gradient-to-r from-slate-600 to-slate-800 text-white border-slate-300 ring-2 ring-slate-400' : 'bg-gradient-to-r from-[#4A148C] to-[#6A1B9A] hover:from-[#6A1B9A] hover:to-[#7B1FA2] text-[#F3E5F5] border-[#CE93D8]/70'}`}
+              title="電磁管制：關閉雷達，敵方 ESM 截收不到、反輻射飛彈失去目標，但本艦不再提供雷達圖像；偵獲來襲飛彈時自動解除"
+            >
+              <span>{silent ? '📡 解除 EMCON 雷達開機 (Y)' : '📴 EMCON 電磁管制 (Y)'}</span>
+            </button>
+          );
+        })()}
+        {selectedUnits.some((u) => isShipUnit(u) && u.side === 'player' && !u.isSunk && (u.mossLeft ?? shipEw(u, era).moss?.count ?? 0) > 0) && (
+          <button
+            type="button"
+            onClick={() => onLaunchMoss?.()}
+            className="mt-1 w-full py-1.5 px-2 rounded text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all shadow-md whitespace-nowrap bg-gradient-to-r from-[#004D40] to-[#00695C] hover:from-[#00695C] hover:to-[#00796B] text-[#E0F2F1] border border-[#80CBC4]/70"
+            title="自魚雷管射出潛艦模擬器：模擬本艦聲紋駛離，誘使敵反潛兵力與魚雷追逐，本艦轉向靜音脫離"
+          >
+            <span>🐟 射出 MOSS 潛艦模擬器 (K)</span>
+          </button>
+        )}
         {selectedUnits.some((u) => isAircraftUnit(u)) && (
           <button
             type="button"

@@ -2119,8 +2119,6 @@ export function createNewportLST(id: string, name: string, pos: Vector2D, era: E
     ciwsCooldown: 0,
     ciwsRange: 1100,
     ciwsType: 'phalanx',
-    hasChaffLauncher: isEra5,
-    chaffCooldown: 0,
     turrets: isEra5
       ? [
           createTurret(24, 0, 'Mk 33 3-inch/50 Twin (艦艏雙聯3吋速射砲)', 1400, 1.4, 2, heading, 150),
@@ -2203,8 +2201,6 @@ export function createCV63(id: string, name: string, pos: Vector2D): Ship {
     samCooldown: 0,
     maxSAMs: 32,
     readySAMs: 32,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     turrets: [
       createTurret(-34, 15, 'Mk 10 Mod 3 Twin-Arm Terrier Launcher (右舷艦艉梗犬防空飛彈)', 2400, 3.5, 2, heading, 90),
       createTurret(-34, -15, 'Mk 10 Mod 3 Twin-Arm Terrier Launcher (左舷艦艉梗犬防空飛彈)', 2400, 3.5, 2, heading, 90),
@@ -2256,8 +2252,6 @@ export function createBelknapCG(id: string, name: string, pos: Vector2D): Ship {
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     turrets: [
       createTurret(28, 0, 'Mk 10 Mod 7 (雙臂長程防空飛彈發射架 RIM-67/Terrier)', 3400, 3.0, 2, heading, 260),
       createTurret(-28, 0, '5-inch/54 Mk 42 Rapid Gun (艦艉5吋自動速射砲)', 1450, 1.5, 1, heading, 220),
@@ -2306,8 +2300,6 @@ export function createAdamsDDG(id: string, name: string, pos: Vector2D): Ship {
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     hasTorpedoes: true,
     torpedoCooldown: 0,
     torpedoReloadTime: 12,
@@ -2359,8 +2351,6 @@ export function createForrestShermanDD(id: string, name: string, pos: Vector2D):
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     hasDepthCharges: true,
     depthChargeCooldown: 0,
     turrets: [
@@ -2410,8 +2400,6 @@ export function createKnoxFFG(id: string, name: string, pos: Vector2D): Ship {
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     turrets: [
       createTurret(24, 0, '5-inch/54 Mk 42 Auto (艦艏5吋自動速射主砲)', 1450, 1.5, 1, heading, 110),
       createTurret(12, 0, 'ASROC 8-cell Launcher (艦艏八聯裝反潛火箭箱)', 1900, 3.5, 1, heading, 80),
@@ -2448,8 +2436,6 @@ export function createLPHIwoJima(id: string, name: string, pos: Vector2D): Ship 
     armor: 0.32,
     detectionRange: 3800,
     isAmphibious: true,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     cargoCapacity: 6,
     embarkedUnitIds: [],
     turrets: [
@@ -2752,8 +2738,6 @@ export function createCVNNimitz(id: string, name: string, pos: Vector2D): Ship {
     ciwsCooldown: 0,
     ciwsRange: 1100,
     ciwsType: 'phalanx',
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     turrets: [
       createTurret(35, 16, 'Mk 29 Sea Sparrow Octuple (右舷前海麻雀)', 2800, 2.5, 1, heading, 150),
       createTurret(-45, -16, 'Mk 29 Sea Sparrow Octuple (左舷後海麻雀)', 2800, 2.5, 1, heading, 150),
@@ -2819,8 +2803,6 @@ export function createTiconderogaCG(id: string, name: string, pos: Vector2D): Sh
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     turrets: [
       createTurret(32, 0, '5-inch/54 Mk 45 Lightweight (艦艏5吋輕量艦砲)', 1500, 1.8, 1, heading, 120),
       createTurret(-32, 0, '5-inch/54 Mk 45 Lightweight (艦艉5吋輕量艦砲)', 1500, 1.8, 1, heading, 120),
@@ -2881,8 +2863,6 @@ export function createVirginiaCGN(id: string, name: string, pos: Vector2D): Ship
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     turrets: [
       createTurret(30, 0, '5-inch/54 Mk 45 Lightweight (艦艏5吋砲)', 1500, 1.8, 1, heading, 120),
       createTurret(-30, 0, '5-inch/54 Mk 45 Lightweight (艦艉5吋砲)', 1500, 1.8, 1, heading, 120),
@@ -2930,8 +2910,6 @@ export function createIowaModernizedBB(id: string, name: string, pos: Vector2D):
     harpoonCooldown: 0,
     readyHarpoons: 16,
     maxHarpoons: 16,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     rocketCooldown: 0,
     turrets: [
       createTurret(42, 0, '16-inch/50 Mk 7 Triple (No.1 艦艏三聯裝406mm主砲)', 2400, 5.0, 3, heading, 820),
@@ -2994,8 +2972,6 @@ export function createSpruanceDD(id: string, name: string, pos: Vector2D): Ship 
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     turrets: [
       createTurret(28, 0, '5-inch/54 Mk 45 Lightweight (艦艏5吋自動砲)', 1500, 1.8, 1, heading, 120),
       createTurret(-28, 0, '5-inch/54 Mk 45 Lightweight (艦艉5吋自動砲)', 1500, 1.8, 1, heading, 120),
@@ -3056,8 +3032,6 @@ export function createKiddDDG(id: string, name: string, pos: Vector2D): Ship {
     readyASROC: 8,
     hasSVTT: true,
     svttCooldown: 0,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     turrets: [
       createTurret(28, 0, '5-inch/54 Mk 45 Lightweight (艦艏5吋砲)', 1500, 1.8, 1, heading, 120),
       createTurret(-28, 0, '5-inch/54 Mk 45 Lightweight (艦艉5吋砲)', 1500, 1.8, 1, heading, 120),
@@ -3112,8 +3086,6 @@ export function createPerryFFG(id: string, name: string, pos: Vector2D): Ship {
     maxHarpoons: 6,
     hasSVTT: true,
     svttCooldown: 0,
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     turrets: [
       createTurret(24, 0, 'Mk 13 Mod 4 Single-Arm Launcher (艦艏單臂標準SM-1MR/魚叉)', 3200, 2.4, 1, heading, 220),
       createTurret(0, 0, 'OTO Melara 76mm/62 Compact (舯部76mm自動快砲)', 1350, 1.2, 1, heading, 100),
@@ -3194,8 +3166,6 @@ export function createAustinLPD(id: string, name: string, pos: Vector2D): Ship {
     ciwsCooldown: 0,
     ciwsRange: 1100,
     ciwsType: 'phalanx',
-    hasChaffLauncher: true,
-    chaffCooldown: 0,
     cargoCapacity: 8,
     embarkedUnitIds: [],
     turrets: [

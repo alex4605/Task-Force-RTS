@@ -499,8 +499,16 @@ export interface Ship {
   hasVLASROC?: boolean; // Mk 41 垂直發射 ASROC (1993 起服役)
   standoffAswWeapon?: 'ASROC' | 'Ikara' | 'Malafon' | 'VL-ASROC';
   svttCooldown?: number;
-  hasChaffLauncher?: boolean; // 艦載 RBOC 金屬箔條干擾迫擊砲發射器
-  chaffCooldown?: number;
+  /** 電磁管制: radars off (no ESM signature, no radar picture); broken automatically when missiles close in. */
+  emcon?: boolean;
+  /** Decoy launcher rounds left (chaff / IR) and noisemakers / MOSS left. */
+  decoyChaff?: number;
+  decoyIr?: number;
+  noisemakers?: number;
+  mossLeft?: number;
+  /** Towed torpedo decoy streamed. */
+  nixieOut?: boolean;
+  decoyCooldown?: number;
   // 近迫防空彈幕與反艦飛彈警報冷卻 (Point Defense AAA Barrage & Alarm)
   pointDefenseCooldown?: number;
   // 時代五 CIWS 近迫防衛與反艦飛彈系統 (Era 5 CIWS & Anti-Ship Missiles)
@@ -2086,6 +2094,14 @@ export interface Projectile {
   acousticPingTimer?: number;
   sarhIlluminatorId?: string; // 機頭/艦載射控雷達照射源 ID
   isDecoyed?: boolean; // 被箔條雲/熱焰彈誘騙偏航
+  /** 53-65K-type wake homer: follows the ship's wake, deaf to acoustic decoys. */
+  wakeHoming?: boolean;
+  /** Decoy the seeker has taken instead of its target. */
+  decoyId?: string;
+  /** Decoys this seeker has already looked at (one seduction roll each). */
+  seenDecoys?: string[];
+  /** Time to the next seeker evaluation against decoys and jamming. */
+  seekerTimer?: number;
   // 時代五 ATACMS / MLRS 戰術陸基火箭特徵
   isClusterSubmunition?: boolean;
   clusterBombletsCount?: number;
@@ -2131,9 +2147,6 @@ export interface Particle {
     | 'tracer'
     | 'oil_slick'
     | 'fire'
-    | 'flare'
-    | 'chaff'
-    | 'chaff_cloud'
     | 'muzzle_flash'
     | 'gun_smoke';
   shape?: 'circle' | 'line' | 'ring';
@@ -2308,6 +2321,37 @@ export interface WhalePod {
   spoutT: number;
   /** Already reported as a sonar false contact this dive. */
   reported?: boolean;
+}
+
+/** A countermeasure in the water or the air: flare, chaff, ship decoys, noisemakers, MOSS. */
+export interface Decoy {
+  id: string;
+  kind: 'flare' | 'chaff' | 'ship_chaff' | 'ship_ir' | 'noisemaker' | 'nixie' | 'moss';
+  side: ShipSide;
+  ownerId: string;
+  pos: Vector2D;
+  vel: Vector2D;
+  age: number;
+  life: number;
+  /** Where a ship decoy rocket bursts (it flies there first). */
+  burstAt?: Vector2D;
+  launchPos?: Vector2D;
+  heading?: number;
+  /** Recent positions (flare smoke trail, MOSS track). */
+  trail?: Vector2D[];
+  /** Random seed for the cloud's look. */
+  seed: number;
+}
+
+/** A hostile emitter picked up by our ESM: bearing from the intercepting platform. */
+export interface EsmContact {
+  key: string;
+  from: Vector2D;
+  bearing: number;
+  /** How far to draw the strobe. */
+  reach: number;
+  label: string;
+  age: number;
 }
 
 export interface Sonobuoy {

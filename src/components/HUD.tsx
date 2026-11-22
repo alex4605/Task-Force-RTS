@@ -154,6 +154,8 @@ interface HUDProps {
   onSetGunRoe?: (key: 'ships' | 'installations' | 'ground', value: boolean) => void;
   onToggleDipping?: () => void;
   onToggleFoxhole?: () => void;
+  onToggleEmcon?: () => void;
+  onLaunchMoss?: () => void;
   onCancelCap?: () => void;
   sonobuoys?: Sonobuoy[];
   isDesignatingSonobuoy?: boolean;
@@ -304,6 +306,8 @@ export const HUD: React.FC<HUDProps> = ({
   onSetGunRoe,
   onToggleDipping,
   onToggleFoxhole,
+  onToggleEmcon,
+  onLaunchMoss,
   onCancelCap,
   sonobuoys = [],
   isDesignatingSonobuoy = false,
@@ -1013,6 +1017,8 @@ export const HUD: React.FC<HUDProps> = ({
           onSetGunRoe={onSetGunRoe}
           onToggleDipping={onToggleDipping}
           onToggleFoxhole={onToggleFoxhole}
+          onToggleEmcon={onToggleEmcon}
+          onLaunchMoss={onLaunchMoss}
           onCancelCap={onCancelCap}
           isDesignatingSonobuoy={isDesignatingSonobuoy}
           onStartSonobuoyDesignation={onStartSonobuoyDesignation}
@@ -1454,7 +1460,7 @@ export const HUD: React.FC<HUDProps> = ({
                     <span>母艦全裝備庫</span>
                   </button>
                   <span className="text-[10px] text-slate-400">
-                    Space 暫停 · Q 增援 · E 構工 · A 機場 · C CAP · T 轉降 · V 護航 · D 吊放聲納 · Z 散兵坑
+                    Space 暫停 · Q 增援 · E 構工 · A 機場 · C CAP · T 轉降 · V 護航 · D 吊放聲納 · Z 散兵坑 · Y EMCON · K MOSS
                   </span>
                 </div>
               </div>

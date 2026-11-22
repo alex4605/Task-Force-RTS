@@ -1,9 +1,10 @@
-import { Vector2D, Island, Ship, Aircraft, Projectile, Particle, SelectionBox, GroundUnit, RequisitionItem, LifeRaft, NuclearDetonation, Sonobuoy, Era, FieldWork, WhalePod } from '../types/game';
+import { Vector2D, Island, Ship, Aircraft, Projectile, Particle, SelectionBox, GroundUnit, RequisitionItem, LifeRaft, NuclearDetonation, Sonobuoy, Era, FieldWork, WhalePod, Decoy, EsmContact } from '../types/game';
 import { RenderContext } from './render/context';
 import * as aircraftRender from './render/aircraft';
 import * as effectsRender from './render/effects';
 import * as groundUnitsRender from './render/groundUnits';
 import * as fieldWorksRender from './render/fieldWorks';
+import * as ewRender from './render/ew';
 import { drawGroundWrecks, GroundWreck } from './render/unitDetails';
 import * as islandsRender from './render/islands';
 import * as oceanRender from './render/ocean';
@@ -136,6 +137,19 @@ export class VectorRenderer {
 
   public drawEscortPreview(pos: Vector2D, charge: Aircraft | undefined, camera: Camera) {
     overlaysRender.drawEscortPreview(this.rc, pos, charge, camera);
+  }
+
+  public drawSeaDecoys(decoys: Decoy[], camera: Camera, wind: Vector2D) {
+    ewRender.drawSeaDecoys(this.rc, decoys, camera, wind);
+  }
+
+  public drawAirDecoys(decoys: Decoy[], camera: Camera) {
+    ewRender.drawAirDecoys(this.rc, decoys, camera);
+  }
+
+  public drawEw(contacts: EsmContact[], zones: Parameters<typeof ewRender.drawJamZones>[1], camera: Camera) {
+    ewRender.drawJamZones(this.rc, zones, camera);
+    ewRender.drawEsmStrobes(this.rc, contacts, camera);
   }
 
   public drawFieldWorks(works: FieldWork[], camera: Camera) {

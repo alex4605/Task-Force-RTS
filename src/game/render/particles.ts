@@ -79,59 +79,6 @@ export function drawParticles(rc: RenderContext, particles: Particle[], camera: 
       ctx.beginPath();
       ctx.ellipse(p.x, p.y, p.radius, p.radius * 0.65, 0, 0, Math.PI * 2);
       ctx.fill();
-    } else if (p.type === 'flare') {
-      // High-intensity magnesium flare with incandescent core
-      const prog = 1 - (p.life / p.maxLife);
-      const flareR = Math.max(2.5, p.radius * (1 - prog * 0.3));
-      const fGrad = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, flareR * 2.2);
-      fGrad.addColorStop(0, '#FFFFFF');
-      fGrad.addColorStop(0.25, '#FFF59D');
-      fGrad.addColorStop(0.65, '#FF7043');
-      fGrad.addColorStop(1, 'rgba(255, 61, 0, 0)');
-      ctx.fillStyle = fGrad;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, flareR * 2.2, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Incandescent core spark
-      ctx.fillStyle = '#FFFFFF';
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, Math.max(1, flareR * 0.5), 0, Math.PI * 2);
-      ctx.fill();
-    } else if (p.type === 'chaff') {
-      // High-reflective aluminum/mylar chaff dipoles fluttering in wind
-      ctx.strokeStyle = '#E0F7FA';
-      ctx.lineWidth = 1.3;
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate((p.life * 7.5) % (Math.PI * 2));
-      ctx.beginPath();
-      ctx.moveTo(-p.radius, 0);
-      ctx.lineTo(p.radius, 0);
-      ctx.stroke();
-      ctx.restore();
-    } else if (p.type === 'chaff_cloud') {
-      // Expanding radar reflection decoy cloud over water/air
-      const prog = 1 - (p.life / p.maxLife);
-      const cloudR = Math.max(4, p.radius * (0.8 + prog * 0.4));
-      const cGrad = ctx.createRadialGradient(p.x, p.y, 2, p.x, p.y, cloudR);
-      cGrad.addColorStop(0, 'rgba(224, 247, 250, 0.45)');
-      cGrad.addColorStop(0.5, 'rgba(178, 235, 242, 0.25)');
-      cGrad.addColorStop(1, 'rgba(128, 222, 234, 0)');
-      ctx.fillStyle = cGrad;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, cloudR, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Shimmering radar sparkles
-      ctx.fillStyle = '#FFFFFF';
-      for (let s = 0; s < 3; s++) {
-        const sx = p.x + (Math.sin(p.life * 10 + s * 2.1) * cloudR * 0.6);
-        const sy = p.y + (Math.cos(p.life * 8 + s * 3.2) * cloudR * 0.6);
-        ctx.beginPath();
-        ctx.arc(sx, sy, 1, 0, Math.PI * 2);
-        ctx.fill();
-      }
     } else if (p.type === 'tracer') {
       const tLen = p.length || Math.min(26, Math.hypot(p.vx, p.vy) * 0.035);
       const tAng = Math.atan2(p.vy, p.vx);

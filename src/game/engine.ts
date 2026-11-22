@@ -8,6 +8,7 @@ import { deckAccepts, shipAviation } from './shipAviation';
 import { CIVIL_HOSPITAL_RADIUS, addCivilHospitals, addCivilTransport } from './civilSites';
 import { FOXHOLE_DIG_S, SPOT_RANGE, insideFieldWork, isFieldWorkTag, makeFieldWork, placeEnemyFieldWorks } from './fieldWorks';
 import { WHALE_NAME, spawnWhales, updateWhales } from './whales';
+import { AircraftEw, DECOY_BLOOM, DECOY_LIFE, ShipEw, aircraftEw, decoyStrength, emitterName, irJamBreakRate, jamBreakRate, radarEccm, seductionChance, seekerProfile, shipEw } from './ew';
 import { clearAirfieldFootprints, findAirfieldSite, nudgeOffAirfield, onAirfield } from './airfieldLayout';
 import { canDipSonar, dippingSonarRange } from './asw';
 import { buildRequisitionShip } from './requisitionShips';
@@ -30,6 +31,8 @@ import {
   AirWingLoadout,
   Island,
   Installation,
+  Decoy,
+  EsmContact,
   FieldWork,
   FieldWorkKind,
   WhalePod,
@@ -742,19 +745,6 @@ export class GameEngine {
     }
   }
 
-  private getAshmChaffDecoyChance(proj: Projectile): number {
-    const v = proj.ashmVariant;
-    if (v === 'p700_granit' || v === 'p500_bazalt') {
-      return proj.datalinkLost ? 0.68 : 0.34;
-    }
-    if (v === 'p270_moskit') return 0.30;
-    if (v === 'kh22_burya') return 0.28;
-    if (v === 'exocet_mm40' || v === 'exocet_mm38') return 0.52;
-    if (v === 'harpoon_rgm84' || v === 'harpoon_ugm84' || v === 'harpoon_agm84') return 0.60;
-    if (v === 'p15_styx' || v === 'ksr5_kelt') return 0.78;
-    return isSupersonicMissile(proj.speed) ? 0.45 : 0.72;
-  }
-
   private handleAshmLeaderDestroyed(leader: Projectile) {
     if (!leader.isLeadMissile) return;
     let affectedCount = 0;
@@ -1161,6 +1151,16 @@ export class GameEngine {
     this.alliedOps = this.makeAlliedOps();
     this.enemyShips = generated.enemyShips;
     this.steerDest.clear();
+    this.decoys = [];
+    this.esmContacts = [];
+    this.jamZones = [];
+    this.esmLogged.clear();
+    this.shipEwCache.clear();
+    {
+      const wa = Math.random() * Math.PI * 2;
+      const ws = 2 + Math.random() * 5;
+      this.wind = { x: Math.cos(wa) * ws, y: Math.sin(wa) * ws };
+    }
     this.groundUnits = generated.groundUnits;
     this.sectorIntel = generated.briefing;
     this.aircraft = [];
@@ -2898,6 +2898,7 @@ export class GameEngine {
     this.updateCivilHospitals(effectiveDt);
     this.updateWhalePods(effectiveDt);
     this.updateAircraft(effectiveDt);
+    this.updateEw(effectiveDt);
     this.updateInstallations(effectiveDt);
     this.updateEra3Mechanics(effectiveDt);
     this.updateEra4Mechanics(effectiveDt);
@@ -3030,10 +3031,8 @@ export class GameEngine {
       if (this.isSubmarine(ship)) {
         const hostileSurface = ship.side === 'enemy' ? [...this.playerShips, ...this.alliedShips] : this.enemyShips;
         const nearestShip = hostileSurface.reduce((m, h) => (h.isSunk || this.isSubmarine(h) ? m : Math.min(m, dist(h.pos, ship.pos))), Infinity);
-        const nearestAircraft = this.aircraft.reduce(
-          (m, a) => (a.state === 'shot_down' || !this.isHostile(ship.side, a.side) ? m : Math.min(m, dist(a.pos, ship.pos))),
-          Infinity
-        );
+        // Aircraft the boat knows about: lookouts, or its ESM mast hearing their radar
+        const nearestAircraft = this.knownAircraftRange(ship);
         const diesel = updateDieselBattery(ship, dt, this.era, nearestShip, nearestAircraft);
         const wasBelow = ship.belowLayer;
         updateThermoclineDepth(ship, dt, nearestShip);
@@ -3908,8 +3907,9 @@ export class GameEngine {
     for (const a of this.aircraft) {
       if (a.state === 'shot_down') continue;
       const watcher = a.side === 'enemy' ? pictures.friendly : pictures.enemy;
+      const radarSide: ShipSide = a.side === 'enemy' ? 'player' : 'enemy';
       const seen =
-        watcher.radars.some((r) => sensorDetects(map, r, a)) ||
+        (!this.maskedByChaff(a, radarSide) && watcher.radars.some((r) => sensorDetects(map, r, a))) ||
         watcher.airEyes.some((p) => visualDetects(map, p, a, true)) ||
         watcher.eyes.some((p) => visualDetects(map, p, a, false));
       if (a.side === 'enemy') {
@@ -3953,7 +3953,7 @@ export class GameEngine {
     const out: { sensor: RadarSensor; label: string }[] = [];
     const ships = enemySide ? this.enemyShips : [...this.playerShips, ...this.alliedShips];
     for (const s of ships) {
-      if (s.isSunk) continue;
+      if (s.isSunk || s.emcon) continue;
       const km = shipRadarKm(s, this.era);
       if (km > 0) out.push({ sensor: { pos: s.pos, heightM: 25 + s.length * 0.08, rangeKm: km, lookDown: false, airborne: false }, label: s.name });
     }
@@ -3971,6 +3971,14 @@ export class GameEngine {
       if (knownOnly && enemySide && !this.isAirTracked(a)) continue;
       const r = aircraftSensor(a);
       if (r) out.push({ sensor: r, label: a.name });
+    }
+    // Jamming shrinks each radar's reach to its burn-through range
+    if (this.jamZones.length > 0) {
+      const side: ShipSide = enemySide ? 'enemy' : 'player';
+      for (const o of out) {
+        const f = this.jamFactorAt(o.sensor.pos, side);
+        if (f < 1) o.sensor = { ...o.sensor, rangeKm: o.sensor.rangeKm * f };
+      }
     }
     return out;
   }
@@ -5926,150 +5934,678 @@ export class GameEngine {
   }
 
   // ══════════════════════════════════════════════════════════
-  // 時代四/時代五戰機干擾絲 (Chaff) / 熱焰彈 (Flare) 與機動高G破轉防禦
+  // 電子作戰 (ESM / ECM / ECCM) 與誘餌 — see ew.ts for the equipment and seeker tables
   // ══════════════════════════════════════════════════════════
-  /** Era 4/5 chaff, flares and high-G break against incoming missiles. */
+  /** Flares, chaff, ship decoys, noisemakers, Nixie and MOSS in play. */
+  public decoys: Decoy[] = [];
+  /** Hostile emitters our ESM holds (bearing strobes on the map). */
+  public esmContacts: EsmContact[] = [];
+  /** Active jamming: stand-off and escort jammers (radius in world units). */
+  public jamZones: { pos: Vector2D; radius: number; power: number; side: ShipSide; name: string }[] = [];
+  /** Surface wind (world units / s): chaff clouds and IR decoys drift with it. */
+  public wind: Vector2D = { x: 4, y: 1.5 };
+  private esmTimer = 0;
+  private esmLogged = new Set<string>();
+  private decoySerial = 0;
+  private shipEwCache = new Map<string, ShipEw>();
+
+  public shipEwOf(ship: Ship): ShipEw {
+    const key = `${ship.id}|${ship.type}`;
+    let ew = this.shipEwCache.get(key);
+    if (!ew) {
+      ew = shipEw(ship, this.era);
+      this.shipEwCache.set(key, ew);
+    }
+    return ew;
+  }
+
+  public aircraftEwOf(plane: Aircraft): AircraftEw {
+    return aircraftEw(plane.model, this.era);
+  }
+
+  private spawnDecoy(kind: Decoy['kind'], side: ShipSide, ownerId: string, pos: Vector2D, vel: Vector2D, extra: Partial<Decoy> = {}): Decoy {
+    const d: Decoy = {
+      id: `decoy-${++this.decoySerial}`,
+      kind,
+      side,
+      ownerId,
+      pos: { x: pos.x, y: pos.y },
+      vel: { x: vel.x, y: vel.y },
+      age: 0,
+      life: DECOY_LIFE[kind] * (0.85 + Math.random() * 0.3),
+      seed: Math.random() * 1000,
+      ...extra,
+    };
+    this.decoys.push(d);
+    if (this.decoys.length > 500) this.decoys.splice(0, this.decoys.length - 500);
+    return d;
+  }
+
+  private updateEw(dt: number): void {
+    this.updateDecoys(dt);
+    this.updateJamZones();
+    this.updateShipEw(dt);
+    this.esmTimer -= dt;
+    if (this.esmTimer <= 0) {
+      this.esmTimer = 1;
+      this.updateEsm();
+    }
+  }
+
+  /** Decoy physics: flares fall back and burn out, chaff blooms and drifts, rockets fly out and burst. */
+  private updateDecoys(dt: number): void {
+    const out: Decoy[] = [];
+    for (const d of this.decoys) {
+      d.age += dt;
+      if (d.age > d.life) {
+        if (d.kind === 'nixie') {
+          const owner = this.findShipById(d.ownerId);
+          if (owner) owner.nixieOut = false;
+        }
+        continue;
+      }
+      if (d.kind === 'flare') {
+        const k = Math.exp(-1.5 * dt);
+        d.vel.x *= k;
+        d.vel.y *= k;
+        d.pos.x += (d.vel.x + this.wind.x * 0.3) * dt;
+        d.pos.y += (d.vel.y + this.wind.y * 0.3) * dt;
+        (d.trail ??= []).push({ x: d.pos.x, y: d.pos.y });
+        if (d.trail.length > 16) d.trail.shift();
+      } else if (d.kind === 'chaff') {
+        const k = Math.exp(-5 * dt);
+        d.vel.x *= k;
+        d.vel.y *= k;
+        d.pos.x += (d.vel.x + this.wind.x) * dt;
+        d.pos.y += (d.vel.y + this.wind.y) * dt;
+      } else if ((d.kind === 'ship_chaff' || d.kind === 'ship_ir') && d.burstAt && d.launchPos) {
+        const flight = 1.1;
+        if (d.age < flight) {
+          const t = d.age / flight;
+          d.pos.x = d.launchPos.x + (d.burstAt.x - d.launchPos.x) * t;
+          d.pos.y = d.launchPos.y + (d.burstAt.y - d.launchPos.y) * t;
+        } else {
+          const drift = d.kind === 'ship_chaff' ? 0.8 : 0.25;
+          d.pos.x += this.wind.x * drift * dt;
+          d.pos.y += this.wind.y * drift * dt;
+        }
+      } else if (d.kind === 'nixie') {
+        const owner = this.findShipById(d.ownerId);
+        if (!owner || owner.isSunk || !owner.nixieOut) continue;
+        // Towed ~170 m astern on its cable, lagging the ship's turns
+        const tx = owner.pos.x - Math.cos(owner.heading) * 170;
+        const ty = owner.pos.y - Math.sin(owner.heading) * 170;
+        const f = Math.min(1, dt * 1.5);
+        d.pos.x += (tx - d.pos.x) * f;
+        d.pos.y += (ty - d.pos.y) * f;
+        d.heading = owner.heading;
+      } else if (d.kind === 'moss') {
+        d.heading = (d.heading ?? 0) + Math.sin(d.age * 0.35 + d.seed) * 0.15 * dt;
+        d.pos.x += Math.cos(d.heading) * 14 * dt;
+        d.pos.y += Math.sin(d.heading) * 14 * dt;
+        (d.trail ??= []).push({ x: d.pos.x, y: d.pos.y });
+        if (d.trail.length > 40) d.trail.shift();
+        // Hunters chase the simulator: the boat's datum follows it while the boat stays lost
+        const sub = this.findShipById(d.ownerId);
+        if (sub && !sub.isSunk && sub.side === 'enemy' && !sub.isSpotted && sub.datumPos) {
+          sub.datumPos = { x: d.pos.x, y: d.pos.y };
+          sub.datumAge = 0;
+        }
+      } else {
+        d.pos.x += this.wind.x * 0.05 * dt;
+        d.pos.y += this.wind.y * 0.05 * dt;
+      }
+      out.push(d);
+    }
+    this.decoys = out;
+  }
+
+  private findShipById(id: string): Ship | undefined {
+    return this.playerShips.find((s) => s.id === id) ?? this.enemyShips.find((s) => s.id === id) ?? this.alliedShips.find((s) => s.id === id);
+  }
+
+  /** Stand-off jammers (ALQ-99, Phase VI, Carpet) and escort jamming from self-protection pods. */
+  private updateJamZones(): void {
+    this.jamZones = [];
+    for (const a of this.aircraft) {
+      if (a.state === 'shot_down' || a.state === 'landing') continue;
+      const j = this.aircraftEwOf(a).jammer;
+      if (!j) continue;
+      const standoff = j.standoff === true;
+      const heavy = a.model === 'b52' || a.model === 'b29' || a.model === 'tu22m3' || a.model === 'tu95' || a.model === 'lancaster';
+      this.jamZones.push({
+        pos: a.pos,
+        radius: gameRangeFromKm(standoff ? 120 : heavy ? 45 : 20),
+        power: standoff ? j.power : heavy ? j.power * 0.8 : j.power * 0.45,
+        side: a.side,
+        name: j.name,
+      });
+    }
+  }
+
+  /** Jamming factor on a radar at `pos` belonging to `side` (1 = clear). */
+  private jamFactorAt(pos: Vector2D, side: ShipSide): number {
+    let f = 1;
+    const eccm = radarEccm(side === 'enemy', this.era);
+    for (const z of this.jamZones) {
+      if (!this.isHostile(side, z.side)) continue;
+      const dx = z.pos.x - pos.x;
+      const dy = z.pos.y - pos.y;
+      if (dx * dx + dy * dy > z.radius * z.radius) continue;
+      f *= 1 - 0.55 * z.power * (1 - eccm);
+    }
+    return Math.max(0.3, f);
+  }
+
+  /** Whether an aircraft is hidden in a hostile chaff corridor from a radar of `radarSide`. */
+  private maskedByChaff(a: Aircraft, radarSide: ShipSide): boolean {
+    for (const d of this.decoys) {
+      if (d.kind !== 'chaff' || !this.isHostile(radarSide, d.side)) continue;
+      const dx = d.pos.x - a.pos.x;
+      const dy = d.pos.y - a.pos.y;
+      if (dx * dx + dy * dy < 180 * 180 && decoyStrength('chaff', d.age) > 0.3) return Math.random() < 0.75 * (1 - radarEccm(radarSide === 'enemy', this.era));
+    }
+    return false;
+  }
+
+  /**
+   * Aircraft countermeasures: on a missile warning (RWR for radar shots; MAWS, or the crew
+   * spotting the smoke, for heat-seekers) the dispenser fires a program of flares or chaff and the
+   * pilot breaks or notches. The decoys are real objects the seeker may or may not take (see
+   * applySeeker). Bombers lay chaff corridors while enemy radars track them.
+   */
   private updateCountermeasures(dt: number, plane: Aircraft): void {
     this.updateMissileEvasion(dt, plane);
-    if (this.era === 'era4' || this.era === 'era5') {
-      if (plane.chaffCount === undefined) {
-        plane.chaffCount = 36;
-        plane.maxChaff = 36;
-        plane.flareCount = 36;
-        plane.maxFlare = 36;
-        plane.cmCooldown = 0;
-      }
-
-      if (plane.cmCooldown !== undefined && plane.cmCooldown > 0) {
-        plane.cmCooldown = Math.max(0, plane.cmCooldown - dt);
-      }
-
-      if (plane.evasionTimer !== undefined && plane.evasionTimer > 0) {
-        plane.evasionTimer = Math.max(0, plane.evasionTimer - dt);
-        if (plane.evasionTimer <= 0) {
-          plane.isEvading = false;
-          plane.evasionTactic = undefined;
-        }
-      }
-
-      if (plane.health > 0 && plane.state !== 'landing') {
-        const incomingMissile = this.projectiles.find(
-          (pr) =>
-            !pr.isDead &&
-            this.isHostile(plane.side, pr.side) &&
-            (pr.type === 'missile_sam' || pr.type === 'missile_aam') &&
-            (pr.targetEntityId === plane.id || dist(pr.pos, plane.pos) < 780)
-        );
-
-        if (incomingMissile && (plane.cmCooldown || 0) <= 0) {
-          const isIr = incomingMissile.guidanceType === 'infrared' || incomingMissile.guidanceType === 'ir';
-          const isRadar = !isIr;
-
-          if (isIr && (plane.flareCount ?? 0) > 0) {
-            // ════ 紅外尋標飛彈威脅對策: Breaking 高G大角度切向破轉 + 熱焰彈群 ════
-            plane.flareCount = Math.max(0, (plane.flareCount ?? 30) - 2);
-            plane.cmCooldown = 1.4;
-            plane.isEvading = true;
-            plane.evasionTactic = 'breaking';
-            plane.evasionTimer = 2.6;
-            plane.evasionTurnSign = Math.random() > 0.5 ? 1 : -1;
-            plane.evadeMissileId = incomingMissile.id;
-
-            // High-G Break Slice: 猛烈大角度急轉切入飛彈追擊幾何並開啟加力燃燒室
-            plane.targetHeading = plane.heading + (plane.evasionTurnSign || 1) * 1.85;
-            plane.speed = Math.min(plane.maxSpeed * 1.35, plane.speed + 120);
-
-            // 投放高溫鎂燃燒熱焰彈 (Burning magnesium flares)
-            for (let f = 0; f < 4; f++) {
-              const flareAng = plane.heading + Math.PI + (Math.random() - 0.5) * 0.9;
-              this.particles.push({
-                id: `flare-${Date.now()}-${f}-${Math.random()}`,
-                x: plane.pos.x - Math.cos(plane.heading) * 14,
-                y: plane.pos.y - Math.sin(plane.heading) * 14,
-                vx: Math.cos(flareAng) * (55 + Math.random() * 30),
-                vy: Math.sin(flareAng) * (55 + Math.random() * 30),
-                life: 1.6,
-                maxLife: 1.6,
-                radius: 5.5,
-                color: '#FF6D00',
-                type: 'flare',
-              });
-            }
-
-            // Threat-matched Breaking 誘騙脫鎖率達 80%
-            if (Math.random() < 0.80) {
-              incomingMissile.isDecoyed = true;
-              incomingMissile.targetEntityId = undefined;
-              incomingMissile.targetPos = {
-                x: plane.pos.x + (Math.random() - 0.5) * 450,
-                y: plane.pos.y + (Math.random() - 0.5) * 450,
-              };
-            }
-
-            this.addCombatLog({
-              category: 'aa',
-              sourceSide: plane.side,
-              sourceName: plane.name,
-              targetName: '來襲紅外飛彈',
-              actionType: 'recon_spotted',
-              text: `⚡【高G破轉機動 + 熱焰彈】「${plane.name}」開後燃器大過載破轉！紅外尋標頭被高溫熱焰彈欺騙脫鎖！`,
-            });
-          } else if (isRadar && (plane.chaffCount ?? 0) > 0) {
-            // ════ 雷達導向飛彈威脅對策: Notching 90° 零都卜勒切向規避 + 箔條干擾雲 ════
-            plane.chaffCount = Math.max(0, (plane.chaffCount ?? 30) - 4);
-            plane.cmCooldown = 1.4;
-            plane.isEvading = true;
-            plane.evasionTactic = 'notching';
-            plane.evasionTimer = 3.0;
-            plane.evasionTurnSign = Math.random() > 0.5 ? 1 : -1;
-            plane.evadeMissileId = incomingMissile.id;
-
-            // 3-9 Line Beam / Notching: 航向精確切至與來襲飛彈夾角 90°，落入都卜勒雷達盲區
-            const missileHeading = incomingMissile.heading ?? Math.atan2(plane.pos.y - incomingMissile.pos.y, plane.pos.x - incomingMissile.pos.x);
-            plane.targetHeading = missileHeading + (Math.PI / 2) * (plane.evasionTurnSign || 1);
-            // 俯衝貼近海面/地形雜波 (Sea Clutter Masking)
-            plane.altitude = Math.max(0.14, plane.altitude - dt * 0.45);
-
-            // 投放鍍鋁干擾絲箔條雲 (Reflective aluminum chaff strips)
-            for (let c = 0; c < 10; c++) {
-              this.particles.push({
-                id: `chaff-${Date.now()}-${c}-${Math.random()}`,
-                x: plane.pos.x - Math.cos(plane.heading) * 16 + (Math.random() - 0.5) * 14,
-                y: plane.pos.y - Math.sin(plane.heading) * 16 + (Math.random() - 0.5) * 14,
-                vx: (Math.random() - 0.5) * 16,
-                vy: (Math.random() - 0.5) * 16,
-                life: 2.8,
-                maxLife: 2.8,
-                radius: 6.5,
-                color: '#E0F7FA',
-                type: 'chaff',
-              });
-            }
-
-            // Threat-matched Notching 規避誘騙率 (78%，若切入角接近90°垂直波束則提升至 88%)
-            const angleDiff = Math.abs(Math.sin(plane.heading - missileHeading));
-            const notchingBonus = angleDiff > 0.85 ? 0.88 : 0.78;
-            if (Math.random() < notchingBonus) {
-              incomingMissile.isDecoyed = true;
-              incomingMissile.targetEntityId = undefined;
-              incomingMissile.targetPos = {
-                x: plane.pos.x + (Math.random() - 0.5) * 600,
-                y: plane.pos.y + (Math.random() - 0.5) * 600,
-              };
-            }
-
-            this.addCombatLog({
-              category: 'aa',
-              sourceSide: plane.side,
-              sourceName: plane.name,
-              targetName: '來襲雷達導引飛彈',
-              actionType: 'recon_spotted',
-              text: `📡【Notching 切向橫滾規避 + 箔條干擾雲】「${plane.name}」切至 90° 零都卜勒盲區並俯衝貼地！雷達波束完全迷失於雜波反射雲中！`,
-            });
-          }
-        }
+    const ew = this.aircraftEwOf(plane);
+    if (plane.chaffCount === undefined) {
+      plane.chaffCount = ew.chaff;
+      plane.maxChaff = ew.chaff;
+      plane.flareCount = ew.flares;
+      plane.maxFlare = ew.flares;
+      plane.cmCooldown = 0;
+    }
+    if ((plane.cmCooldown ?? 0) > 0) plane.cmCooldown = Math.max(0, (plane.cmCooldown ?? 0) - dt);
+    if (plane.evasionTimer !== undefined && plane.evasionTimer > 0 && (this.era === 'era4' || this.era === 'era5')) {
+      plane.evasionTimer = Math.max(0, plane.evasionTimer - dt);
+      if (plane.evasionTimer <= 0) {
+        plane.isEvading = false;
+        plane.evasionTactic = undefined;
       }
     }
+    if (plane.health <= 0 || plane.state === 'landing' || (plane.cmCooldown ?? 0) > 0) return;
+    const salvo = Math.max(1, ew.salvo);
+
+    const incoming = this.projectiles.find(
+      (pr) =>
+        !pr.isDead &&
+        !pr.isDecoyed &&
+        this.isHostile(plane.side, pr.side) &&
+        (pr.type === 'missile_sam' || pr.type === 'missile_aam') &&
+        (pr.targetEntityId === plane.id || dist(pr.pos, plane.pos) < 700) &&
+        dist(pr.pos, plane.pos) < 1300
+    );
+    if (incoming) {
+      const isIr = incoming.guidanceType === 'infrared' || incoming.guidanceType === 'ir';
+      // A radar shot lights up the RWR; a heat-seeker gives no warning without MAWS
+      const warned = isIr ? ew.maws || Math.random() < 0.55 : Boolean(ew.rwr) || this.era === 'era5' || Math.random() < 0.6;
+      plane.cmCooldown = warned ? 1.2 : 0.6;
+      if (!warned) return;
+      const sign = Math.random() > 0.5 ? 1 : -1;
+      if (isIr && (plane.flareCount ?? 0) > 0) {
+        const n = Math.min(salvo, plane.flareCount ?? 0);
+        plane.flareCount = (plane.flareCount ?? 0) - n;
+        this.dispenseFlares(plane, n);
+        plane.isEvading = true;
+        plane.evasionTactic = 'breaking';
+        plane.evasionTimer = 2.6;
+        plane.evasionTurnSign = sign;
+        plane.evadeMissileId = incoming.id;
+        plane.targetHeading = plane.heading + sign * 1.85;
+        plane.speed = Math.min(plane.maxSpeed * 1.3, plane.speed + 100);
+      } else if (!isIr && (plane.chaffCount ?? 0) > 0) {
+        const n = Math.min(salvo, plane.chaffCount ?? 0);
+        plane.chaffCount = (plane.chaffCount ?? 0) - n;
+        this.dispenseChaff(plane, n);
+        const mh = incoming.heading ?? Math.atan2(plane.pos.y - incoming.pos.y, plane.pos.x - incoming.pos.x);
+        plane.isEvading = true;
+        plane.evasionTactic = 'notching';
+        plane.evasionTimer = 3;
+        plane.evasionTurnSign = sign;
+        plane.evadeMissileId = incoming.id;
+        plane.targetHeading = mh + (Math.PI / 2) * sign;
+        plane.altitude = Math.max(0.14, plane.altitude - dt * 0.45);
+      }
+      return;
+    }
+    // Chaff corridor: bombers seeding "Window" while the enemy's radars hold them
+    const bomberish = plane.role === 'level_bomber' || plane.model === 'b52' || plane.model === 'tu22m3' || plane.model === 'tu95';
+    if (bomberish && (plane.chaffCount ?? 0) > 0 && ((plane.side === 'enemy' ? plane.trackedByPlayer : plane.trackedByEnemy) ?? 0) > 0) {
+      const n = Math.min(salvo, plane.chaffCount ?? 0);
+      plane.chaffCount = (plane.chaffCount ?? 0) - n;
+      this.dispenseChaff(plane, n);
+      plane.cmCooldown = 4;
+    }
+  }
+
+  private dispenseFlares(plane: Aircraft, n: number): void {
+    for (let f = 0; f < n; f++) {
+      // Ejected down and to the sides from the rear fuselage dispensers, falling behind
+      const side = (f % 2 === 0 ? 1 : -1) * (0.5 + Math.random() * 0.5);
+      const a = plane.heading + Math.PI / 2 * side;
+      const sp = plane.speed * 0.45;
+      this.spawnDecoy(
+        'flare',
+        plane.side,
+        plane.id,
+        { x: plane.pos.x - Math.cos(plane.heading) * 10, y: plane.pos.y - Math.sin(plane.heading) * 10 },
+        { x: Math.cos(plane.heading) * sp + Math.cos(a) * 30, y: Math.sin(plane.heading) * sp + Math.sin(a) * 30 },
+        { life: DECOY_LIFE.flare * (0.85 + Math.random() * 0.3) + f * 0.05 }
+      );
+    }
+  }
+
+  private dispenseChaff(plane: Aircraft, n: number): void {
+    for (let c = 0; c < n; c++) {
+      const a = plane.heading + Math.PI + (Math.random() - 0.5) * 1.2;
+      this.spawnDecoy(
+        'chaff',
+        plane.side,
+        plane.id,
+        { x: plane.pos.x - Math.cos(plane.heading) * 12, y: plane.pos.y - Math.sin(plane.heading) * 12 },
+        { x: Math.cos(plane.heading) * plane.speed * 0.3 + Math.cos(a) * 25, y: Math.sin(plane.heading) * plane.speed * 0.3 + Math.sin(a) * 25 }
+      );
+    }
+  }
+
+  /**
+   * Ship EW each tick: rounds and noisemakers stocked from the class fit; EMCON broken when
+   * missiles close in; SRBOC / RBOC / PK salvos against inbound anti-ship missiles; towed decoys
+   * (Fanfare, Nixie) streamed against homing torpedoes; submarines drop noisemakers and launch
+   * MOSS / MG-74 when torpedoes are in the water or hunters hold them.
+   */
+  private updateShipEw(dt: number): void {
+    const ships = [...this.playerShips, ...this.alliedShips, ...this.enemyShips];
+    for (const ship of ships) {
+      if (ship.isSunk) continue;
+      const ew = this.shipEwOf(ship);
+      if (ship.decoyChaff === undefined) {
+        ship.decoyChaff = ew.decoys?.chaff ?? 0;
+        ship.decoyIr = ew.decoys?.ir ?? 0;
+        ship.noisemakers = ew.noisemaker?.count ?? 0;
+        ship.mossLeft = ew.moss?.count ?? 0;
+      }
+      ship.decoyCooldown = Math.max(0, (ship.decoyCooldown ?? 0) - dt);
+      const sub = this.isSubmarine(ship);
+      const missile = sub
+        ? undefined
+        : nearestTo(this.projectiles, ship.pos, (p) => !p.isDead && !p.isDecoyed && this.isHostile(ship.side, p.side) && (p.type === 'missile_ashm' || p.type === 'missile_cruise' || p.type === 'missile_arm' || (p.type === 'missile_aam' && p.targetEntityId === ship.id)));
+      const missileD = missile ? dist(missile.pos, ship.pos) : Infinity;
+
+      // EMCON: radiate again once something is coming
+      if (ship.emcon && missileD < 2500) {
+        ship.emcon = false;
+        if (ship.side === 'player') {
+          this.addCombatLog({ category: 'naval', sourceSide: 'player', sourceName: ship.name, targetName: '電磁管制', actionType: 'recon_spotted', text: `📡【解除 EMCON】「${ship.name}」偵獲來襲飛彈，雷達全面開機接戰！` });
+        }
+      }
+
+      // Decoy launcher salvo against an inbound missile
+      if (ew.decoys && missile && missileD < 2200 && (ship.decoyCooldown ?? 0) <= 0 && (ship.decoyChaff ?? 0) > 0 && missile.type !== 'missile_arm') {
+        ship.decoyCooldown = ew.decoys.reload;
+        const los = Math.atan2(missile.pos.y - ship.pos.y, missile.pos.x - ship.pos.x);
+        const rounds = Math.min(2, ship.decoyChaff ?? 0);
+        ship.decoyChaff = (ship.decoyChaff ?? 0) - rounds;
+        // One round either beam: the missile's range gate sees a bigger target beside the ship
+        for (let r = 0; r < rounds; r++) {
+          const a = los + (r === 0 ? 1 : -1) * (Math.PI / 2) + (Math.random() - 0.5) * 0.4;
+          const range = missileD > 1300 ? 320 : 170; // distraction farther out, seduction close in
+          this.spawnDecoy('ship_chaff', ship.side, ship.id, ship.pos, { x: 0, y: 0 }, {
+            launchPos: { ...ship.pos },
+            burstAt: { x: ship.pos.x + Math.cos(a) * range, y: ship.pos.y + Math.sin(a) * range },
+          });
+        }
+        if ((ship.decoyIr ?? 0) > 0) {
+          ship.decoyIr = (ship.decoyIr ?? 0) - 1;
+          const a = los + (Math.random() < 0.5 ? 1 : -1) * 1.9;
+          this.spawnDecoy('ship_ir', ship.side, ship.id, ship.pos, { x: 0, y: 0 }, {
+            launchPos: { ...ship.pos },
+            burstAt: { x: ship.pos.x + Math.cos(a) * 140, y: ship.pos.y + Math.sin(a) * 140 },
+          });
+        }
+        soundEngine.playRocketWhoosh();
+        if (ship.side === 'player') {
+          this.addCombatLog({
+            category: 'aa',
+            sourceSide: 'player',
+            sourceName: `${ship.name} (${ew.decoys.name})`,
+            targetName: missile.attackerName || '來襲飛彈',
+            actionType: 'recon_spotted',
+            text: `🎆【誘餌齊射】「${ship.name}」以 ${ew.decoys.name} 向兩舷射出箔條${(ew.decoys.ir ?? 0) > 0 ? '與紅外誘餌' : ''}（剩餘箔條 ${ship.decoyChaff} 發）。`,
+          });
+        }
+      }
+
+      // Torpedo countermeasures
+      if (!ew.noisemaker && !ew.moss) continue;
+      const torp = nearestTo(this.projectiles, ship.pos, (p) => !p.isDead && p.type === 'torpedo' && Boolean(p.isAcousticHoming) && this.isHostile(ship.side, p.side));
+      const torpD = torp ? dist(torp.pos, ship.pos) : Infinity;
+      if (ew.noisemaker?.towed) {
+        if (torpD < 2600 && !ship.nixieOut && (ship.noisemakers ?? 0) > 0) {
+          ship.nixieOut = true;
+          this.spawnDecoy('nixie', ship.side, ship.id, { x: ship.pos.x - Math.cos(ship.heading) * 60, y: ship.pos.y - Math.sin(ship.heading) * 60 }, { x: 0, y: 0 }, { heading: ship.heading });
+          if (ship.side === 'player') {
+            this.addCombatLog({ category: 'naval', sourceSide: 'player', sourceName: ship.name, targetName: torp?.attackerName || '來襲魚雷', actionType: 'recon_spotted', text: `🔊【拖曳誘餌】「${ship.name}」施放 ${ew.noisemaker.name}，艦尾拖曳噪音體模擬螺旋槳聲引離聲導魚雷。` });
+          }
+        }
+      } else if (ew.noisemaker && torp && torpD < 1500 && (ship.noisemakers ?? 0) > 0 && (ship.decoyCooldown ?? 0) <= 0) {
+        ship.noisemakers = (ship.noisemakers ?? 0) - 1;
+        ship.decoyCooldown = 5;
+        this.spawnDecoy('noisemaker', ship.side, ship.id, ship.pos, { x: 0, y: 0 });
+        if (sub) this.startSubmarineEvasion(ship, torp.pos);
+        if (ship.side === 'player') {
+          this.addCombatLog({ category: 'naval', sourceSide: 'player', sourceName: ship.name, targetName: torp.attackerName || '來襲魚雷', actionType: 'recon_spotted', text: `🔊【噪音彈】「${ship.name}」射出 ${ew.noisemaker.name} 並轉向脫離（剩餘 ${ship.noisemakers}）。` });
+        }
+      }
+      // MOSS: a torpedo in the water, or hunters holding the boat
+      const held = sub && (ship.side === 'enemy' ? ship.isSpotted : ship.isSpottedByEnemy);
+      if (sub && ew.moss && (ship.mossLeft ?? 0) > 0 && (torpD < 2400 || (held && Math.random() < 0.004)) && !this.decoys.some((d) => d.kind === 'moss' && d.ownerId === ship.id)) {
+        this.launchMoss(ship);
+      }
+    }
+  }
+
+  /** A submarine launches its simulator (Mk 70 MOSS / MG-74): it runs off on the boat's course while the boat turns away and goes quiet. */
+  public launchMoss(sub: Ship): boolean {
+    const ew = this.shipEwOf(sub);
+    if (!ew.moss || (sub.mossLeft ?? 0) <= 0 || sub.isSunk) return false;
+    sub.mossLeft = (sub.mossLeft ?? 0) - 1;
+    this.spawnDecoy('moss', sub.side, sub.id, sub.pos, { x: 0, y: 0 }, { heading: sub.heading + (Math.random() - 0.5) * 0.5 });
+    // The hunters' contact transfers to the simulator half the time or more
+    const counter = this.era === 'era5' ? 0.6 : 0.5;
+    if (sub.side === 'enemy' && sub.isSpotted && Math.random() < counter) {
+      sub.isSpotted = false;
+      sub.spottedTimer = 0;
+    } else if (sub.side !== 'enemy' && sub.isSpottedByEnemy && Math.random() < counter) {
+      sub.isSpottedByEnemy = false;
+      sub.enemySpottedTimer = 0;
+    }
+    this.startSubmarineEvasion(sub, { x: sub.pos.x + Math.cos(sub.heading) * 100, y: sub.pos.y + Math.sin(sub.heading) * 100 });
+    if (sub.side !== 'enemy') {
+      this.addCombatLog({ category: 'naval', sourceSide: 'player', sourceName: sub.name, targetName: ew.moss.name, actionType: 'recon_spotted', text: `🐟【${ew.moss.name}】「${sub.name}」自魚雷管射出潛艦模擬器，模擬本艦聲紋沿原航向駛離，本艦轉向靜音脫離（剩餘 ${sub.mossLeft}）。` });
+    }
+    return true;
+  }
+
+  /** Player command: selected submarines launch their simulators. */
+  public launchMossSelected(): number {
+    let n = 0;
+    for (const s of this.playerShips) if (this.selectedUnitIds.includes(s.id) && this.isSubmarine(s) && this.launchMoss(s)) n++;
+    return n;
+  }
+
+  /** Player command: selected surface ships go radar-silent (or radiate again). */
+  public toggleEmcon(): void {
+    const ships = this.playerShips.filter((s) => this.selectedUnitIds.includes(s.id) && !s.isSunk && !this.isSubmarine(s));
+    if (ships.length === 0) return;
+    const on = ships.some((s) => !s.emcon);
+    for (const s of ships) s.emcon = on;
+    this.addBannerAlert(on ? `📴【EMCON 電磁管制】${ships.length} 艘艦艇關閉雷達：敵 ESM 無法截收，但我方雷達圖像縮小` : `📡【解除 EMCON】${ships.length} 艘艦艇雷達開機`, 'player', 'capture', 3.5);
+  }
+
+  /**
+   * ESM: each side's intercept receivers pick up hostile radars well beyond those radars' own
+   * reach (one-way propagation). Radiating aircraft go into the air picture; our receivers'
+   * intercepts are kept as bearing strobes and each new emitter type is classified in the log.
+   */
+  private updateEsm(): void {
+    this.esmContacts = this.esmContacts.map((c) => ({ ...c, age: c.age + 1 })).filter((c) => c.age < 4);
+    type Ear = { id: string; pos: Vector2D; side: ShipSide; factor: number; name: string };
+    type Emitter = { id: string; key: string; pos: Vector2D; side: ShipSide; reach: number; label: string; plane?: Aircraft };
+    const ears: Ear[] = [];
+    for (const s of [...this.playerShips, ...this.alliedShips, ...this.enemyShips]) {
+      if (s.isSunk) continue;
+      const e = this.shipEwOf(s).esm;
+      // A submarine's ESM mast works only near the surface
+      if (!e || (this.isSubmarine(s) && s.belowLayer)) continue;
+      ears.push({ id: s.id, pos: s.pos, side: s.side, factor: e.factor, name: e.name });
+    }
+    for (const a of this.aircraft) {
+      if (a.state === 'shot_down') continue;
+      const e = this.aircraftEwOf(a).esm;
+      if (e) ears.push({ id: a.id, pos: a.pos, side: a.side, factor: e.factor, name: e.name });
+    }
+    if (ears.length === 0) return;
+    const emitters: Emitter[] = [];
+    for (const s of [...this.playerShips, ...this.alliedShips, ...this.enemyShips]) {
+      if (s.isSunk || s.emcon) continue;
+      const km = shipRadarKm(s, this.era);
+      if (km > 0) emitters.push({ id: s.id, key: s.type, pos: s.pos, side: s.side, reach: gameRangeFromKm(km), label: `${emitterName(s.type, '艦載搜索雷達', this.era, s.side === 'enemy')} (${s.codeName || s.name})` });
+    }
+    for (const isl of this.islands) {
+      for (const inst of isl.installations) {
+        if (inst.isDestroyed || inst.isCivilian || inst.isRadarEmitting === false) continue;
+        const km = installationRadarKm(inst, this.era);
+        if (km > 0) emitters.push({ id: inst.id, key: inst.type, pos: inst.pos, side: inst.side, reach: gameRangeFromKm(km), label: `${emitterName(inst.type, '地面雷達', this.era, inst.side === 'enemy')} (${inst.name.split(' (')[0]})` });
+      }
+    }
+    for (const a of this.aircraft) {
+      if (a.state === 'shot_down') continue;
+      const r = aircraftSensor(a);
+      if (r) emitters.push({ id: a.id, key: a.model, pos: a.pos, side: a.side, reach: gameRangeFromKm(r.rangeKm), label: `${emitterName(a.model, '機載雷達', this.era, a.side === 'enemy')} (${a.model.toUpperCase()})`, plane: a });
+    }
+    for (const em of emitters) {
+      for (const ear of ears) {
+        if (!this.isHostile(ear.side, em.side)) continue;
+        const d = dist(ear.pos, em.pos);
+        if (d > em.reach * ear.factor) continue;
+        if (em.plane) {
+          if (em.side === 'enemy') em.plane.trackedByPlayer = Math.max(em.plane.trackedByPlayer ?? 0, 2.5);
+          else em.plane.trackedByEnemy = Math.max(em.plane.trackedByEnemy ?? 0, 2.5);
+        }
+        if (ear.side === 'enemy') break;
+        const bearing = Math.atan2(em.pos.y - ear.pos.y, em.pos.x - ear.pos.x) + (Math.random() - 0.5) * 0.05;
+        this.esmContacts.push({ key: `${ear.id}>${em.id}`, from: { ...ear.pos }, bearing, reach: Math.min(d * 1.25, em.reach * ear.factor), label: em.label, age: 0 });
+        if (!this.esmLogged.has(em.key)) {
+          this.esmLogged.add(em.key);
+          const deg = Math.round(((Math.atan2(em.pos.x - ear.pos.x, -(em.pos.y - ear.pos.y)) * 180) / Math.PI + 360) % 360);
+          this.addCombatLog({
+            category: 'naval',
+            sourceSide: 'player',
+            sourceName: ear.name,
+            targetName: em.label,
+            actionType: 'recon_spotted',
+            text: `📶【ESM 截收】${ear.name} 於方位 ${String(deg).padStart(3, '0')}° 截獲 ${em.label} 雷達信號，比其雷達偵測距離更早得知其存在。`,
+          });
+        }
+        break;
+      }
+    }
+    // Keep one strobe per pair, newest first
+    const seen = new Set<string>();
+    this.esmContacts = this.esmContacts.reverse().filter((c) => (seen.has(c.key) ? false : (seen.add(c.key), true)));
+  }
+
+  /** Range at which a submarine knows of a hostile aircraft: its lookouts, or its ESM mast for a radiating one. */
+  private knownAircraftRange(sub: Ship): number {
+    const esm = this.shipEwOf(sub).esm;
+    let best = Infinity;
+    for (const a of this.aircraft) {
+      if (a.state === 'shot_down' || !this.isHostile(sub.side, a.side)) continue;
+      const d = dist(a.pos, sub.pos);
+      if (d >= best) continue;
+      if (d < 1500) best = d;
+      else if (esm && !sub.belowLayer) {
+        const r = aircraftSensor(a);
+        if (r && d < gameRangeFromKm(r.rangeKm) * esm.factor) best = d;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Seeker logic for a guided missile, run five times a second: decoys entering the seeker's field
+   * of view each get one seduction roll (ECCM, aspect, notching, jamming); self-protection,
+   * deception and stand-off jamming can break a radar seeker's lock unless it homes on the jam;
+   * an anti-radiation missile loses a ship that goes silent. Returns the point to steer at.
+   */
+  private applySeeker(dt: number, proj: Projectile, targetPos: Vector2D | null): Vector2D | null {
+    if (!(proj.type === 'missile_aam' || proj.type === 'missile_sam' || proj.type === 'missile_ashm' || proj.type === 'missile_cruise' || proj.type === 'missile_arm')) return targetPos;
+    if (proj.decoyId) {
+      const d = this.decoys.find((x) => x.id === proj.decoyId);
+      if (d) {
+        proj.targetPos = { x: d.pos.x, y: d.pos.y };
+        return proj.targetPos;
+      }
+      proj.decoyId = undefined;
+      return proj.targetPos ?? targetPos;
+    }
+    if (proj.isDecoyed || !targetPos) return targetPos;
+    proj.seekerTimer = (proj.seekerTimer ?? 0) - dt;
+    if (proj.seekerTimer > 0) return targetPos;
+    const step = 0.2;
+    proj.seekerTimer = step;
+    const seeker = seekerProfile(proj, this.era);
+    const plane = proj.targetEntityType === 'aircraft' ? this.aircraft.find((a) => a.id === proj.targetEntityId) : undefined;
+    const ship = proj.targetEntityType === 'ship' ? this.findShipById(proj.targetEntityId ?? '') : undefined;
+    const targetSide: ShipSide | undefined = plane?.side ?? ship?.side;
+    const distT = dist(proj.pos, targetPos);
+
+    // ARM against a ship that has gone radar-silent
+    if (seeker.band === 'arm' && ship?.emcon) {
+      this.breakLock(proj, targetPos, `${proj.attackerName || '反輻射飛彈'} 失去輻射源（「${ship.name}」電磁管制）`);
+      return proj.targetPos ?? targetPos;
+    }
+
+    // Decoys in the seeker's view
+    const jammerPower = plane ? this.aircraftEwOf(plane).jammer?.power ?? 0 : ship && !ship.emcon ? this.shipEwOf(ship).jammer?.power ?? 0 : 0;
+    const losT = Math.atan2(targetPos.y - proj.pos.y, targetPos.x - proj.pos.x);
+    const tgtHeading = plane?.heading ?? ship?.heading;
+    const beam = plane && tgtHeading !== undefined ? Math.abs(Math.sin(tgtHeading - losT)) : 0;
+    const rear = tgtHeading !== undefined ? Math.max(0, Math.cos(tgtHeading - losT)) : 0.5;
+    const cell = ship ? 520 : 260;
+    for (const d of this.decoys) {
+      if (targetSide ? this.isHostile(d.side, targetSide) : !this.isHostile(proj.side, d.side)) continue;
+      if (d.kind === 'noisemaker' || d.kind === 'nixie' || d.kind === 'moss') continue;
+      if (proj.seenDecoys?.includes(d.id)) continue;
+      // Looked at once it has bloomed (a ship round also has to fly out and burst first)
+      if (d.age < DECOY_BLOOM[d.kind] + (d.kind === 'ship_chaff' || d.kind === 'ship_ir' ? 1.1 : 0)) continue;
+      const dd = dist(proj.pos, d.pos);
+      if (dd > distT + 400 || dist(d.pos, targetPos) > cell) continue;
+      let off = Math.atan2(d.pos.y - proj.pos.y, d.pos.x - proj.pos.x) - proj.heading;
+      while (off > Math.PI) off -= Math.PI * 2;
+      while (off < -Math.PI) off += Math.PI * 2;
+      if (Math.abs(off) > seeker.fov) continue;
+      (proj.seenDecoys ??= []).push(d.id);
+      const p = seductionChance(d.kind, seeker, decoyStrength(d.kind, d.age), { beam, rear, jamming: jammerPower > 0 });
+      if (p > 0 && Math.random() < p) {
+        this.seduce(proj, d, plane?.name ?? ship?.name);
+        return proj.targetPos ?? targetPos;
+      }
+    }
+
+    // Jamming: the target's own jammer, and stand-off jamming over a command-guided SAM's site
+    let power = jammerPower;
+    if (proj.guidanceType === 'command_radar' && targetSide) {
+      for (const z of this.jamZones) if (z.side === targetSide && dist(z.pos, proj.originPos) < z.radius) power = Math.max(power, z.power);
+    }
+    if (power > 0 && distT > 350) {
+      const rate = jamBreakRate(seeker, power);
+      if (rate > 0 && Math.random() < rate * step) {
+        this.breakLock(proj, targetPos, `「${plane?.name ?? ship?.name ?? '目標'}」電子干擾使 ${seeker.name} 失鎖`);
+        return proj.targetPos ?? targetPos;
+      }
+    }
+    const irj = plane ? this.aircraftEwOf(plane).irJammer : undefined;
+    if (irj && distT > 150) {
+      const rate = irJamBreakRate(seeker, irj.power);
+      if (rate > 0 && Math.random() < rate * step) {
+        this.breakLock(proj, targetPos, `「${plane?.name}」${irj.name} 擾亂 ${seeker.name}`);
+        return proj.targetPos ?? targetPos;
+      }
+    }
+    return targetPos;
+  }
+
+  private seduce(proj: Projectile, d: Decoy, targetName?: string): void {
+    proj.decoyId = d.id;
+    proj.isDecoyed = true;
+    proj.targetEntityId = undefined;
+    proj.targetPos = { x: d.pos.x, y: d.pos.y };
+    if (proj.isLeadMissile) this.handleAshmLeaderDestroyed(proj);
+    const what: Record<Decoy['kind'], string> = { flare: '熱焰彈', chaff: '箔條', ship_chaff: '艦載箔條雲', ship_ir: '艦載紅外誘餌', noisemaker: '噪音彈', nixie: '拖曳誘餌', moss: '潛艦模擬器' };
+    const seeker = seekerProfile(proj, this.era);
+    this.addCombatLog({
+      category: 'aa',
+      sourceSide: d.side,
+      sourceName: targetName ?? '誘餌',
+      targetName: proj.attackerName || '來襲飛彈',
+      actionType: 'recon_spotted',
+      text: `🎯【誘餌生效】${seeker.name} 被${what[d.kind]}引離「${targetName ?? '目標'}」！`,
+    });
+  }
+
+  private breakLock(proj: Projectile, targetPos: Vector2D, text: string): void {
+    proj.isDecoyed = true;
+    proj.targetEntityId = undefined;
+    const a = Math.random() * Math.PI * 2;
+    proj.targetPos = { x: targetPos.x + Math.cos(a) * 380, y: targetPos.y + Math.sin(a) * 380 };
+    if (proj.isLeadMissile) this.handleAshmLeaderDestroyed(proj);
+    this.addCombatLog({ category: 'aa', sourceSide: proj.side === 'enemy' ? 'player' : 'enemy', sourceName: '電子反制', targetName: proj.attackerName || '飛彈', actionType: 'recon_spotted', text: `📡【ECM 失鎖】${text}，飛彈偏離航線。` });
+  }
+
+  /**
+   * Acoustic torpedo seeker against noisemakers, towed decoys and simulators (wake homers ignore
+   * them). Returns the decoy to steer at, if the torpedo has taken one.
+   */
+  private torpedoDecoy(dt: number, proj: Projectile): Decoy | undefined {
+    if (proj.decoyId) {
+      const d = this.decoys.find((x) => x.id === proj.decoyId);
+      if (d) return d;
+      proj.decoyId = undefined; // decoy gone: the torpedo searches again (re-attack)
+    }
+    proj.seekerTimer = (proj.seekerTimer ?? 0) - dt;
+    if (proj.seekerTimer > 0) return undefined;
+    proj.seekerTimer = 0.3;
+    const seeker = seekerProfile(proj, this.era);
+    if (seeker.band !== 'acoustic') return undefined;
+    for (const d of this.decoys) {
+      if (!(d.kind === 'noisemaker' || d.kind === 'nixie' || d.kind === 'moss') || !this.isHostile(proj.side, d.side)) continue;
+      if (proj.seenDecoys?.includes(d.id) || d.age < DECOY_BLOOM[d.kind] || dist(proj.pos, d.pos) > 950) continue;
+      let off = Math.atan2(d.pos.y - proj.pos.y, d.pos.x - proj.pos.x) - proj.heading;
+      while (off > Math.PI) off -= Math.PI * 2;
+      while (off < -Math.PI) off += Math.PI * 2;
+      if (Math.abs(off) > seeker.fov) continue;
+      (proj.seenDecoys ??= []).push(d.id);
+      if (Math.random() < seductionChance(d.kind, seeker, decoyStrength(d.kind, d.age))) {
+        proj.decoyId = d.id;
+        proj.isDecoyed = true;
+        const owner = this.findShipById(d.ownerId);
+        this.addCombatLog({
+          category: 'naval',
+          sourceSide: d.side,
+          sourceName: owner?.name ?? '誘餌',
+          targetName: proj.attackerName || '魚雷',
+          actionType: 'recon_spotted',
+          text: `🔊【魚雷被誘騙】${seeker.name} 轉向追逐${d.kind === 'moss' ? '潛艦模擬器' : d.kind === 'nixie' ? '拖曳誘餌' : '噪音彈'}，放過「${owner?.name ?? '目標'}」！`,
+        });
+        return d;
+      }
+    }
+    return undefined;
+  }
+
+  /** A torpedo reaching the decoy it chased: it detonates on (or runs past) it. */
+  private torpedoHitsDecoy(proj: Projectile, d: Decoy): void {
+    proj.isDead = true;
+    this.decoys = this.decoys.filter((x) => x.id !== d.id);
+    if (d.kind === 'nixie') {
+      const owner = this.findShipById(d.ownerId);
+      if (owner) {
+        owner.nixieOut = false;
+        owner.noisemakers = Math.max(0, (owner.noisemakers ?? 1) - 1);
+      }
+    }
+    this.particles.push({ id: `torp-decoy-${Date.now()}-${Math.random()}`, x: d.pos.x, y: d.pos.y, vx: 0, vy: 0, life: 1.2, maxLife: 1.2, radius: 40, color: '#B3E5FC', type: 'geyser' });
   }
 
   /**
@@ -7962,10 +8498,6 @@ export class GameEngine {
         wingmanOffset: { x: i * 55, y: i === 0 ? -35 : 35 },
         missionType: 'asw_patrol',
         sonarPingCooldown: 2.0 + i * 1.4,
-        chaffCount: 24,
-        maxChaff: 24,
-        flareCount: 24,
-        maxFlare: 24,
       });
     }
 
@@ -8030,10 +8562,6 @@ export class GameEngine {
         maxGunAmmo: capModel === 'su27' ? 250 : capModel === 'mig29a' ? 250 : capModel === 'mig21' ? 200 : capModel === 'mig17' ? 240 : capModel === 'mig15' ? 300 : capModel === 'yak9' ? 340 : 1000,
         wingmanOffset: { x: i * 35, y: -20 },
         missionType: 'cap',
-        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
       });
     }
 
@@ -8103,10 +8631,6 @@ export class GameEngine {
         maxGunAmmo: isEra5 ? (casModel === 'su25' ? 400 : 900) : isEra4 ? 320 : isEra3 ? 600 : 600,
         wingmanOffset: { x: i * 25, y: 15 },
         missionType: 'cas',
-        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
       });
     }
 
@@ -8184,10 +8708,6 @@ export class GameEngine {
         missionType: 'strike_airbase',
         hasDefensiveTurret: isEra5 || isEra4 || isEra3,
         rearGunnerCooldown: 0,
-        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
       });
     }
 
@@ -8274,10 +8794,6 @@ export class GameEngine {
         maxGunAmmo: isEra5 ? 400 : isEra4 ? 320 : isEra3 ? 600 : 600,
         wingmanOffset: { x: i * 26, y: -15 },
         missionType: 'strike_fleet',
-        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
       });
     }
     // Torpedo Bombers / Standoff AShM Bombers
@@ -8314,10 +8830,6 @@ export class GameEngine {
         missionType: 'strike_fleet',
         hasDefensiveTurret: isEra5 || isEra4 || isEra3,
         rearGunnerCooldown: 0,
-        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
       });
     }
 
@@ -8400,10 +8912,6 @@ export class GameEngine {
         maxGunAmmo: isEra5 ? 250 : isEra4 ? 200 : isEra3 ? 300 : 1000,
         wingmanOffset: { x: i * 30, y: -25 },
         missionType: 'strike_flagship',
-        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
       });
     }
 
@@ -8443,10 +8951,6 @@ export class GameEngine {
         maxGunAmmo: isEra5 ? 400 : isEra4 ? 320 : isEra3 ? 600 : 600,
         wingmanOffset: { x: i * 28, y: 0 },
         missionType: 'strike_flagship',
-        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
       });
     }
 
@@ -8488,10 +8992,6 @@ export class GameEngine {
         missionType: 'strike_flagship',
         hasDefensiveTurret: true,
         rearGunnerCooldown: 0,
-        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
       });
     }
 
@@ -8568,10 +9068,6 @@ export class GameEngine {
         maxGunAmmo: scModel === 'su27' ? 250 : scModel === 'mig29a' ? 250 : scModel === 'mig23' ? 200 : scModel === 'mig21' ? 200 : scModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
         wingmanOffset: { x: i * 22, y: 15 },
         missionType: 'scramble',
-        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
       });
     }
 
@@ -8656,10 +9152,6 @@ export class GameEngine {
         maxGunAmmo: sweepModel === 'su27' ? 250 : sweepModel === 'mig29a' ? 250 : sweepModel === 'yak38' ? 250 : sweepModel === 'mig21' ? 200 : sweepModel === 'mig19' ? 210 : sweepModel === 'mig17' ? 240 : sweepModel === 'mig15' ? 300 : sweepModel === 'yak9' ? 340 : 1000,
         wingmanOffset: { x: i * 30, y: (i - (sweepCount - 1) / 2) * 22 },
         missionType: 'air_sweep',
-        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
       });
     }
 
@@ -8738,10 +9230,6 @@ export class GameEngine {
         maxGunAmmo: thisModel === 'su27' ? 250 : thisModel === 'mig29a' ? 250 : thisModel === 'mig23' ? 200 : thisModel === 'mig21' ? 200 : thisModel === 'mig19' ? 210 : isEra3 ? 300 : 1000,
         wingmanOffset: { x: i * 25, y: (i - (dcaCount - 1) / 2) * 20 },
         missionType: 'dca',
-        chaffCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxChaff: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        flareCount: isEra5 ? 36 : isEra4 ? 24 : undefined,
-        maxFlare: isEra5 ? 36 : isEra4 ? 24 : undefined,
       });
     }
 
@@ -12320,7 +12808,6 @@ export class GameEngine {
         }
       }
 
-      this.fireShipboardChaff(dt, ship);
 
       // 3b. 艦載 ASROC 反潛火箭助推魚雷發射系統 (Automatic Sonar Launch with Manual Target Override)
       if (ship.hasASROC) {
@@ -12568,64 +13055,6 @@ export class GameEngine {
                 this.fireSA2Missile(inst, targetPlane, fanSongAlive);
                 inst.cooldown = fanSongAlive ? inst.reloadTime || 12 : (inst.reloadTime || 12) * 2;
               }
-            }
-          }
-        }
-      }
-    }
-  }
-
-  // 3a. 艦載 RBOC 金屬箔條干擾火箭 (Shipboard RBOC Chaff Rocket Mortars vs AShM)
-  private fireShipboardChaff(dt: number, ship: Ship): void {
-    if (ship.hasChaffLauncher) {
-      if (ship.chaffCooldown !== undefined && ship.chaffCooldown > 0) {
-        ship.chaffCooldown = Math.max(0, ship.chaffCooldown - dt);
-      }
-      if ((ship.chaffCooldown || 0) <= 0) {
-        const incomingAshm = this.projectiles.find(
-          (p) => !p.isDead && p.side === 'enemy' && p.type === 'missile_ashm' && dist(ship.pos, p.pos) <= 950
-        );
-        if (incomingAshm) {
-          ship.chaffCooldown = 18.0;
-          soundEngine.playPlaneSortie();
-
-          // 在船艦與飛彈間海面上射出金屬箔條雲假目標
-          const cloudPos = {
-            x: ship.pos.x + Math.cos(incomingAshm.heading + Math.PI * 0.45) * 260,
-            y: ship.pos.y + Math.sin(incomingAshm.heading + Math.PI * 0.45) * 260,
-          };
-          for (let c = 0; c < 14; c++) {
-            this.particles.push({
-              id: `ship-chaff-${Date.now()}-${c}`,
-              x: cloudPos.x + (Math.random() - 0.5) * 70,
-              y: cloudPos.y + (Math.random() - 0.5) * 70,
-              vx: (Math.random() - 0.5) * 10,
-              vy: (Math.random() - 0.5) * 10,
-              life: 4.5,
-              maxLife: 4.5,
-              radius: 12 + Math.random() * 8,
-              color: '#ECEFF1',
-              type: 'chaff_cloud',
-            });
-          }
-
-          if (!incomingAshm.isDecoyed) {
-            const decoyChance = this.getAshmChaffDecoyChance(incomingAshm);
-            if (Math.random() < decoyChance) {
-              incomingAshm.isDecoyed = true;
-              incomingAshm.targetPos = { ...cloudPos };
-              if (incomingAshm.isLeadMissile) {
-                this.handleAshmLeaderDestroyed(incomingAshm);
-              }
-              this.addBannerAlert('📡【RBOC 艦載箔條干擾生效】海面金屬箔條雲成功誘騙來襲反艦飛彈！', 'player', 'alert', 4.5);
-              this.addCombatLog({
-                category: 'aa',
-                sourceSide: 'player',
-                sourceName: `${ship.name} (RBOC 箔條迫擊砲)`,
-                targetName: incomingAshm.attackerName || '來襲反艦飛彈',
-                actionType: 'recon_spotted',
-                text: `📡【艦載箔條誘騙成功】「${ship.name}」向海面射出金屬箔條干擾火箭！形成高雷達截面假目標雲，來襲飛彈尋標頭被引離真艦！`,
-              });
             }
           }
         }
@@ -13275,83 +13704,6 @@ export class GameEngine {
                 this.fireTomahawkCruiseMissile(ship, enemyTargetInst.pos, enemyTargetInst);
                 ship.rocketCooldown = 38.0;
                 break;
-              }
-            }
-          }
-        }
-      }
-
-      // 3d. 時代五 Mk 36 SRBOC 艦載干擾絲箔條 (Chaff) 與熱焰誘餌彈 (Flare)
-      if (ship.hasChaffLauncher || ship.hasCIWS || ship.type === 'bb_iowa_mod') {
-        if (ship.chaffCooldown !== undefined && ship.chaffCooldown > 0) {
-          ship.chaffCooldown = Math.max(0, ship.chaffCooldown - dt);
-        }
-        if ((ship.chaffCooldown || 0) <= 0) {
-          const incomingThreat = this.projectiles.find(
-            (p) => !p.isDead && p.side === 'enemy' && (p.type === 'missile_ashm' || p.type === 'missile_cruise' || p.type === 'missile_ssm') && dist(ship.pos, p.pos) <= 1200
-          );
-          if (incomingThreat) {
-            ship.chaffCooldown = 16.0;
-            soundEngine.playPlaneSortie();
-
-            const cloudAngle = (incomingThreat.heading || 0) + Math.PI * 0.45;
-            const cloudPos = {
-              x: ship.pos.x + Math.cos(cloudAngle) * 280,
-              y: ship.pos.y + Math.sin(cloudAngle) * 280,
-            };
-
-            for (let c = 0; c < 16; c++) {
-              this.particles.push({
-                id: `srboc-chaff-${Date.now()}-${c}`,
-                x: cloudPos.x + (Math.random() - 0.5) * 80,
-                y: cloudPos.y + (Math.random() - 0.5) * 80,
-                vx: (Math.random() - 0.5) * 12,
-                vy: (Math.random() - 0.5) * 12,
-                life: 5.0,
-                maxLife: 5.0,
-                radius: 14 + Math.random() * 8,
-                color: '#ECEFF1',
-                type: 'chaff_cloud',
-              });
-            }
-            for (let f = 0; f < 6; f++) {
-              this.particles.push({
-                id: `srboc-flare-${Date.now()}-${f}`,
-                x: cloudPos.x + (Math.random() - 0.5) * 40,
-                y: cloudPos.y + (Math.random() - 0.5) * 40,
-                vx: (Math.random() - 0.5) * 18,
-                vy: (Math.random() - 0.5) * 18,
-                life: 3.5,
-                maxLife: 3.5,
-                radius: 7,
-                color: '#FF6D00',
-                type: 'flare',
-              });
-            }
-
-            if (!incomingThreat.isDecoyed) {
-              const decoyChance =
-                incomingThreat.type === 'missile_ashm'
-                  ? this.getAshmChaffDecoyChance(incomingThreat)
-                  : isSupersonicMissile(incomingThreat.speed) || incomingThreat.type === 'missile_ssm'
-                  ? 0.45
-                  : 0.76;
-              if (Math.random() < decoyChance) {
-                incomingThreat.isDecoyed = true;
-                incomingThreat.targetPos = { ...cloudPos };
-                incomingThreat.targetEntityId = undefined;
-                if (incomingThreat.isLeadMissile) {
-                  this.handleAshmLeaderDestroyed(incomingThreat);
-                }
-                this.addBannerAlert(`📡【Mk 36 SRBOC 誘騙成功！】「${ship.name}」發射箔條/熱焰干擾彈！成功誘離來襲飛彈！`, 'player', 'alert', 4.5);
-                this.addCombatLog({
-                  category: 'aa',
-                  sourceSide: 'player',
-                  sourceName: `${ship.name} (Mk 36 SRBOC)`,
-                  targetName: incomingThreat.attackerName || '來襲飛彈',
-                  actionType: 'recon_spotted',
-                  text: `📡【艦載干擾誘騙】「${ship.name}」齊射 Mk 36 SRBOC 金屬箔條雲與高溫熱焰誘餌！成功誘離來襲「${incomingThreat.attackerName || '飛彈'}」！`,
-                });
               }
             }
           }
@@ -14137,6 +14489,7 @@ export class GameEngine {
       targetEntityId: target.id,
       targetEntityType: 'ship',
       isAcousticHoming: true,
+      wakeHoming: true,
       attackerName: `${sub.name} (53-65K 尾流自導重型魚雷)`,
     });
   }
@@ -18709,6 +19062,8 @@ export class GameEngine {
     if (!targetPos && proj.targetPos) {
       targetPos = proj.targetPos;
     }
+    // Seeker against decoys and jamming (ECM / ECCM)
+    targetPos = this.applySeeker(dt, proj, targetPos);
 
     this.updateSarhIllumination(proj, targetPos);
 
@@ -19385,7 +19740,22 @@ export class GameEngine {
     const isHoming = Boolean(proj.isAcousticHoming);
     const allShips = [...this.playerShips, ...this.alliedShips, ...this.enemyShips];
     const targetShips = allShips.filter((s) => !s.isSunk && this.isHostile(proj.side, s.side));
-    if (isHoming) {
+    const lure = isHoming ? this.torpedoDecoy(dt, proj) : undefined;
+    if (lure) {
+      // Chasing a noisemaker, towed decoy or simulator
+      const a = Math.atan2(lure.pos.y - proj.pos.y, lure.pos.x - proj.pos.x);
+      let diff = a - proj.heading;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      const tr = (proj.turnRate || 3.5) * dt;
+      proj.heading += Math.abs(diff) < tr ? diff : Math.sign(diff) * tr;
+      proj.vel.x = Math.cos(proj.heading) * proj.speed;
+      proj.vel.y = Math.sin(proj.heading) * proj.speed;
+      if (dist(proj.pos, lure.pos) < 35) {
+        this.torpedoHitsDecoy(proj, lure);
+        return;
+      }
+    } else if (isHoming) {
       const targets = targetShips;
       let bestTarget: Ship | null = null;
       let bestDist = 1800;

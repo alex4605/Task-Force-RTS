@@ -202,11 +202,12 @@ export function updateDieselBattery(sub: Ship, dt: number, era: Era, nearestShip
 
   if (sub.isSnorkeling) {
     sub.battery = Math.min(1, battery + 0.02 * dt);
-    if (sub.battery >= 0.95 || nearestShip < 1000) sub.isSnorkeling = false;
+    // Lookouts or the ESM mast report an aircraft: pull the snorkel and go deep
+    if (sub.battery >= 0.95 || nearestShip < 1000 || nearestAircraft < 2500) sub.isSnorkeling = false;
     return sub.isSnorkeling ? { capKt: 6 } : {};
   }
   drain();
-  if ((sub.battery ?? 0) < 0.3 && nearestShip >= 1000) {
+  if ((sub.battery ?? 0) < 0.3 && nearestShip >= 1000 && nearestAircraft >= 2500) {
     sub.isSnorkeling = true;
     return { capKt: 6 };
   }

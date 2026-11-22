@@ -413,6 +413,14 @@ export default function App() {
           engine.toggleFoxholes();
           setGroundUnits([...engine.groundUnits]);
         }}
+        onToggleEmcon={() => {
+          engine.toggleEmcon();
+          setPlayerShips([...engine.playerShips]);
+        }}
+        onLaunchMoss={() => {
+          engine.launchMossSelected();
+          setPlayerShips([...engine.playerShips]);
+        }}
         onSetGunRoe={(key, value) => {
           engine.setGunRoe(key, value);
           setPlayerShips([...engine.playerShips]);
