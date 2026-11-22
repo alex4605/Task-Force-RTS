@@ -8,6 +8,7 @@ import { ArmamentModal } from './components/ArmamentModal';
 import { TacticalMapModal } from './components/TacticalMapModal';
 import { DockyardModal } from './components/DockyardModal';
 import { BattleLogModal } from './components/BattleLogModal';
+import { CodexModal } from './components/CodexModal';
 import { GameOverModal } from './components/GameOverModal';
 import {
   Ship,
@@ -71,6 +72,7 @@ export default function App() {
   const [isAirPrepOpen, setIsAirPrepOpen] = useState<boolean>(false);
   const [isArmamentOpen, setIsArmamentOpen] = useState<boolean>(false);
   const [isBattleLogOpen, setIsBattleLogOpen] = useState<boolean>(false);
+  const [isCodexOpen, setIsCodexOpen] = useState<boolean>(false);
   const [isMapOpen, setIsMapOpen] = useState<boolean>(false);
   const [radarLayerOn, setRadarLayerOn] = useState<boolean>(false);
   const [isDockyardOpen, setIsDockyardOpen] = useState<boolean>(false);
@@ -462,6 +464,7 @@ export default function App() {
         onOpenAirPrep={() => setIsAirPrepOpen(true)}
         onOpenArmament={() => setIsArmamentOpen(true)}
         onOpenBattleLog={() => setIsBattleLogOpen(true)}
+        onOpenCodex={() => setIsCodexOpen(true)}
         combatLogs={combatLogs}
         gameSpeed={gameSpeed}
         isPaused={isPaused}
@@ -570,6 +573,7 @@ export default function App() {
       />
 
       {/* Tactical Battle Log Modal */}
+      <CodexModal isOpen={isCodexOpen} onClose={() => setIsCodexOpen(false)} era={era} />
       <BattleLogModal
         isOpen={isBattleLogOpen}
         onClose={() => setIsBattleLogOpen(false)}

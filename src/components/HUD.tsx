@@ -67,6 +67,7 @@ import {
   ShoppingCart,
   MapPin,
   Hammer,
+  BookOpen,
 } from 'lucide-react';
 
 interface HUDProps {
@@ -93,6 +94,7 @@ interface HUDProps {
   onOpenAirPrep: () => void;
   onOpenArmament: () => void;
   onOpenBattleLog?: () => void;
+  onOpenCodex?: () => void;
   combatLogs?: CombatLogEntry[];
   gameSpeed: number;
   isPaused: boolean;
@@ -263,6 +265,7 @@ export const HUD: React.FC<HUDProps> = ({
   onOpenAirPrep,
   onOpenArmament,
   onOpenBattleLog,
+  onOpenCodex,
   combatLogs = [],
   gameSpeed,
   isPaused,
@@ -778,6 +781,17 @@ export const HUD: React.FC<HUDProps> = ({
             <Wrench className="w-3.5 h-3.5 text-[#FFD54F]" />
             <span className="hidden min-[1800px]:inline">戰區與時代</span>
           </button>
+
+          {onOpenCodex && (
+            <button
+              onClick={onOpenCodex}
+              className="flex items-center gap-1.5 px-3 py-1 bg-[#0B1E34] hover:bg-[#153252] border border-[#FFE082]/70 rounded text-xs font-mono text-[#FFE082] font-bold transition-all shadow-sm active:scale-95"
+              title="作戰圖鑑：各時代地面部隊、飛機、艦艇與設施的史實資料、性能與電戰配備 (I)"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-[#FFE082]" />
+              <span className="hidden min-[1800px]:inline">圖鑑</span>
+            </button>
+          )}
 
           {/* Tactical Battle Log Button with count badge */}
           {onOpenBattleLog && (
