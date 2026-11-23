@@ -3,6 +3,7 @@ import { RenderContext } from '../context';
 import { getInstallationStyle } from './style';
 import { INSTALLATION_DRAWERS } from './bodies';
 import { airfieldFootprint } from '../../airfieldLayout';
+import { airfieldIntegrity, airfieldStage, airfieldStatusLine } from '../../airfieldOps';
 
 // Draw Installation
 const SPHERE_LABEL: ReadonlySet<string> = new Set(['settlement', 'town', 'city', 'civil_hospital', 'copra_plantation', 'civil_wharf', 'sugar_mill', 'power_plant', 'pagoda', 'factory']);
@@ -89,6 +90,7 @@ export function drawInstallation(rc: RenderContext, inst: Installation, island?:
   // Type-specific body: see bodies.ts
   INSTALLATION_DRAWERS[inst.type]?.(rc, inst, style, island);
   if (inst.type === 'airfield' && inst.cratered) drawCrateredOverlay(rc, inst);
+  else if (inst.type === 'airfield' && inst.health < inst.maxHealth) drawAirfieldDamage(rc, inst);
   if (inst.type === 'airfield' && inst.captureProgress && inst.captureBy) {
     // Ground troops taking the field
     const { hy } = airfieldFootprint(inst);
@@ -108,7 +110,8 @@ export function drawInstallation(rc: RenderContext, inst: Installation, island?:
     ctx.textAlign = 'center';
     ctx.fillStyle = inst.controlledBy === 'player' ? '#81D4FA' : '#FF8A80';
     const ours = inst.type === 'civil_hospital' ? '🟦 我方勢力範圍 · 收治傷患' : '🟦 我方勢力範圍 · 有產出';
-    ctx.fillText(inst.controlledBy === 'player' ? ours : '🟥 敵方勢力範圍', 0, 24);
+    const settle = inst.type === 'settlement' || inst.type === 'town' || inst.type === 'city';
+    ctx.fillText(inst.controlledBy === 'player' ? ours : '🟥 敵方勢力範圍', 0, settle ? (inst.type === 'city' ? 52 : inst.type === 'town' ? 45 : 43) : 24);
   }
 
   if (inst.health < inst.maxHealth) {
@@ -128,6 +131,85 @@ export function drawInstallation(rc: RenderContext, inst: Installation, island?:
   }
 
   ctx.restore();
+}
+
+/**
+ * A damaged but working airfield, by stage: at 75% a few patched craters and a scorched hangar; at
+ * 50% more craters, a burning hangar and burnt-out aircraft on the hard standings, the far end of
+ * the runway closed; at 25% only a short cleared stretch, every hangar gutted. The status line says
+ * what can still fly from it.
+ */
+function drawAirfieldDamage(rc: RenderContext, inst: Installation): void {
+  const ctx = rc.ctx;
+  const { hx, hy } = airfieldFootprint(inst);
+  const stage = airfieldStage(inst);
+  const lost = 1 - airfieldIntegrity(inst);
+  const n = Math.round(lost * 16);
+  for (let k = 0; k < n; k++) {
+    const x = -hx * 0.85 + ((k * 0.618 + 0.13) % 1) * hx * 1.7;
+    const y = (((k * 0.377 + 0.21) % 1) - 0.5) * hy * 0.6;
+    // Older craters are already filled with gravel and matting (lighter), fresh ones are dark
+    const patched = k % 3 === 0 && stage >= 2;
+    ctx.fillStyle = patched ? 'rgba(141, 123, 104, 0.75)' : 'rgba(20, 14, 10, 0.8)';
+    ctx.beginPath();
+    ctx.arc(x, y, 4 + (k % 3) * 2, 0, Math.PI * 2);
+    ctx.fill();
+    if (!patched) {
+      ctx.strokeStyle = 'rgba(121, 85, 72, 0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
+  // Closed length of runway: a hatched band at the far end
+  if (stage <= 2) {
+    const len = stage === 2 ? hx * 0.6 : hx * 1.15;
+    ctx.save();
+    ctx.fillStyle = 'rgba(30, 22, 18, 0.55)';
+    ctx.fillRect(hx - len, -hy * 0.22, len, hy * 0.44);
+    ctx.strokeStyle = 'rgba(255, 183, 77, 0.75)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for (let x = hx - len; x < hx; x += 9) {
+      ctx.moveTo(x, -hy * 0.22);
+      ctx.lineTo(x + 7, hy * 0.22);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+  // Burnt-out aircraft on the hard standings
+  if (stage <= 2) {
+    for (let k = 0; k < (stage === 2 ? 2 : 4); k++) {
+      const x = -hx * 0.6 + k * 22;
+      const y = hy * 0.62;
+      ctx.strokeStyle = 'rgba(40, 36, 34, 0.95)';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(x - 7, y);
+      ctx.lineTo(x + 7, y);
+      ctx.moveTo(x - 1, y - 6);
+      ctx.lineTo(x + 2, y + 6);
+      ctx.stroke();
+    }
+  }
+  // Hangars burning
+  const fires = stage === 3 ? 1 : stage === 2 ? 2 : 3;
+  for (let k = 0; k < fires; k++) {
+    const t = (rc.time * 0.5 + k / 3) % 1;
+    const x = -hx * 0.3 + k * 26;
+    const y = -hy * 0.75;
+    ctx.fillStyle = `rgba(255, 112, 40, ${0.6 + 0.3 * Math.sin(rc.time * 8 + k)})`;
+    ctx.beginPath();
+    ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(30, 30, 34, ${0.45 * (1 - t)})`;
+    ctx.beginPath();
+    ctx.arc(x + t * 8, y - t * 34, 6 + t * 12, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.font = 'bold 9px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = stage >= 3 ? '#FFE082' : stage === 2 ? '#FFB74D' : '#FF8A65';
+  ctx.fillText(`🛠️ ${Math.round((1 - lost) * 100)}% · ${airfieldStatusLine(inst)}`, 0, hy + 14);
 }
 
 /** Bomb craters along a knocked-out runway, burning hangars and the repair state. */
@@ -159,7 +241,7 @@ function drawCrateredOverlay(rc: RenderContext, inst: Installation): void {
   ctx.font = 'bold 9px monospace';
   ctx.textAlign = 'center';
   ctx.fillStyle = '#FFB74D';
-  ctx.fillText(`💥 跑道癱瘓 · 搶修中 ${Math.floor(progress * 100)}%`, 0, -hy - 10);
+  ctx.fillText(`💥 0% · 跑道癱瘓 · 搶修中 ${Math.floor(progress * 100)}%`, 0, hy + 14);
 }
 
 /** A field wiped out by a nuclear burst: scorched ground, the runway outline and any rebuilding. */

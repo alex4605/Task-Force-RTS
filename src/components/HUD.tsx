@@ -114,7 +114,7 @@ interface HUDProps {
   convoyReinforceTimer?: number;
   nextConvoyEscort?: 'ss' | 'dd' | 'cl' | 'ca';
   /** Friendly airfields with their own aircraft stock, HQ island first. */
-  airfields?: { id: string; name: string; isHQ: boolean; rotaryOnly?: boolean; planes: Record<string, number>; repair?: number }[];
+  airfields?: { id: string; name: string; isHQ: boolean; rotaryOnly?: boolean; planes: Record<string, number>; repair?: number; integrity?: number; status?: string }[];
   onTransferPlanes?: (model: AircraftModel, count: number, fromId: string, toId: string) => void;
   onLaunchAirbaseSortie?: (model: AircraftModel, count: number, payload?: AircraftPayloadType, airfieldId?: string) => void;
   onToggleTransportEmbark?: (transportId: string) => void;
@@ -1782,6 +1782,11 @@ export const HUD: React.FC<HUDProps> = ({
                 </select>
               </div>
 
+              {activeAirfield && (activeAirfield.integrity ?? 1) < 1 && (
+                <div className={`text-[10px] font-mono rounded px-2 py-1 mb-1 border ${(activeAirfield.integrity ?? 1) >= 0.625 ? 'text-amber-200 border-amber-700/50 bg-amber-950/20' : 'text-orange-300 border-orange-700/50 bg-orange-950/30'}`}>
+                  🛠️ 跑道完整度 {Math.round((activeAirfield.integrity ?? 1) * 100)}% · {activeAirfield.status}（地勤持續搶修，工兵在場可加快）
+                </div>
+              )}
               {afbStockOnly && afbModels.every((p) => (airbaseStock[p.id] || 0) === 0) && (() => {
                 // An empty field (a captured or newly built one): offer what the other fields hold, flown in by ferry
                 const sources = airfields.filter((a) => a.id !== activeAirfield?.id);

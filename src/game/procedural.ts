@@ -1,6 +1,6 @@
 import { addEnemyPowCamp } from './pow';
 import { applyHistoricalAswFit } from './asw';
-import { addIslandSettlements, naturalizeCoast, naturalizeIslands } from './coastline';
+import { addIslandSettlements, addMainlandVillages, naturalizeCoast, naturalizeIslands } from './coastline';
 import { applyMainlandTemplate } from './terrain/theaters';
 import { OUTER_ISLANDS, STAGING_BASE, applyEraEquipment, applyEraPlaceNames } from './placeNames';
 import {
@@ -5116,6 +5116,7 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
   // Natural coastlines (atolls did theirs before their reef passes were cut) and island villages
   naturalizeIslands(islands, seedBase, (isl) => isl.id.startsWith('atoll-'), worldSize);
   addIslandSettlements(islands, era, seedBase * 31 + 7);
+  addMainlandVillages(islands, era, seedBase * 53 + 11);
   addEnemyPowCamp(islands, era);
 
   // 初始友軍地面部隊

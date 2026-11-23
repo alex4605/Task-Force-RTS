@@ -1968,6 +1968,14 @@ export interface Installation {
   nuclearDestroyed?: boolean;
   /** Rebuild progress of a destroyed installation (engineers on site), 0..1. */
   rebuildProgress?: number;
+  /** Settlements: built fabric (BLD) and its maximum, and how full of people the place is (POP, 0..1). */
+  bld?: number;
+  maxBld?: number;
+  pop?: number;
+  /** Seconds since the last fighting or explosion in or near the settlement. */
+  quietFor?: number;
+  /** Refugee band last reported: 0 = full, 1 = half gone, 2 = nearly empty. */
+  popBand?: number;
   /** Engineers are repairing this damaged installation (for the start / finish reports). */
   underRepair?: boolean;
   /** A FARP: an airfield for helicopters and V/STOL jets only. */

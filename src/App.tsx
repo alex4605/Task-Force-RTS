@@ -28,6 +28,7 @@ import {
   Sonobuoy,
 } from './types/game';
 import { getRequisitionCatalog } from './game/requisition';
+import { airfieldIntegrity, airfieldStatusLine } from './game/airfieldOps';
 import { soundEngine } from './game/audio';
 
 export default function App() {
@@ -506,6 +507,8 @@ export default function App() {
           rotaryOnly: !!a.rotaryOnly,
           planes: engine.getAirfieldPool(a.id),
           repair: a.cratered?.progress,
+          integrity: airfieldIntegrity(a),
+          status: airfieldStatusLine(a),
         }))}
         onTransferPlanes={(model, count, fromId, toId) => {
           engine.transferAircraft(model, count, fromId, toId);
