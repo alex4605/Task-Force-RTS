@@ -6,6 +6,8 @@ import { fitsInHold, formatHold, holdUsed, shipHold } from './naval/lift';
 import { isRotaryOrVstol, rollBailout, shipRaftGroups } from './aircrew';
 import { deckAccepts, shipAviation } from './shipAviation';
 import { CIVIL_HOSPITAL_RADIUS, addCivilEconomy, addCivilHospitals, addCivilTransport } from './civilSites';
+import { airfieldRefusal, airfieldStage, sortieCap } from './airfieldOps';
+import { blastBld, blastPop, collateralPenalty, initSettlement, isSettlement, settlementYieldFactor, tickSettlement } from './settlements';
 import { FOXHOLE_DIG_S, SPOT_RANGE, insideFieldWork, isFieldWorkTag, makeFieldWork, placeEnemyFieldWorks } from './fieldWorks';
 import { WHALE_NAME, spawnWhales, updateWhales } from './whales';
 import { LocalForceRule, localRulesFor, pickForce, raisedFor } from './localForces';
@@ -492,8 +494,8 @@ export class GameEngine {
       this.era === 'era5'
         ? ['熊蜂級河川砲艇 BK-12', '熊蜂級河川砲艇 BK-16', '熊蜂級河川砲艇 BK-31']
         : this.era === 'era4'
-        ? ['越南人民海軍 武裝機帆船 (T-11)', '越南人民海軍 武裝機帆船 (T-14)', '游擊隊 武裝舢舨 (Delta-3)', '游擊隊 武裝舢舨 (Delta-7)']
-        : ['朝鮮人民軍 武裝機帆船 (江-21)', '朝鮮人民軍 武裝機帆船 (江-24)', '朝鮮人民軍 武裝機帆船 (江-27)'];
+        ? ['越南人民海軍 武裝機帆船 T-11', '越南人民海軍 武裝機帆船 T-14', '解放陣線 武裝舢舨 Delta-3', '解放陣線 武裝舢舨 Delta-7']
+        : ['朝鮮人民軍 武裝機帆船 江-21', '朝鮮人民軍 武裝機帆船 江-24', '朝鮮人民軍 武裝機帆船 江-27'];
     stations.forEach((pos, k) => {
       const boat = createRiverGunboat(`enemy-river-${k}-${Date.now()}`, names[k % names.length], pos, this.era);
       boat.riverHome = { ...pos };
@@ -985,10 +987,12 @@ export class GameEngine {
         const ours = i.type === 'rail_station' ? i.side === 'player' : i.controlledBy === 'player';
         const y = ours ? CIVIL_YIELD[i.type] : undefined;
         if (!y) continue;
-        rate.mp += y.mp ?? 0;
-        rate.rp += y.rp ?? 0;
-        rate.pp += y.pp ?? 0;
-        rate.tp += y.tp ?? 0;
+        // A town yields what its people and its standing buildings can (settlements.ts)
+        const f = settlementYieldFactor(i);
+        rate.mp += (y.mp ?? 0) * f;
+        rate.rp += (y.rp ?? 0) * f;
+        rate.pp += (y.pp ?? 0) * f;
+        rate.tp += (y.tp ?? 0) * f;
       }
     }
     return rate;
@@ -1175,6 +1179,7 @@ export class GameEngine {
     clearAirfieldFootprints(this.islands);
     // The defenders' wire, trenches, traps and mines; whales out in the deep water
     this.fieldWorks = placeEnemyFieldWorks(this.islands, era);
+    for (const isl of this.islands) for (const inst of isl.installations) initSettlement(inst);
     this.whales = spawnWhales(this.islands, this.worldSize, era, sectorNum);
     this.applyHistoricalInstallationRanges();
     this.friendlyBase = generated.friendlyBase;
@@ -1601,6 +1606,9 @@ export class GameEngine {
         activeWaypointIndex: 0,
         riverine: Boolean(river),
       };
+      // A direct order takes the ship off its lifeguard station
+      ship.sarZone = undefined;
+      ship.sarTargetId = undefined;
 
       if (order.type === 'move' && targetPos) {
         const firstWp = waypoints && waypoints.length > 0 ? waypoints[0] : targetPos;
@@ -2477,6 +2485,92 @@ export class GameEngine {
   }
 
   // Issue Combat Air Patrol (CAP) Orbit Order to Fighters in a designated area
+  /**
+   * Lifeguard station (救生站): the selected ships patrol an area and pick up every airman or ship's
+   * survivor in the water there, our own and the enemy's (who become prisoners). This is what US
+   * submarines and destroyers did on the lifeguard stations along the B-29 and carrier strike
+   * routes to Japan, and what a carrier's plane-guard destroyer did astern of it. A plain click sets
+   * a 2.4 km square round the point. Returns whether any ship took the station.
+   */
+  public issueShipSarOrder(origin: Vector2D, specificUnitIds?: string[], box?: { x0: number; y0: number; x1: number; y1: number }): boolean {
+    const ids = specificUnitIds || this.selectedUnitIds;
+    const ships = this.playerShips.filter((s) => ids.includes(s.id) && !s.isSunk);
+    if (ships.length === 0) return false;
+    const zone = box ?? { x0: origin.x - 1200, y0: origin.y - 1200, x1: origin.x + 1200, y1: origin.y + 1200 };
+    for (const s of ships) {
+      s.sarZone = { ...zone };
+      s.sarTargetId = undefined;
+      s.order = { type: 'idle' };
+    }
+    this.addCombatLog({
+      category: 'naval',
+      sourceSide: 'player',
+      sourceName: ships.map((s) => s.name.split(' (')[0]).join('、'),
+      targetName: '救生站',
+      actionType: 'recon_spotted',
+      text: `🛟【救生站】${ships.map((s) => `「${s.name}」`).join('、')}進駐指定海域擔任救生站，自主搜索並救起區內所有落水飛行員與船員（敵方人員將被俘）。`,
+    });
+    return true;
+  }
+
+  /** Sends one ship to a point by the sea lanes (a river craft takes the channel). */
+  private steerShipTo(ship: Ship, pos: Vector2D, speedFactor = 1): void {
+    const river = this.planRiverineOrder(ship, pos);
+    let target = river ? river.targetPos : this.navGrid ? this.navGrid.projectToWalkableWater(pos, requiredDepth(ship)) : pos;
+    const waypoints = river ? river.waypoints : this.navGrid ? this.navGrid.findPath(ship.pos, target, requiredDepth(ship)) : [target];
+    if (!target) target = pos;
+    ship.order = { type: 'move', targetPos: target, waypoints, activeWaypointIndex: 0, riverine: Boolean(river) };
+    const first = waypoints && waypoints.length > 0 ? waypoints[0] : target;
+    ship.targetHeading = Math.atan2(first.y - ship.pos.y, first.x - ship.pos.x);
+    ship.targetSpeed = ship.maxSpeed * speedFactor;
+  }
+
+  /**
+   * Ships on a lifeguard station, twice a second: steam for the nearest raft in the area (a
+   * little beyond its edge too: a raft drifts), and with none, patrol the area at an economical
+   * speed so as to be near when the next aircraft comes down.
+   */
+  private sarTimer = 0;
+  private updateShipSar(dt: number): void {
+    this.sarTimer -= dt;
+    if (this.sarTimer > 0) return;
+    this.sarTimer = 0.5;
+    for (const ship of this.playerShips) {
+      const z = ship.sarZone;
+      if (!z || ship.isSunk) continue;
+      const m = 250;
+      const inZone = (p: Vector2D) => p.x >= z.x0 - m && p.x <= z.x1 + m && p.y >= z.y0 - m && p.y <= z.y1 + m;
+      const rafts = (this.lifeRafts ?? []).filter((r) => !r.rescued && !r.isCapturedPOW && !r.isOnLand && inZone(r.pos));
+      // Rafts another ship on station is already making for are left to it
+      const claimed = new Set(this.playerShips.filter((s) => s !== ship && s.sarTargetId).map((s) => s.sarTargetId));
+      const pick = rafts.filter((r) => !claimed.has(r.id)).sort((a, b) => dist(a.pos, ship.pos) - dist(b.pos, ship.pos))[0] ?? rafts[0];
+      if (pick) {
+        const tp = ship.order.targetPos;
+        if (ship.sarTargetId !== pick.id || !tp || dist(tp, pick.pos) > 60) {
+          if (ship.sarTargetId !== pick.id) {
+            this.addCombatLog({
+              category: 'naval',
+              sourceSide: 'player',
+              sourceName: ship.name,
+              targetName: pick.pilotName,
+              actionType: 'recon_spotted',
+              text: `🛟【救生站】「${ship.name}」發現落水人員「${pick.pilotName}」，全速前往救援。`,
+            });
+          }
+          ship.sarTargetId = pick.id;
+          this.steerShipTo(ship, pick.pos);
+        }
+        continue;
+      }
+      ship.sarTargetId = undefined;
+      const tp = ship.order.targetPos;
+      if (ship.order.type !== 'move' || !tp || dist(ship.pos, tp) < 90) {
+        const p = { x: z.x0 + Math.random() * (z.x1 - z.x0), y: z.y0 + Math.random() * (z.y1 - z.y0) };
+        this.steerShipTo(ship, p, 0.55);
+      }
+    }
+  }
+
   public issueCapPatrolOrder(origin: Vector2D, specificUnitIds?: string[], box?: { x0: number; y0: number; x1: number; y1: number }) {
     const ids = specificUnitIds || this.selectedUnitIds;
     let targetFighters = this.aircraft.filter(
@@ -2924,9 +3018,11 @@ export class GameEngine {
     this.updateStrongholds(effectiveDt);
     this.updateShipAviation(effectiveDt);
     this.updateConstruction(effectiveDt);
+    this.updateInstallationRepair(effectiveDt);
     this.updateAirfieldDamage(effectiveDt);
     this.updateAirfieldControl(effectiveDt);
     this.updateCivilControl(effectiveDt);
+    this.updateSettlements(effectiveDt);
     this.updateFieldWorks(effectiveDt);
     this.updateLocalForces(effectiveDt);
     this.updateCivilHospitals(effectiveDt);
@@ -2940,6 +3036,7 @@ export class GameEngine {
     this.updateSof(effectiveDt);
     this.updateAntiShipMissilePointDefense(effectiveDt);
     this.updateModernNavalGunAA(effectiveDt);
+    this.updateShipSar(effectiveDt);
     this.updateLifeRaftRescue(effectiveDt);
     this.updatePowCamps(effectiveDt);
     this.updatePendingMissileLaunches(effectiveDt);
@@ -3185,6 +3282,14 @@ export class GameEngine {
       // Cooldowns
       if (ship.hasTorpedoes && ship.torpedoCooldown !== undefined && ship.torpedoCooldown > 0) {
         ship.torpedoCooldown = Math.max(0, ship.torpedoCooldown - dt);
+      }
+      // Our PT boats loose their torpedoes by themselves at an enemy surface ship inside 650 m
+      if (ship.side === 'player' && ship.craft?.tubes && ship.hasTorpedoes && !ship.isSunk && (ship.torpedoCooldown ?? 0) <= 0) {
+        const mark = this.enemyShips.find((e) => !e.isSunk && !e.isSubmerged && dist(e.pos, ship.pos) < 650);
+        if (mark) {
+          this.fireTorpedoSalvo(ship, mark.pos, 2);
+          ship.torpedoCooldown = ship.torpedoReloadTime || 14;
+        }
       }
       if (ship.hasDepthCharges && ship.depthChargeCooldown !== undefined && ship.depthChargeCooldown > 0) {
         ship.depthChargeCooldown = Math.max(0, ship.depthChargeCooldown - dt);
@@ -3516,6 +3621,32 @@ export class GameEngine {
       ship.targetSpeed = 14;
     }
 
+    // Shinyo: no torpedoes, the boat is the weapon. Run straight in at full speed and blow up alongside
+    if (ship.codeName === 'Shinyo') {
+      ship.targetHeading = Math.atan2(primaryTarget.pos.y - ship.pos.y, primaryTarget.pos.x - ship.pos.x);
+      ship.targetSpeed = ship.maxSpeed;
+      if (d < Math.max(30, primaryTarget.length * 0.45)) {
+        soundEngine.playExplosion(true);
+        const dmg = Math.round(900 * (1 - Math.min(0.85, primaryTarget.armor || 0) * 0.35));
+        primaryTarget.health = Math.max(0, primaryTarget.health - dmg);
+        if (primaryTarget.hullCrewHealth !== undefined) {
+          primaryTarget.hullCrewHealth = Math.max(0, primaryTarget.hullCrewHealth - dmg);
+          primaryTarget.health = primaryTarget.hullCrewHealth;
+        }
+        this.sinkShip(ship);
+        this.addCombatLog({
+          category: 'naval',
+          sourceSide: 'enemy',
+          sourceName: ship.name,
+          targetName: primaryTarget.name,
+          actionType: 'gun_hit',
+          damage: dmg,
+          text: `💥【震洋自殺艇衝撞】「${ship.name}」夜間高速衝撞「${primaryTarget.name}」，艇艏 250kg 炸藥爆炸，造成 ${dmg} 點傷害！`,
+        });
+      }
+      return;
+    }
+
     if (ship.hasTorpedoes && (ship.torpedoCooldown || 0) <= 0 && d < 700) {
       this.fireTorpedoSalvo(ship, primaryTarget.pos, 3);
       ship.torpedoCooldown = ship.torpedoReloadTime || 20;
@@ -3776,7 +3907,7 @@ export class GameEngine {
   private getEnemyAirThreatAxis(): Vector2D | undefined {
     const airfield = this.islands
       .flatMap((i) => i.installations)
-      .find((inst) => inst.type === 'airfield' && inst.side === 'enemy' && !inst.isDestroyed && !inst.cratered);
+      .find((inst) => inst.type === 'airfield' && inst.side === 'enemy' && !inst.isDestroyed && airfieldStage(inst) >= 2);
     if (airfield) return airfield.pos;
     return this.enemyShips.find((s) => !s.isSunk && (s.type === 'carrier' || s.type === 'cvhg_kiev'))?.pos;
   }
@@ -5642,6 +5773,15 @@ export class GameEngine {
     return undefined;
   }
 
+  /** Friendly airfield by id, also while its runway is cratered and under repair (a ferry destination). */
+  private findFriendlyAirfieldIncludingRepair(id: string): Installation | undefined {
+    for (const isl of this.islands) {
+      const inst = isl.installations.find((x) => x.id === id && x.type === 'airfield' && x.side === 'player' && !x.isDestroyed);
+      if (inst) return inst;
+    }
+    return undefined;
+  }
+
   /** Every intact friendly airfield, the HQ island's first. */
   public getFriendlyAirfields(): Installation[] {
     const all = this.islands.flatMap((isl) => isl.installations.filter((x) => x.type === 'airfield' && x.side === 'player' && !x.isDestroyed));
@@ -5734,8 +5874,13 @@ export class GameEngine {
     };
     if (fromId === toId) return fail('⚠️ 轉場出發地與目的地相同。');
     const fromPos = this.getAirBasePos(fromId);
-    const toPos = this.getAirBasePos(toId);
-    if (!fromPos || !toPos) return fail('⚠️ 轉場基地不存在或已被摧毀。');
+    const toField = this.findFriendlyAirfieldIncludingRepair(toId);
+    const toPos = this.getAirBasePos(toId) ?? toField?.pos;
+    if (!fromPos) {
+      const cr = this.findFriendlyAirfieldIncludingRepair(fromId)?.cratered;
+      return fail(cr ? `⚠️ 出發機場跑道搶修中（${Math.floor(cr.progress * 100)}%），暫時無法起飛。` : '⚠️ 出發基地不存在或已被摧毀。');
+    }
+    if (!toPos) return fail('⚠️ 目的地基地不存在、已被摧毀或已失守。');
     const toCarrier = this.findFriendlyCarrier(toId);
     if (this.findFriendlyAirfield(toId)?.rotaryOnly && !isRotaryOrVstol(model)) return fail(`⚠️ FARP 只能收容直升機與垂直起降機。`);
     if (toCarrier && !deckAccepts(toCarrier, model)) return fail(`⚠️「${toCarrier.name}」只能收容自己的艦載直升機 / 水上飛機。`);
@@ -5762,7 +5907,7 @@ export class GameEngine {
     const heading = Math.atan2(toPos.y - fromPos.y, toPos.x - fromPos.x);
     const sqId = `sq-ferry-${model}-${Date.now()}`;
     const fromName = fromCarrier?.name ?? this.findFriendlyAirfield(fromId)?.name ?? fromId;
-    const toName = toCarrier?.name ?? this.findFriendlyAirfield(toId)?.name ?? toId;
+    const toName = toCarrier?.name ?? toField?.name ?? toId;
     for (let k = 0; k < count; k++) {
       this.aircraft.push({
         id: `ferry-${model}-${Date.now()}-${k}-${Math.floor(Math.random() * 1e6)}`,
@@ -5800,7 +5945,9 @@ export class GameEngine {
       sourceName: fromName,
       targetName: toName,
       actionType: 'recon_spotted',
-      text: `🛫【轉場起飛】${count} 架 ${model.toUpperCase()} 自「${fromName}」起飛轉場前往「${toName}」，抵達降落後即計入該基地庫存。`,
+      text: toField && (toField.cratered || airfieldRefusal(toField, model, this.era))
+        ? `🛫【轉場起飛】${count} 架 ${modelLabel(model)} 自「${fromName}」轉場前往「${toName}」。${toField.cratered ? `目的地跑道搶修中（${Math.floor(toField.cratered.progress * 100)}%）` : airfieldRefusal(toField, model, this.era)}，機隊將在上空盤旋待命，修復後降落（派工兵到機場可大幅加快搶修）。`
+        : `🛫【轉場起飛】${count} 架 ${modelLabel(model)} 自「${fromName}」起飛轉場前往「${toName}」，抵達降落後即計入該基地庫存。`,
     });
     return true;
   }
@@ -5811,6 +5958,18 @@ export class GameEngine {
    */
   private updateFerryFlight(dt: number, i: number, plane: Aircraft): boolean {
     if (!plane.ferryTo) return false;
+    const repairing = this.findFriendlyAirfieldIncludingRepair(plane.ferryTo);
+    if (repairing && (repairing.cratered || airfieldRefusal(repairing, plane.model, this.era))) {
+      // Runway still cratered: fly there and orbit until the strip reopens
+      // The move order steers for a point a little ahead on a 200 m circle over the field
+      const c = repairing.pos;
+      const bearing = Math.atan2(plane.pos.y - c.y, plane.pos.x - c.x);
+      const ahead = dist(plane.pos, c) > 320 ? 0 : 0.7;
+      plane.altitude = Math.min(0.85, plane.altitude + dt * 0.2);
+      plane.state = 'cruising';
+      plane.order = { type: 'move', targetPos: { x: c.x + Math.cos(bearing + ahead) * 200, y: c.y + Math.sin(bearing + ahead) * 200 } };
+      return false;
+    }
     let pos = this.getAirBasePos(plane.ferryTo);
     if (!pos) {
       plane.ferryTo = this.findFriendlyAirfield(this.hqAirfieldId) ? this.hqAirfieldId : this.getFriendlyAirfields()[0]?.id;
@@ -5818,6 +5977,7 @@ export class GameEngine {
       pos = plane.ferryTo ? this.getAirBasePos(plane.ferryTo) : undefined;
       if (!pos) return false;
     }
+    plane.state = 'cruising';
     plane.order = { type: 'move', targetPos: { ...pos } };
     plane.targetHeading = Math.atan2(pos.y - plane.pos.y, pos.x - plane.pos.x);
     plane.altitude = Math.min(0.85, plane.altitude + dt * 0.2);
@@ -8274,7 +8434,7 @@ export class GameEngine {
     const enemyAirfield = this.islands
       .filter((island) => !island.isFriendlyBase && !island.isFullyCaptured)
       .flatMap((i) => i.installations)
-      .find((inst) => inst.type === 'airfield' && inst.side === 'enemy' && !inst.isDestroyed && !inst.cratered);
+      .find((inst) => inst.type === 'airfield' && inst.side === 'enemy' && !inst.isDestroyed && airfieldStage(inst) >= 2);
 
     const enemyCarrier = this.enemyShips.find((s) => s.type === 'carrier' && !s.isSunk);
 
@@ -8305,7 +8465,7 @@ export class GameEngine {
     const operationalAirfields = this.islands
       .filter((i) => !i.isFriendlyBase && !i.isFullyCaptured)
       .flatMap((i) => i.installations)
-      .filter((inst) => inst.type === 'airfield' && inst.side === 'enemy' && !inst.isDestroyed && !inst.cratered).length;
+      .filter((inst) => inst.type === 'airfield' && inst.side === 'enemy' && !inst.isDestroyed && airfieldStage(inst) >= 2).length;
     const hasCarrier = this.enemyShips.some((s) => s.type === 'carrier' && !s.isSunk);
     let size = baseCount + Math.min(2, Math.floor((this.sectorNumber - 1) / 2));
     if (operationalAirfields >= 2) size += 2;
@@ -9213,7 +9373,7 @@ export class GameEngine {
     const enemyAirfield = this.islands
       .filter((i) => !i.isFriendlyBase && !i.isFullyCaptured)
       .flatMap((i) => i.installations)
-      .find((inst) => inst.type === 'airfield' && inst.side === 'enemy' && !inst.isDestroyed && !inst.cratered);
+      .find((inst) => inst.type === 'airfield' && inst.side === 'enemy' && !inst.isDestroyed && airfieldStage(inst) >= 2);
 
     if (this.enemyDcaCooldown <= 0 && (enemyCarrier || enemyAirfield)) {
       const threatBasePos = enemyCarrier ? enemyCarrier.pos : enemyAirfield!.pos;
@@ -11244,6 +11404,17 @@ export class GameEngine {
       else if (knocked?.nuclearDestroyed) this.addBannerAlert(`☢️【機場全毀】「${knocked.name}」已被核爆摧毀，需工兵重建`, 'player', 'alert', 4);
       return;
     }
+    // A damaged field launches only what its runway and dispersals still allow (airfieldOps.ts)
+    const refusal = airfieldRefusal(airfield, model, this.era);
+    if (refusal) {
+      this.addBannerAlert(`⚠️【${airfield.name.split(' (')[0]}】${refusal}`, 'player', 'alert', 4);
+      return;
+    }
+    const cap = sortieCap(airfieldStage(airfield));
+    if (count > cap) {
+      this.addBannerAlert(`⚠️【跑道受損】「${airfield.name.split(' (')[0]}」每批最多起飛 ${cap} 架，已改派 ${cap} 架`, 'player', 'alert', 3.5);
+      count = cap;
+    }
     const pool = this.getAirfieldPool(airfieldId);
     const available = pool[model] || 0;
     if (available < count) return;
@@ -11646,8 +11817,9 @@ export class GameEngine {
           const crews = inst.side === 'enemy' ? 1 / 90 : 1 / 150;
           inst.cratered.progress += dt * (crews + engineers * (1 / 45));
           if (inst.cratered.progress >= 1) {
+            // Craters filled: a strip usable by helicopters first, the rest comes back by degrees
             inst.cratered = undefined;
-            inst.health = Math.max(inst.health, inst.maxHealth * 0.6);
+            inst.health = Math.max(inst.health, inst.maxHealth * 0.3);
             this.islandsVersion++;
             this.addCombatLog({
               category: 'air',
@@ -11656,6 +11828,25 @@ export class GameEngine {
               targetName: inst.name,
               actionType: 'recon_spotted',
               text: `🛠️【跑道修復】「${inst.name}」彈坑填平、跑道恢復起降。`,
+            });
+          }
+        } else if (!inst.isDestroyed && inst.health < inst.maxHealth) {
+          // Patching, relaying matting and rebuilding hangars, a stage at a time: about 12 minutes from
+          // ruin to whole by the base crews alone (the enemy's labour battalions about 9); engineers on
+          // site bring it to about 4.5 minutes, 3 at most however many there are
+          const before = airfieldStage(inst);
+          const crews = inst.side === 'enemy' ? 1 / 540 : 1 / 720;
+          inst.health = Math.min(inst.maxHealth, inst.health + inst.maxHealth * dt * (crews + buildRate(engineers) / 420));
+          const after = airfieldStage(inst);
+          if (after > before && inst.side !== 'enemy') {
+            this.islandsVersion++;
+            this.addCombatLog({
+              category: 'air',
+              sourceSide: 'player',
+              sourceName: '地勤搶修',
+              targetName: inst.name,
+              actionType: 'recon_spotted',
+              text: `🛠️【跑道修復】「${inst.name}」完整度回升至 ${[0, 25, 50, 75, 100][after]}%：${after >= 3 ? '重轟炸機與運輸機恢復起降' : after === 2 ? '戰鬥機與攻擊機恢復起降' : '直升機可起降'}。`,
             });
           }
         } else if (inst.isDestroyed && inst.nuclearDestroyed && engineers > 0) {
@@ -11743,6 +11934,55 @@ export class GameEngine {
             actionType: 'installation_down',
             text: `⚠️【機場失守】敵軍佔領「${inst.name}」${lost ? `，停放地面的 ${lost} 架飛機來不及疏散而損失` : ''}；敵方可由此出擊，奪回需派地面部隊進佔跑道。`,
           });
+        }
+      }
+    }
+  }
+
+  /** Site types that are troops or civilian property, not facilities engineers maintain. */
+  private static readonly NOT_REPAIRABLE = new Set<string>(['airfield', 'infantry_squad', 'infantry_platoon', 'tank_platoon', 'tank_battalion', 'hidden_tunnel', 'city', 'town', 'settlement', 'refugee_camp']);
+  private repairTimer = 0;
+
+  /**
+   * Engineers keep our facilities running: with an engineer platoon within BUILDER_RADIUS a damaged
+   * facility is patched up (about 90 s from wrecked to whole with one platoon, faster with more), and
+   * one that was knocked out is rebuilt in about two-thirds of its original build time. Airfields
+   * with cratered runways have their own repair (updateAirfieldDamage); fields are only rebuilt here
+   * after conventional loss, never after a nuclear burst.
+   */
+  private updateInstallationRepair(dt: number): void {
+    this.repairTimer -= dt;
+    if (this.repairTimer > 0) return;
+    const T = 0.5;
+    this.repairTimer = T;
+    const engineers = this.groundUnits.filter((u) => this.canBuild(u, 'engineer'));
+    if (engineers.length === 0) return;
+    for (const isl of this.islands) {
+      for (const inst of isl.installations) {
+        if (inst.side !== 'player' || GameEngine.NOT_REPAIRABLE.has(inst.type) || inst.cratered || inst.nuclearDestroyed) continue;
+        if (!inst.isDestroyed && inst.health >= inst.maxHealth) continue;
+        const n = engineers.filter((u) => dist(u.pos, inst.pos) <= BUILDER_RADIUS).length;
+        if (n === 0) continue;
+        if (inst.isDestroyed) {
+          const total = Math.max(60, (buildTime(inst.type) || 150) * 0.66);
+          inst.rebuildProgress = (inst.rebuildProgress ?? 0) + (T / total) * buildRate(n);
+          if (inst.rebuildProgress < 1) continue;
+          inst.isDestroyed = false;
+          inst.rebuildProgress = undefined;
+          inst.health = inst.maxHealth * 0.5;
+          this.islandsVersion++;
+          this.addBannerAlert(`🏗️【重建完成】「${inst.name}」恢復運作（50%）`, 'player', 'capture', 4);
+          this.addCombatLog({ category: 'naval', sourceSide: 'player', sourceName: '工兵', targetName: inst.name, actionType: 'recon_spotted', text: `🏗️【重建完成】工兵重建「${inst.name}」，恢復運作（耐久 50%，工兵留在現場會繼續修復）。` });
+          continue;
+        }
+        if (!inst.underRepair) {
+          inst.underRepair = true;
+          this.addCombatLog({ category: 'naval', sourceSide: 'player', sourceName: '工兵', targetName: inst.name, actionType: 'recon_spotted', text: `🔧【搶修】工兵開始修復「${inst.name}」（${Math.round((inst.health / inst.maxHealth) * 100)}%）。` });
+        }
+        inst.health = Math.min(inst.maxHealth, inst.health + (inst.maxHealth / 90) * T * buildRate(n));
+        if (inst.health >= inst.maxHealth) {
+          inst.underRepair = undefined;
+          this.addCombatLog({ category: 'naval', sourceSide: 'player', sourceName: '工兵', targetName: inst.name, actionType: 'recon_spotted', text: `🛠️【修復完成】「${inst.name}」已修復至完好。` });
         }
       }
     }
@@ -12040,6 +12280,8 @@ export class GameEngine {
         const sapper = isEngineerType(u.type);
         if (w.kind === 'trench') {
           if (!hostile && foot) u.fieldCover = 'trench';
+          // Engineers blow in and fill the enemy's trenches
+          else if (hostile && sapper) w.health -= 120 * T;
         } else if (w.kind === 'obstacle') {
           if (!hostile) continue;
           u.obstacleSlow = Math.min(u.obstacleSlow ?? 1, foot ? 0.45 : 0.3);
@@ -12082,6 +12324,8 @@ export class GameEngine {
                 ? `🧹【雷區清除】「${w.name}」已被${w.side === 'enemy' ? '我軍' : '敵軍'}排除或引爆殆盡。`
                 : w.kind === 'obstacle'
                 ? `🚧【阻絕突破】「${w.name}」已被${w.side === 'enemy' ? '我軍' : '敵軍'}開闢通路。`
+                : w.kind === 'trench'
+                ? `🕳️【工事破壞】「${w.name}」已被${w.side === 'enemy' ? '我軍' : '敵軍'}炸毀填平。`
                 : `💥「${w.name}」已失效。`,
           });
         }
@@ -17298,7 +17542,7 @@ export class GameEngine {
             order: { type: 'move', targetPos: targetObj },
           },
           {
-            ...createGroundUnit(`us-army-wave-tank-${ts}`, 'us_army_armor_korea', '美陸軍第70戰車營 M46 巴頓戰車排', 'player', 'era3', {
+            ...createGroundUnit(`us-army-wave-tank-${ts}`, 'us_armor_m4a3e8', '美陸軍第70戰車營 M4A3E8 薛曼戰車排', 'player', 'era3', {
               x: spawnBase.x - 30 + (Math.random() - 0.5) * 40,
               y: spawnBase.y + 30 + (Math.random() - 0.5) * 40,
             }),
@@ -17956,6 +18200,7 @@ export class GameEngine {
       id,
       name: def.name,
       codeName: def.codeName,
+      craft: def.craft,
       type: def.type,
       side: 'allied',
       era: this.era,
@@ -18191,14 +18436,90 @@ export class GameEngine {
   }
 
   // ══════════════════════════════════════════════════════════
+  /** Whether a settlement is itself contested ground: enemy troops in or right round it. */
+  private isSettlementContested(inst: Installation): boolean {
+    const r = (inst.civilianZoneRadius ?? 120) + 200;
+    return this.groundUnits.some((u) => u.side === 'enemy' && !u.isDestroyed && !u.embarkedInShipId && dist(u.pos, inst.pos) < r);
+  }
+
+  /** Any side's explosion in or near a settlement: buildings come down, people leave. */
+  private applySettlementBlast(proj: Projectile): void {
+    const heavy = proj.type === 'bomb' || (proj.damage ?? 0) >= 600;
+    for (const isl of this.islands) {
+      for (const inst of isl.installations) {
+        if (!isSettlement(inst) || inst.isDestroyed) continue;
+        const zR = inst.civilianZoneRadius ?? 120;
+        const d = dist(proj.pos, inst.pos);
+        if (d <= zR + (proj.blastRadius ?? 20)) {
+          blastBld(inst, proj.damage ?? 100, proj.type === 'bomb');
+          blastPop(inst, true, heavy);
+        } else if (d <= zR + 260) {
+          blastPop(inst, false, heavy);
+        }
+      }
+    }
+  }
+
+  /**
+   * Once a second: fighting in or round a settlement drives its people out (logged when half and
+   * then nearly all have gone), and quiet lets them come back and rebuild.
+   */
+  private settlementTimer = 0;
+  private updateSettlements(dt: number): void {
+    this.settlementTimer -= dt;
+    if (this.settlementTimer > 0) return;
+    this.settlementTimer = 1;
+    const ground = this.groundUnits.filter((u) => !u.isDestroyed && !u.embarkedInShipId);
+    for (const isl of this.islands) {
+      for (const inst of isl.installations) {
+        if (!isSettlement(inst) || inst.isDestroyed) continue;
+        const r = (inst.civilianZoneRadius ?? 120) + 300;
+        let ours = false;
+        let theirs = false;
+        for (const u of ground) {
+          if (dist(u.pos, inst.pos) >= r) continue;
+          if (u.side === 'enemy') theirs = true;
+          else ours = true;
+          if (ours && theirs) break;
+        }
+        const crossed = tickSettlement(inst, ours && theirs);
+        if (crossed) {
+          this.addCombatLog({
+            category: 'naval',
+            sourceSide: 'player',
+            sourceName: '民政事務',
+            targetName: inst.name,
+            actionType: 'recon_spotted',
+            text:
+              crossed === 1
+                ? `🧳【難民潮】戰火逼近，「${inst.name}」半數居民扶老攜幼逃離，地方產出隨之減少。`
+                : `🏚️【人去城空】「${inst.name}」居民幾乎走避一空，城區已成戰場。`,
+          });
+        }
+      }
+    }
+  }
+
   // 平民設施與難民營附帶損害軍事懲處 (Civilian Collateral Penalty)
   // 扣除 15 CP，發出高優先級軍事法庭與參謀訓誡戰鬥日誌
   // ══════════════════════════════════════════════════════════
-  private triggerCivilianCollateralPenalty(inst: Installation, attacker: string) {
+  private triggerCivilianCollateralPenalty(inst: Installation, attacker: string, scaledPenalty?: number) {
     if (this.civilianCollateralCooldowns[inst.id] && this.civilianCollateralCooldowns[inst.id] > 0) return;
     this.civilianCollateralCooldowns[inst.id] = 4.0; // 4s cooldown per installation
 
-    const penalty = 25;
+    const penalty = scaledPenalty ?? 25;
+    if (penalty <= 0) {
+      // An emptied ruin in the battle line: nobody left to answer to
+      this.addCombatLog({
+        category: 'naval',
+        sourceSide: 'player',
+        sourceName: attacker,
+        targetName: inst.name,
+        actionType: 'recon_spotted',
+        text: `🏚️「${inst.name}」已成無人廢墟，砲火落入城區未再造成平民傷亡。`,
+      });
+      return;
+    }
     this.economy.lose({ pp: penalty });
     soundEngine.playKlaxon();
 
@@ -18661,30 +18982,30 @@ export class GameEngine {
       let sub: Ship;
       if (this.era === 'era1' || this.era === 'era2') {
         sub = useUBoat
-          ? createMonsunUBoatSS(`wolfpack-uboat-${ts}-${i}`, `Kriegsmarine U-${178 + i * 7} 季風遠洋潛艇`, subPos, this.era)
-          : createIjnIBoatSS(`wolfpack-ijn-${ts}-${i}`, `IJN 伊-${19 + i * 7} 號巡潛型潛艦`, subPos, this.era);
+          ? createMonsunUBoatSS(`wolfpack-uboat-${ts}-${i}`, `U-${178 + i * 7} (季風群)`, subPos, this.era)
+          : createIjnIBoatSS(`wolfpack-ijn-${ts}-${i}`, `IJN 伊-${19 + i * 7}`, subPos, this.era);
       } else if (this.era === 'era3') {
         const isZulu = i === 0 && Math.random() < 0.45;
         sub = createSovietWhiskeySS(
           `wolfpack-whiskey-${ts}-${i}`,
-          isZulu ? `蘇聯 Project 611 Zulu級 遠洋潛艦 B-${62 + i}` : `蘇聯 Project 613 Whiskey級 潛艦 S-${80 + i * 4}`,
+          isZulu ? `祖魯級潛艦 B-${62 + i}` : `威士忌級潛艦 S-${80 + i * 4}`,
           subPos,
           isZulu ? 'zulu' : 'whiskey'
         );
       } else if (this.era === 'era4') {
-        sub = createFoxtrotSS(`wolfpack-foxtrot-${ts}-${i}`, `蘇聯 Project 641 Foxtrot級 柴電潛艦 B-${39 + i}`, subPos);
+        sub = createFoxtrotSS(`wolfpack-foxtrot-${ts}-${i}`, `狐步級潛艦 B-${39 + i}`, subPos);
       } else {
         // Era 5: Victor III / Akula SSN or occasional Oscar II SSGN lead
         if (i === 0 && Math.random() < 0.35) {
-          sub = createOscarSSGN(`wolfpack-oscar-${ts}-${i}`, `蘇聯 Project 949A 奧斯卡 II 級巡弋核潛艦 K-${132 + i}`, subPos);
+          sub = createOscarSSGN(`wolfpack-oscar-${ts}-${i}`, `奧斯卡II級潛艦 K-${132 + i}`, subPos);
         } else {
           const r = Math.random();
           const isAkula = r < 0.35;
           if (r > 0.75) {
-            sub = createKiloSS(`wolfpack-kilo-${ts}-${i}`, `蘇聯 Project 877 Kilo 基洛級靜音柴電潛艦 B-${400 + i}`, subPos);
+            sub = createKiloSS(`wolfpack-kilo-${ts}-${i}`, `基洛級潛艦 B-${400 + i}`, subPos);
           } else sub = createSovietVictor3SSN(
             `wolfpack-ssn-${ts}-${i}`,
-            isAkula ? `蘇聯 Project 971 Akula 阿庫拉級核動力攻擊潛艦 K-${284 + i}` : `蘇聯 Project 671RTM Victor III 核動力攻擊潛艦 K-${255 + i}`,
+            isAkula ? `阿庫拉級潛艦 K-${284 + i}` : `勝利III級潛艦 K-${255 + i}`,
             subPos,
             isAkula ? 'akula' : 'victor3'
           );
@@ -20279,6 +20600,7 @@ export class GameEngine {
     }
 
     this.applyBlastToInstallations(proj);
+    this.applySettlementBlast(proj);
 
     // ══════════════════════════════════════════════════════════
     // 平民設施與難民營附帶損害檢驗 (Civilian & Refugee Collateral Damage)
@@ -20292,7 +20614,8 @@ export class GameEngine {
           if (inst.isCivilian && !inst.isDestroyed) {
             const zR = inst.civilianZoneRadius || 160;
             if (dist(proj.pos, inst.pos) <= zR) {
-              this.triggerCivilianCollateralPenalty(inst, proj.attackerName || '我方戰機 / 艦砲');
+              const penalty = isSettlement(inst) ? collateralPenalty(inst, this.isSettlementContested(inst)) : undefined;
+              this.triggerCivilianCollateralPenalty(inst, proj.attackerName || '我方戰機 / 艦砲', penalty);
             }
           }
         }
@@ -21024,7 +21347,7 @@ export class GameEngine {
       'opfor_pt76_amphib', 'opfor_t54_tank', 'opfor_zsu23_shilka', 'opfor_s60_flak', 'opfor_ks19_heavy',
       'opfor_zsu57_2', 'opfor_sa6_kub', 'opfor_sa9_strela1', 'opfor_sa8_osa', 'opfor_sa11_buk', 'opfor_sa15_tor', 'opfor_btr_zd',
       'opfor_tunguska', 'opfor_strela10', 'opfor_t72b', 'opfor_t80b', 'opfor_bmp2',
-      'usmc_armor_m3', 'usmc_armor_m4', 'usmc_patton_m46', 'us_army_armor_korea',
+      'usmc_armor_m3', 'usmc_armor_m4', 'usmc_patton_m46',
       'usmc_duster_m42', 'usmc_armor_m48', 'usmc_ontos_m50', 'us_m551_sheridan', 'us_m26_pershing', 'us_armor_m4a3e8', 'us_m1a1_abrams', 'us_army_m113_mech', 'us_army_chaparral_sam',
       'usmc_m4a3r3_flame', 'us_m24_chaffee', 'us_m16_quad50', 'us_m113_acav', 'us_avenger', 'au_matilda', 'cw_centurion', 'arvn_m41',
       'frg_marder', 'frg_leopard2', 'uk_challenger1', 'uk_warrior',

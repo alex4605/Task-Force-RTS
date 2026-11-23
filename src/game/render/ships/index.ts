@@ -3,6 +3,7 @@ import { drawFunnelSmoke } from '../unitDetails';
 import { Ship, Vector2D } from '../../../types/game';
 import { RenderContext, Camera, isWorldCircleVisible } from '../context';
 import { drawAlliedSAGShip } from './alliedSag';
+import { drawSmallCraft } from './smallCraft';
 import { SHIP_HULL_DRAWERS } from './hulls';
 import { planView } from './planform';
 
@@ -793,6 +794,10 @@ export function drawNavalEnsign(rc: RenderContext, ensignType: NavalEnsign, x: n
 // 依照艦種呼叫對應之向量線條艦體繪製
 function renderShipHullByType(rc: RenderContext, ship: Ship, hullColor: string, detailColor: string) {
   // 優先判定盟軍水面作戰群 (Allied SAG) 專屬外觀
+  if (ship.craft) {
+    drawSmallCraft(rc, ship, hullColor, detailColor);
+    return;
+  }
   if (ship.isAlliedSAG || ship.side === 'allied') {
     drawAlliedSAGShip(rc, ship, hullColor, detailColor);
     return;
@@ -1028,6 +1033,6 @@ function drawDatum(rc: RenderContext, ship: Ship): void {
 }
 
 /** A ship's hull and deck artwork alone, at the current transform (for menu icons). */
-export function drawShipIcon(rc: RenderContext, ship: Ship): void {
-  drawHull(rc, planView(ship), '#E0F7FA', '#80DEEA');
+export function drawShipIcon(rc: RenderContext, ship: Ship, hullColor = '#E0F7FA', detailColor = '#80DEEA'): void {
+  drawHull(rc, planView(ship), hullColor, detailColor);
 }

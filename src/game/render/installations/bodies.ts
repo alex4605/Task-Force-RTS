@@ -7,6 +7,7 @@ import { drawAmmoDepotSite, drawBattalionCpSite, drawCivilHospitalSite, drawComm
 import { RenderContext } from '../context';
 import { drawGroundSilhouette, GROUND_SILHOUETTE_SCALE, groundSilhouetteClass } from '../../unitPreviewRenderer';
 import { InstallationStyle } from './style';
+import { drawSettlementStage } from './settlementArt';
 
 /** Draws the type-specific body of one installation in its local frame. */
 export type InstallationDrawer = (rc: RenderContext, inst: Installation, style: InstallationStyle, island?: Island) => void;
@@ -298,120 +299,6 @@ function drawPowCamp(rc: RenderContext, inst: Installation, style: InstallationS
   ctx.fillText(style.isPlayer ? `⛓ [戰俘營] 收押 ${n}/80${wait}` : `⛓ [敵戰俘營] 我方被俘 ${n}/80${wait} · 禁止射擊`, 0, -28);
 }
 
-
-function drawCity(rc: RenderContext, inst: Installation, _style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-
-  // ════ 城市市區 (City: High-Density Urban Street Grid & Buildings) ════
-  ctx.fillStyle = 'rgba(38, 50, 56, 0.85)';
-  ctx.strokeStyle = '#78909C';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(-32, -22, 64, 44);
-  ctx.fillRect(-32, -22, 64, 44);
-
-  // 十字街道網格
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-  ctx.lineWidth = 2.4;
-  ctx.setLineDash([4, 4]);
-  ctx.beginPath();
-  ctx.moveTo(-32, 0);
-  ctx.lineTo(32, 0);
-  ctx.moveTo(0, -22);
-  ctx.lineTo(0, 22);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // 4大建築街區群 (高層公寓與市政廳)
-  ctx.fillStyle = '#455A64';
-  ctx.strokeStyle = '#B0BEC5';
-  ctx.lineWidth = 1.2;
-  ctx.fillRect(-28, -18, 12, 14);
-  ctx.strokeRect(-28, -18, 12, 14);
-  ctx.fillRect(16, -18, 12, 14);
-  ctx.strokeRect(16, -18, 12, 14);
-  ctx.fillRect(-28, 4, 12, 14);
-  ctx.strokeRect(-28, 4, 12, 14);
-  ctx.fillRect(16, 4, 12, 14);
-  ctx.strokeRect(16, 4, 12, 14);
-
-  // 市政中心/鐘樓頂部屋脊 (中央磚紅核心)
-  ctx.fillStyle = '#BF360C';
-  ctx.fillRect(-8, -8, 16, 16);
-  ctx.strokeStyle = '#FF8A65';
-  ctx.strokeRect(-8, -8, 16, 16);
-
-  ctx.fillStyle = '#80DEEA';
-  ctx.font = 'bold 9.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(`🏛️【城市核心市區】${inst.name.split(' ')[0]}`, 0, -30);
-}
-
-function drawTown(rc: RenderContext, inst: Installation, _style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-
-  // ════ 城鎮集市 (Town: Traditional Crossroads Settlement & Houses) ════
-  ctx.fillStyle = 'rgba(62, 39, 35, 0.75)';
-  ctx.strokeStyle = '#8D6E63';
-  ctx.lineWidth = 1.8;
-  ctx.strokeRect(-24, -16, 48, 32);
-  ctx.fillRect(-24, -16, 48, 32);
-
-  // 市集道路
-  ctx.strokeStyle = '#BCAAA4';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(-24, 0);
-  ctx.lineTo(24, 0);
-  ctx.stroke();
-
-  // 磚瓦人字形小屋群
-  ctx.fillStyle = '#D84315';
-  ctx.strokeStyle = '#FFAB91';
-  ctx.lineWidth = 1.2;
-  for (const hx of [-16, 4]) {
-    for (const hy of [-12, 4]) {
-      ctx.beginPath();
-      ctx.moveTo(hx, hy + 8);
-      ctx.lineTo(hx + 6, hy);
-      ctx.lineTo(hx + 12, hy + 8);
-      ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
-    }
-  }
-
-  ctx.fillStyle = '#FFCC80';
-  ctx.font = 'bold 9px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(`🏘️【城鎮市集】${inst.name.split(' ')[0]}`, 0, -24);
-}
-
-function drawSettlement(rc: RenderContext, inst: Installation, _style: InstallationStyle, _island?: Island): void {
-  const ctx = rc.ctx;
-
-  // ════ 沿海漁村定居點 (Settlement: Coastal Huts & Dock Pier) ════
-  ctx.fillStyle = 'rgba(78, 52, 46, 0.65)';
-  ctx.strokeStyle = '#A1887F';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(0, 0, 18, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-
-  // 3座圓形茅草屋頂
-  ctx.fillStyle = '#8D6E63';
-  for (const [cx, cy] of [[-7, -6], [7, -6], [0, 8]]) {
-    ctx.beginPath();
-    ctx.arc(cx, cy, 5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  }
-
-  ctx.fillStyle = '#FFE082';
-  ctx.font = 'bold 8.5px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(`🏡【沿海定居點】${inst.name.split(' ')[0]}`, 0, -24);
-}
 
 function drawRefugeeCamp(rc: RenderContext, _inst: Installation, _style: InstallationStyle, _island?: Island): void {
   const ctx = rc.ctx;
@@ -1107,9 +994,9 @@ export const INSTALLATION_DRAWERS: Record<InstallationType, InstallationDrawer> 
   motor_pool: drawMotorPoolSite,
   rail_station: drawRailStationSite,
   pow_camp: drawPowCamp,
-  city: drawCity,
-  town: drawTown,
-  settlement: drawSettlement,
+  city: drawSettlementStage,
+  town: drawSettlementStage,
+  settlement: drawSettlementStage,
   refugee_camp: drawRefugeeCamp,
   bunker_nest: drawBunkerSite,
   sam_hawk: drawSamBatterySite,

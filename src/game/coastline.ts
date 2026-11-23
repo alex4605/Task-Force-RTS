@@ -89,8 +89,8 @@ export function naturalizeIslands(islands: Island[], seed: number, skip: (isl: I
 
 /** Village names by theatre: the Solomons; Saipan, Okinawa and the Keramas; Wonsan harbour; Vietnam's coastal islands; the German Bight. */
 const VILLAGE_NAMES: Record<Era, string[]> = {
-  era1: ['科孔布納土著村落 (Kokumbona)', '塔薩法隆加村 (Tassafaronga)', '馬塔尼考村 (Matanikau)', '科利角漁村 (Koli Point)', '馬拉瑙傳教站 (Marau Mission)', '奧拉椰子種植園 (Aola)'],
-  era2: ['加拉班町 (Garapan)', '查蘭卡諾亞村 (Chalan Kanoa)', '那霸港町 (Naha)', '首里城下町 (Shuri)', '座間味村 (Zamami)', '讀谷村 (Yomitan)'],
+  era1: ['科孔布納土著村落 (Kokumbona)', '塔薩法隆加村 (Tassafaronga)', '馬塔尼考村 (Matanikau)', '科利角漁村 (Koli Point)', '馬拉瑙傳教站 (Marau Mission)', '奧拉椰子種植園 (Aola)', '維薩萊傳教站 (Visale)', '泰納魯村 (Tenaru)', '塔辛博科村 (Tasimboko)', '倫加村落 (Lunga)', '加武圖漁村 (Gavutu)', '魯阿瓦圖傳教站 (Ruavatu)'],
+  era2: ['加拉班町 (Garapan)', '查蘭卡諾亞村 (Chalan Kanoa)', '那霸港町 (Naha)', '首里城下町 (Shuri)', '座間味村 (Zamami)', '讀谷村 (Yomitan)', '糸滿漁港 (Itoman)', '名護町 (Nago)', '渡嘉敷村 (Tokashiki)', '北谷村 (Chatan)'],
   // Wonsan harbour islands held by the UN through the siege of Wonsan (1951-53)
   era3: ['熊島村落 (Ung-do)', '黃土島漁村 (Hwangto-do)', '麗島漁村 (Yo-do)', '薪島漁村 (Sin-do)'],
   // Cu Lao Cham off Hoi An, and Con Co off the DMZ
@@ -124,7 +124,9 @@ export function addIslandSettlements(islands: Island[], era: Era, seed: number):
       names = all.slice(slot[0], slot[1]);
     }
     if (names.length === 0) continue;
-    const want = isl.radius > 1000 ? (rand() < 0.6 ? 2 : 1) : rand() < 0.75 ? 1 : 0;
+    // The Pacific islands were well peopled (Guadalcanal ~15,000, Okinawa ~450,000): two or three villages each
+    const pacific = era === 'era1' || era === 'era2';
+    const want = isl.radius > 1000 ? (pacific ? (rand() < 0.5 ? 3 : 2) : rand() < 0.6 ? 2 : 1) : rand() < 0.75 ? 1 : 0;
     const military: Vector2D[] = [...isl.installations.map((i) => i.pos), ...(isl.strongholds ?? []).map((s) => s.cpPos)];
     const placed: Vector2D[] = [];
     const n = isl.points.length;
@@ -156,6 +158,71 @@ export function addIslandSettlements(islands: Island[], era: Era, seed: number):
         isCivilian: true,
       });
       isl.installations.push(village);
+    }
+  }
+}
+
+/**
+ * Villages of the mainland front, by theatre: the farming villages of the Hamhung plain behind
+ * Wonsan (1950); the hamlets of Quang Tri province below the DMZ, fought through from 1967 to
+ * 1972; and the villages and market towns of Schleswig-Holstein and Lower Saxony that every NATO
+ * war plan put in the line. Each sits on open ground clear of the military positions.
+ */
+const MAINLAND_VILLAGES: Partial<Record<Era, { name: string; type: 'settlement' | 'town' }[]>> = {
+  era3: [
+    { name: '洪原郡 農村 (Hongwon)', type: 'settlement' },
+    { name: '定平郡 農村 (Chongpyong)', type: 'settlement' },
+    { name: '五老里 (Oro-ri)', type: 'settlement' },
+    { name: '新興邑 (Sinhung)', type: 'town' },
+  ],
+  era4: [
+    { name: 'Gio Linh 由靈村', type: 'settlement' },
+    { name: 'Cam Lộ 甘露村', type: 'settlement' },
+    { name: 'Đại Độ 大渡村', type: 'settlement' },
+    { name: 'Triệu Phong 肇豐縣城', type: 'town' },
+  ],
+  era5: [
+    { name: 'Tarp 塔普村', type: 'settlement' },
+    { name: 'Hohn 霍恩村', type: 'settlement' },
+    { name: 'Lütjenburg 呂延堡村', type: 'settlement' },
+    { name: 'Eckernförde 埃肯弗德鎮', type: 'town' },
+  ],
+};
+
+export function addMainlandVillages(islands: Island[], era: Era, seed: number): void {
+  const list = MAINLAND_VILLAGES[era];
+  const land = islands.find((i) => i.isMainland);
+  if (!list || !land) return;
+  let rnd = Math.abs(Math.floor(seed)) % 2147483647 || 1;
+  const rand = () => (rnd = (rnd * 16807) % 2147483647) / 2147483647;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const q of land.points) {
+    minX = Math.min(minX, q.x); minY = Math.min(minY, q.y); maxX = Math.max(maxX, q.x); maxY = Math.max(maxY, q.y);
+  }
+  const taken = () => [...islands.flatMap((i) => i.installations.map((x) => x.pos)), ...islands.flatMap((i) => (i.strongholds ?? []).map((s) => s.cpPos))];
+  let placedN = 0;
+  for (const v of list) {
+    for (let tries = 0; tries < 300; tries++) {
+      const p = { x: minX + 600 + rand() * (maxX - minX - 1200), y: minY + 600 + rand() * (maxY - minY - 1200) };
+      if (!onIslandLand(p, land)) continue;
+      if (![0, 1, 2, 3, 4, 5].every((j) => onIslandLand({ x: p.x + Math.cos(j) * 140, y: p.y + Math.sin(j) * 140 }, land))) continue;
+      if (taken().some((m) => dist(m, p) < 520)) continue;
+      placedN++;
+      land.installations.push(
+        makeInstallation({
+          id: `${land.id}-hamlet-${placedN}`,
+          type: v.type,
+          name: v.name,
+          weaponDesc: '平民聚落 · 嚴禁實彈射擊 · 誤擊扣除政治值',
+          pos: p,
+          health: v.type === 'town' ? 3000 : 1200,
+          armor: 0.2,
+          side: 'neutral',
+          civilianZoneRadius: v.type === 'town' ? 150 + Math.round(rand() * 30) : 90 + Math.round(rand() * 30),
+          isCivilian: true,
+        })
+      );
+      break;
     }
   }
 }

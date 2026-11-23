@@ -89,6 +89,13 @@ const GROUND_REQUISITIONS: Record<string, Resolver> = {
   us_m16_quad50: fixed('us_m16_quad50', 'M16 四聯裝 .50 防空半履帶車'),
   us_m113_acav: fixed('us_m113_acav', 'M113 ACAV 裝甲騎兵突擊車排'),
   us_m107_175: fixed('us_m107_175', 'M107 175mm 自走加農砲連'),
+  usmc_mortar_81_42: fixed('usmc_mortar_81_42', '陸戰隊 M1 81mm 迫擊砲排'),
+  us_mortar_42in_45: fixed('us_mortar_42in_45', '美陸軍第88化學迫擊砲營 M2 4.2吋 迫擊砲連'),
+  usmc_mortar_42in_50: fixed('usmc_mortar_42in_50', '陸戰隊第1團 M2 4.2吋 重迫擊砲連'),
+  usmc_mortar_81_65: fixed('usmc_mortar_81_65', '陸戰隊 M29 81mm 迫擊砲排'),
+  us_m106_65: fixed('us_m106_65', '美陸軍 M106 4.2吋 自走迫擊砲排'),
+  usmc_mortar_m252_83: fixed('usmc_mortar_m252_83', '陸戰隊 M252 81mm 迫擊砲排'),
+  us_m106a2_83: fixed('us_m106a2_83', '美陸軍 M106A2 107mm 自走迫擊砲排'),
   us_hmmwv_tow: fixed('us_hmmwv_tow', 'M966 悍馬 TOW 反戰車飛彈班'),
   us_avenger: fixed('us_avenger', 'M1097 復仇者 刺針防空車'),
   // Special operations forces
@@ -111,12 +118,15 @@ export function resolveGroundRequisition(typeTag: string, era: Era): GroundRequi
 /** Era-specific additions to the reinforcement menu. */
 const ADDITIONAL_GROUND_ITEMS: Partial<Record<Era, Omit<RequisitionItem, 'category' | 'era'>[]>> = {
   era1: [
+    { id: 'req-ground-mortar-81-42', name: '陸戰隊 M1 81mm 迫擊砲排', cost: 120, badge: '81mm · 曲射 3 km', desc: '營屬武器連的 81mm 迫擊砲，以高拋彈道越過叢林樹冠與山脊，壓制反斜面的日軍陣地與夜襲集結。', statsDesc: '間接射擊 | 曲射越障 | 3.0 km', typeTag: 'usmc_mortar_81_42' },
     { id: 'req-ground-raiders', name: '陸戰隊突擊營 步槍排', cost: 140, badge: '湯普森+BAR+詹森機槍', desc: '卡爾森與艾森突擊營的精銳步兵，以大量湯普森衝鋒槍與 BAR 組成火力小組，擅長夜間滲透與叢林突襲（馬金島、瓜島長征）。', statsDesc: '近戰火力強 | 移動快 | 400m', typeTag: 'usmc_raider_42' },
     { id: 'req-sof-coastwatcher', name: '【SOF】澳紐海岸監視員偵搜組', cost: 160, badge: '敵後無線電預警', desc: '潛伏在所羅門群島山區的澳洲海岸監視員，以無線電通報日軍艦隊與機群動向，讓韓德森機場提早升空攔截。', statsDesc: '隱蔽 | 偵察：艦船 3000m・機群 4200m | 戰鬥力弱', typeTag: 'sof_coastwatcher_42' },
     { id: 'req-ground-90mm-aa', name: '陸戰隊 90mm M1 高射砲連 (牽引)', cost: 190, badge: '90mm 高射砲 · 防空', desc: '陸戰隊第3防衛營的 90mm 高射砲連，1942 年 8 月隨首波登陸瓜島，架設在韓德森機場周邊迎擊日軍一式陸攻的高空轟炸；當年陸戰隊尚無自走防空砲。', statsDesc: '牽引式 | 中高空防空 | 1800m | 移動緩慢', typeTag: 'usmc_90mm_aa_42' },
     { id: 'req-ground-37mm-at', name: '陸戰隊 M3 37mm 反戰車砲班', cost: 130, badge: '37mm 穿甲/霰彈', desc: '瓜島泰納魯河口以 37mm 霰彈擊退一木支隊衝鋒的經典火砲；對九五式、九七式戰車有效。', statsDesc: '反裝甲 | 牽引 | 1000m', typeTag: 'usmc_37mm_at' },
   ],
   era2: [
+    { id: 'req-ground-mortar-81-42b', name: '陸戰隊 M1 81mm 迫擊砲排', cost: 120, badge: '81mm · 曲射 3 km', desc: '營屬武器連的 81mm 迫擊砲，以高拋彈道越過叢林樹冠與山脊，逐洞壓制硫磺島與沖繩反斜面的日軍坑道口。', statsDesc: '間接射擊 | 曲射越障 | 3.0 km', typeTag: 'usmc_mortar_81_42' },
+    { id: 'req-ground-mortar-42in-45', name: 'M2 4.2吋 化學迫擊砲連', cost: 170, badge: '4.2吋 · 白磷/高爆', desc: '陸軍化學迫擊砲營原為施放煙幕與毒氣而設，在沖繩改以高爆彈與白磷彈為步兵提供最近接的重火力。', statsDesc: '間接射擊 | 重彈 | 4.0 km', typeTag: 'us_mortar_42in_45' },
     { id: 'req-ground-army-45', name: '美陸軍步兵排 (1945 沖繩)', cost: 110, badge: '加蘭德+BAR+巴祖卡', desc: '第7、77、96步兵師的步兵排，與陸戰隊並肩攻打沖繩首里防線。', statsDesc: '標準步兵 | 500m', typeTag: 'us_army_rifle_45' },
     { id: 'req-sof-alamo', name: '【SOF】第6軍阿拉莫偵察隊', cost: 200, badge: '敵後偵察 · 突襲營救', desc: '克魯格將軍的精銳偵察隊，深入呂宋敵後偵察，並引導遊騎兵突襲卡巴納圖安戰俘營。', statsDesc: '隱蔽 | 偵察 | 據點奪取加速 | 爆破設施 ×3', typeTag: 'sof_alamo_scouts_45' },
     { id: 'req-sof-udt-45', name: '【SOF】海軍水下爆破隊 (UDT)', cost: 180, badge: '泳渡 · 灘頭爆破', desc: '「赤裸戰士」在登陸前泳渡至灘頭，以炸藥清除珊瑚礁與水中障礙，沖繩與硫磺島登陸的先鋒。', statsDesc: '兩棲泳渡 | 隱蔽 | 爆破設施 ×3', typeTag: 'sof_udt_45' },
@@ -125,12 +135,15 @@ const ADDITIONAL_GROUND_ITEMS: Partial<Record<Era, Omit<RequisitionItem, 'catego
     { id: 'req-ground-zippo', name: '陸戰隊 M4A3R3「打火機」噴火戰車排', cost: 300, badge: '主砲換裝噴火器', desc: '以 POA-CWS-H1 噴火器取代 75mm 主砲的薛曼，硫磺島與沖繩清除洞窟碉堡的關鍵武器。', statsDesc: '噴火射程 150m | 對碉堡/步兵極強', typeTag: 'usmc_m4a3r3_flame' },
   ],
   era3: [
+    { id: 'req-ground-mortar-42in-50', name: '陸戰隊 M2 4.2吋 重迫擊砲連', cost: 170, badge: '4.2吋 · 曲射 4 km', desc: '韓國山地的團屬重迫擊砲，綽號「Four-Deuce」，長津湖撤退中以近距曲射擊退中共夜間人海衝鋒。', statsDesc: '間接射擊 | 山地曲射 | 4.0 km', typeTag: 'usmc_mortar_42in_50' },
     { id: 'req-ground-chaffee', name: '美陸軍 M24 霞飛輕戰車排', cost: 230, badge: '75mm M6 · 高機動', desc: '1950 年 7 月首批抵韓的美軍戰車，裝甲薄弱但機動快，擔任偵察與步兵支援。', statsDesc: '輕戰車 | 75mm | 1300m', typeTag: 'us_m24_chaffee' },
     { id: 'req-sof-ranger-50', name: '【SOF】第8軍遊騎兵連', cost: 230, badge: '夜間滲透突擊', desc: '韓戰中組建的空降遊騎兵連，以夜間滲透突襲中共軍陣地與指揮所。', statsDesc: '隱蔽 | 據點奪取加速 | 爆破設施 ×3', typeTag: 'sof_ranger_50' },
     { id: 'req-sof-udt-50', name: '【SOF】UDT-1 水下爆破隊', cost: 190, badge: '海岸爆破襲擊', desc: '自驅逐艦出發，夜間登岸炸毀北韓東海岸鐵路隧道與橋樑，也為仁川登陸勘察灘頭。', statsDesc: '兩棲泳渡 | 隱蔽 | 爆破設施 ×3', typeTag: 'sof_udt_50' },
     { id: 'req-ground-quad50', name: 'M16 四聯裝 .50 防空半履帶車', cost: 200, badge: 'M45 四聯 .50 機槍', desc: '韓戰中常以平射壓制中共人海衝鋒的「絞肉機」，同時提供低空防空。', statsDesc: '防空 + 對步兵壓制 | 1200m', typeTag: 'us_m16_quad50' },
   ],
   era4: [
+    { id: 'req-ground-mortar-81-65', name: '陸戰隊 M29 81mm 迫擊砲排', cost: 120, badge: '81mm · 曲射 3.6 km', desc: '火力基地與巡邏據點的常備火力，能在數十秒內以照明彈與高爆彈回應越軍的夜間突擊。', statsDesc: '間接射擊 | 照明/高爆 | 3.6 km', typeTag: 'usmc_mortar_81_65' },
+    { id: 'req-ground-m106', name: 'M106 4.2吋 自走迫擊砲排', cost: 230, badge: 'M113 底盤 · 自走', desc: '機械化步兵營與裝甲騎兵中隊的隨伴曲射火力，車頂大艙門打開即可在車內射擊，跟得上 M113 與戰車。', statsDesc: '自走 | 間接射擊 | 5.6 km', typeTag: 'us_m106_65' },
     { id: 'req-ground-acav', name: 'M113 ACAV 裝甲騎兵突擊車排', cost: 240, badge: '三挺機槍+防盾', desc: '第11裝甲騎兵團在越南把 M113 改成「裝甲騎兵突擊車」，車長 .50 機槍與兩側 M60 都加裝防盾，穿越叢林正面衝擊。', statsDesc: '機動火力 | 兩棲 | 1500m', typeTag: 'us_m113_acav' },
     { id: 'req-sof-seal-65', name: '【SOF】海豹第一分隊 (SEAL)', cost: 280, badge: '湄公河伏擊', desc: '在湄公河三角洲以小艇滲透，夜間伏擊越共運補與綁架指揮幹部的海軍特戰隊。', statsDesc: '兩棲 | 隱蔽 | 爆破設施 ×3 | 據點奪取加速', typeTag: 'sof_seal_65' },
     { id: 'req-sof-sog', name: '【SOF】MACV-SOG 跨境偵察小組', cost: 260, badge: '胡志明小道偵察', desc: '美軍綠扁帽與南越、蒙達納族隊員組成的偵察小組，深入寮國與柬埔寨監視胡志明小道。', statsDesc: '隱蔽 | 偵察：艦船 3000m・機群 4200m', typeTag: 'sof_macv_sog_65' },
@@ -138,6 +151,8 @@ const ADDITIONAL_GROUND_ITEMS: Partial<Record<Era, Omit<RequisitionItem, 'catego
     { id: 'req-ground-m107', name: 'M107 175mm 自走加農砲連', cost: 420, badge: '175mm · 32 km', desc: '越戰美軍射程最遠的火砲，自非軍事區南側的「岩石堆」等火力基地轟擊北越縱深。', statsDesc: '長程火力 | 反砲擊 | 32.7 km', typeTag: 'us_m107_175' },
   ],
   era5: [
+    { id: 'req-ground-mortar-m252', name: '陸戰隊 M252 81mm 迫擊砲排', cost: 140, badge: '81mm · 曲射 5.6 km', desc: '1986 年起取代 M29 的英製 L16 衍生型，射程與射速大增，是陸戰隊步兵營最直接可用的曲射火力。', statsDesc: '間接射擊 | 高射速 | 5.6 km', typeTag: 'usmc_mortar_m252_83' },
+    { id: 'req-ground-m106a2', name: 'M106A2 107mm 自走迫擊砲排', cost: 250, badge: 'M113A2 底盤 · 自走', desc: '駐德機械化步兵營的營屬曲射火力，隨布萊德雷與艾布蘭行動，以快速齊射壓制華約的反戰車陣地。', statsDesc: '自走 | 間接射擊 | 6.8 km', typeTag: 'us_m106a2_83' },
     { id: 'req-ground-hmmwv-tow', name: 'M966 悍馬 TOW 反戰車飛彈班', cost: 220, badge: 'BGM-71 TOW-2', desc: '輕型步兵師與陸戰隊的機動反戰車主力，3750m 外以 TOW-2 擊破 T-72。', statsDesc: '反裝甲 | 高機動 | 3750m', typeTag: 'us_hmmwv_tow' },
     { id: 'req-sof-force-recon', name: '【SOF】陸戰隊武裝偵察排', cost: 280, badge: '兩棲偵察', desc: '以潛艦或橡皮艇滲透上岸，在登陸前偵察灘頭與敵陣地的陸戰隊特種偵察兵。', statsDesc: '兩棲 | 隱蔽 | 偵察：艦船 3000m・機群 4200m', typeTag: 'sof_force_recon_83' },
     { id: 'req-sof-seal-83', name: '【SOF】海豹第四分隊 (SEAL)', cost: 320, badge: '直接行動', desc: '1983 年格瑞那達行動中突襲總督府與廣播電台的海軍特戰隊。', statsDesc: '兩棲 | 隱蔽 | 爆破設施 ×3 | 據點奪取加速', typeTag: 'sof_seal_83' },

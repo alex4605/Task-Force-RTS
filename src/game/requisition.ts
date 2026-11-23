@@ -1040,17 +1040,6 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
         typeTag: 'm113_mech',
       },
       {
-        id: 'req-ground-chaparral-sam',
-        category: 'ground',
-        name: 'MIM-72 榭樹野戰履帶防空飛彈排',
-        cost: 380,
-        era: 'era5',
-        badge: '4聯裝響尾蛇防空飛彈',
-        desc: '前線機動野戰防空傘！履帶車載四聯裝紅外線尋標防空飛彈發射架，自動偵測並打擊 1600m 範圍內掠空敵戰鬥機與強擊機！',
-        statsDesc: 'HP: 1300 | MIM-72 紅外導引飛彈 (1600m防空) | 前線自動防禦攔截',
-        typeTag: 'chaparral_sam',
-      },
-      {
         id: 'req-ground-chaparral-sam-65',
         category: 'ground',
         name: 'MIM-72 榭樹野戰履帶防空飛彈排',
@@ -1578,22 +1567,22 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       category: 'ground',
       name:
         era === 'era3'
-          ? '陸戰突擊步兵排 (1950 M14/無後座力砲)'
+          ? '陸戰隊步槍排 (1950)'
           : era === 'era2'
-          ? '陸戰突擊步兵排 (1945 M1/巴祖卡/噴火器)'
-          : '陸戰步兵排 (1942 M1903/BAR)',
+          ? '陸戰隊突擊步槍排 (1945)'
+          : '陸戰隊步槍排 (1942)',
       cost: 110,
       era,
       badge: era === 'era3' ? '無後座力砲' : era === 'era2' ? '巴祖卡與噴火器' : '春田與BAR',
       desc:
         era === 'era3'
-          ? '精銳美軍陸戰隊突擊步槍排 (1950)，配備 M14 自動步槍、75mm 無後座力砲與肩射火箭。'
+          ? '精銳美軍陸戰隊突擊步槍排 (1950)，配備 M1 加蘭德、BAR、M20 超級巴祖卡與 75mm 無後座力砲。'
           : era === 'era2'
           ? '精銳美軍陸戰隊突擊步槍排 (1945)，配備 M1 加蘭德步槍、巴祖卡火箭筒與火焰噴射器！'
           : '精銳美軍陸戰步兵排 (1942)，配備春田 M1903 狙擊步槍、早期加蘭德與 BAR 班用機槍。',
       statsDesc:
         era === 'era3'
-          ? '兵力: 36人 | M14/75mm無後座力砲 | 破障穿甲'
+          ? '兵力: 36人 | M1加蘭德/超級巴祖卡/75mm無後座力砲 | 破障穿甲'
           : era === 'era2'
           ? '兵力: 36人 | M1加蘭德/巴祖卡/噴火器 | 火焰壓制'
           : '兵力: 36人 | M1903春田/BAR機槍 | 基礎步戰',

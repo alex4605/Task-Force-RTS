@@ -8,6 +8,10 @@ import { aircraftEw, shipEw } from './ew';
 import { groundSilhouetteClass } from './unitPreviewRenderer';
 import { LOCAL_FORCES } from './localForces';
 import { AIR_INTRO, GROUND_INTRO, SHIP_INTRO, UnitIntro } from './unitIntro';
+import { Ship } from '../types/game';
+import { codexFleetShips } from './procedural';
+import { AlliedSagShipDef, getAlliedSagFleet } from './alliedSagFleets';
+import { shipClassOf } from './shipClasses';
 
 /**
  * 圖鑑 (codex): every ground unit, aircraft, ship and installation in the game, with its era,
@@ -30,6 +34,8 @@ export interface CodexEntry {
   group: string;
   stats: { label: string; value: string }[];
   extras: string[];
+  /** A real ship of the era's fleets, drawn with its own artwork. */
+  ship?: Ship;
 }
 
 const ERA_ZH: Record<string, Era> = { 一: 'era1', 二: 'era2', 三: 'era3', 四: 'era4', 五: 'era5' };
@@ -308,35 +314,167 @@ function buildAircraft(): CodexEntry[] {
     });
 }
 
+/** The navy a ship sails for, from its name prefix (enemy ships without one by era). */
+function shipNation(ship: Ship, era: Era): string {
+  const n = ship.name;
+  const PREFIX: [RegExp, string][] = [
+    [/^USS |^PBR|^LCAC/, '美國海軍'],
+    [/^IJN /, '大日本帝國海軍'],
+    [/^U-\d/, '德國海軍 (季風群)'],
+    [/^HMS /, '英國皇家海軍'],
+    [/^HMAS /, '澳洲皇家海軍'],
+    [/^HMNZS /, '紐西蘭皇家海軍'],
+    [/^HMCS /, '加拿大皇家海軍'],
+    [/^HNLMS /, '荷蘭皇家海軍'],
+    [/^FS /, '法國海軍'],
+    [/^FGS /, '西德海軍'],
+    [/^JDS /, '日本海上自衛隊'],
+    [/^ROKS /, '大韓民國海軍'],
+    [/^RVNS /, '越南共和國海軍'],
+    [/^ORP /, '波蘭人民海軍'],
+    [/Thälmann/, '東德人民海軍'],
+    [/^朝鮮人民軍/, '朝鮮人民軍海軍'],
+    [/^越南人民海軍|^解放陣線|HQ-01|T-26\d/, '越南人民海軍'],
+  ];
+  const hit = PREFIX.find(([re]) => re.test(n));
+  if (hit) return hit[1];
+  if (ship.side === 'enemy') return era === 'era1' || era === 'era2' ? '大日本帝國海軍' : '蘇聯海軍';
+  return '美國海軍';
+}
+
+/** An allied surface action group's ship definition as a Ship the renderers can draw. */
+function alliedDefToShip(def: AlliedSagShipDef, era: Era): Ship {
+  return {
+    ...(def as unknown as Ship),
+    id: `codex-${def.name}`,
+    side: 'allied',
+    era,
+    pos: { x: 0, y: 0 },
+    vel: { x: 0, y: 0 },
+    heading: 0,
+    targetHeading: 0,
+    maxSpeed: def.speed,
+    health: def.maxHealth,
+    isSunk: false,
+    sinkProgress: 0,
+    wakePoints: [],
+    isAlliedSAG: true,
+    turrets: def.turrets.map((t) => ({ ...t, relX: t.relX ?? t.pos?.x ?? 0, relY: t.relY ?? t.pos?.y ?? 0, angle: 0 })),
+  } as Ship;
+}
+
+/** The main armament in a line: the ship's armament list, or its mounts grouped by calibre. */
+function armamentLine(ship: Ship): string {
+  if (ship.detailedArmaments?.length) return ship.detailedArmaments.map((a) => (a.count ? `${a.name} ${/^\d+$/.test(a.count) ? `×${a.count}` : a.count}` : a.name)).join(' · ');
+  const byCal = new Map<string, number>();
+  for (const t of ship.turrets) {
+    const c = (t as { caliber?: string }).caliber;
+    if (c) byCal.set(c, (byCal.get(c) ?? 0) + 1);
+  }
+  const parts = [...byCal].map(([c, n]) => (n > 1 ? `${c} ×${n}` : c));
+  if (ship.hasSAM && ship.samModel && !parts.some((p) => p.includes(ship.samModel!))) parts.push(ship.samModel);
+  if (ship.hasASROC) parts.push('ASROC 反潛火箭');
+  return parts.join(' · ');
+}
+
+const SHIP_GROUP = (ship: Ship): string => {
+  const k = `${ship.type} ${ship.name}`;
+  return /submarine|foxtrot|ssn|ssgn|潛艦|伊-|^U-\d/i.test(k)
+    ? '潛艦'
+    : /carrier|cve|cv63|cvn|lph|lha|kiev/i.test(k)
+    ? '航艦 / 兩棲突擊艦'
+    : /lst|lcvp|lpd|lcac|lcm|lsm/i.test(k)
+    ? '兩棲艦艇'
+    : /patrol|osa|komar|pbr|river_gunboat|魚雷艇|飛彈艇/i.test(k)
+    ? '小型艦艇'
+    : /battleship|bb_/i.test(k)
+    ? '戰艦'
+    : /cruiser|cg|sverdlov|kynda|kirov|chokai/i.test(k)
+    ? '巡洋艦'
+    : '驅逐艦 / 護衛艦';
+};
+
+/**
+ * Every ship the era's fleets actually sail: our task force, the enemy's fleet and the ships that
+ * join it later, and each of the allied surface action groups, under their own names. A ship that
+ * sails in more than one era is one entry with all its eras. Ship types no fleet uses as such
+ * (landing craft and ships delivered by reinforcement cards) keep a generic entry.
+ */
 function buildShips(): CodexEntry[] {
-  return parseUnion('ShipType').map(({ key, comment, header }) => {
-    const type = key as ShipType;
-    let eras = erasIn(comment);
-    if (eras.length === 0) eras = erasIn(header);
-    const enemy = ENEMY_SHIP.test(key) || /OPFOR|蘇聯|北越/.test(header + comment);
-    const generic = SHIP_TITLE[type] !== undefined;
-    const side: CodexSide = generic ? 'both' : enemy ? 'enemy' : 'player';
-    const extras: string[] = [];
-    for (const e of eras.length ? eras : (['era1', 'era2', 'era3', 'era4', 'era5'] as Era[])) {
-      const ew = shipEw({ type, side: enemy ? 'enemy' : 'player' }, e);
-      const parts = [ew.esm && `ESM ${ew.esm.name}`, ew.jammer && `ECM ${ew.jammer.name}`, ew.decoys && `誘餌 ${ew.decoys.name}`, ew.noisemaker && `${ew.noisemaker.name}`, ew.moss && ew.moss.name].filter(Boolean);
-      if (parts.length) extras.push(`📡 ${ERA_LABEL[e]}：${parts.join(' · ')}`);
+  const ERAS: Era[] = ['era1', 'era2', 'era3', 'era4', 'era5'];
+  const byName = new Map<string, CodexEntry>();
+  const typesSeen = new Set<string>();
+  const add = (ship: Ship, era: Era, side: CodexSide) => {
+    typesSeen.add(ship.type);
+    const have = byName.get(ship.name);
+    if (have) {
+      if (!have.eras.includes(era)) have.eras.push(era);
+      return;
     }
-    const intro = SHIP_INTRO[type];
-    const generalNote = generic ? '各時代通用艦種：實際艦名、武裝與外觀依時代與陣營而定' : '';
-    return {
+    const cls = shipClassOf(ship.name);
+    const intro = SHIP_INTRO[ship.type as ShipType];
+    const extras: string[] = [];
+    const arms = armamentLine(ship);
+    if (arms) extras.push(`🔫 武裝：${arms}`);
+    const ew = shipEw({ type: ship.type, side: side === 'enemy' ? 'enemy' : 'player' }, era);
+    const ewParts = [ew.esm && `ESM ${ew.esm.name}`, ew.jammer && `ECM ${ew.jammer.name}`, ew.decoys && `誘餌 ${ew.decoys.name}`, ew.noisemaker && ew.noisemaker.name, ew.moss && ew.moss.name].filter(Boolean);
+    if (ewParts.length) extras.push(`📡 電子戰：${ewParts.join(' · ')}`);
+    byName.set(ship.name, {
       kind: 'ship',
-      key,
-      title: intro?.[0] ?? SHIP_TITLE[type] ?? (stripEra(comment) || key),
-      note: withIntro(intro, comment || generalNote, extras),
-      eras,
+      key: ship.name,
+      title: ship.name,
+      note: cls?.[2] ?? intro?.[1] ?? '',
+      eras: [era],
       side,
-      nation: side === 'both' ? '各國' : enemy ? (eras.includes('era1') || eras.includes('era2') ? '大日本帝國海軍' : '蘇聯 / 北越') : '美國海軍',
-      group: /潛艦|submarine|SSN|SSGN/i.test(key + comment) ? '潛艦' : /航空母艦|carrier|CV|lph|LPH|航空巡洋艦/i.test(key + comment) ? '航艦' : /登陸|lst|lcvp|lpd|lcac|lcm/i.test(key + comment) ? '兩棲艦艇' : /快艇|patrol|osa|komar|pbr|gunboat/i.test(key + comment) ? '小型艦艇' : '水面作戰艦',
-      stats: [{ label: '吃水', value: `${SHIP_DRAFT_M[type] ?? '—'} m` }],
+      nation: shipNation(ship, era),
+      group: cls?.[1] ?? intro?.[0] ?? SHIP_GROUP(ship),
+      stats: [
+        { label: '耐久', value: String(Math.round(ship.maxHealth)) },
+        { label: '最高航速', value: `${Math.round(ship.maxSpeed)} 節` },
+        { label: '吃水', value: `${SHIP_DRAFT_M[ship.type as ShipType] ?? '—'} m` },
+      ],
       extras,
-    };
-  });
+      ship,
+    });
+  };
+  for (const era of ERAS) {
+    const { player, enemy } = codexFleetShips(era);
+    for (const s of player) add(s, era, 'player');
+    for (const s of enemy) add(s, era, 'enemy');
+    // The allied groups are picked at random per game: draw until every option has come up
+    for (let i = 0; i < 40; i++) for (const def of getAlliedSagFleet(era).ships) add(alliedDefToShip(def, era), era, 'allied');
+  }
+  const SIDE_ORDER: Record<CodexSide, number> = { player: 0, enemy: 1, allied: 2, neutral: 3, both: 4 };
+  const ERA_ORDER = (e: CodexEntry) => Math.min(...e.eras.map((x) => ERAS.indexOf(x)));
+  const real = [...byName.values()].sort((a, b) => SIDE_ORDER[a.side] - SIDE_ORDER[b.side] || ERA_ORDER(a) - ERA_ORDER(b));
+
+  // Generic entries for the types no fleet sails under its own name
+  const generic = parseUnion('ShipType')
+    .filter(({ key }) => !typesSeen.has(key))
+    .map(({ key, comment, header }) => {
+      const type = key as ShipType;
+      let eras = erasIn(comment);
+      if (eras.length === 0) eras = erasIn(header);
+      const enemy = ENEMY_SHIP.test(key) || /OPFOR|蘇聯|北越/.test(header + comment);
+      const isGeneric = SHIP_TITLE[type] !== undefined;
+      const side: CodexSide = isGeneric ? 'both' : enemy ? 'enemy' : 'player';
+      const intro = SHIP_INTRO[type];
+      const extras: string[] = [];
+      const generalNote = isGeneric ? '各時代通用艦種：實際艦名、武裝與外觀依時代與陣營而定' : '';
+      return {
+        kind: 'ship' as const,
+        key,
+        title: intro?.[0] ?? SHIP_TITLE[type] ?? (stripEra(comment) || key),
+        note: withIntro(intro, comment || generalNote, extras),
+        eras,
+        side,
+        nation: side === 'both' ? '各國' : enemy ? '蘇聯 / 北越' : '美國海軍',
+        group: /lst|lcvp|lpd|lcac|lcm|lsm/i.test(key) ? '兩棲艦艇' : '艦種',
+        stats: [{ label: '吃水', value: `${SHIP_DRAFT_M[type] ?? '—'} m` }],
+        extras,
+      };
+    });
+  return [...real, ...generic];
 }
 
 function buildSites(): CodexEntry[] {

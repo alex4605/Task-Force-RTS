@@ -1,4 +1,4 @@
-import { Aircraft, AircraftModel, AircraftPayloadType, Era, RequisitionItem } from '../types/game';
+import { Aircraft, AircraftModel, AircraftPayloadType, Era, RequisitionItem, Ship } from '../types/game';
 import { drawShipIcon } from './render/ships';
 import { buildRequisitionShip } from './requisitionShips';
 import { drawSpecificAircraftModel } from './render/aircraft';
@@ -683,6 +683,9 @@ const EXPLICIT_SILHOUETTE_CLASS: Record<string, GroundSilhouetteClass> = {
   us_cav_air_assault_65: 'infantry',
   us_m1a1_pack_75: 'towed',
   us_m102_105: 'towed',
+  us_m106_65: 'spg',
+  opfor_2s9_nona_83: 'spg',
+  us_m106a2_83: 'spg',
   sof_coastwatcher_42: 'infantry',
   sof_alamo_scouts_45: 'infantry',
   sof_udt_45: 'infantry',
@@ -1880,6 +1883,36 @@ function shipIcon(typeTag: string, era: Era): Icon | null {
   }
   SHIP_ICON_CACHE.set(key, icon);
   return icon;
+}
+
+/** A particular ship (the encyclopedia's fleets) drawn with its map artwork in its side's colours, bow to the right. */
+const SHIP_OBJECT_CACHE = new Map<string, Icon | null>();
+export function drawShipObjectPreview(ctx: CanvasRenderingContext2D, width: number, height: number, ship: Ship, cacheKey: string): void {
+  let icon = SHIP_OBJECT_CACHE.get(cacheKey);
+  if (icon === undefined) {
+    icon = null;
+    if (typeof document !== 'undefined') {
+      const s: Ship = { ...ship, pos: { x: 0, y: 0 }, heading: 0, turrets: ship.turrets.map((t) => ({ ...t, angle: t.relX < 0 ? Math.PI : 0 })) };
+      const res = 4;
+      const span = Math.max(80, s.length * 1.4);
+      const raw = document.createElement('canvas');
+      raw.width = Math.ceil(span * res);
+      raw.height = Math.ceil(Math.max(40, s.width * 4) * res);
+      const rctx = raw.getContext('2d')!;
+      rctx.translate(raw.width / 2, raw.height / 2);
+      rctx.scale(res, res);
+      const [hull, detail] = s.side === 'enemy' ? ['#FFCDD2', '#EF9A9A'] : s.side === 'allied' ? ['#B9F6CA', '#00E676'] : ['#E0F7FA', '#80DEEA'];
+      try {
+        drawShipIcon({ ctx: rctx, width: raw.width, height: raw.height, time: 0.4, era: s.era ?? 'era1' }, s, hull, detail);
+        icon = cropToContent(raw);
+      } catch {
+        icon = null;
+      }
+    }
+    SHIP_OBJECT_CACHE.set(cacheKey, icon);
+  }
+  drawBlueprintBackdrop(ctx, width, height, 'ship', false);
+  if (icon) drawFittedIcon(ctx, width, height, icon, 0.94, 0.8);
 }
 
 /**

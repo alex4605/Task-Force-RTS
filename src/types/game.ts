@@ -61,7 +61,6 @@ export type GroundUnitType =
   | 'usmc_rifle_45'      // 時代二 1945 USMC 陸戰隊步槍排 (M1加蘭德 / 巴祖卡 / 火焰噴射器)
   | 'usmc_korea_rifle'   // 時代三 1950-53 USMC 陸戰第1師突擊排 (M1加蘭德 / M20超級巴祖卡)
   | 'us_army_infantry_korea' // 時代三 美國陸軍前線突擊步兵排 (M14/無後座力砲)
-  | 'us_army_armor_korea'    // 時代三 美國陸軍前線裝甲排 (M46巴頓/M4A3E8薛曼)
   | 'usmc_air_assault_65' // 時代四 1965 USMC 陸戰隊空中突擊排 (M16A1 / M60 / M79 / 垂直機動空降)
   | 'us_army_rifle_platoon_65' // 時代四 美陸軍常規步槍排 (M16A1 / M60 / M79)
   | 'us_army_m113_mech'        // 時代四 M113 裝甲運兵機械化步兵排
@@ -212,6 +211,13 @@ export type GroundUnitType =
   | 'us_cav_air_assault_65'   // 時代四 第1騎兵師(空中機動) 空中突擊排
   | 'us_m1a1_pack_75'         // 時代二/三 M1A1 75mm 空降山砲排 (傘降綑包)
   | 'us_m102_105'             // 時代四/五 M102 105mm 空降輕型榴彈砲排
+  | 'usmc_mortar_81_42'       // 時代一/二 M1 81mm 迫擊砲排 (陸戰隊營屬武器連)
+  | 'us_mortar_42in_45'       // 時代二 M2 4.2吋 化學迫擊砲連 (陸軍化學迫擊砲營 · 沖繩)
+  | 'usmc_mortar_42in_50'     // 時代三 M2 4.2吋 重迫擊砲連 (團屬)
+  | 'usmc_mortar_81_65'       // 時代四 M29 81mm 迫擊砲排
+  | 'us_m106_65'              // 時代四 M106 4.2吋 自走迫擊砲 (M113 底盤)
+  | 'usmc_mortar_m252_83'     // 時代五 M252 81mm 迫擊砲排
+  | 'us_m106a2_83'            // 時代五 M106A2 107mm 自走迫擊砲
   | 'uk_milan_team'         // 時代五 英國萊茵軍團 MILAN 反戰車飛彈組
   // OPFOR 歷史各時代守軍
   | 'opfor_infantry_42'  // 時代一 日軍海軍特別陸戰隊步槍排 (SNLF)
@@ -226,6 +232,15 @@ export type GroundUnitType =
   | 'opfor_zsu23_shilka'  // 時代四 ZSU-23-4 石勒喀河 4聯裝雷達導引防空自走砲
   | 'opfor_zu23_aa'       // 時代四 ZU-23-2 雙管防空砲陣地
   | 'opfor_mortar_platoon' // 迫擊砲排
+  | 'opfor_ija_knee_mortar_42' // 時代一/二 八九式重擲彈筒班 (膝射迫擊砲)
+  | 'opfor_ija_mortar_320_45'  // 時代二 九八式臼砲 320mm (硫磺島 · 沖繩)
+  | 'opfor_kpa_mortar_120_50'  // 時代三 朝鮮人民軍 PM-38 120mm 迫擊砲連
+  | 'opfor_pva_mortar_82_50'   // 時代三 中國人民志願軍 82mm 迫擊砲排
+  | 'opfor_vc_mortar_60_65'    // 時代四 越共 60mm 迫擊砲組
+  | 'opfor_pavn_mortar_82_65'  // 時代四 越南人民軍 82mm 迫擊砲排
+  | 'opfor_pavn_mortar_120_65' // 時代四 越南人民軍 120mm 重迫擊砲連
+  | 'opfor_2b14_mortar_83'     // 時代五 蘇軍 2B14 托盤 82mm 迫擊砲排
+  | 'opfor_2s9_nona_83'        // 時代五 蘇軍空降兵 2S9 Nona-S 120mm 自走迫擊砲
   | 'opfor_infantry_ambush' // 隱蔽坑道突擊衝鋒部隊
   | 'opfor_type95_tank'    // 敵軍九五式輕戰車小隊
   | 'opfor_type97_tank'    // 敵軍九七式改中戰車中隊
@@ -387,9 +402,27 @@ export interface GunRoe {
   ground: boolean;
 }
 
+/** Plan-view layout of a small combatant: hull form, deckhouse, torpedo tubes, missile canisters. */
+export interface SmallCraftPlan {
+  hull: 'planing' | 'displacement' | 'hydrofoil' | 'wooden';
+  /** Deckhouse: centre x and length as fractions of the boat's length. */
+  house: [number, number];
+  tubes?: number;
+  canisters?: number;
+  /** Depth-charge racks or mine-sweeping gear at the stern. */
+  stern?: 'racks' | 'sweep';
+  deck?: string;
+}
+
 export interface Ship {
   id: string;
   name: string;
+  /** Lifeguard station: an area this ship patrols, picking up every airman or survivor in the water there. */
+  sarZone?: { x0: number; y0: number; x1: number; y1: number };
+  /** The raft the ship is steaming for on its lifeguard station. */
+  sarTargetId?: string;
+  /** Small-craft plan for boats drawn by the generic small-craft drawer (PT boats, gunboats, hydrofoils...). */
+  craft?: SmallCraftPlan;
   codeName?: string;
   type: ShipType;
   side: ShipSide;
@@ -1951,8 +1984,18 @@ export interface Installation {
   cratered?: { progress: number };
   /** Destroyed outright by a nuclear burst (only rebuilding by engineers brings it back). */
   nuclearDestroyed?: boolean;
-  /** Rebuild progress of a nuclear-destroyed airfield, 0..1. */
+  /** Rebuild progress of a destroyed installation (engineers on site), 0..1. */
   rebuildProgress?: number;
+  /** Settlements: built fabric (BLD) and its maximum, and how full of people the place is (POP, 0..1). */
+  bld?: number;
+  maxBld?: number;
+  pop?: number;
+  /** Seconds since the last fighting or explosion in or near the settlement. */
+  quietFor?: number;
+  /** Refugee band last reported: 0 = full, 1 = half gone, 2 = nearly empty. */
+  popBand?: number;
+  /** Engineers are repairing this damaged installation (for the start / finish reports). */
+  underRepair?: boolean;
   /** A FARP: an airfield for helicopters and V/STOL jets only. */
   rotaryOnly?: boolean;
   /** Built on what was a civilian site (airport, station): drawn as such. */

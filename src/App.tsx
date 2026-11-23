@@ -28,6 +28,7 @@ import {
   Sonobuoy,
 } from './types/game';
 import { getRequisitionCatalog } from './game/requisition';
+import { airfieldIntegrity, airfieldStatusLine } from './game/airfieldOps';
 import { soundEngine } from './game/audio';
 
 export default function App() {
@@ -101,7 +102,13 @@ export default function App() {
   };
 
   const handleConfirmCapTarget = (worldPos: Vector2D, box?: { x0: number; y0: number; x1: number; y1: number }) => {
-    engine.issueCapPatrolOrder(worldPos, engine.selectedUnitIds, box);
+    // Ships take the box as a lifeguard station; aircraft as a CAP area (a ships-only selection does not
+    // send every airborne fighter there)
+    const ids = engine.selectedUnitIds;
+    const tookSar = engine.issueShipSarOrder(worldPos, ids, box);
+    const planesSelected = engine.aircraft.some((a) => ids.includes(a.id) && a.side === 'player');
+    if (planesSelected || !tookSar) engine.issueCapPatrolOrder(worldPos, ids, box);
+    setPlayerShips([...engine.playerShips]);
     setAircraft([...engine.aircraft]);
     setCombatLogs([...engine.combatLogs]);
     setIsDesignatingCap(false);
@@ -505,6 +512,9 @@ export default function App() {
           isHQ: a.id === engine.hqAirfieldId,
           rotaryOnly: !!a.rotaryOnly,
           planes: engine.getAirfieldPool(a.id),
+          repair: a.cratered?.progress,
+          integrity: airfieldIntegrity(a),
+          status: airfieldStatusLine(a),
         }))}
         onTransferPlanes={(model, count, fromId, toId) => {
           engine.transferAircraft(model, count, fromId, toId);

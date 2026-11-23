@@ -42,6 +42,15 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   opfor_infantry_42: 0.46, // Type 38 Arisaka
   opfor_infantry_45: 0.5, // Type 99 + Type 96 LMG
   opfor_mortar_platoon: 2.8, // Type 97 81mm mortar
+  opfor_ija_knee_mortar_42: 0.7, // Type 89 grenade discharger
+  opfor_ija_mortar_320_45: 1.2, // Type 98 320mm spigot mortar
+  opfor_kpa_mortar_120_50: 5.7, // PM-38 120mm
+  opfor_pva_mortar_82_50: 3.0, // 82mm BM-37 / Type 53
+  opfor_vc_mortar_60_65: 1.5, // 60mm Type 31 / M2
+  opfor_pavn_mortar_82_65: 3.0, // 82mm Type 53
+  opfor_pavn_mortar_120_65: 5.7, // 120mm PM-43 / Type 55
+  opfor_2b14_mortar_83: 4.0, // 2B14 Podnos 82mm
+  opfor_2s9_nona_83: 7.1, // 2A51 120mm, mortar bombs
   opfor_infantry_ambush: 0.3,
   opfor_type95_tank: 1.0, // Type 98 37mm
   opfor_type97_tank: 1.2, // Type 1 47mm
@@ -49,7 +58,6 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   // Korean War
   usmc_korea_rifle: 0.46,
   us_army_infantry_korea: 0.5,
-  us_army_armor_korea: 1.8, // M4A3E8 76mm / M46 90mm
   usmc_lvtp5: 1.0,
   usmc_patton_m46: 2.0, // M3A1 90mm
   usmc_howitzer_155: 14.6, // M114 155mm
@@ -230,6 +238,13 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   us_cav_air_assault_65: 0.5, // M16 / M60 / M79
   us_m1a1_pack_75: 8.8, // M1A1 75mm pack howitzer
   us_m102_105: 11.5, // M102 105mm
+  usmc_mortar_81_42: 3.0, // M1 81mm (light HE)
+  us_mortar_42in_45: 4.0, // M2 4.2-inch
+  usmc_mortar_42in_50: 4.0, // M2 4.2-inch
+  usmc_mortar_81_65: 3.6, // M29A1 81mm
+  us_m106_65: 5.6, // M30 4.2-inch on M106
+  usmc_mortar_m252_83: 5.6, // M252 81mm
+  us_m106a2_83: 6.8, // M30 107mm with M329A2
   uk_milan_team: 1.95, // MILAN
 };
 

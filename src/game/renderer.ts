@@ -172,6 +172,10 @@ export class VectorRenderer {
     overlaysRender.drawCapBoxes(this.rc, aircraft, selectedIds, camera);
   }
 
+  public drawSarZones(ships: Ship[], selectedIds: string[], camera: Camera) {
+    overlaysRender.drawSarZones(this.rc, ships, selectedIds, camera);
+  }
+
   // Render Active Air-Dropped Passive Sonobuoys & Acoustic Ping Sweeps
   public drawSonobuoys(sonobuoys: Sonobuoy[], camera: Camera) {
     effectsRender.drawSonobuoys(this.rc, sonobuoys, camera);

@@ -1,6 +1,6 @@
 import { addEnemyPowCamp } from './pow';
 import { applyHistoricalAswFit } from './asw';
-import { addIslandSettlements, naturalizeCoast, naturalizeIslands } from './coastline';
+import { addIslandSettlements, addMainlandVillages, naturalizeCoast, naturalizeIslands } from './coastline';
 import { applyMainlandTemplate } from './terrain/theaters';
 import { OUTER_ISLANDS, STAGING_BASE, applyEraEquipment, applyEraPlaceNames } from './placeNames';
 import {
@@ -5116,6 +5116,7 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
   // Natural coastlines (atolls did theirs before their reef passes were cut) and island villages
   naturalizeIslands(islands, seedBase, (isl) => isl.id.startsWith('atoll-'), worldSize);
   addIslandSettlements(islands, era, seedBase * 31 + 7);
+  addMainlandVillages(islands, era, seedBase * 53 + 11);
   addEnemyPowCamp(islands, era);
 
   // 初始友軍地面部隊
@@ -7353,7 +7354,7 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
       {
-        ...createGroundUnit('us-army-front-tank-1', 'us_army_armor_korea', '美陸軍第70戰車營 M46 巴頓戰車第1排', 'player', 'era3', { x: 6800, y: 7400 }),
+        ...createGroundUnit('us-army-front-tank-1', 'us_m26_pershing', '美陸軍第70戰車營 M26 潘興戰車第1排', 'player', 'era3', { x: 6800, y: 7400 }),
         isNPCAlliedFrontline: true,
         order: { type: 'move', targetPos: { x: 11200, y: 3400 } },
       },
@@ -7370,7 +7371,9 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
       createGroundUnit('opfor-cont-inf-2', 'opfor_coldwar_infantry', '朝鮮人民軍第4步兵師 突擊第2排', 'enemy', 'era3', { x: 8800, y: 5000 }),
       createGroundUnit('opfor-cont-tank-1', 'opfor_t34_85', '朝鮮人民軍第105戰車師 T-34/85 戰車排', 'enemy', 'era3', { x: 9100, y: 4700 }),
       createGroundUnit('opfor-cont-su100-1', 'opfor_su100', '朝鮮人民軍 SU-100 自走砲連', 'enemy', 'era3', { x: 9300, y: 4650 }),
-      createGroundUnit('opfor-cont-flak-1', 'opfor_s60_flak', '第24高射砲團 S-60 57mm 高射砲連', 'enemy', 'era3', { x: 9400, y: 4500 })
+      createGroundUnit('opfor-cont-flak-1', 'opfor_s60_flak', '第24高射砲團 S-60 57mm 高射砲連', 'enemy', 'era3', { x: 9400, y: 4500 }),
+      createGroundUnit('opfor-cont-mortar-1', 'opfor_kpa_mortar_120_50', '朝鮮人民軍第4步兵師 PM-38 120mm 迫擊砲連', 'enemy', 'era3', { x: 8950, y: 4900 }),
+      createGroundUnit('opfor-cont-mortar-2', 'opfor_pva_mortar_82_50', '志願軍第42軍 82mm 迫擊砲排', 'enemy', 'era3', { x: 8450, y: 5450 })
     );
   } else if (era === 'era4') {
     // 時代四 (1965-1973):
@@ -7428,7 +7431,9 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
       createGroundUnit('opfor-cont-tank-1', 'opfor_t54_tank', '越南人民軍第203裝甲團 T-54 戰車排', 'enemy', 'era4', { x: 9100, y: 4700 }),
       createGroundUnit('opfor-cont-pt76-1', 'opfor_pt76_amphib', '越南人民軍第198裝甲營 PT-76 水陸戰車排', 'enemy', 'era4', { x: 8900, y: 5400 }),
       createGroundUnit('opfor-cont-2s3-1', 'opfor_m46_130mm', '越南人民軍第164砲兵團 M-46 130mm 加農砲連', 'enemy', 'era4', { x: 9350, y: 4800 }),
-      createGroundUnit('opfor-cont-mortar-1', 'opfor_mortar_platoon', '越南人民軍 120mm 重迫擊砲連', 'enemy', 'era4', { x: 9300, y: 4900 }),
+      createGroundUnit('opfor-cont-mortar-1', 'opfor_pavn_mortar_120_65', '越南人民軍 120mm 重迫擊砲連', 'enemy', 'era4', { x: 9300, y: 4900 }),
+      createGroundUnit('opfor-cont-mortar-2', 'opfor_pavn_mortar_82_65', '越南人民軍第320師 82mm 迫擊砲排', 'enemy', 'era4', { x: 8700, y: 5300 }),
+      createGroundUnit('opfor-cont-mortar-3', 'opfor_vc_mortar_60_65', '越共地方部隊 60mm 迫擊砲組', 'enemy', 'era4', { x: 8150, y: 6000 }),
       createGroundUnit('opfor-cont-flak-1', 'opfor_zsu23_shilka', '越南人民軍 ZSU-23-4 石勒喀河 防空砲連', 'enemy', 'era4', { x: 9400, y: 4500 }),
       createGroundUnit('opfor-cont-zsu57-1', 'opfor_zsu57_2', '越南人民軍 ZSU-57-2 自走高射砲連', 'enemy', 'era4', { x: 9050, y: 4950 }),
       createGroundUnit('opfor-cont-sa6-1', 'opfor_sa6_kub', '蘇軍顧問團 2K12 立方體 (SA-6) 防空飛彈連', 'enemy', 'era4', { x: 9700, y: 4300 }),
@@ -7498,6 +7503,8 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
       createGroundUnit('opfor-cont-t72-1', 'opfor_t72b', '蘇軍第39近衛摩托化步兵師 T-72B 戰車排', 'enemy', 'era5', { x: 8800, y: 5000 }),
       createGroundUnit('opfor-cont-bmp2-1', 'opfor_bmp2', '蘇軍近衛摩托化步兵 BMP-2 步兵戰車排', 'enemy', 'era5', { x: 8300, y: 5800 }),
       createGroundUnit('opfor-cont-inf-1', 'opfor_motor_rifle_83', '蘇軍 摩托化步兵排', 'enemy', 'era5', { x: 7900, y: 6300 }),
+      createGroundUnit('opfor-cont-mortar-1', 'opfor_2b14_mortar_83', '蘇軍第39近衛摩步師 2B14 托盤 82mm 迫擊砲排', 'enemy', 'era5', { x: 8100, y: 6050 }),
+      createGroundUnit('opfor-cont-nona-1', 'opfor_2s9_nona_83', '蘇軍第103近衛空降師 2S9 Nona-S 自走迫擊砲排', 'enemy', 'era5', { x: 8700, y: 5450 }),
       createGroundUnit('opfor-cont-2s19-1', 'opfor_2s19', '蘇軍近衛砲兵師 2S19 姆斯塔-S 152mm 自走砲連', 'enemy', 'era5', { x: 9200, y: 4650 }),
       createGroundUnit('opfor-cont-2s1-1', 'opfor_2s1', '蘇軍 2S1 石竹 122mm 自走砲連', 'enemy', 'era5', { x: 9100, y: 4700 }),
       createGroundUnit('opfor-cont-bm21-1', 'opfor_bm21_grad', '蘇軍第39近衛摩托化步兵師 BM-21 冰雹火箭砲營', 'enemy', 'era5', { x: 9250, y: 4550 }),
@@ -7676,6 +7683,20 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
         )
       );
 
+      // Each garrison also has its own mortars, the era's commonest kinds
+      const r = Math.random();
+      const pitPick: [GroundUnitType, string] =
+        era === 'era5'
+          ? r < 0.3 ? ['opfor_2s9_nona_83', '蘇軍近衛空降師 2S9 Nona-S 120mm 自走迫擊砲排'] : ['opfor_2b14_mortar_83', '蘇軍摩步營 2B14 托盤 82mm 迫擊砲排']
+          : era === 'era4'
+          ? r < 0.35 ? ['opfor_vc_mortar_60_65', '越共 60mm 迫擊砲組'] : r < 0.75 ? ['opfor_pavn_mortar_82_65', '越南人民軍 82mm 迫擊砲排'] : ['opfor_pavn_mortar_120_65', '越南人民軍 120mm 重迫擊砲連']
+          : era === 'era3'
+          ? r < 0.55 ? ['opfor_pva_mortar_82_50', '志願軍 82mm 迫擊砲排'] : ['opfor_kpa_mortar_120_50', '朝鮮人民軍 PM-38 120mm 迫擊砲連']
+          : era === 'era2' && r < 0.2
+          ? ['opfor_ija_mortar_320_45', '九八式臼砲 320mm 臼砲隊']
+          : ['opfor_ija_knee_mortar_42', '八九式重擲彈筒班'];
+      groundUnits.push(createGroundUnit(`opfor-pit-mortar-${i}`, pitPick[0], `${islShortName} · ${pitPick[1]}`, 'enemy', era, { x: center.x - 55, y: center.y + 35 }));
+
       if (era === 'era5' || era === 'era4' || era === 'era3' || era === 'era2' || i <= 2) {
         const artType: GroundUnitType =
           era === 'era5'
@@ -7731,6 +7752,11 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
 
 /** The player's historical task force for each era. */
 function addPlayerTaskForce(era: Era, cvPos: Vector2D, initialHeading: number, playerShips: Ship[]): void {
+  addPlayerTaskForceMain(era, cvPos, initialHeading, playerShips);
+  playerShips.push(...classicCraftFor(era, 'player', cvPos));
+}
+
+function addPlayerTaskForceMain(era: Era, cvPos: Vector2D, initialHeading: number, playerShips: Ship[]): void {
   if (era === 'era1') {
     addPlayerFleetEra1(cvPos, initialHeading, playerShips);
   } else if (era === 'era2') {
@@ -8622,6 +8648,11 @@ function addPlayerFleetEra3(cvPos: Vector2D, initialHeading: number, playerShips
 // Heading 225° (South-West)
 /** The historical OPFOR task force for each era. */
 function addEnemyTaskForce(era: Era, enemyShips: Ship[], enemyCenter: Vector2D, enemyHeading: number): void {
+  addEnemyTaskForceMain(era, enemyShips, enemyCenter, enemyHeading);
+  enemyShips.push(...classicCraftFor(era, 'enemy', enemyCenter));
+}
+
+function addEnemyTaskForceMain(era: Era, enemyShips: Ship[], enemyCenter: Vector2D, enemyHeading: number): void {
   if (era === 'era1') {
     addEnemyFleetEra1(enemyShips, enemyCenter, enemyHeading);
   } else if (era === 'era2') {
@@ -9730,3 +9761,187 @@ export function isPointOnIslandLand(point: Vector2D, island: Island): boolean {
   return true;
 }
 
+
+/** The era's own task force and the enemy's main fleet, as the encyclopedia shows them (positions are dummies). */
+export function codexFleetShips(era: Era): { player: Ship[]; enemy: Ship[] } {
+  const player: Ship[] = [];
+  const enemy: Ship[] = [];
+  addPlayerTaskForce(era, { x: 0, y: 0 }, 0, player);
+  addEnemyTaskForce(era, enemy, { x: 0, y: 0 }, 0);
+  // Ships that join later: surface action groups, wolfpacks and river craft (names as the engine gives them)
+  const o = { x: 0, y: 0 };
+  if (era === 'era1') {
+    enemy.push(
+      createSendaiCL('cx-sendai', 'IJN Sendai 川內號', o),
+      createTokyoExpressDD('cx-murasame', 'IJN Murasame 村雨號', o),
+      createIjnIBoatSS('cx-i26', 'IJN 伊-26', o, era),
+      createMonsunUBoatSS('cx-u178', 'U-178 (季風群)', o, era)
+    );
+  } else if (era === 'era2') {
+    enemy.push(createAkizukiDD('cx-fuyutsuki', 'IJN Fuyutsuki 冬月號', o, era), createIjnIBoatSS('cx-i58', 'IJN 伊-58', o, era), createMonsunUBoatSS('cx-u195', 'U-195 (季風群)', o, era));
+  } else if (era === 'era3') {
+    enemy.push(
+      createSverdlovCL('cx-sverdlov', 'Sverdlov 斯維爾德洛夫號', o),
+      createKotlinDD('cx-smotr', 'Smotryashchy 警戒號', o),
+      createSovietWhiskeySS('cx-zulu', '祖魯級潛艦 B-62', o, 'zulu'),
+      createRiverGunboat('cx-junk-kp', '朝鮮人民軍 武裝機帆船 江-21', o, era)
+    );
+  } else if (era === 'era4') {
+    enemy.push(createKyndaCG('cx-grozny', 'Grozny 威嚴號', o), createPetyaFFG('cx-petya', '佩佳級護衛艦 SKR-1', o), createRiverGunboat('cx-junk-vn', '越南人民海軍 武裝機帆船 T-11', o, era));
+  } else if (era === 'era5') {
+    enemy.push(
+      createKashinDDG('cx-warszawa', 'ORP Warszawa 華沙號', o),
+      createRigaFFG('cx-thalmann', 'Ernst Thälmann 台爾曼號', o),
+      createSovietVictor3SSN('cx-victor', '勝利III級潛艦 K-255', o, 'victor3'),
+      createSovietVictor3SSN('cx-akula', '阿庫拉級潛艦 K-284', o, 'akula'),
+      createKiloSS('cx-kilo', '基洛級潛艦 B-400', o),
+      createRiverGunboat('cx-shmel', '熊蜂級河川砲艇 BK-12', o, era)
+    );
+  }
+  return { player, enemy };
+}
+
+// ── Classic small combatants ──────────────────────────────────────────────
+
+type CraftSpec = {
+  type: Ship['type'];
+  side: Ship['side'];
+  codeName: string;
+  length: number;
+  width: number;
+  health: number;
+  speed: number;
+  maxSpeed: number;
+  armor: number;
+  craft: Ship['craft'];
+  guns: [number, number, string, number, number, number, number][];
+  arms: { name: string; count: string; type: 'main' | 'secondary' | 'aa' | 'torpedo' | 'asw'; desc?: string }[];
+  torpedoes?: number;
+  harpoon?: boolean;
+  depthCharges?: boolean;
+  flakRange?: number;
+};
+
+/**
+ * The small ships that did much of the fighting and are easy to forget: PT boats in Iron Bottom
+ * Sound and Surigao Strait, the minesweepers that cleared Wonsan, the Asheville gunboats and Swift
+ * boats off Vietnam, the Pegasus hydrofoil, and on the other side the Shinyo suicide boats of the
+ * Keramas and North Vietnam's Shanghai-class gunboats.
+ */
+const CLASSIC_CRAFT: Record<string, CraftSpec> = {
+  elco_pt: {
+    type: 'patrol_boat', side: 'player', codeName: 'Elco 80-ft PT', length: 24, width: 6, health: 320, speed: 20, maxSpeed: 41, armor: 0.05,
+    craft: { hull: 'planing', house: [0.08, 0.18], tubes: 4, deck: '#1B2A20' },
+    guns: [[3, -1.6, '.50 cal Twin M2 (左機槍塔)', 900, 0.4, 2, 30], [3, 1.6, '.50 cal Twin M2 (右機槍塔)', 900, 0.4, 2, 30], [-9, 0, '20mm Oerlikon', 1000, 0.6, 1, 40]],
+    arms: [{ name: 'Mk 8 21 吋魚雷', count: '4 枚', type: 'torpedo', desc: '老式 Mk 8 魚雷，常因深度與引信問題失效' }, { name: '.50 雙聯裝機槍塔', count: '2 座', type: 'aa' }, { name: '20mm 厄利空機砲', count: '1 門', type: 'aa' }],
+    torpedoes: 14, flakRange: 600,
+  },
+  am_admirable: {
+    type: 'patrol_boat', side: 'player', codeName: 'Admirable-class AM', length: 56, width: 10, health: 900, speed: 10, maxSpeed: 15, armor: 0.12,
+    craft: { hull: 'displacement', house: [0.12, 0.26], stern: 'sweep' },
+    guns: [[18, 0, '3-inch/50 Mk 22', 1500, 3, 1, 110], [-6, 0, '40mm Bofors Twin', 1300, 1.4, 2, 50]],
+    arms: [{ name: '3 吋 50 倍徑艦砲', count: '1 門', type: 'main' }, { name: '40mm 波佛斯', count: '2 門', type: 'aa' }, { name: '掃雷具 / 深水炸彈', count: '一套', type: 'asw' }],
+    depthCharges: true, flakRange: 1100,
+  },
+  pg_asheville: {
+    type: 'patrol_boat', side: 'player', codeName: 'Asheville-class PG', length: 50, width: 7, health: 900, speed: 18, maxSpeed: 40, armor: 0.1,
+    craft: { hull: 'planing', house: [0.06, 0.24] },
+    guns: [[14, 0, '3-inch/50 Mk 34', 1500, 2.2, 1, 120], [-14, 0, '40mm Bofors', 1300, 1.2, 1, 50], [-4, -2, '.50 cal M2', 900, 0.4, 1, 20]],
+    arms: [{ name: '3 吋 50 倍徑速射砲', count: '1 門', type: 'main' }, { name: '40mm 波佛斯', count: '1 門', type: 'aa' }, { name: '.50 機槍', count: '4 挺', type: 'aa' }],
+    flakRange: 1000,
+  },
+  pcf_swift: {
+    type: 'patrol_boat', side: 'player', codeName: 'Swift Boat PCF', length: 16, width: 5, health: 260, speed: 14, maxSpeed: 28, armor: 0.06,
+    craft: { hull: 'planing', house: [0.08, 0.3] },
+    guns: [[4, 0, '.50 cal Twin M2 (艦橋頂)', 900, 0.4, 2, 30], [-6, 0, '81mm Mortar / .50 Combo', 1200, 2.5, 1, 90]],
+    arms: [{ name: '.50 雙聯裝機槍', count: '1 座', type: 'main' }, { name: '81mm 迫擊砲 / .50 機槍組合', count: '1 座', type: 'secondary' }],
+    flakRange: 600,
+  },
+  phm_pegasus: {
+    type: 'patrol_boat', side: 'player', codeName: 'Pegasus-class PHM', length: 40, width: 8.6, health: 700, speed: 24, maxSpeed: 48, armor: 0.08,
+    craft: { hull: 'hydrofoil', house: [0.08, 0.26], canisters: 8 },
+    guns: [[11, 0, '76mm OTO Melara Mk 75', 1700, 1.0, 1, 110]],
+    arms: [{ name: 'RGM-84 魚叉反艦飛彈', count: '8 枚', type: 'main' }, { name: '76mm 奧托快砲', count: '1 門', type: 'secondary' }],
+    harpoon: true, flakRange: 1200,
+  },
+  shinyo: {
+    type: 'patrol_boat', side: 'enemy', codeName: 'Shinyo', length: 6, width: 2, health: 90, speed: 16, maxSpeed: 23, armor: 0.02,
+    craft: { hull: 'wooden', house: [-0.25, 0.2] },
+    guns: [],
+    arms: [{ name: '艇艏 250kg 炸藥 (自殺衝撞)', count: '1', type: 'torpedo', desc: '夜間成群衝撞運輸船與登陸艦' }],
+    torpedoes: 999, flakRange: 0,
+  },
+  shanghai: {
+    type: 'patrol_boat', side: 'enemy', codeName: 'Shanghai-class', length: 39, width: 5.4, health: 600, speed: 18, maxSpeed: 30, armor: 0.08,
+    craft: { hull: 'displacement', house: [0.04, 0.24], stern: 'racks' },
+    guns: [[12, 0, '37mm Twin 61-K', 1200, 0.8, 2, 45], [-12, 0, '25mm Twin 2M-3', 1000, 0.5, 2, 30]],
+    arms: [{ name: '37mm 雙聯裝砲', count: '2 座', type: 'main' }, { name: '25mm 雙聯裝砲', count: '2 座', type: 'aa' }, { name: '深水炸彈', count: '8 枚', type: 'asw' }],
+    depthCharges: true, flakRange: 900,
+  },
+};
+
+export function createClassicCraft(key: keyof typeof CLASSIC_CRAFT, id: string, name: string, pos: Vector2D, era: Era): Ship {
+  const c = CLASSIC_CRAFT[key];
+  const heading = c.side === 'enemy' ? (Math.PI * 3) / 4 : -Math.PI / 4;
+  return createShip({
+    id,
+    name,
+    codeName: c.codeName,
+    type: c.type,
+    side: c.side,
+    era,
+    pos: { ...pos },
+    heading,
+    speed: c.speed,
+    maxSpeed: c.maxSpeed,
+    length: c.length,
+    width: c.width,
+    health: c.health,
+    maxHealth: c.health,
+    armor: c.armor,
+    detectionRange: 2000,
+    craft: c.craft,
+    hasTorpedoes: c.torpedoes !== undefined,
+    torpedoCooldown: 0,
+    torpedoReloadTime: c.torpedoes,
+    hasHarpoon: c.harpoon,
+    ashmType: c.harpoon ? 'harpoon' : undefined,
+    hasDepthCharges: c.depthCharges,
+    depthChargeCooldown: 0,
+    turrets: c.guns.map(([x, y, cal, range, reload, barrels, dmg]) => createTurret(x, y, cal, range, reload, barrels, heading, dmg)),
+    detailedArmaments: c.arms,
+    flakCooldown: 0,
+    flakRange: c.flakRange ?? 600,
+  });
+}
+
+/** The era's classic small combatants for one side, placed round a point. */
+function classicCraftFor(era: Era, side: 'player' | 'enemy', at: Vector2D): Ship[] {
+  const p = (dx: number, dy: number) => ({ x: at.x + dx, y: at.y + dy });
+  if (side === 'player') {
+    if (era === 'era1')
+      return [createClassicCraft('elco_pt', 'player-pt-109', 'PT-109', p(-520, 120), era), createClassicCraft('elco_pt', 'player-pt-59', 'PT-59', p(-560, 170), era)];
+    if (era === 'era2')
+      return [createClassicCraft('elco_pt', 'player-pt-137', 'PT-137', p(-520, 120), era), createClassicCraft('elco_pt', 'player-pt-493', 'PT-493', p(-560, 170), era)];
+    if (era === 'era3') return [createClassicCraft('am_admirable', 'player-am-275', 'USS Pirate (AM-275)', p(-480, 200), era)];
+    if (era === 'era4')
+      return [createClassicCraft('pg_asheville', 'player-pg-84', 'USS Asheville (PG-84)', p(-520, 160), era), createClassicCraft('pcf_swift', 'player-pcf-94', 'PCF-94 (Swift Boat)', p(-560, 220), era)];
+    return [createClassicCraft('phm_pegasus', 'player-phm-1', 'USS Pegasus (PHM-1)', p(-520, 160), era)];
+  }
+  if (era === 'era2')
+    return [0, 1, 2].map((k) => createClassicCraft('shinyo', `enemy-shinyo-${k}`, `震洋 第3海上挺進戰隊 #${k + 1}`, p(-380 - k * 40, 260 + k * 30), era));
+  if (era === 'era4')
+    return [createClassicCraft('shanghai', 'enemy-shanghai-1', '上海級砲艇 T-121', p(-300, 300), era), createClassicCraft('shanghai', 'enemy-shanghai-2', '上海級砲艇 T-122', p(-340, 340), era)];
+  if (era === 'era5') {
+    const g = createPetyaFFG('enemy-grisha-1', '格里沙級護衛艦 MPK-105', p(-300, 300));
+    g.codeName = 'Project 1124 Grisha';
+    g.detailedArmaments = [
+      { name: 'SA-N-4 黃蜂防空飛彈', count: '20 枚', type: 'aa' },
+      { name: '57mm AK-725 雙聯裝砲', count: '1 座', type: 'main' },
+      { name: 'RBU-6000 反潛火箭', count: '2 具', type: 'asw' },
+      { name: '533mm 魚雷管', count: '4 具', type: 'torpedo' },
+    ];
+    return [g];
+  }
+  return [];
+}

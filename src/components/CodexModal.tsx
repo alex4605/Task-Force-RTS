@@ -5,6 +5,8 @@ import { CodexEntry, CodexKind, CodexSide, ERA_LABEL, SIDE_LABEL, codexEntries }
 import { UnitPreviewCanvas } from './hud/UnitPreviewCanvas';
 import { drawInstallation } from '../game/render/installations/index';
 import { makeInstallation } from '../game/procedural';
+import { drawShipObjectPreview } from '../game/unitPreviewRenderer';
+import { Ship } from '../types/game';
 
 interface CodexModalProps {
   isOpen: boolean;
@@ -57,7 +59,26 @@ const SitePreview: React.FC<{ type: string; name: string; era: Era; width: numbe
 });
 SitePreview.displayName = 'SitePreview';
 
+/** A particular ship of the era's fleets, drawn with its own map artwork. */
+const ShipPreview: React.FC<{ ship: Ship; cacheKey: string; width: number; height: number }> = React.memo(({ ship, cacheKey, width, height }) => {
+  const ref = useRef<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    const cv = ref.current;
+    if (!cv) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.round(width * dpr);
+    cv.height = Math.round(height * dpr);
+    const ctx = cv.getContext('2d');
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+    drawShipObjectPreview(ctx, width, height, ship, cacheKey);
+  }, [ship, cacheKey, width, height]);
+  return <canvas ref={ref} style={{ width, height }} className="block shrink-0 rounded border border-[#1E3A5F]/90" aria-hidden="true" />;
+});
+ShipPreview.displayName = 'ShipPreview';
+
 const Preview: React.FC<{ e: CodexEntry; era: Era; w: number; h: number }> = ({ e, era, w, h }) => {
+  if (e.ship) return <ShipPreview ship={e.ship} cacheKey={e.key} width={w} height={h} />;
   if (e.kind === 'site') return <SitePreview type={e.key} name={e.title} era={e.eras[0] ?? era} width={w} height={h} />;
   return <UnitPreviewCanvas kind={e.kind} unitKey={e.key} width={w} height={h} era={e.eras[0] ?? era} />;
 };
@@ -186,7 +207,7 @@ export const CodexModal: React.FC<CodexModalProps> = ({ isOpen, onClose, era }) 
                         </span>
                       ))}
                     </div>
-                    <div className="text-[10px] text-slate-500">代號 {current.key}</div>
+                    {!current.ship && <div className="text-[10px] text-slate-500">代號 {current.key}</div>}
                   </div>
                 </div>
                 {current.note && !current.note.endsWith(current.title) && (
