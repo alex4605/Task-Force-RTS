@@ -313,7 +313,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       renderer.drawImpacts(engine.impacts, cameraRef.current);
       renderer.drawParticles(engine.particles, cameraRef.current);
       // Draw Downed Pilot SAR Life Rafts
-      renderer.drawLifeRafts(engine.lifeRafts, cameraRef.current);
+      renderer.drawLifeRafts(engine.lifeRafts.filter((r) => r.side !== 'enemy' || engine.isRaftSpottedByFoe(r)), cameraRef.current);
       // Draw Tactical Nuclear Strike Screen Flash & Mushroom Cloud Detonations
       renderer.drawNuclearEffects(engine.nuclearFlash, engine.nuclearDetonations, cameraRef.current);
       // Draw RTS Command Ripple Markers

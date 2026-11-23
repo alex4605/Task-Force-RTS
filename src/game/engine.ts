@@ -1,4 +1,5 @@
 import { groundWeaponMode, GroundWeaponMode } from './groundWeapons';
+import { rescueCrewOf } from './aircrew';
 import { ImpactEffect, ImpactSurface, impactFor, MAX_IMPACTS } from './impacts';
 import { snapOntoLand } from './coastline';
 import { canCallFrom, isLightGroundUnit, rallyKind, resolveGroundRequisition } from './groundRequisition';
@@ -634,6 +635,17 @@ export class GameEngine {
   }
 
   /** Terrain masking of low fliers from an air-defence site or ship (terrain/combat.ts). */
+  /**
+   * Heavy strategic bombers (B-29 at 9-10,000 m, B-52 higher still) cruise above what gun AA can
+   * reach: only fighters and SAMs touch them, except low down near their own field.
+   */
+  private aboveGunCeiling(plane: Aircraft): boolean {
+    if (plane.model !== 'b29' && plane.model !== 'b52') return false;
+    if (plane.state === 'shot_down' || plane.state === 'landing') return false;
+    const home = this.friendlyBase?.center;
+    return !(plane.side !== 'enemy' && home && dist(plane.pos, home) < 500);
+  }
+
   private aaCanSee(from: Vector2D, plane: Aircraft, mast = 0.04): boolean {
     // Fire control needs the target in the side's air picture and a clear line to it
     return this.isAirTracked(plane) && canSeeAircraft(this.terrain, from, plane, mast);
@@ -894,7 +906,27 @@ export class GameEngine {
   /** Last time each identical log line was written (game seconds), to drop repeats. */
   private recentLogText = new Map<string, number>();
 
+  /** Blow-by-blow chatter that adds nothing the result lines do not already say. */
+  private static readonly LOG_NOISE = /【(FOX ONE|FOX TWO|FOX THREE|高G破轉避彈|誘餌生效|艦對空飛彈發射|敵飛行員失蹤|敵機組員逃竄|[^】]*點火|[^】]*發射艦空飛彈|[^】]*脫靶)/;
+  /** Every report kind folds into one line per kind (and side) when it repeats within 15 s. */
+  private static readonly LOG_ROUTINE = /【([^】\s:：!！0-9]+)/;
+
   public addCombatLog(entry: Omit<CombatLogEntry, 'id' | 'timestamp' | 'timeStr'>) {
+    if (GameEngine.LOG_NOISE.test(entry.text)) return;
+    const routine = entry.text.match(GameEngine.LOG_ROUTINE);
+    if (routine) {
+      // Fold into the last line of the same kind from the same side if it is under 15 s old
+      for (let i = 0; i < Math.min(40, this.combatLogs.length); i++) {
+        const prev = this.combatLogs[i];
+        if (this.gameTime - prev.timestamp > 15) break;
+        if (prev.sourceSide !== entry.sourceSide || !(prev.baseText ?? prev.text).includes(`【${routine[1]}`)) continue;
+        prev.repeat = (prev.repeat ?? 1) + 1;
+        prev.baseText = prev.baseText ?? prev.text;
+        prev.text = `${prev.baseText}（同類 ×${prev.repeat}）`;
+        this.combatLogsVersion++;
+        return;
+      }
+    }
     // The same line from the same source within 3 s is noise (several planes of one flight
     // reporting the same thing on the same tick)
     const key = `${entry.sourceName}|${entry.text}`;
@@ -3426,20 +3458,29 @@ export class GameEngine {
         const thrower = AHEAD_THROWERS[ship.aheadThrower ?? 'hedgehog'];
         // Hedgehog and Squid fire ahead along a fixed axis; Limbo and the Bofors launcher train to the beam
         const cone = ship.aheadThrower === 'limbo' || ship.aheadThrower === 'bofors375' ? 2.6 : 0.8;
-        const targetSub = this.enemyShips.find((e) => {
+        const rel = (e: Ship) => {
+          let r = Math.atan2(e.pos.y - ship.pos.y, e.pos.x - ship.pos.x) - ship.heading;
+          while (r > Math.PI) r -= Math.PI * 2;
+          while (r < -Math.PI) r += Math.PI * 2;
+          return r;
+        };
+        const inReach = (e: Ship) => {
           if (!this.isSubmarine(e) || e.isSunk || !e.isSpotted) return false;
           const d = dist(ship.pos, e.pos);
-          if (d < 100 || d > thrower.maxRange) return false;
-          const ang = Math.atan2(e.pos.y - ship.pos.y, e.pos.x - ship.pos.x);
-          let relAngle = ang - ship.heading;
-          while (relAngle > Math.PI) relAngle -= Math.PI * 2;
-          while (relAngle < -Math.PI) relAngle += Math.PI * 2;
-          return Math.abs(relAngle) <= cone;
-        });
+          return d >= 60 && d <= thrower.maxRange;
+        };
+        const targetSub = this.enemyShips.find((e) => inReach(e) && Math.abs(rel(e)) <= cone);
 
         if (targetSub) {
-          this.fireHedgehogSalvo(ship, targetSub.pos);
+          // Lead the target: where the boat will be when the pattern lands
+          const flight = dist(ship.pos, targetSub.pos) / 160 + 0.3;
+          const aim = { x: targetSub.pos.x + targetSub.vel.x * flight, y: targetSub.pos.y + targetSub.vel.y * flight };
+          this.fireHedgehogSalvo(ship, aim);
           ship.hedgehogCooldown = thrower.reload;
+        } else if (ship.order.type !== 'move') {
+          // A spotted boat in reach but off the bow: come round to bring the thrower to bear
+          const off = this.enemyShips.find((e) => inReach(e));
+          if (off) ship.targetHeading = Math.atan2(off.pos.y - ship.pos.y, off.pos.x - ship.pos.x);
         }
       }
 
@@ -3950,7 +3991,7 @@ export class GameEngine {
 
     if (ship.flakCooldown <= 0 && wcsEfficiency >= 0.12) {
       const hostilePlanes = this.aircraft.filter(
-        (a) => this.isHostile(ship.side, a.side) && a.state !== 'shot_down' && dist(ship.pos, a.pos) < ship.flakRange && this.aaCanSee(ship.pos, a, 0.05)
+        (a) => this.isHostile(ship.side, a.side) && a.state !== 'shot_down' && dist(ship.pos, a.pos) < ship.flakRange && this.aaCanSee(ship.pos, a, 0.05) && !this.aboveGunCeiling(a)
       );
 
       if (hostilePlanes.length > 0) {
@@ -5533,8 +5574,16 @@ export class GameEngine {
     ) {
       // ════ 航空深水炸彈群 (ASW Depth Bomb Attack): 低空震盪獵潛 ════
       plane.altitude = Math.max(0.22, plane.altitude - dt * 0.45);
-      if (d < 220) {
-        this.dropDepthBombs(plane, targetPos);
+      // Release over the boat itself (a stick straddling it), not from a couple of hundred metres off
+      const sub = plane.order.targetId ? this.enemyShips.find((e) => e.id === plane.order.targetId && !e.isSunk) : undefined;
+      // Track the boat while it is held on radar / MAD / sonar, rather than its first-reported position
+      if (sub && sub.isSpotted) {
+        plane.order.targetPos = { ...sub.pos };
+        plane.targetPos = { ...sub.pos };
+      }
+      const aim = sub && sub.isSpotted ? sub.pos : targetPos;
+      if (dist(plane.pos, aim) < 70) {
+        this.dropDepthBombs(plane, sub ? { x: sub.pos.x + sub.vel.x * 0.9, y: sub.pos.y + sub.vel.y * 0.9 } : aim);
         plane.hasPayload = false;
         plane.order = { type: 'rtb' };
         plane.state = 'returning';
@@ -7634,12 +7683,14 @@ export class GameEngine {
     });
   }
 
-  private dropDepthBombs(plane: Aircraft, _targetPos: Vector2D) {
+  private dropDepthBombs(plane: Aircraft, targetPos: Vector2D) {
     soundEngine.playWaterSplash();
     const count = plane.payloadType === 'scout_depth_charge' ? 2 : 4;
+    // A stick laid along the run, centred on the aim point
     for (let i = 0; i < count; i++) {
-      const spreadX = plane.pos.x + Math.cos(plane.heading) * (i * 24);
-      const spreadY = plane.pos.y + Math.sin(plane.heading) * (i * 24);
+      const along = (i - (count - 1) / 2) * 24;
+      const spreadX = targetPos.x + Math.cos(plane.heading) * along;
+      const spreadY = targetPos.y + Math.sin(plane.heading) * along;
       this.projectiles.push({
         id: `air-dc-${Date.now()}-${i}`,
         type: 'depth_charge',
@@ -7992,7 +8043,7 @@ export class GameEngine {
     // 常規高射砲最高有效射高僅 6,000-8,000m，砲彈破片於低空自毀，完全無法傷及 B-29！
     // 僅有噴射截擊機 (MiG-15) 等高空攔截機能造成威脅
     // ══════════════════════════════════════════════════════════
-    if ((plane.model === 'b29' || plane.model === 'b52' || (plane.role === 'level_bomber' && (plane.altitude ?? 0.8) >= 0.88)) && (plane.altitude ?? 0.8) >= 0.88) {
+    if (this.aboveGunCeiling(plane) || (plane.role === 'level_bomber' && (plane.altitude ?? 0.8) >= 0.88)) {
       if (Math.random() < 0.25) {
         this.addCombatLog({
           category: 'aa',
@@ -9512,7 +9563,7 @@ export class GameEngine {
           if (this.era === 'era5' && isPatriotBattery(inst)) continue;
           // 防空高射砲陣地 (雙方皆可自動對敵機射擊)
           const targetPlane = this.aircraft.find(
-            (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= inst.range && this.aaCanSee(inst.pos, a)
+            (a) => this.isHostile(inst.side, a.side) && a.state !== 'shot_down' && dist(inst.pos, a.pos) <= inst.range && this.aaCanSee(inst.pos, a) && !this.aboveGunCeiling(a)
           );
           if (targetPlane && inst.cooldown <= 0) {
             this.fireFlakBurst(inst.pos, targetPlane, inst.side);
@@ -10189,7 +10240,7 @@ export class GameEngine {
           ? 950
           : 1400;
       const targetPlane = this.aircraft.find(
-        (a) => this.isHostile(unit.side, a.side) && a.state !== 'shot_down' && dist(unit.pos, a.pos) <= aaRange && this.aaCanSee(unit.pos, a)
+        (a) => this.isHostile(unit.side, a.side) && a.state !== 'shot_down' && dist(unit.pos, a.pos) <= aaRange && this.aaCanSee(unit.pos, a) && !this.aboveGunCeiling(a)
       );
       if (targetPlane) {
         unit.heading = Math.atan2(targetPlane.pos.y - unit.pos.y, targetPlane.pos.x - unit.pos.x);
@@ -10592,26 +10643,54 @@ export class GameEngine {
           sh.hasTriggeredBanzai = true;
           soundEngine.playKamikazeSiren();
 
-          // Spawn additional fanatic charge squad with banzai mode enabled
-          const banzaiSquad = createGroundUnit(
-            `banzai-${Date.now()}`,
-            'opfor_infantry_ambush',
-            '玉碎突擊死士 (萬歲衝鋒)',
-            'enemy',
-            'era2',
-            { x: sh.cpPos.x + 30, y: sh.cpPos.y + 30 }
-          );
-          banzaiSquad.pos = this.groundSpawnOnLand(banzaiSquad.pos, island);
-          banzaiSquad.isBanzaiCharging = true;
-          banzaiSquad.order = { type: 'move', targetPos: friendlyTroopsNearCP[0].pos };
-          this.groundUnits.push(banzaiSquad);
+          // The garrison's last mass charge (as on Saipan, 7 July 1944): every man who can still
+          // stand, from the cave headquarters and the rear, in two waves
+          const target = friendlyTroopsNearCP[0].pos;
+          const WAVE1: { type: GroundUnitType; name: string }[] = [
+            { type: 'opfor_infantry_ambush', name: '玉碎突擊隊 (萬歲衝鋒)' },
+            { type: 'opfor_infantry_45', name: '殘存守備步兵 (萬歲衝鋒)' },
+            { type: 'opfor_infantry_45', name: '殘存守備步兵 (萬歲衝鋒)' },
+            { type: 'opfor_ija_banzai_45', name: '挺身斬込隊 (刺突爆雷)' },
+            { type: 'opfor_ija_banzai_45', name: '挺身斬込隊 (刺突爆雷)' },
+            { type: 'opfor_infantry_ambush', name: '傷兵與後勤人員 (竹槍 · 手榴彈)' },
+          ];
+          const WAVE2: { type: GroundUnitType; name: string }[] = [
+            { type: 'opfor_infantry_45', name: '第二波 萬歲衝鋒 步兵' },
+            { type: 'opfor_infantry_45', name: '第二波 萬歲衝鋒 步兵' },
+            { type: 'opfor_ija_banzai_45', name: '第二波 挺身斬込隊' },
+            { type: 'opfor_giyutai_45', name: '國民義勇隊 (竹槍)' },
+          ];
+          const charge = (wave: { type: GroundUnitType; name: string }[], tag: string) => {
+            const aim = (friendlyTroopsNearCP.find((u) => !u.isDestroyed) ?? friendlyTroopsNearCP[0]).pos;
+            wave.forEach((w, k) => {
+              const a = (k / wave.length) * Math.PI * 2;
+              const u = createGroundUnit(`banzai-${tag}-${Date.now()}-${k}`, w.type, w.name, 'enemy', 'era2', { x: sh.cpPos.x + Math.cos(a) * 70, y: sh.cpPos.y + Math.sin(a) * 70 });
+              u.pos = this.groundSpawnOnLand(u.pos, island);
+              u.isBanzaiCharging = true;
+              u.order = { type: 'move', targetPos: { ...aim } };
+              this.groundUnits.push(u);
+            });
+          };
+          charge(WAVE1, 'w1');
+          this.scheduleAction(25, () => {
+            if (sh.isCaptured) return;
+            charge(WAVE2, 'w2');
+            this.addCombatLog({
+              category: 'naval',
+              sourceSide: 'enemy',
+              sourceName: '守備司令官與殘存衛隊',
+              targetName: '我方登陸部隊',
+              actionType: 'recon_spotted',
+              text: `⚔️🔥【第二波萬歲衝鋒！】又一波殘存守軍與義勇隊從坑道與後方衝出，持竹槍與手榴彈撲向我軍陣線！`,
+            });
+          });
 
-          // All remaining defenders in stronghold enter Banzai frenzy
+          // All remaining defenders round the stronghold join the charge
           this.groundUnits
-            .filter((u) => u.side === 'enemy' && !u.isDestroyed && dist(u.pos, sh.cpPos) <= 450)
+            .filter((u) => u.side === 'enemy' && !u.isDestroyed && !u.rearPatrol && dist(u.pos, sh.cpPos) <= 800)
             .forEach((u) => {
               u.isBanzaiCharging = true;
-              u.order = { type: 'move', targetPos: friendlyTroopsNearCP[0].pos };
+              u.order = { type: 'move', targetPos: { ...target } };
             });
 
           this.addCombatLog({
@@ -10620,7 +10699,7 @@ export class GameEngine {
             sourceName: '守備司令官與殘存衛隊',
             targetName: '我方登陸部隊',
             actionType: 'recon_spotted',
-            text: `⚔️🔥【萬歲衝鋒！】「天皇陛下萬歲！」敵軍殘存守軍全員上刺刀，發動瘋狂絕望的玉碎萬歲突擊！立即提供火力掩護！`,
+            text: `⚔️🔥【萬歲衝鋒！】「天皇陛下萬歲！」整個守備隊與後方人員一齊上刺刀，發動最後的大規模玉碎突擊（第二波將隨後湧出）！立即集中火力！`,
           });
         }
 
@@ -13340,7 +13419,7 @@ export class GameEngine {
     const idleRescueHelis = this.aircraft.filter(
       (a) =>
         a.side === 'player' &&
-        (a.model === 'sh3f' || a.model === 'ch53' || a.role === 'rescue') &&
+        (Boolean(rescueCrewOf(a.model)) || a.role === 'rescue') &&
         a.state !== 'shot_down' &&
         (a.order.type === 'idle' || a.order.type === 'patrol')
     );
@@ -13413,7 +13492,7 @@ export class GameEngine {
       const reach = u.range || 1500;
       const target = this.aircraft.find((a) => {
         if (!this.isHostile(u.side, a.side) || a.state === 'shot_down' || a.altitude > 0.9) return false;
-        if (dist(u.pos, a.pos) > reach || !this.aaCanSee(u.pos, a)) return false;
+        if (dist(u.pos, a.pos) > reach || this.aboveGunCeiling(a) || !this.aaCanSee(u.pos, a)) return false;
         if (spec.allAspect) return true;
         // Tail-chase only: the aircraft must be flying away from the team
         const away = Math.atan2(a.pos.y - u.pos.y, a.pos.x - u.pos.x);
@@ -13480,7 +13559,7 @@ export class GameEngine {
         // the towed 90mm M1 and 40mm M1 of the Marine defense / AAA battalions
         const reach = gUnit.type === 'frg_gepard' || gUnit.type === 'usmc_90mm_aa_42' ? 2000 : gUnit.type === 'usmc_duster_m42' || gUnit.type === 'usmc_40mm_bofors_45' || gUnit.type === 'us_m163_vads' ? 1400 : 1000;
         const targetPlane = this.aircraft.find(
-          (a) => this.isHostile(gUnit.side, a.side) && a.state !== 'shot_down' && dist(gUnit.pos, a.pos) <= reach && this.aaCanSee(gUnit.pos, a)
+          (a) => this.isHostile(gUnit.side, a.side) && a.state !== 'shot_down' && dist(gUnit.pos, a.pos) <= reach && this.aaCanSee(gUnit.pos, a) && !this.aboveGunCeiling(a)
         );
         if (targetPlane) {
           gUnit.heading = Math.atan2(targetPlane.pos.y - gUnit.pos.y, targetPlane.pos.x - gUnit.pos.x);
@@ -17313,8 +17392,49 @@ export class GameEngine {
   }
 
   /** Walks an airman down on land toward his side's nearest command post; returns it once he is there. */
+  /** Whether the other side's troops know where this airman on land is (he hides until found). */
+  public isRaftSpottedByFoe(raft: LifeRaft): boolean {
+    return !raft.isOnLand || (raft.spottedUntil ?? -1) > this.gameTime;
+  }
+
+  /**
+   * A downed airman on land goes to ground: the other side only knows where he is once its troops
+   * come within sight of him (he is then tracked for a while), and he slips away from any hostile
+   * troops he sees closing in before carrying on towards his own lines. Returns true while evading.
+   */
+  private updateAirmanEvasion(raft: LifeRaft, dt: number): boolean {
+    if (!raft.isOnLand || raft.fromShip) return false;
+    const hostile = (u: GroundUnit) => !u.isDestroyed && !u.embarkedInShipId && (raft.side === 'player' ? u.side === 'enemy' : u.side !== 'enemy');
+    let nearest: GroundUnit | undefined;
+    let nd = 380;
+    for (const u of this.groundUnits) {
+      if (!hostile(u)) continue;
+      const d = dist(u.pos, raft.pos);
+      if (d < nd) {
+        nd = d;
+        nearest = u;
+      }
+    }
+    if (!nearest) return false;
+    // Troops this close see him
+    if (nd < 110) raft.spottedUntil = this.gameTime + 20;
+    // Move away from them, along the ground (try a fan of headings away from the threat)
+    const away = Math.atan2(raft.pos.y - nearest.pos.y, raft.pos.x - nearest.pos.x);
+    const step = 6.5 * dt;
+    for (const off of [0, 0.5, -0.5, 1.0, -1.0, 1.5, -1.5]) {
+      const q = { x: raft.pos.x + Math.cos(away + off) * step, y: raft.pos.y + Math.sin(away + off) * step };
+      if (this.isGroundWalkable(q.x, q.y)) {
+        raft.pos = q;
+        break;
+      }
+    }
+    return true;
+  }
+
   private walkToCommandPost(raft: LifeRaft, dt: number): { id: string; name: string; pos: Vector2D } | undefined {
     if (!raft.isOnLand || raft.fromShip) return undefined;
+    // Hostile troops about: hide and slip away first
+    if (this.updateAirmanEvasion(raft, dt)) return undefined;
     const PILOT_WALK = 7; // world units per second, a man on foot across country
     // A refuge only counts while it is still his side's: a post overrun, or one standing by an
     // airfield or on ground the other side now holds, is no way home (re-checked every tick, since
@@ -17387,11 +17507,11 @@ export class GameEngine {
         return dist(u.pos, raft.pos) < 85;
       });
 
-      // C. 搜救直升機 (HO3S-1 < 85m)
+      // C. Helicopters with a rescue crewman aboard hoist the survivor up without landing
       const rescueHeli = this.aircraft.find(
         (a) =>
-          a.side === 'player' &&
-          (a.model === 'ho3s1' || a.role === 'rescue') &&
+          (a.side === 'player' || a.side === 'allied') &&
+          (Boolean(rescueCrewOf(a.model)) || a.role === 'rescue') &&
           a.state !== 'shot_down' &&
           dist(a.pos, raft.pos) < 85
       );
@@ -17420,7 +17540,8 @@ export class GameEngine {
 
       const playerUnit = nearPlayerShip || nearPlayerGround || rescueHeli || (raft.side === 'player' ? cpReached : undefined);
       if (playerUnit) {
-        const rescuerName = playerUnit.name;
+        const crewman = rescueHeli && playerUnit === rescueHeli ? rescueCrewOf(rescueHeli.model) : undefined;
+        const rescuerName = crewman ? `${playerUnit.name} 的${crewman}` : playerUnit.name;
 
         if (raft.side === 'player') {
           raft.rescued = true;
@@ -18639,8 +18760,8 @@ export class GameEngine {
   }
 
   /**
-   * Rear-area patrols, both sides: each stronghold a side holds raises a small patrol (four at most
-   * on the map per side, re-manned a minute after one is lost) that hunts the other side's downed
+   * Rear-area patrols, both sides: each stronghold a side holds keeps one small patrol of its own
+   * (re-manned a minute after it is lost) that hunts the other side's downed
    * aircrew near its post and otherwise walks the beat. Ours come from strongholds we captured.
    */
   private runRearPatrols(side: 'allied' | 'enemy'): void {
@@ -18656,8 +18777,8 @@ export class GameEngine {
         this.rearPatrolLost[id] = this.gameTime;
       }
     }
-    // Raise one patrol at a post that has none, four at most per side
-    if (patrols.length < 4) {
+    // Each stronghold keeps its own single patrol; one is raised per tick where a post has none
+    {
       for (const { isl, sh } of posts) {
         if (patrols.some((u) => u.rearPatrol!.post === sh.id)) continue;
         if (this.gameTime - (this.rearPatrolLost[key(sh.id)] ?? -999) < 60) continue;
@@ -18695,7 +18816,7 @@ export class GameEngine {
     for (const u of patrols) {
       const home = u.rearPatrol!.home;
       const airman = (this.lifeRafts ?? [])
-        .filter((r) => r.side === quarry && r.isOnLand && !r.rescued && !r.isCapturedPOW && dist(r.pos, home) < 1400)
+        .filter((r) => r.side === quarry && r.isOnLand && !r.rescued && !r.isCapturedPOW && this.isRaftSpottedByFoe(r) && dist(r.pos, home) < 1400)
         .sort((a, b) => dist(a.pos, u.pos) - dist(b.pos, u.pos))[0];
       if (airman) {
         const tp = u.order.targetPos;

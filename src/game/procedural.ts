@@ -2296,6 +2296,55 @@ function addMaedaEscarpment(islands: Island[]): void {
   });
 }
 
+/**
+ * Mainland maps (eras 3-5): our lodgement sits well to the south, clear of the enemy's front-line
+ * strongholds, and the buildings that are not part of a stronghold's works are spread out so the
+ * map does not have one crowded quarter and empty country elsewhere. Enemy sites stay on their
+ * side of the line; coastal sites and stronghold garrisons stay where they were placed.
+ */
+function spreadMainlandSites(islands: Island[]): void {
+  const main = islands.find((i) => i.isMainland);
+  if (!main) return;
+  const SHIFT = 2600;
+  for (const inst of main.installations) {
+    if (inst.id.startsWith('player-')) inst.pos = { x: inst.pos.x, y: Math.min(13300, inst.pos.y + SHIFT) };
+  }
+  const hq = main.installations.find((i) => i.id === 'player-hq-continental');
+  const frontY = (hq?.pos.y ?? 10400) - 1800;
+  const movable = main.installations.filter(
+    (i) => !i.strongholdId && !i.id.startsWith('player-') && !/pier|wharf|coastal|radar|ferry/.test(i.type + i.id) && i.type !== 'airfield'
+  );
+  const onLand = (p: Vector2D) => p.x > 5500 && p.x < 13600 && p.y > 400 && p.y < 13600 && isPointOnIslandLand(p, main);
+  const clearance = (p: Vector2D, self: Installation) => {
+    let m = Infinity;
+    for (const o of main.installations) if (o !== self) m = Math.min(m, dist(o.pos, p));
+    return m;
+  };
+  for (let pass = 0; pass < 3; pass++) {
+    for (const inst of movable) {
+      const here = clearance(inst.pos, inst);
+      if (here >= 420) continue;
+      let best = inst.pos;
+      let bestC = here;
+      for (let k = 0; k < 24; k++) {
+        const a = (k / 24) * Math.PI * 2 + pass;
+        for (const r of [500, 900, 1400]) {
+          const q = { x: inst.pos.x + Math.cos(a) * r, y: inst.pos.y + Math.sin(a) * r };
+          if (!onLand(q)) continue;
+          // The enemy's works keep to their side of the front; ours and civil sites anywhere
+          if (inst.side === 'enemy' && q.y > frontY) continue;
+          const c = clearance(q, inst);
+          if (c > bestC + 60) {
+            bestC = c;
+            best = q;
+          }
+        }
+      }
+      inst.pos = best;
+    }
+  }
+}
+
 export function createLSMR(id: string, name: string, pos: Vector2D, era: Era): Ship {
   return createShip({
     id,
@@ -5254,6 +5303,7 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
   addIslandSettlements(islands, era, seedBase * 31 + 7);
   addMainlandVillages(islands, era, seedBase * 53 + 11);
   addEnemyPowCamp(islands, era);
+  spreadMainlandSites(islands);
 
   // 初始友軍地面部隊
   const groundUnits: GroundUnit[] = [];

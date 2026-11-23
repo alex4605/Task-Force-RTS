@@ -1778,6 +1778,8 @@ export interface LifeRaft {
   isCapturedPOW?: boolean; // 是否已被作為戰俘收押
   /** A downed airman on land making for his own side's command post (its id / position). */
   walkingTo?: { id: string; name: string; pos: Vector2D };
+  /** Game time until which the other side's troops know where he is (an airman on land hides). */
+  spottedUntil?: number;
 }
 
 export type AircraftState =
@@ -2279,6 +2281,9 @@ export interface CombatDiceRoll {
 export interface CombatLogEntry {
   id: string;
   timestamp: number;
+  /** Routine reports of one kind folded into this line, and its text before the count. */
+  repeat?: number;
+  baseText?: string;
   timeStr: string;
   category: 'air' | 'naval' | 'aa' | 'sunk';
   sourceSide: ShipSide;
