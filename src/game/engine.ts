@@ -17973,7 +17973,8 @@ export class GameEngine {
     const isEra4 = this.era === 'era4';
 
     if (isCap) {
-      const patrolCenter: Vector2D = { x: 8600, y: 5200 };
+      // Over the front line, just north of our quarter of the mainland
+      const patrolCenter: Vector2D = { x: 8600, y: 9200 };
       const model = isEra5 ? (Math.random() < 0.5 ? 'f15a' : 'f16a') : isEra4 ? 'f4e' : 'f86';
       const speed = getAircraftSpeed(model);
       const baseHealth = getAircraftBaseHealth(model);

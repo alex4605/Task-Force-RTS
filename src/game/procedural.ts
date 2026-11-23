@@ -2297,52 +2297,134 @@ function addMaedaEscarpment(islands: Island[]): void {
 }
 
 /**
- * Mainland maps (eras 3-5): our lodgement sits well to the south, clear of the enemy's front-line
- * strongholds, and the buildings that are not part of a stronghold's works are spread out so the
- * map does not have one crowded quarter and empty country elsewhere. Enemy sites stay on their
- * side of the line; coastal sites and stronghold garrisons stay where they were placed.
+ * Mainland maps (eras 3-5): the southern quarter of the front is ours and the allies', the rest
+ * the enemy's, and each side's works are spread evenly over its own ground rather than heaped in
+ * one corner. The strongholds are staggered from the far north down to the line, each moving with
+ * its garrison; other enemy works and the civil sites are laid on a jittered grid; coastal sites
+ * (piers, wharves, ferries, radar pickets, airfields) stay on their stretch of coast.
  */
 function spreadMainlandSites(islands: Island[]): void {
   const main = islands.find((i) => i.isMainland);
   if (!main) return;
-  const SHIFT = 2600;
-  for (const inst of main.installations) {
-    if (inst.id.startsWith('player-')) inst.pos = { x: inst.pos.x, y: Math.min(13300, inst.pos.y + SHIFT) };
+  const SOUTH = 10500; // the southern quarter of the 14 km front
+  const X0 = 5700;
+  const X1 = 13500;
+  const onLand = (p: Vector2D) => p.x > X0 - 200 && p.x < X1 + 100 && p.y > 300 && p.y < 13700 && isPointOnIslandLand(p, main);
+  const fixedType = (i: Installation) => /pier|wharf|coastal|radar|ferry/.test(`${i.type} ${i.id}`) || i.type === 'airfield';
+
+  // 1. Our lodgement: the whole HQ group into the southern quarter
+  const ours = main.installations.filter((i) => i.id.startsWith('player-'));
+  if (ours.length) {
+    const minY = Math.min(...ours.map((i) => i.pos.y));
+    const maxY = Math.max(...ours.map((i) => i.pos.y));
+    const dy = Math.max(0, SOUTH + 250 - minY);
+    const span = maxY - minY;
+    const top = Math.min(13450 - span, minY + dy);
+    for (const i of ours) i.pos = { x: i.pos.x, y: top + (i.pos.y - minY) };
   }
-  const hq = main.installations.find((i) => i.id === 'player-hq-continental');
-  const frontY = (hq?.pos.y ?? 10400) - 1800;
-  const movable = main.installations.filter(
-    (i) => !i.strongholdId && !i.id.startsWith('player-') && !/pier|wharf|coastal|radar|ferry/.test(i.type + i.id) && i.type !== 'airfield'
-  );
-  const onLand = (p: Vector2D) => p.x > 5500 && p.x < 13600 && p.y > 400 && p.y < 13600 && isPointOnIslandLand(p, main);
-  const clearance = (p: Vector2D, self: Installation) => {
-    let m = Infinity;
-    for (const o of main.installations) if (o !== self) m = Math.min(m, dist(o.pos, p));
-    return m;
-  };
-  for (let pass = 0; pass < 3; pass++) {
-    for (const inst of movable) {
-      const here = clearance(inst.pos, inst);
-      if (here >= 420) continue;
-      let best = inst.pos;
-      let bestC = here;
-      for (let k = 0; k < 24; k++) {
-        const a = (k / 24) * Math.PI * 2 + pass;
-        for (const r of [500, 900, 1400]) {
-          const q = { x: inst.pos.x + Math.cos(a) * r, y: inst.pos.y + Math.sin(a) * r };
-          if (!onLand(q)) continue;
-          // The enemy's works keep to their side of the front; ours and civil sites anywhere
-          if (inst.side === 'enemy' && q.y > frontY) continue;
-          const c = clearance(q, inst);
-          if (c > bestC + 60) {
-            bestC = c;
-            best = q;
+
+  // 2. Strongholds staggered evenly from north to the line, each with its garrison
+  const sh = [...(main.strongholds ?? [])].sort((a, b) => a.cpPos.y - b.cpPos.y);
+  sh.forEach((h, k) => {
+    const ty = 1600 + ((SOUTH - 1900 - 1600) * (k + 0.5)) / Math.max(1, sh.length);
+    const tx = X0 + 900 + ((X1 - X0 - 1800) * ((k * 0.618 + 0.25) % 1));
+    let target = { x: tx, y: ty };
+    for (let r = 0; r < 1500 && !onLand(target); r += 100) target = { x: tx + r, y: ty };
+    const d = { x: target.x - h.cpPos.x, y: target.y - h.cpPos.y };
+    h.cpPos = target;
+    for (const i of main.installations) if (i.strongholdId === h.id) i.pos = { x: i.pos.x + d.x, y: i.pos.y + d.y };
+  });
+
+  const fixed = () => main.installations.filter((i) => i.strongholdId || i.id.startsWith('player-') || fixedType(i));
+  /** Lay `sites` on a jittered grid over a band of the front, clear of the fixed works. */
+  const layOut = (sites: Installation[], y0: number, y1: number, salt: number) => {
+    if (sites.length === 0) return;
+    const w = X1 - X0;
+    const h = y1 - y0;
+    const cols = Math.max(1, Math.round(Math.sqrt((sites.length * w) / h) * 1.15));
+    const rows = Math.max(1, Math.ceil((sites.length * 1.3) / cols));
+    const keepOff = fixed().map((i) => i.pos);
+    const cells: Vector2D[] = [];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const jx = Math.sin((r * 31 + c * 17 + salt) * 12.9898) * 0.3;
+        const jy = Math.cos((r * 13 + c * 29 + salt) * 78.233) * 0.3;
+        const p = { x: X0 + ((c + 0.5 + jx) * w) / cols, y: y0 + ((r + 0.5 + jy) * h) / rows };
+        if (onLand(p) && keepOff.every((q) => dist(q, p) > 320)) cells.push(p);
+      }
+    }
+    // Nearest free cell for each site, the ones with the farthest-off cells placed first
+    const todo = [...sites];
+    while (todo.length && cells.length) {
+      let bi = 0;
+      let bc = 0;
+      let bd = Infinity;
+      for (let i = 0; i < todo.length; i++) {
+        for (let c = 0; c < cells.length; c++) {
+          const dd = dist(todo[i].pos, cells[c]);
+          if (dd < bd) {
+            bd = dd;
+            bi = i;
+            bc = c;
           }
         }
       }
-      inst.pos = best;
+      todo[bi].pos = cells[bc];
+      todo.splice(bi, 1);
+      cells.splice(bc, 1);
+    }
+  };
+
+  const loose = main.installations.filter((i) => !i.strongholdId && !i.id.startsWith('player-') && !fixedType(i));
+  // 3. The enemy's works over the northern three quarters
+  layOut(loose.filter((i) => i.side === 'enemy' && !i.isCivilian), 500, SOUTH - 400, 1);
+  // 4. Our and the allies' outlying works in the southern quarter
+  layOut(loose.filter((i) => i.side !== 'enemy' && !i.isCivilian), SOUTH + 100, 13400, 2);
+  // 5. Civil sites over the whole front
+  layOut(loose.filter((i) => i.isCivilian), 500, 13400, 3);
+
+  // 6. Coastal and fixed works on the wrong side of the line move up or down their coast
+  main.installations
+    .filter((i) => !i.strongholdId && !i.isCivilian && i.side !== 'neutral')
+    .forEach((i, k) => {
+      const enemy = i.side === 'enemy';
+      if (enemy ? i.pos.y <= SOUTH - 300 : i.pos.y >= SOUTH + 100) return;
+      const y = enemy ? SOUTH - 600 - ((k * 470) % 2200) : SOUTH + 350 + ((k * 390) % 1600);
+      let p = { x: i.pos.x, y };
+      for (let n = 0; n < 30 && !isPointOnIslandLand(p, main); n++) p = { x: p.x + 80, y };
+      i.pos = p;
+    });
+}
+
+/** Mainland start positions: ours in the southern quarter, the enemy's spread over its works. */
+function spreadMainlandUnits(islands: Island[], groundUnits: GroundUnit[]): void {
+  const main = islands.find((i) => i.isMainland);
+  if (!main) return;
+  const posts = main.installations.filter((i) => i.side === 'enemy' && !i.isCivilian).sort((a, b) => a.pos.y - b.pos.y || a.pos.x - b.pos.x);
+  // Ours and the allies' on the mainland start in the southern quarter, in their formation
+  const friends = groundUnits.filter((u) => u.side !== 'enemy' && isPointOnIslandLand(u.pos, main));
+  if (friends.length) {
+    const minY = Math.min(...friends.map((u) => u.pos.y));
+    const dy = Math.max(0, 10900 - minY);
+    for (const u of friends) {
+      const p = { x: u.pos.x, y: Math.min(13300, u.pos.y + dy) };
+      u.pos = isPointOnIslandLand(p, main) ? p : { x: p.x + 250, y: p.y };
+      if (u.order?.targetPos) u.order = { ...u.order, targetPos: { x: u.order.targetPos.x, y: Math.min(13300, u.order.targetPos.y + dy) } };
     }
   }
+  const units = groundUnits.filter((u) => u.side === 'enemy' && isPointOnIslandLand(u.pos, main));
+  if (posts.length === 0) return;
+  units.forEach((u, k) => {
+    const post = posts[Math.floor(((k + 0.5) * posts.length) / units.length) % posts.length];
+    for (let t = 0; t < 8; t++) {
+      const a = k * 2.39996 + t * 0.8;
+      const p = { x: post.pos.x + Math.cos(a) * (110 + t * 20), y: post.pos.y + Math.sin(a) * (110 + t * 20) };
+      if (isPointOnIslandLand(p, main) && p.y < 10200) {
+        u.pos = p;
+        break;
+      }
+    }
+  });
 }
 
 export function createLSMR(id: string, name: string, pos: Vector2D, era: Era): Ship {
@@ -5310,6 +5392,7 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
   addFriendlyGroundUnits(era, groundUnits);
 
   addEnemyGarrisonUnits(era, islands, groundUnits);
+  spreadMainlandUnits(islands, groundUnits);
 
   const cvPos: Vector2D = { ...playerSpawn };
   const initialHeading = -Math.PI / 4; // Heading 045° (North-East)
