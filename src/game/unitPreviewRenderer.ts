@@ -479,6 +479,8 @@ interface TowedSpec {
   gunW: number;
   barrels?: number;
   muzzle?: 'single' | 'double';
+  /** Heavy AA gun on its firing platform: round traversing deck, levelling jacks, recuperators, fuze setter and crew. */
+  aa?: boolean;
 }
 
 const TOWED_SPECS: TowedSpec[] = [
@@ -491,7 +493,10 @@ const TOWED_SPECS: TowedSpec[] = [
   // IJA Type 91 10cm howitzer: split trail, spoked wheels, gun shield
   { match: /field_artillery/, carriage: 'split', trailLen: 12, track: 5.5, wheel: 2.8, spokedWheels: true, shield: 5.5, gunLen: 11, gunW: 1.7 },
   // KS-19 100mm AA gun: cruciform firing platform, long tube with muzzle brake
-  { match: /ks19/, carriage: 'cross4', trailLen: 11, track: 0, wheel: 0, shield: 4, gunLen: 18, gunW: 1.8, muzzle: 'single' },
+  { match: /ks19/, carriage: 'cross4', trailLen: 11, track: 0, wheel: 0, shield: 4, gunLen: 18, gunW: 1.8, muzzle: 'single', aa: true },
+  // 90mm M1A1 AA gun: four outriggers on its M1A1 mount, the round platform the layers stand on,
+  // a long plain tube (no muzzle brake), twin recuperators over it and the M8 fuze setter on the left
+  { match: /90mm_aa/, carriage: 'cross4', trailLen: 12.5, track: 0, wheel: 0, gunLen: 19, gunW: 1.9, aa: true },
   // QF 25-pounder: single box trail on its round firing platform, shield, double-baffle brake
   { match: /25pdr/, carriage: 'box', trailLen: 13, track: 5, wheel: 2.8, shield: 5, gunLen: 10, gunW: 1.8, muzzle: 'double' },
   // L5 105mm pack howitzer: light split trail, short tube with multi-baffle brake, no shield
@@ -607,6 +612,54 @@ function drawTowedGun(ctx: CanvasRenderingContext2D, sp: TowedSpec, pal: Vehicle
     ctx.lineTo(1 + sp.gunLen * 0.45, sp.gunW * 0.9);
     ctx.stroke();
     drawMuzzle(ctx, 1 + sp.gunLen, 0, sp.gunW, sp.muzzle, pal.barrelColor);
+  }
+  if (sp.aa) drawHeavyAaDetails(ctx, sp, pal);
+}
+
+/** Heavy AA gun details over the cruciform mount: platform, jacks, recuperators, fuze setter, crew. */
+function drawHeavyAaDetails(ctx: CanvasRenderingContext2D, sp: TowedSpec, pal: VehiclePalette): void {
+  // Levelling jack pads at the ends of the outriggers
+  ctx.fillStyle = '#37474F';
+  ctx.strokeStyle = pal.hullStroke;
+  ctx.lineWidth = 0.6;
+  for (const a of [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4]) {
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * sp.trailLen, Math.sin(a) * sp.trailLen, 1.7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  // Round firing platform the crew stands on
+  ctx.fillStyle = 'rgba(84, 110, 122, 0.55)';
+  ctx.strokeStyle = 'rgba(176, 190, 197, 0.75)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.arc(0, 0, 5.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // Breech ring and the twin recuperator cylinders along the top of the tube
+  ctx.fillStyle = pal.turretFill;
+  ctx.strokeStyle = pal.hullStroke;
+  ctx.fillRect(-3.4, -2.2, 5.6, 4.4);
+  ctx.strokeRect(-3.4, -2.2, 5.6, 4.4);
+  ctx.strokeStyle = pal.hullHighlight;
+  ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  ctx.moveTo(1.5, -1.3);
+  ctx.lineTo(1 + sp.gunLen * 0.38, -1.1);
+  ctx.moveTo(1.5, 1.3);
+  ctx.lineTo(1 + sp.gunLen * 0.38, 1.1);
+  ctx.stroke();
+  // Fuze setter and the ready rounds beside it
+  ctx.fillStyle = '#455A64';
+  ctx.fillRect(-4.6, -5.2, 3.2, 2.2);
+  ctx.fillStyle = '#C9A227';
+  for (let k = 0; k < 3; k++) ctx.fillRect(-8.2 + k * 0.9, 3.6, 0.6, 2.4);
+  // Layers and loaders on the platform
+  ctx.fillStyle = '#5D6B3A';
+  for (const [x, y] of [[-2.8, 3.9], [-0.6, -3.9], [-5.4, -1.6], [-5.6, 1.8]] as const) {
+    ctx.beginPath();
+    ctx.arc(x, y, 0.95, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
@@ -1892,7 +1945,7 @@ export function drawShipObjectPreview(ctx: CanvasRenderingContext2D, width: numb
   if (icon === undefined) {
     icon = null;
     if (typeof document !== 'undefined') {
-      const s: Ship = { ...ship, pos: { x: 0, y: 0 }, heading: 0, turrets: ship.turrets.map((t) => ({ ...t, angle: t.relX < 0 ? Math.PI : 0 })) };
+      const s: Ship = { ...ship, pos: { x: 0, y: 0 }, heading: 0, isSubmerged: false, speed: 0, turrets: ship.turrets.map((t) => ({ ...t, angle: t.relX < 0 ? Math.PI : 0 })) };
       const res = 4;
       const span = Math.max(80, s.length * 1.4);
       const raw = document.createElement('canvas');

@@ -449,6 +449,7 @@ export default function App() {
         enemyShips={enemyShips}
         aircraft={aircraft}
         groundUnits={groundUnits}
+        alliedShips={engine.alliedShips}
         islands={islands}
         worldSize={engine.worldSize}
         era={era}

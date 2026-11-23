@@ -288,6 +288,8 @@ export interface GroundTerrainInfo {
 }
 
 export interface GroundUnit {
+  /** Allied rear-area patrol raised at a captured point: hunts downed enemy airmen, otherwise patrols round its post. */
+  rearPatrol?: { home: Vector2D; post: string };
   id: string;
   type: GroundUnitType;
   name: string;
@@ -421,6 +423,8 @@ export interface Ship {
   sarZone?: { x0: number; y0: number; x1: number; y1: number };
   /** The raft the ship is steaming for on its lifeguard station. */
   sarTargetId?: string;
+  /** Headway watchdog on a move order: best distance to the current waypoint, seconds without gain, failures. */
+  navWatch?: { wp: number; best: number; t: number; fails: number };
   /** Small-craft plan for boats drawn by the generic small-craft drawer (PT boats, gunboats, hydrofoils...). */
   craft?: SmallCraftPlan;
   codeName?: string;
@@ -1928,7 +1932,7 @@ export type InstallationType =
   | 'pagoda'             // 佛寺 (時代四 · 受保護文化設施 · PP)
   | 'factory'            // 工業區/工廠 (時代五 · RP/TP)
   | 'civil_hospital'     // 中立民間醫院 (教會醫院 / 市立醫院 · 我方勢力範圍時救治附近部隊並提供政治值 PP)
-  | 'refugee_camp'       // 戰地難民收容營 (聯合國/紅十字帳篷區，遭受火力攻擊扣除 15 CP)
+  | 'refugee_camp'       // 戰地難民收容營 (聯合國/紅十字帳篷區，遭受火力攻擊扣除政治值 PP)
   // 時代四特種防空與前進雷達作戰設施 (Era 4 Cold War / Vietnam Installations)
   | 'sa2_sam_site'       // SA-2 導針 (Guideline) 地空防空飛彈發射營
   | 'sa3_sam_site'       // S-125 涅瓦河 / SA-3 Goa 低空強化地空防空飛彈發射營
@@ -1971,7 +1975,7 @@ export interface Installation {
   isASuWOnly?: boolean;
   upgradeTimer?: number; // 工兵駐守升級累積時間 (例如急造棧橋港達 35s 升級為正規軍港)
   civilianZoneRadius?: number; // 城市/城鎮/定居點/難民營之平民區影響半徑 (米)
-  isCivilian?: boolean;        // 是否為非軍事平民保護區 (受擊將觸發附帶損害警告與扣除 15 CP)
+  isCivilian?: boolean;        // 是否為非軍事平民保護區 (受擊將觸發附帶損害警告與扣除政治值 PP)
   isRadarEmitting?: boolean;   // 雷達發射信號 (供 AGM-45 反輻射飛彈追蹤)
   samMissilesReady?: number;   // 鷹式/SA-2 飛彈備射量
   samMaxMissiles?: number;

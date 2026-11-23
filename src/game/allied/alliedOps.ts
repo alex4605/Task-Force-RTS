@@ -519,7 +519,7 @@ export class AlliedOps {
     const h = this.host;
     const roster = BASE_ROSTER[h.era];
     if (!roster) return;
-    const alive = h.groundUnits.filter((u) => u.side === 'allied' && !u.isDestroyed).length;
+    const alive = h.groundUnits.filter((u) => u.side === 'allied' && !u.isDestroyed && !u.rearPatrol).length;
     if (alive >= esc.maxUnits) return;
     const plans = atTier(roster.units, esc.tier);
     // From the full-scale stage on, a forward assembly point behind the captured line shortens the march
@@ -663,7 +663,7 @@ export class AlliedOps {
     // Formations from the base move off together, three at a time, rather than piecemeal
     const base = this.findBase();
     const atBase = base && !base.isDestroyed
-      ? h.groundUnits.filter((u) => u.side === 'allied' && !u.isDestroyed && u.order.type === 'idle' && dist(u.pos, base.pos) < 600)
+      ? h.groundUnits.filter((u) => u.side === 'allied' && !u.isDestroyed && !u.rearPatrol && u.order.type === 'idle' && dist(u.pos, base.pos) < 600)
       : [];
     const holdAtBase = atBase.length > 0 && atBase.length < 3;
     const tier = h.escalation().tier;

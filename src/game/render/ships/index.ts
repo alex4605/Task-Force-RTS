@@ -5,6 +5,8 @@ import { RenderContext, Camera, isWorldCircleVisible } from '../context';
 import { drawAlliedSAGShip } from './alliedSag';
 import { drawSmallCraft } from './smallCraft';
 import { SHIP_HULL_DRAWERS } from './hulls';
+import { ALLIED_GUN_SHIP_CLASSES } from './ww2';
+import { alliedEnsign } from './alliedClasses';
 import { planView } from './planform';
 
 function isSubmarineShip(ship: Ship): boolean {
@@ -799,6 +801,14 @@ function renderShipHullByType(rc: RenderContext, ship: Ship, hullColor: string, 
     return;
   }
   if (ship.isAlliedSAG || ship.side === 'allied') {
+    const adamsDerivative = ship.type === 'ddg' && /\(D3[89]\)|\(D41\)|Lütjens|Mölders|Rommel/.test(ship.name);
+    if (adamsDerivative || ((ship.type === 'battleship' || ship.type === 'cruiser' || ship.type === 'destroyer') && ALLIED_GUN_SHIP_CLASSES.test(ship.name))) {
+      // Classic gun ships (and the Adams-class exports) get the full class-specific plan view, flying their own ensign
+      SHIP_HULL_DRAWERS[ship.type](rc, ship, hullColor, detailColor);
+      const ensign = alliedEnsign(ship);
+      if (ensign) drawNavalEnsign(rc, ensign, -ship.length * 0.48, 0, Math.min(13, ship.length * 0.1), Math.min(8.5, ship.length * 0.065));
+      return;
+    }
     drawAlliedSAGShip(rc, ship, hullColor, detailColor);
     return;
   }
@@ -850,7 +860,7 @@ function drawShipUniversalDetails(rc: RenderContext, ship: Ship, hullColor: stri
   }
 
   // 2. Animated Spinning Search Radar Bar atop Major Surface Combatants
-  if (!isLandingCraft) {
+  if (!isLandingCraft && l >= 40) {
     const radarX = isCarrier ? (ship.type === 'cvn' ? -l * 0.01 : l * 0.12) : -l * 0.02;
     const radarY = isCarrier ? (ship.type === 'cvn' || ship.type === 'cv63' ? w * 0.32 : -w * 0.48) : 0;
     const rAng = rc.time * 3.4 + (ship.heading || 0);
@@ -864,12 +874,14 @@ function drawShipUniversalDetails(rc: RenderContext, ship: Ship, hullColor: stri
   }
 
   // 3. International Port (Red) / Starboard (Green) / Stern Navigation Lights
+  // (scaled down on small craft so the lights do not swamp a 20 m hull)
+  const nl = Math.min(2.2, Math.max(0.8, w * 0.12));
   ctx.fillStyle = '#FF5252';
-  ctx.fillRect(0, -w * 0.45, 2.2, 2.2);
+  ctx.fillRect(0, -w * 0.45, nl, nl);
   ctx.fillStyle = '#00E676';
-  ctx.fillRect(0, w * 0.45 - 2.2, 2.2, 2.2);
+  ctx.fillRect(0, w * 0.45 - nl, nl, nl);
   ctx.fillStyle = '#FFF9C4';
-  ctx.fillRect(-l * 0.48, -1, 2, 2);
+  ctx.fillRect(-l * 0.48, -nl / 2, nl, nl);
 }
 
 const PLATE_MAX_WIDTH = 150;

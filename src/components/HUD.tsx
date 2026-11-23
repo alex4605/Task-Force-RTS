@@ -77,6 +77,7 @@ interface HUDProps {
   enemyShips: Ship[];
   aircraft: Aircraft[];
   groundUnits?: GroundUnit[];
+  alliedShips?: Ship[];
   islands: Island[];
   worldSize: number;
   era: Era;
@@ -248,6 +249,7 @@ export const HUD: React.FC<HUDProps> = ({
   enemyShips,
   aircraft,
   groundUnits = [],
+  alliedShips = [],
   islands,
   worldSize,
   era,
@@ -1054,6 +1056,8 @@ export const HUD: React.FC<HUDProps> = ({
             cameraViewport={cameraViewport}
             onMiniMapClick={onMiniMapClick}
             radarCoverage={radarCoverage}
+            alliedShips={alliedShips}
+            groundUnits={groundUnits}
           />
 
           {/* Strongholds panel toggle (the flight list was dropped: aircraft are handled on the map) */}

@@ -122,8 +122,9 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
         const iy = inst.pos.y * scale;
 
         const isPlayer = inst.side ? inst.side !== 'enemy' : island.isFriendlyBase;
-        const boxFill = isPlayer ? 'rgba(33, 150, 243, 0.65)' : 'rgba(239, 83, 80, 0.6)';
-        const boxStroke = isPlayer ? '#42A5F5' : '#FF5252';
+        const isAlliedInst = inst.side === 'allied';
+        const boxFill = isAlliedInst ? 'rgba(0, 200, 83, 0.6)' : isPlayer ? 'rgba(33, 150, 243, 0.65)' : 'rgba(239, 83, 80, 0.6)';
+        const boxStroke = isAlliedInst ? '#00E676' : isPlayer ? '#42A5F5' : '#FF5252';
 
         if (inst.type === 'infantry_squad' || inst.type === 'infantry_platoon') {
           // NATO 步兵: 友軍藍/敵軍紅戰術框 + 交叉線 "X"
@@ -293,9 +294,10 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
       const ux = unit.pos.x * scale;
       const uy = unit.pos.y * scale;
       const isPlayer = unit.side === 'player';
+      const isAlliedUnit = unit.side === 'allied';
 
-      ctx.fillStyle = isPlayer ? 'rgba(33, 150, 243, 0.7)' : 'rgba(244, 67, 54, 0.7)';
-      ctx.strokeStyle = isPlayer ? '#64B5F6' : '#E57373';
+      ctx.fillStyle = isAlliedUnit ? 'rgba(0, 200, 83, 0.7)' : isPlayer ? 'rgba(33, 150, 243, 0.7)' : 'rgba(244, 67, 54, 0.7)';
+      ctx.strokeStyle = isAlliedUnit ? '#00E676' : isPlayer ? '#64B5F6' : '#E57373';
       ctx.lineWidth = 1;
       ctx.fillRect(ux - 3.5, uy - 2.5, 7, 5);
       ctx.strokeRect(ux - 3.5, uy - 2.5, 7, 5);
@@ -483,7 +485,7 @@ export const TacticalMapModal: React.FC<TacticalMapModalProps> = ({
         ctx.font = '7px monospace';
         ctx.fillText('G4M', px, py - 3.5);
       } else {
-        ctx.fillStyle = plane.side === 'player' ? '#80D8FF' : '#FF8A80';
+        ctx.fillStyle = plane.side === 'player' ? '#80D8FF' : plane.side === 'allied' ? '#00E676' : '#FF8A80';
         ctx.fillRect(px - 1.5, py - 1.5, 3, 3);
       }
     }
