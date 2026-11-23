@@ -3253,6 +3253,7 @@ export class GameEngine {
       }
 
       // Realistic Deliberate Naval Warship Movement (Noticeably slower than high-speed aircraft)
+      const prevPos = { x: ship.pos.x, y: ship.pos.y };
       if (ship.speed !== 0) {
         // speed is in knots; vel is the true map velocity on the shared speed scale
         const mapSpeed = shipMapSpeed(ship.speed);
@@ -3269,8 +3270,10 @@ export class GameEngine {
           inRiverChannel(this.terrain, ship.pos) &&
           depthNext <= 0 &&
           !inRiverChannel(this.terrain, { x: nx, y: ny });
-        if (offChannel) {
-          // Riverine craft keep between the banks
+        const ontoDryLand =
+          !isRiverine(ship) && need > 0 && depthNext <= 0 && this.terrain.depthAt(ship.pos.x, ship.pos.y) > 0;
+        if (offChannel || ontoDryLand) {
+          // Riverine craft keep between the banks; nothing sails onto a cay or reef flat
           ship.speed *= 0.6;
           ship.navStuck = true;
         } else if (depthNext > 0 && depthNext < need && depthNext < this.terrain.depthAt(ship.pos.x, ship.pos.y)) {
@@ -3302,13 +3305,32 @@ export class GameEngine {
       const afloatInRiver = isRiverine(ship) && inRiverChannel(this.terrain, ship.pos);
       for (const island of afloatInRiver ? [] : this.islands) {
         if (isPointOnIslandLand(ship.pos, island)) {
-          const pushAngle = Math.atan2(ship.pos.y - island.center.y, ship.pos.x - island.center.x);
-          ship.pos.x += Math.cos(pushAngle) * 5;
-          ship.pos.y += Math.sin(pushAngle) * 5;
-          // Rotate targetHeading tangentially away from island shore to slide out smoothly
+          // Step back to the water she came from; if she was already aground, move to the nearest
+          // water (outward from a solid island, inward towards the lagoon from an atoll ring)
+          let pushAngle: number;
+          if (!isPointOnIslandLand(prevPos, island)) {
+            pushAngle = Math.atan2(prevPos.y - ship.pos.y, prevPos.x - ship.pos.x);
+            ship.pos.x = prevPos.x;
+            ship.pos.y = prevPos.y;
+          } else {
+            pushAngle = Math.atan2(ship.pos.y - island.center.y, ship.pos.x - island.center.x);
+            search: for (const r of [8, 16, 28, 44, 64]) {
+              for (let k = 0; k < 12; k++) {
+                const a = (k / 12) * Math.PI * 2;
+                if (!isPointOnIslandLand({ x: ship.pos.x + Math.cos(a) * r, y: ship.pos.y + Math.sin(a) * r }, island)) {
+                  pushAngle = a;
+                  break search;
+                }
+              }
+            }
+            ship.pos.x += Math.cos(pushAngle) * 5;
+            ship.pos.y += Math.sin(pushAngle) * 5;
+          }
+          // Rotate targetHeading along the shore to slide off it, and replan the route
           const tangentAngle = pushAngle + (Math.sin(ship.heading - pushAngle) >= 0 ? Math.PI / 2 : -Math.PI / 2);
           ship.targetHeading = tangentAngle;
           ship.speed *= 0.65;
+          ship.navStuck = true;
         }
       }
 
@@ -9512,7 +9534,12 @@ export class GameEngine {
               nearestTo(
                 this.groundUnits,
                 inst.pos,
-                (u) => !u.isDestroyed && !u.embarkedInShipId && this.isHostile(inst.side, u.side) && this.canHitGround(inst.pos, inst.range, u, fieldGuns)
+                (u) =>
+                  !u.isDestroyed &&
+                  !u.embarkedInShipId &&
+                  this.isHostile(inst.side, u.side) &&
+                  this.canHitGround(inst.pos, inst.range, u, fieldGuns) &&
+                  !(fieldGuns && this.inNoFireArea(u.pos))
               );
             const earlyGround = fieldGuns ? findGroundTarget() : undefined;
             const shipTarget = earlyGround
@@ -10437,6 +10464,24 @@ export class GameEngine {
     }
   }
 
+  private noFireCache: { t: number; zones: { pos: Vector2D; r: number }[] } = { t: -1, zones: [] };
+  /**
+   * Restricted-fire areas for our guns firing on their own: hospitals, temples and refugee camps
+   * (and the ground right round them). Batteries hold fire there unless ordered to shoot.
+   */
+  private inNoFireArea(pos: Vector2D): boolean {
+    if (this.gameTime - this.noFireCache.t > 2) {
+      this.noFireCache = {
+        t: this.gameTime,
+        zones: this.islands
+          .flatMap((i) => i.installations)
+          .filter((i) => !i.isDestroyed && (i.type === 'civil_hospital' || i.type === 'pagoda' || i.type === 'refugee_camp'))
+          .map((i) => ({ pos: i.pos, r: (i.civilianZoneRadius ?? 90) + 90 })),
+      };
+    }
+    return this.noFireCache.zones.some((z) => dist(z.pos, pos) < z.r);
+  }
+
   /** Player / allied ground unit fire selection and attack. */
   private updateFriendlyGroundCombat(unit: GroundUnit): boolean {
     let targetPos: Vector2D | null = null;
@@ -10444,7 +10489,12 @@ export class GameEngine {
 
     const indirectFire = this.isIndirectFire(unit);
     const enemyGround = this.groundUnits.find(
-      (u) => this.isHostile(unit.side, u.side) && !u.isDestroyed && !u.embarkedInShipId && this.canHitGround(unit.pos, unit.range, u, indirectFire)
+      (u) =>
+        this.isHostile(unit.side, u.side) &&
+        !u.isDestroyed &&
+        !u.embarkedInShipId &&
+        this.canHitGround(unit.pos, unit.range, u, indirectFire) &&
+        !(indirectFire && this.inNoFireArea(u.pos))
     );
     // Special forces: demolition parties go for the installations first
     const sabotage = isSof(unit.type) ? this.findSabotageTarget(unit) : null;
@@ -18708,6 +18758,7 @@ export class GameEngine {
 
   /** Any side's explosion in or near a settlement: buildings come down, people leave. */
   private applySettlementBlast(proj: Projectile): void {
+    if (proj.targetEntityType === 'aircraft' || proj.targetEntityType === 'projectile') return;
     const heavy = proj.type === 'bomb' || (proj.damage ?? 0) >= 600;
     for (const isl of this.islands) {
       for (const inst of isl.installations) {
@@ -20872,7 +20923,9 @@ export class GameEngine {
     // ══════════════════════════════════════════════════════════
     // The player answers for the fire of the forces they command, not for the AI frontline army
     // (USAF theatre sorties fly on their own as well)
-    if (proj.side === 'player' && !proj.autonomous && !proj.attackerName?.startsWith('USAF 大陸戰線空軍')) {
+    // Air-defence and air-to-air rounds aimed at aircraft are not fire on the town below.
+    const antiAir = proj.targetEntityType === 'aircraft' || proj.targetEntityType === 'projectile';
+    if (proj.side === 'player' && !antiAir && !proj.autonomous && !proj.attackerName?.startsWith('USAF 大陸戰線空軍')) {
       for (const isl of this.islands) {
         for (const inst of isl.installations) {
           if (inst.isCivilian && !inst.isDestroyed) {
@@ -21002,7 +21055,7 @@ export class GameEngine {
             const actualDmg = Math.round(proj.damage * (1 - armorFactor * 0.7) * warheadVsInstallation(proj.warhead, armorFactor >= 0.6));
             inst.health -= actualDmg;
 
-            if (this.logAllowed(`inst|${attacker}|${inst.id}`, 6)) this.addCombatLog({
+            if (this.logAllowed(`inst|${attacker}`, 10)) this.addCombatLog({
               category: proj.type === 'rocket' ? 'air' : 'naval',
               sourceSide: proj.side,
               sourceName: attacker,
@@ -21084,7 +21137,7 @@ export class GameEngine {
         unit.isPinned = unit.suppression >= 75;
 
         // Combat Log 戰況播報 (one report per firer and unit every few seconds)
-        if (unit.health <= 0 || this.logAllowed(`blast|${attacker}|${unit.id}`, 6)) this.addCombatLog({
+        if (unit.health <= 0 || this.logAllowed(`blast|${attacker}`, 10)) this.addCombatLog({
           category: proj.type === 'bomb' ? 'air' : 'naval',
           sourceSide: proj.side,
           sourceName: attacker,
