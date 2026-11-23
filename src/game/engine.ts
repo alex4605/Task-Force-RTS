@@ -242,6 +242,23 @@ export class GameEngine {
    * Plans a terrain route toward `goal`: the waypoints, null when there is no land route (or the
    * unit swims), undefined when this tick's planning budget is spent (try again next tick).
    */
+  /** Dry land a ground unit can stand on: inside a landmass and not in a lake or lagoon. */
+  private waterStopNotice?: number;
+
+  private isGroundWalkable(x: number, y: number): boolean {
+    return this.islands.some((isl) => isPointInPolygon({ x, y }, isl.points)) && !this.terrain.isInlandWater(x, y);
+  }
+
+  /** A heading within 70° of the wanted one that keeps a unit on land for the next step, nearest first. */
+  private shoreSlideHeading(pos: Vector2D, heading: number, step: number): number | undefined {
+    const s = Math.max(step, 4);
+    for (const d of [0.4, -0.4, 0.8, -0.8, 1.2, -1.2]) {
+      const h = heading + d;
+      if (this.isGroundWalkable(pos.x + Math.cos(h) * s, pos.y + Math.sin(h) * s)) return h;
+    }
+    return undefined;
+  }
+
   private planGroundRoute(unit: GroundUnit, goal: Vector2D): Vector2D[] | null | undefined {
     if (this.isAmphibiousUnit(unit)) return null;
     if (this.groundPathBudget <= 0) return undefined;
@@ -277,8 +294,13 @@ export class GameEngine {
     const factor = amphib ? 1 : Math.max(0.08, this.terrain.moveFactor(unit.pos.x, unit.pos.y, !this.isFootUnit(unit)));
     const nx = unit.pos.x + Math.cos(unit.heading) * speed * factor * dt * scale;
     const ny = unit.pos.y + Math.sin(unit.heading) * speed * factor * dt * scale;
-    const onLand = this.islands.some((isl) => isPointInPolygon({ x: nx, y: ny }, isl.points)) && !this.terrain.isLake(nx, ny);
-    if (!onLand && !amphib) return;
+    if (!this.isGroundWalkable(nx, ny) && !amphib) {
+      const slide = this.shoreSlideHeading(unit.pos, unit.heading, speed * factor * dt * scale);
+      if (slide === undefined) return;
+      unit.pos.x += Math.cos(slide) * speed * factor * dt * scale;
+      unit.pos.y += Math.sin(slide) * speed * factor * dt * scale;
+      return;
+    }
     unit.pos.x = nx;
     unit.pos.y = ny;
   }
@@ -1168,6 +1190,8 @@ export class GameEngine {
     this.era = era;
     const generated = generateSector(sectorNum, era);
     this.constructionSites = [];
+    this.rearPatrolManned = new Set();
+    this.rearPatrolLost = {};
     this.worldSize = generated.worldSize;
     this.islands = generated.islands;
     // Civilian railway stations and the airport (eras with a mainland)
@@ -3023,6 +3047,8 @@ export class GameEngine {
     this.updateAirfieldControl(effectiveDt);
     this.updateCivilControl(effectiveDt);
     this.updateSettlements(effectiveDt);
+    this.updateRearPatrols(effectiveDt);
+    this.updateAlliedCapStations(effectiveDt);
     this.updateFieldWorks(effectiveDt);
     this.updateLocalForces(effectiveDt);
     this.updateCivilHospitals(effectiveDt);
@@ -3092,6 +3118,27 @@ export class GameEngine {
         }
 
         if (ship.order.type === 'move') {
+          // Headway watchdog: circling a waypoint (turning circle) or shoved about by avoidance with no
+          // gain for 8 s replans from here; a waypoint failed twice is skipped
+          const dNow = dist(ship.pos, activeTarget);
+          const w = ship.navWatch && ship.navWatch.wp === wpIdx ? ship.navWatch : (ship.navWatch = { wp: wpIdx, best: dNow, t: 0, fails: 0 });
+          if (dNow < w.best - 20) {
+            w.best = dNow;
+            w.t = 0;
+          } else if (ship.speed > 0.5 || ship.targetSpeed > 0.5) {
+            w.t += dt;
+          }
+          if (w.t > 8) {
+            w.t = 0;
+            w.best = dNow;
+            w.fails += 1;
+            if (w.fails >= 2 && wps && wpIdx < wps.length - 1) {
+              ship.order.activeWaypointIndex = wpIdx + 1;
+              ship.navWatch = undefined;
+            } else {
+              ship.navStuck = true;
+            }
+          }
           const dx = activeTarget.x - ship.pos.x;
           const dy = activeTarget.y - ship.pos.y;
           const d = Math.hypot(dx, dy);
@@ -10039,13 +10086,24 @@ export class GameEngine {
           const nextX = unit.pos.x + Math.cos(unit.heading) * unit.speed * dt * 15;
           const nextY = unit.pos.y + Math.sin(unit.heading) * unit.speed * dt * 15;
           const isLVT = unit.isAmphibious || unit.type === 'usmc_lvt_42' || unit.type === 'usmc_lvt_45' || unit.type === 'usmc_lvtp5';
-          // Lakes and reservoirs count as water: only amphibians cross them
-          const onAnyIsland = this.islands.some((isl) => isPointInPolygon({ x: nextX, y: nextY }, isl.points)) && !this.terrain.isLake(nextX, nextY);
+          // Lakes, reservoirs and an atoll's lagoon count as water: only amphibians cross them
+          const onAnyIsland = this.isGroundWalkable(nextX, nextY);
 
           if (!onAnyIsland && !isLVT) {
-            // 非兩棲裝備無法涉水，停駐於灘頭
-            unit.speed = 0;
-            unit.order = { type: 'idle' };
+            // Blocked by water: slide along the shore if a slight turn keeps the unit on land, else stop at the water's edge
+            const slide = this.shoreSlideHeading(unit.pos, unit.heading, unit.speed * dt * 15);
+            if (slide !== undefined) {
+              unit.pos.x += Math.cos(slide) * unit.speed * dt * 15;
+              unit.pos.y += Math.sin(slide) * unit.speed * dt * 15;
+            } else {
+              // 非兩棲裝備無法涉水，停駐於灘頭
+              unit.speed = 0;
+              unit.order = { type: 'idle' };
+              if (unit.side === 'player' && this.gameTime - (this.waterStopNotice ?? -99) > 6) {
+                this.waterStopNotice = this.gameTime;
+                this.addBannerAlert(`🌊「${unit.name.split(' (')[0]}」無陸路可達：潟湖或水道阻隔，需兩棲車輛或登陸艇運送`, 'player', 'alert', 4);
+              }
+            }
           } else {
             const waterMod = !onAnyIsland && isLVT ? 0.75 : 1.0;
             unit.pos.x += Math.cos(unit.heading) * unit.speed * waterMod * dt * 15;
@@ -12233,7 +12291,8 @@ export class GameEngine {
     // Never while the place is being fought over
     if (near(450, (u) => this.isHostile(u.side, h))) return;
     // Infiltration and LRRP inserts only where the holder keeps no troops of its own
-    if (rule.unguarded !== undefined && near(rule.unguarded, (u) => !this.isHostile(u.side, h))) return;
+    // Rear-area patrols do not stop infiltration (the NLF moved through villages the ARVN 'held')
+    if (rule.unguarded !== undefined && near(rule.unguarded, (u) => !this.isHostile(u.side, h) && !u.rearPatrol)) return;
     let pos: Vector2D | null = null;
     const r0 = rule.unguarded !== undefined ? 160 : 60;
     for (let k = 0; k < 10 && !pos; k++) {
@@ -17249,12 +17308,36 @@ export class GameEngine {
     return out;
   }
 
+  /** Whether a refuge is still in its side's hands: no airfield of the other side beside it, no ground held by the other side round it. */
+  private isRefugeHeld(pos: Vector2D, side: 'player' | 'enemy'): boolean {
+    const other = side === 'enemy' ? 'player' : 'enemy';
+    for (const isl of this.islands) {
+      for (const i of isl.installations) {
+        if (i.type === 'airfield' && !i.isDestroyed && (i.side === other || (other === 'player' && i.side === 'allied')) && dist(i.pos, pos) < 350) return false;
+      }
+    }
+    let theirs = false;
+    let ours = false;
+    for (const u of this.groundUnits) {
+      if (u.isDestroyed || u.embarkedInShipId || dist(u.pos, pos) > 260) continue;
+      const enemySide = u.side === 'enemy';
+      if ((side === 'enemy') === enemySide) ours = true;
+      else theirs = true;
+    }
+    return !(theirs && !ours);
+  }
+
   /** Walks an airman down on land toward his side's nearest command post; returns it once he is there. */
   private walkToCommandPost(raft: LifeRaft, dt: number): { id: string; name: string; pos: Vector2D } | undefined {
     if (!raft.isOnLand || raft.fromShip) return undefined;
     const PILOT_WALK = 7; // world units per second, a man on foot across country
+    // A refuge only counts while it is still his side's: a post overrun, or one standing by an
+    // airfield or on ground the other side now holds, is no way home (re-checked every tick, since
+    // a field can change hands while he walks)
+    const refuges = this.commandPostsOf(raft.side).filter((c) => this.isRefugeHeld(c.pos, raft.side));
+    if (raft.walkingTo && !refuges.some((c) => c.id === raft.walkingTo!.id)) raft.walkingTo = undefined;
     if (!raft.walkingTo) {
-      const near = this.commandPostsOf(raft.side)
+      const near = refuges
         .map((c) => ({ c, d: dist(c.pos, raft.pos) }))
         .filter((x) => x.d < 1500)
         .sort((a, b) => a.d - b.d)[0];
@@ -17315,7 +17398,7 @@ export class GameEngine {
 
       // B. 地面部隊 (步兵、裝甲、兩棲戰車、工兵 < 85m)
       const nearPlayerGround = this.groundUnits.find((u) => {
-        if (u.isDestroyed || u.embarkedInShipId || u.side !== 'player') return false;
+        if (u.isDestroyed || u.embarkedInShipId || (u.side !== 'player' && u.side !== 'allied')) return false;
         return dist(u.pos, raft.pos) < 85;
       });
 
@@ -18077,6 +18160,7 @@ export class GameEngine {
     packageId?: string
   ): void {
     const ts = Date.now();
+    if (airMission === 'barcap') this.alliedCapTimer = 0;
     for (let i = 0; i < count; i++) {
       this.aircraft.push({
         id: `allied-${choice.model}-${ts}-${i}-${Math.floor(Math.random() * 1e6)}`,
@@ -18463,6 +18547,159 @@ export class GameEngine {
   }
 
   // ══════════════════════════════════════════════════════════
+  /**
+   * Rear-area patrols at the points we have taken: local troops of the era raised at each captured
+   * stronghold, one per post and at most four on the map (rebuilt a while after one is lost). They
+   * go after enemy airmen down on land nearby, the way the Solomon Islands scouts brought in
+   * Japanese pilots and the ROK police and RF/PF combed the hills behind the front; otherwise they
+   * walk a beat round their post. They do not stop the NLF slipping into the villages.
+   */
+  private alliedCapTimer = 0;
+  private alliedCapFront?: Vector2D;
+  /**
+   * Allied BARCAP stations follow the front: every 10s the line of contact is taken as the
+   * midpoints of the closest friendly/enemy ground pairs, and each allied CAP flight is moved
+   * to a barrier point between that front and the enemy air threat. With no ground contact
+   * the CAP stays between the fleet and the threat.
+   */
+  private updateAlliedCapStations(dt: number): void {
+    this.alliedCapTimer -= dt;
+    if (this.alliedCapTimer > 0) return;
+    this.alliedCapTimer = 10;
+    const caps = this.aircraft.filter((a) => a.side === 'allied' && a.airMission === 'barcap' && a.state !== 'shot_down' && a.order?.type === 'patrol');
+    if (caps.length === 0) return;
+    const friendly: Vector2D[] = this.groundUnits.filter((u) => !u.isDestroyed && u.side !== 'enemy').map((u) => u.pos);
+    for (const isl of this.islands) {
+      for (const sh of isl.strongholds ?? []) if (sh.isCaptured) friendly.push(sh.cpPos);
+    }
+    const hostile: Vector2D[] = this.groundUnits.filter((u) => !u.isDestroyed && u.side === 'enemy').map((u) => u.pos);
+    for (const isl of this.islands) {
+      for (const inst of isl.installations) if (inst.side === 'enemy' && !inst.isDestroyed) hostile.push(inst.pos);
+    }
+    const threat = this.getEnemyAirThreatAxis() ?? this.aircraft.find((a) => a.side === 'enemy' && a.state !== 'shot_down')?.pos;
+    let front: Vector2D | undefined;
+    if (friendly.length > 0 && hostile.length > 0) {
+      const pairs: { d: number; m: Vector2D }[] = [];
+      for (const f of friendly) {
+        let best = Infinity;
+        let bp: Vector2D | undefined;
+        for (const h of hostile) {
+          const d = Math.hypot(h.x - f.x, h.y - f.y);
+          if (d < best) {
+            best = d;
+            bp = h;
+          }
+        }
+        if (bp && best < 3000) pairs.push({ d: best, m: { x: (f.x + bp.x) / 2, y: (f.y + bp.y) / 2 } });
+      }
+      pairs.sort((a, b) => a.d - b.d);
+      const top = pairs.slice(0, 6);
+      if (top.length > 0) front = { x: top.reduce((s, p) => s + p.m.x, 0) / top.length, y: top.reduce((s, p) => s + p.m.y, 0) / top.length };
+    }
+    const fleet = this.getFlagship()?.pos ?? this.friendlyBase?.center;
+    const station = front ? barrierStation(front, threat, 700) : fleet ? barrierStation(fleet, threat, 1800) : undefined;
+    if (!station) return;
+    const moved = !this.alliedCapFront || Math.hypot(station.x - this.alliedCapFront.x, station.y - this.alliedCapFront.y) > 600;
+    for (const [i, p] of caps.entries()) {
+      // Flights spread a little along the station so they are not stacked on one point
+      p.order.patrolOrigin = { x: station.x + ((i % 4) - 1.5) * 90, y: station.y + (Math.floor(i / 4) - 0.5) * 90 };
+    }
+    if (moved) {
+      if (this.alliedCapFront) {
+        this.addCombatLog({
+          category: 'air',
+          sourceSide: 'allied',
+          sourceName: '盟軍航空部隊',
+          targetName: '戰區空域',
+          actionType: 'recon_spotted',
+          text: front ? '盟軍 BARCAP 依戰線推移調整巡邏站位' : '盟軍 BARCAP 回防艦隊與敵機場之間',
+        });
+      }
+      this.alliedCapFront = station;
+    }
+  }
+
+  private rearPatrolTimer = 0;
+  private rearPatrolLost: Record<string, number> = {};
+  private rearPatrolManned = new Set<string>();
+  private static readonly REAR_PATROL: Record<Era, { type: GroundUnitType; name: string }> = {
+    era1: { type: 'si_scouts_42', name: '所羅門群島土著偵察兵 巡邏隊' },
+    era2: { type: 'usmc_rifle_45', name: '陸戰隊憲兵 巡邏隊' },
+    era3: { type: 'rok_police_50', name: '大韓民國警察 戰鬥警察 巡邏隊' },
+    era4: { type: 'arvn_rfpf_65', name: '南越地方軍 (RF/PF) 巡邏隊' },
+    era5: { type: 'frg_heimatschutz_83', name: '西德國土防衛 巡邏隊' },
+  };
+  private updateRearPatrols(dt: number): void {
+    this.rearPatrolTimer -= dt;
+    if (this.rearPatrolTimer > 0) return;
+    this.rearPatrolTimer = 2;
+    const patrols = this.groundUnits.filter((u) => u.rearPatrol && !u.isDestroyed);
+    const posts = this.islands.flatMap((isl) => (isl.strongholds ?? []).filter((sh) => sh.isCaptured).map((sh) => ({ isl, sh })));
+    // A post whose patrol is gone waits a minute before it is manned again
+    for (const id of [...this.rearPatrolManned]) {
+      if (!patrols.some((u) => u.rearPatrol!.post === id)) {
+        this.rearPatrolManned.delete(id);
+        this.rearPatrolLost[id] = this.gameTime;
+      }
+    }
+    // Raise one patrol at a post that has none (a minute after its last one was lost), four at most
+    if (patrols.length < 4) {
+      for (const { isl, sh } of posts) {
+        if (patrols.some((u) => u.rearPatrol!.post === sh.id)) continue;
+        if (this.gameTime - (this.rearPatrolLost[sh.id] ?? -999) < 60) continue;
+        // Only a post that is actually secure: no live enemy works or troops close round it
+        const near = (q: Vector2D) => dist(q, sh.cpPos) < 600;
+        if (this.groundUnits.some((g) => g.side === 'enemy' && !g.isDestroyed && near(g.pos))) continue;
+        if (isl.installations.some((i) => i.side === 'enemy' && !i.isDestroyed && i.type !== 'pow_camp' && near(i.pos))) continue;
+        let pos: Vector2D | null = null;
+        for (let k = 0; k < 12 && !pos; k++) {
+          const a = Math.random() * Math.PI * 2;
+          const p = { x: sh.cpPos.x + Math.cos(a) * 70, y: sh.cpPos.y + Math.sin(a) * 70 };
+          if (this.isGroundWalkable(p.x, p.y)) pos = p;
+        }
+        if (!pos) continue;
+        const spec = GameEngine.REAR_PATROL[this.era];
+        const u = createGroundUnit(`rear-patrol-${sh.id}-${Math.floor(this.gameTime)}`, spec.type, `${spec.name} (${sh.name.split(' (')[0].split(' [')[0]})`, 'allied', this.era, pos);
+        u.rearPatrol = { home: { ...sh.cpPos }, post: sh.id };
+        this.rearPatrolManned.add(sh.id);
+        this.groundUnits.push(u);
+        patrols.push(u);
+        this.addCombatLog({
+          category: 'naval',
+          sourceSide: 'allied',
+          sourceName: '後方警備',
+          targetName: isl.name,
+          actionType: 'recon_spotted',
+          text: `🚓【後方巡邏】「${u.name}」進駐已攻克的「${sh.name}」，負責搜捕附近跳傘的敵機組員並巡邏周邊。`,
+        });
+        break; // one a tick
+      }
+    }
+    for (const u of patrols) {
+      const home = u.rearPatrol!.home;
+      const airman = (this.lifeRafts ?? [])
+        .filter((r) => r.side === 'enemy' && r.isOnLand && !r.rescued && !r.isCapturedPOW && dist(r.pos, home) < 1400)
+        .sort((a, b) => dist(a.pos, u.pos) - dist(b.pos, u.pos))[0];
+      if (airman) {
+        const tp = u.order.targetPos;
+        if (u.order.type !== 'move' || !tp || dist(tp, airman.pos) > 40) u.order = { type: 'move', targetPos: { ...airman.pos } };
+        continue;
+      }
+      // Walking the beat: a point within 500 m of the post
+      if (u.order.type === 'idle' || (u.order.targetPos && dist(u.pos, u.order.targetPos) < 30)) {
+        for (let k = 0; k < 8; k++) {
+          const a = Math.random() * Math.PI * 2;
+          const r = 120 + Math.random() * 380;
+          const p = { x: home.x + Math.cos(a) * r, y: home.y + Math.sin(a) * r };
+          if (this.isGroundWalkable(p.x, p.y)) {
+            u.order = { type: 'move', targetPos: p };
+            break;
+          }
+        }
+      }
+    }
+  }
+
   /** Whether a settlement is itself contested ground: enemy troops in or right round it. */
   private isSettlementContested(inst: Installation): boolean {
     const r = (inst.civilianZoneRadius ?? 120) + 200;

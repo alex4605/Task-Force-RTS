@@ -288,6 +288,8 @@ export interface GroundTerrainInfo {
 }
 
 export interface GroundUnit {
+  /** Allied rear-area patrol raised at a captured point: hunts downed enemy airmen, otherwise patrols round its post. */
+  rearPatrol?: { home: Vector2D; post: string };
   id: string;
   type: GroundUnitType;
   name: string;
@@ -421,6 +423,8 @@ export interface Ship {
   sarZone?: { x0: number; y0: number; x1: number; y1: number };
   /** The raft the ship is steaming for on its lifeguard station. */
   sarTargetId?: string;
+  /** Headway watchdog on a move order: best distance to the current waypoint, seconds without gain, failures. */
+  navWatch?: { wp: number; best: number; t: number; fails: number };
   /** Small-craft plan for boats drawn by the generic small-craft drawer (PT boats, gunboats, hydrofoils...). */
   craft?: SmallCraftPlan;
   codeName?: string;

@@ -170,6 +170,12 @@ export class TerrainMap {
     return this.at(x, y) === TERRAIN.lake;
   }
 
+  /** Water inside a landmass a ground unit cannot walk into: lakes and the lagoon of an atoll. */
+  isInlandWater(x: number, y: number): boolean {
+    const t = this.at(x, y);
+    return t === TERRAIN.lake || t === TERRAIN.lagoon;
+  }
+
   // ── Build ───────────────────────────────────────────────────────────────────────────────────
 
   /** Calls `fn` for every cell whose centre is inside the polygon; `ragged` pushes the edge in/out by noise. */

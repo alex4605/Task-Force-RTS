@@ -668,12 +668,12 @@ interface EraEquipment {
 // Garrison equipment per era: US forces for the player, IJA / KPA-PVA / NVA / Soviet for the enemy.
 const EMPLACEMENT_EQUIPMENT: Record<Era, { player: EraEquipment; enemy: EraEquipment }> = {
   era1: {
-    player: { rifle: 'usmc_rifle_42', tank: 'usmc_armor_m3', gun: 'usmc_artillery_105', flak: 'opfor_ks19_heavy', names: { rifle: 'M1 Garand / BAR', tank: 'M3 斯圖亞特 37mm', gun: 'M2A1 105mm', flak: 'M2 90mm' } },
-    enemy: { rifle: 'opfor_infantry_42', tank: 'opfor_type95_tank', gun: 'opfor_field_artillery', flak: 'opfor_ks19_heavy', names: { rifle: '三八式 / 九六式輕機槍', tank: '九五式輕戰車 37mm', gun: '九一式十糎榴彈砲', flak: '八八式 75mm 高射砲' } },
+    player: { rifle: 'usmc_rifle_42', tank: 'usmc_armor_m3', gun: 'usmc_artillery_105', flak: 'usmc_90mm_aa_42', names: { rifle: 'M1 Garand / BAR', tank: 'M3 斯圖亞特 37mm', gun: 'M2A1 105mm', flak: 'M2 90mm' } },
+    enemy: { rifle: 'opfor_infantry_42', tank: 'opfor_type95_tank', gun: 'opfor_field_artillery', flak: 'usmc_90mm_aa_42', names: { rifle: '三八式 / 九六式輕機槍', tank: '九五式輕戰車 37mm', gun: '九一式十糎榴彈砲', flak: '八八式 75mm 高射砲' } },
   },
   era2: {
-    player: { rifle: 'usmc_rifle_45', tank: 'usmc_armor_m4', gun: 'usmc_artillery_105', flak: 'opfor_ks19_heavy', names: { rifle: 'M1 Garand / BAR', tank: 'M4 雪曼 75mm', gun: 'M2A1 105mm', flak: 'M2 90mm' } },
-    enemy: { rifle: 'opfor_infantry_45', tank: 'opfor_type97_tank', gun: 'opfor_field_artillery', flak: 'opfor_ks19_heavy', names: { rifle: '九九式 / 九六式輕機槍', tank: '九七式中戰車 57mm', gun: '九一式十糎榴彈砲', flak: '八八式 75mm 高射砲' } },
+    player: { rifle: 'usmc_rifle_45', tank: 'usmc_armor_m4', gun: 'usmc_artillery_105', flak: 'usmc_90mm_aa_42', names: { rifle: 'M1 Garand / BAR', tank: 'M4 雪曼 75mm', gun: 'M2A1 105mm', flak: 'M2 90mm' } },
+    enemy: { rifle: 'opfor_infantry_45', tank: 'opfor_type97_tank', gun: 'opfor_field_artillery', flak: 'usmc_90mm_aa_42', names: { rifle: '九九式 / 九六式輕機槍', tank: '九七式中戰車 57mm', gun: '九一式十糎榴彈砲', flak: '八八式 75mm 高射砲' } },
   },
   era3: {
     player: { rifle: 'usmc_korea_rifle', tank: 'usmc_patton_m46', gun: 'usmc_howitzer_155', flak: 'usmc_duster_m42', names: { rifle: 'M1 Garand / BAR', tank: 'M46 巴頓 90mm', gun: 'M114 155mm', flak: 'M42 Duster 40mm' } },
@@ -701,7 +701,10 @@ const EMPLACEMENT_TITLES: Record<EmplacementKind, [string, string, keyof EraEqui
 function emplacementLabel(kind: EmplacementKind, isPlayer: boolean, era: Era): string {
   const [own, foe, key] = EMPLACEMENT_TITLES[kind];
   const eq = EMPLACEMENT_EQUIPMENT[era][isPlayer ? 'player' : 'enemy'];
-  return `${isPlayer ? own : foe} ${eq.names[key]}`;
+  // Whose garrison it is in that war (there was no NATO before 1949)
+  const SIDE: Record<Era, [string, string]> = { era1: ['美軍', '日軍'], era2: ['美軍', '日軍'], era3: ['聯合國軍', '共軍'], era4: ['美軍', '北越軍'], era5: ['北約', '華約'] };
+  const label = (isPlayer ? own : foe).replace('NATO ', `${SIDE[era][isPlayer ? 0 : 1]} `);
+  return `${label} ${eq.names[key]}`;
 }
 
 // Garrison layouts with era-appropriate silhouettes.

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Aircraft, Island, Ship, Sonobuoy, Vector2D } from '../../types/game';
+import { Aircraft, GroundUnit, Island, Ship, Sonobuoy, Vector2D } from '../../types/game';
 import { CameraViewportState } from '../GameCanvas';
 import type { RadarCoverage } from '../../game/engine';
 import { drawCoverageOnMap } from './drawCoverage';
@@ -17,6 +17,9 @@ interface MiniRadarProps {
   onMiniMapClick: (worldPos: Vector2D) => void;
   /** Radar coverage layer, when switched on. */
   radarCoverage?: RadarCoverage[];
+  /** Allied ships (green) and friendly ground units (ours blue, allied green). */
+  alliedShips?: Ship[];
+  groundUnits?: GroundUnit[];
 }
 
 export const MiniRadar: React.FC<MiniRadarProps> = ({
@@ -30,6 +33,8 @@ export const MiniRadar: React.FC<MiniRadarProps> = ({
   cameraViewport,
   onMiniMapClick,
   radarCoverage,
+  alliedShips = [],
+  groundUnits = [],
 }) => {
   const miniMapCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const isMiniMapDraggingRef = useRef<boolean>(false);
@@ -71,9 +76,9 @@ export const MiniRadar: React.FC<MiniRadarProps> = ({
         if (inst.isDestroyed) continue;
         const ix = inst.pos.x * scale;
         const iy = inst.pos.y * scale;
-        const isFriendly = inst.side === 'player' || inst.side === 'allied';
+        const isFriendly = inst.side === 'player';
         const isNeutral = inst.side === 'neutral';
-        const col = isFriendly ? '#00E5FF' : isNeutral ? '#F59E0B' : '#EF4444';
+        const col = inst.side === 'allied' ? '#00E676' : isFriendly ? '#00E5FF' : isNeutral ? '#F59E0B' : '#EF4444';
 
         ctx.fillStyle = col;
         if (inst.type === 'airfield' || inst.type === 'command_post' || inst.type === 'forward_fob') {
@@ -109,6 +114,22 @@ export const MiniRadar: React.FC<MiniRadarProps> = ({
       ctx.fill();
     }
 
+    // Friendly ground units: ours blue, allied green
+    for (const u of groundUnits) {
+      if (u.isDestroyed || u.embarkedInShipId || u.side === 'enemy') continue;
+      ctx.fillStyle = u.side === 'allied' ? '#00E676' : '#4FC3F7';
+      ctx.fillRect(u.pos.x * scale - 1, u.pos.y * scale - 1, 2, 2);
+    }
+
+    // Allied ships
+    for (const ship of alliedShips) {
+      if (ship.isSunk) continue;
+      ctx.fillStyle = '#00E676';
+      ctx.beginPath();
+      ctx.arc(ship.pos.x * scale, ship.pos.y * scale, 2.3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     // Player Ships
     for (const ship of playerShips) {
       if (ship.isSunk) continue;
@@ -139,7 +160,7 @@ export const MiniRadar: React.FC<MiniRadarProps> = ({
     for (const p of aircraft) {
       if (p.state === 'shot_down') continue;
       if (p.side === 'enemy' && (p.trackedByPlayer ?? 1) <= 0) continue; // not on our scopes
-      ctx.fillStyle = p.side === 'player' ? '#80DEEA' : '#FF8A80';
+      ctx.fillStyle = p.side === 'player' ? '#80DEEA' : p.side === 'allied' ? '#00E676' : '#FF8A80';
       ctx.fillRect(p.pos.x * scale - 1, p.pos.y * scale - 1, 2, 2);
     }
 
@@ -153,7 +174,7 @@ export const MiniRadar: React.FC<MiniRadarProps> = ({
       ctx.lineWidth = 1;
       ctx.strokeRect(vx, vy, Math.min(vw, size - 1), Math.min(vh, size - 1));
     }
-  }, [islands, playerShips, enemyShips, aircraft, sonobuoys, worldSize, cameraViewport, radarCoverage]);
+  }, [islands, playerShips, enemyShips, aircraft, sonobuoys, worldSize, cameraViewport, radarCoverage, alliedShips, groundUnits]);
 
   const panMiniMapFromClient = (clientX: number, clientY: number) => {
     const canvas = miniMapCanvasRef.current;

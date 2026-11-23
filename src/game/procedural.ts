@@ -5171,6 +5171,7 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
     era === 'era3' || era === 'era4' || era === 'era5'
       ? Math.PI * 0.45 // Heading Southeast into the gulf/strait
       : (Math.PI * 3) / 4; addEnemyTaskForce(era, enemyShips, enemyCenter, enemyHeading);
+  addLagoonBoatBases(islands, enemyShips, era, seedBase * 17 + 3);
 
   applyEraPlaceNames(era, islands);
   applyEraEquipment(era, islands);
@@ -9775,10 +9776,11 @@ export function codexFleetShips(era: Era): { player: Ship[]; enemy: Ship[] } {
       createSendaiCL('cx-sendai', 'IJN Sendai 川內號', o),
       createTokyoExpressDD('cx-murasame', 'IJN Murasame 村雨號', o),
       createIjnIBoatSS('cx-i26', 'IJN 伊-26', o, era),
+      createClassicCraft('daihatsu', 'cx-daihatsu', '武裝大發動艇 第1舟艇隊 #1', o, era),
       createMonsunUBoatSS('cx-u178', 'U-178 (季風群)', o, era)
     );
   } else if (era === 'era2') {
-    enemy.push(createAkizukiDD('cx-fuyutsuki', 'IJN Fuyutsuki 冬月號', o, era), createIjnIBoatSS('cx-i58', 'IJN 伊-58', o, era), createMonsunUBoatSS('cx-u195', 'U-195 (季風群)', o, era));
+    enemy.push(createClassicCraft('hayabusa', 'cx-hayabusa', '隼型魚雷艇 第31魚雷艇隊 #1', o, era), createAkizukiDD('cx-fuyutsuki', 'IJN Fuyutsuki 冬月號', o, era), createIjnIBoatSS('cx-i58', 'IJN 伊-58', o, era), createMonsunUBoatSS('cx-u195', 'U-195 (季風群)', o, era));
   } else if (era === 'era3') {
     enemy.push(
       createSverdlovCL('cx-sverdlov', 'Sverdlov 斯維爾德洛夫號', o),
@@ -9871,6 +9873,20 @@ const CLASSIC_CRAFT: Record<string, CraftSpec> = {
     arms: [{ name: '艇艏 250kg 炸藥 (自殺衝撞)', count: '1', type: 'torpedo', desc: '夜間成群衝撞運輸船與登陸艦' }],
     torpedoes: 999, flakRange: 0,
   },
+  daihatsu: {
+    type: 'patrol_boat', side: 'enemy', codeName: 'Daihatsu gunboat', length: 15, width: 3.4, health: 260, speed: 6, maxSpeed: 9, armor: 0.06,
+    craft: { hull: 'wooden', house: [-0.3, 0.18], deck: '#3B3222' },
+    guns: [[3, 0, '25mm Type 96 單裝機砲', 900, 0.6, 1, 35], [-2, 0, '13mm Type 93 機槍', 800, 0.4, 1, 20]],
+    arms: [{ name: '九六式 25mm 機砲', count: '1 門', type: 'main' }, { name: '九三式 13mm 機槍', count: '1 挺', type: 'aa' }],
+    flakRange: 700,
+  },
+  hayabusa: {
+    type: 'patrol_boat', side: 'enemy', codeName: 'Hayabusa-type MTB', length: 18, width: 4.3, health: 300, speed: 16, maxSpeed: 28, armor: 0.05,
+    craft: { hull: 'planing', house: [0.02, 0.2], tubes: 2 },
+    guns: [[5, 0, '25mm Type 96 單裝機砲', 900, 0.6, 1, 35], [-5, 0, '13mm Type 93 機槍', 800, 0.4, 1, 20]],
+    arms: [{ name: '45cm 魚雷', count: '2 枚', type: 'torpedo' }, { name: '九六式 25mm 機砲', count: '1 門', type: 'aa' }],
+    torpedoes: 18, flakRange: 700,
+  },
   shanghai: {
     type: 'patrol_boat', side: 'enemy', codeName: 'Shanghai-class', length: 39, width: 5.4, health: 600, speed: 18, maxSpeed: 30, armor: 0.08,
     craft: { hull: 'displacement', house: [0.04, 0.24], stern: 'racks' },
@@ -9944,4 +9960,57 @@ function classicCraftFor(era: Era, side: 'player' | 'enemy', at: Vector2D): Ship
     return [g];
   }
   return [];
+}
+
+/**
+ * Boat bases in the lagoons of the Pacific atolls: a pier on the lagoon shore and its boats moored
+ * inside, where they can sortie through the reef passes. In 1942 the boats are the armed Daihatsu
+ * landing barges that ran supplies and fought in the shallows of the Solomons; in 1944-45 the
+ * Hayabusa-type torpedo boats the Navy sent to the island bases.
+ */
+function addLagoonBoatBases(islands: Island[], enemyShips: Ship[], era: Era, seed: number): void {
+  if (era !== 'era1' && era !== 'era2') return;
+  let rnd = Math.abs(Math.floor(seed)) % 2147483647 || 1;
+  const rand = () => (rnd = (rnd * 16807) % 2147483647) / 2147483647;
+  let n = 0;
+  const withLagoon = islands.filter((i) => !i.isFriendlyBase && (i.lagoons?.length ?? 0) > 0 && (i.lagoons![0].points.length ?? 0) > 6);
+  withLagoon.forEach((isl, k) => {
+    if (k > 0 && rand() > 0.6) return; // at least one, then most of the others
+    const lag = isl.lagoons![0];
+    const pts = lag.points;
+    for (let tries = 0; tries < 12; tries++) {
+      const p = pts[Math.floor(rand() * pts.length)];
+      const dx = p.x - lag.center.x;
+      const dy = p.y - lag.center.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const pos = { x: p.x + (dx / len) * 50, y: p.y + (dy / len) * 50 };
+      if (!isPointInPolygon(pos, isl.points) || isPointInPolygon(pos, pts)) continue;
+      if (isl.installations.some((i) => dist(i.pos, pos) < 120)) continue;
+      n++;
+      isl.installations.push(
+        makeInstallation({
+          id: `${isl.id}-boat-base`,
+          type: 'pontoon_pier',
+          name: era === 'era1' ? `第${n}舟艇隊 大發基地 (潟湖泊地)` : `第${30 + n}魚雷艇隊 泊地 (潟湖)`,
+          weaponDesc: era === 'era1' ? '武裝大發動艇泊地 · 夜間沿岸運補與淺水伏擊' : '隼型魚雷艇泊地 · 經礁口水道出擊襲擊登陸船團',
+          pos,
+          angle: Math.atan2(-dy, -dx),
+          health: 1800,
+          armor: 0.25,
+          side: 'enemy',
+        })
+      );
+      // The boats lie inside, between the pier and the middle of the lagoon
+      for (let b = 0; b < 2; b++) {
+        const t = 0.45 + b * 0.12;
+        const bp = { x: lag.center.x + dx * t + (b - 0.5) * 30, y: lag.center.y + dy * t };
+        enemyShips.push(
+          era === 'era1'
+            ? createClassicCraft('daihatsu', `lagoon-boat-${isl.id}-${b}`, `武裝大發動艇 第${n}舟艇隊 #${b + 1}`, bp, era)
+            : createClassicCraft('hayabusa', `lagoon-boat-${isl.id}-${b}`, `隼型魚雷艇 第${30 + n}魚雷艇隊 #${b + 1}`, bp, era)
+        );
+      }
+      break;
+    }
+  });
 }

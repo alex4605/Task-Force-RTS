@@ -90,11 +90,14 @@ function navGrid(map: TerrainMap): NavGrid {
   const sub = NAV_CELL / 3;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      // Worst of a 3×3 sample, but a road anywhere in the cell lets traffic through (bridges)
+      // Mean cost of the dry part of a 3×3 sample, passable when at least 4 of the 9 points are dry
+      // land (so the narrow rim of an atoll joins up round its lagoon); a road anywhere in the cell
+      // lets traffic through (bridges)
       let foot = Infinity;
       let veh = Infinity;
-      let worstFoot = 0;
-      let worstVeh = 0;
+      let sumFoot = 0;
+      let sumVeh = 0;
+      let dry = 0;
       let road = false;
       for (let sy = 0; sy < 3; sy++) {
         for (let sx = 0; sx < 3; sx++) {
@@ -103,14 +106,17 @@ function navGrid(map: TerrainMap): NavGrid {
           const t = map.at(x, y);
           if (map.onRoad(x, y)) road = true;
           const water = t === TERRAIN.water || t === TERRAIN.lagoon || t === TERRAIN.lake;
-          const f = water ? 0 : map.moveFactor(x, y, false);
-          const v = water ? 0 : map.moveFactor(x, y, true);
-          worstFoot = Math.max(worstFoot, f > 0 ? 1 / f : 1e9);
-          worstVeh = Math.max(worstVeh, v > 0 ? 1 / v : 1e9);
+          if (water) continue;
+          dry++;
+          const f = map.moveFactor(x, y, false);
+          const v = map.moveFactor(x, y, true);
+          sumFoot += f > 0 ? 1 / f : 1e9;
+          sumVeh += v > 0 ? 1 / v : 1e9;
         }
       }
-      foot = road ? 1 / 1.15 : worstFoot;
-      veh = road ? 1 / 1.35 : worstVeh;
+      const mostlyDry = dry >= 4;
+      foot = road ? 1 / 1.15 : mostlyDry ? sumFoot / dry : 1e9;
+      veh = road ? 1 / 1.35 : mostlyDry ? sumVeh / dry : 1e9;
       costFoot[r * cols + c] = foot >= 1e8 ? Infinity : foot;
       costVehicle[r * cols + c] = veh >= 1e8 ? Infinity : veh;
     }
@@ -174,9 +180,34 @@ export function findGroundPath(map: TerrainMap, from: Vector2D, to: Vector2D, ve
   const cost = vehicle ? g.costVehicle : g.costFoot;
   const cellOf = (p: Vector2D) => Math.max(0, Math.min(g.rows - 1, Math.floor(p.y / NAV_CELL))) * g.cols + Math.max(0, Math.min(g.cols - 1, Math.floor(p.x / NAV_CELL)));
   const start = cellOf(from);
-  const goal = cellOf(to);
+  let goal = cellOf(to);
   if (start === goal) return [to];
-  if (!isFinite(cost[goal])) return null;
+  if (!isFinite(cost[goal])) {
+    // A goal in the water (a lagoon, the surf line): make for the nearest passable ground instead
+    const gx0 = goal % g.cols;
+    const gy0 = Math.floor(goal / g.cols);
+    let best = -1;
+    for (let r = 1; r <= 6 && best < 0; r++) {
+      let bestD = Infinity;
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+          const x = gx0 + dx;
+          const y = gy0 + dy;
+          if (x < 0 || y < 0 || x >= g.cols || y >= g.rows) continue;
+          const n = y * g.cols + x;
+          const d = Math.hypot(((x + 0.5) * NAV_CELL) - from.x, ((y + 0.5) * NAV_CELL) - from.y);
+          if (isFinite(cost[n]) && d < bestD) {
+            bestD = d;
+            best = n;
+          }
+        }
+      }
+    }
+    if (best < 0) return null;
+    goal = best;
+    to = { x: ((goal % g.cols) + 0.5) * NAV_CELL, y: (Math.floor(goal / g.cols) + 0.5) * NAV_CELL };
+  }
   const gScore = new Float32Array(g.cols * g.rows).fill(Infinity);
   const came = new Int32Array(g.cols * g.rows).fill(-1);
   const closed = new Uint8Array(g.cols * g.rows);
