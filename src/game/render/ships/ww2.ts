@@ -62,6 +62,11 @@ export function drawBattleship(rc: RenderContext, ship: Ship, hullColor: string,
     // ════ US Battleship (Iowa / Colorado) ════
     // Iowa: long fine entry ahead of the forward turrets; North Carolina: shorter, fuller bow
     const isIowa = /Iowa|Missouri|New Jersey|Wisconsin|BB-6[1-4]/.test(ship.name);
+    // King George V class (Howe, Duke of York): squat box bridge, two stacks with the hangar
+    // and cross-deck catapult between them, no fantail catapults
+    const isKgv = /Howe|Duke of York|King George|Anson/.test(ship.name);
+    // Queen Elizabeth class (Warspite) after her 1937 rebuild: one large trunked funnel
+    const isQe = /Warspite|Queen Elizabeth|Valiant/.test(ship.name);
     drawHullShape(ctx, l, w, isIowa ? { entry: 0.38, run: 0.2, transom: 0.3, fullness: 0.32, rake: 0.012 } : { entry: 0.3, run: 0.2, transom: 0.35, fullness: 0.45, rake: 0.008 }, '#081726', hullColor, 2.2);
 
     // Superstructure between the forward superfiring turret and the aft turret (from the turret data)
@@ -95,7 +100,22 @@ export function drawBattleship(rc: RenderContext, ship: Ship, hullColor: string,
     ctx.arc(fwdX - span * 0.2, 0, Math.max(1.8, sw * 0.24), 0, Math.PI * 2);
     ctx.stroke();
     // Funnels: Iowa's two widely spaced stacks (the forward one trunked into the tower); NC's pair close together
-    const stacks = isIowa ? [0.36, 0.62] : [0.4, 0.56];
+    const stacks = isIowa ? [0.36, 0.62] : isKgv ? [0.3, 0.62] : isQe ? [0.45] : [0.4, 0.56];
+    if (isKgv) {
+      // Hangars either side of the forward stack and the athwartships catapult behind it
+      ctx.fillStyle = '#16293A';
+      ctx.strokeStyle = detailColor;
+      ctx.lineWidth = 1;
+      ctx.fillRect(fwdX - span * 0.4, -sw * 0.95, span * 0.16, sw * 0.4);
+      ctx.strokeRect(fwdX - span * 0.4, -sw * 0.95, span * 0.16, sw * 0.4);
+      ctx.fillRect(fwdX - span * 0.4, sw * 0.55, span * 0.16, sw * 0.4);
+      ctx.strokeRect(fwdX - span * 0.4, sw * 0.55, span * 0.16, sw * 0.4);
+      ctx.strokeStyle = '#FFE082';
+      ctx.beginPath();
+      ctx.moveTo(fwdX - span * 0.47, -w * 0.44);
+      ctx.lineTo(fwdX - span * 0.47, w * 0.44);
+      ctx.stroke();
+    }
     ctx.fillStyle = '#263238';
     ctx.strokeStyle = hullColor;
     ctx.lineWidth = 1.2;
@@ -117,7 +137,11 @@ export function drawBattleship(rc: RenderContext, ship: Ship, hullColor: string,
     ctx.arc(aftX + span * 0.1, 0, Math.max(1.6, sw * 0.2), 0, Math.PI * 2);
     ctx.stroke();
 
-    // Fantail: two catapults angled outboard and the aircraft crane at the stern
+    // Fantail: two catapults angled outboard and the aircraft crane at the stern (USN only)
+    if (isKgv || isQe) {
+      drawShipTurrets(rc, ship, hullColor);
+      return;
+    }
     ctx.strokeStyle = '#FFE082';
     ctx.lineWidth = 1.2;
     ctx.beginPath();
@@ -138,18 +162,31 @@ export function drawBattleship(rc: RenderContext, ship: Ship, hullColor: string,
 }
 
 interface CruiserLayout {
-  navy: 'usn' | 'ijn';
+  navy: 'usn' | 'ijn' | 'rn';
   /** Funnels as fractions of the superstructure zone (0 = forward end, 1 = aft end). */
   funnels: { at: number; raked?: boolean; trunked?: boolean }[];
   /** Aircraft catapults: 'stern' (Baltimore / Cleveland) or 'midships' (treaty cruisers, IJN). */
   catapult: 'stern' | 'midships' | 'none';
   /** IJN quadruple torpedo mounts on the beam, Atlanta's centreline quads. */
-  torpedoes: 'ijn_beam' | 'ijn_centre' | 'usn_centre' | 'none';
+  torpedoes: 'ijn_beam' | 'ijn_centre' | 'usn_centre' | 'rn_beam' | 'none';
   /** Takao-class towering bridge structure. */
   massiveBridge?: boolean;
 }
 
 function cruiserLayout(name: string): CruiserLayout {
+  // Commonwealth and Dutch cruisers (allied squadrons)
+  if (/Australia|Canberra/.test(name)) {
+    // County class: three tall funnels, amidships catapult, beam torpedo tubes
+    return { navy: 'rn', funnels: [{ at: 0.3 }, { at: 0.48 }, { at: 0.66 }], catapult: 'midships', torpedoes: 'rn_beam' };
+  }
+  if (/Shropshire/.test(name)) return { navy: 'rn', funnels: [{ at: 0.3 }, { at: 0.48 }, { at: 0.66 }], catapult: 'none', torpedoes: 'rn_beam' };
+  if (/Exeter/.test(name)) return { navy: 'rn', funnels: [{ at: 0.36, raked: true }, { at: 0.56, raked: true }], catapult: 'midships', torpedoes: 'rn_beam' };
+  if (/De Ruyter/.test(name)) return { navy: 'rn', funnels: [{ at: 0.48, trunked: true }], catapult: 'midships', torpedoes: 'none' };
+  if (/Achilles|Leander/.test(name)) return { navy: 'rn', funnels: [{ at: 0.46, trunked: true }], catapult: 'midships', torpedoes: 'rn_beam' };
+  if (/Hobart|Perth \(D29|Sydney/.test(name)) return { navy: 'rn', funnels: [{ at: 0.34 }, { at: 0.6 }], catapult: 'midships', torpedoes: 'rn_beam' };
+  if (/Argonaut|Dido|Bellona/.test(name)) return { navy: 'rn', funnels: [{ at: 0.4 }, { at: 0.62 }], catapult: 'none', torpedoes: 'rn_beam' };
+  if (/Belfast \(C35|Jamaica|Swiftsure|Newfoundland/.test(name)) return { navy: 'rn', funnels: [{ at: 0.34 }, { at: 0.6 }], catapult: 'none', torpedoes: 'rn_beam' };
+  if (/Belfast|Gambia|Sheffield|Edinburgh|Fiji/.test(name)) return { navy: 'rn', funnels: [{ at: 0.32 }, { at: 0.6 }], catapult: 'midships', torpedoes: 'rn_beam' };
   if (/Takao|Atago|Maya/.test(name)) {
     return { navy: 'ijn', massiveBridge: true, funnels: [{ at: 0.38, raked: true, trunked: true }, { at: 0.58, raked: true }], catapult: 'midships', torpedoes: 'ijn_beam' };
   }
@@ -281,6 +318,18 @@ export function drawCruiser(rc: RenderContext, ship: Ship, hullColor: string, de
         ctx.stroke();
       }
     }
+  } else if (lay.torpedoes === 'rn_beam') {
+    // RN triple 21-inch mounts on each beam abaft the funnels
+    for (const side of [-1, 1]) {
+      const ox = zx(0.78);
+      ctx.beginPath();
+      for (let i = 0; i < 3; i++) {
+        const y = side * (w * 0.3 + i * 0.9);
+        ctx.moveTo(ox - l * 0.028, y);
+        ctx.lineTo(ox + l * 0.028, y);
+      }
+      ctx.stroke();
+    }
   } else if (lay.torpedoes === 'ijn_centre' || lay.torpedoes === 'usn_centre') {
     const tx = zx(lay.torpedoes === 'ijn_centre' ? 0.66 : 0.5);
     ctx.beginPath();
@@ -296,7 +345,7 @@ export function drawCruiser(rc: RenderContext, ship: Ship, hullColor: string, de
 }
 
 interface DestroyerLayout {
-  navy: 'usn' | 'ijn' | 'sov';
+  navy: 'usn' | 'ijn' | 'sov' | 'rn';
   /** Funnel centres as fractions of length (bow = +0.5); raked funnels lean aft (IJN). */
   funnels: { x: number; raked?: boolean; trunked?: boolean }[];
   /** Centreline torpedo mounts: position and number of tubes. */
@@ -308,6 +357,19 @@ interface DestroyerLayout {
 
 // Plan-view layouts per destroyer class, positions as fractions of hull length from midships.
 function destroyerLayout(name: string): DestroyerLayout {
+  // Commonwealth, Dutch and ROK destroyers and escorts (allied squadrons)
+  if (/Arunta|Warramunga|Bataan|Cayuga|Athabaskan|Cossack/.test(name)) {
+    // Tribal class: two funnels, one quadruple torpedo mount, twin 4.7in mounts fore and aft
+    return { navy: 'rn', bridge: [0.14, 0.22], funnels: [{ x: 0.07 }, { x: -0.04 }], tubes: [{ x: -0.1, count: 4 }] };
+  }
+  if (/Napier|Jervis/.test(name)) return { navy: 'rn', bridge: [0.13, 0.22], funnels: [{ x: 0.04, trunked: true }], tubes: [{ x: -0.05, count: 5 }, { x: -0.14, count: 5 }] };
+  if (/Electra|Kortenaer/.test(name)) return { navy: 'rn', bridge: [0.14, 0.22], funnels: [{ x: 0.07 }, { x: -0.03 }], tubes: [{ x: -0.1, count: 4 }, { x: -0.17, count: 4 }] };
+  if (/Quilliam|Grenville|Evertsen/.test(name)) return { navy: 'rn', bridge: [0.13, 0.22], funnels: [{ x: 0.03 }], tubes: [{ x: -0.07, count: 4 }, { x: -0.15, count: 4 }] };
+  if (/Armada/.test(name)) return { navy: 'rn', bridge: [0.11, 0.23], funnels: [{ x: 0.02, trunked: true }], tubes: [{ x: -0.09, count: 4 }, { x: -0.16, count: 4 }] };
+  if (/Defender|Vampire|Daring/.test(name)) return { navy: 'rn', bridge: [0.12, 0.21], funnels: [{ x: 0.05, trunked: true }, { x: -0.06 }], tubes: [{ x: -0.13, count: 5 }] };
+  if (/Murchison|Rotoiti|Grandière|Baekdusan/.test(name)) return { navy: 'rn', bridge: [0.12, 0.21], funnels: [{ x: 0.02 }], tubes: [] };
+  if (/Trần Hưng Đạo/.test(name)) return { navy: 'usn', bridge: [0.1, 0.2], funnels: [{ x: 0.03 }], tubes: [] };
+  if (/Chungbuk/.test(name)) return { navy: 'usn', bridge: [0.06, 0.12], funnels: [{ x: 0.02 }, { x: -0.1 }], tubes: [] };
   if (/Shimakaze/.test(name)) {
     return { navy: 'ijn', bridge: [0.14, 0.23], deckBreak: 0.13, funnels: [{ x: 0.07, raked: true, trunked: true }, { x: -0.04, raked: true }], tubes: [{ x: 0.0, count: 5 }, { x: -0.1, count: 5 }, { x: -0.155, count: 5 }] };
   }
@@ -1099,3 +1161,6 @@ export function drawAkizukiDD(rc: RenderContext, ship: Ship, hullColor: string, 
 
   drawShipTurrets(rc, ship, hullColor);
 }
+
+/** Allied gun ships whose class the WW2 drawers above know (Commonwealth, Dutch, ROK and ex-USN). */
+export const ALLIED_GUN_SHIP_CLASSES = /Australia|Canberra|Shropshire|Exeter|De Ruyter|Achilles|Leander|HMAS Hobart 荷巴特號 \(D63\)|Argonaut|Belfast|Jamaica|Swiftsure|Gambia|Howe|Duke of York|King George|Warspite|Arunta|Warramunga|Bataan|Cayuga|Athabaskan|Cossack|Napier|Jervis|Electra|Kortenaer|Quilliam|Grenville|Evertsen|Armada|Defender|Vampire|Murchison|Rotoiti|Grandière|Baekdusan|Trần Hưng Đạo|Chungbuk/;

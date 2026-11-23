@@ -1945,7 +1945,7 @@ export function drawShipObjectPreview(ctx: CanvasRenderingContext2D, width: numb
   if (icon === undefined) {
     icon = null;
     if (typeof document !== 'undefined') {
-      const s: Ship = { ...ship, pos: { x: 0, y: 0 }, heading: 0, turrets: ship.turrets.map((t) => ({ ...t, angle: t.relX < 0 ? Math.PI : 0 })) };
+      const s: Ship = { ...ship, pos: { x: 0, y: 0 }, heading: 0, isSubmerged: false, speed: 0, turrets: ship.turrets.map((t) => ({ ...t, angle: t.relX < 0 ? Math.PI : 0 })) };
       const res = 4;
       const span = Math.max(80, s.length * 1.4);
       const raw = document.createElement('canvas');

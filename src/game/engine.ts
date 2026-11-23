@@ -18765,7 +18765,7 @@ export class GameEngine {
   }
 
   // 平民設施與難民營附帶損害軍事懲處 (Civilian Collateral Penalty)
-  // 扣除 15 CP，發出高優先級軍事法庭與參謀訓誡戰鬥日誌
+  // 扣除政治值 PP，發出高優先級軍事法庭與參謀訓誡戰鬥日誌
   // ══════════════════════════════════════════════════════════
   private triggerCivilianCollateralPenalty(inst: Installation, attacker: string, scaledPenalty?: number) {
     if (this.civilianCollateralCooldowns[inst.id] && this.civilianCollateralCooldowns[inst.id] > 0) return;

@@ -116,7 +116,7 @@ export function drawAlliedSAGShip(rc: RenderContext, ship: Ship, hullColor: stri
     }
 
     // 艦尾動態揮舞：日本海上自衛隊十六條旭日旗
-    drawNavalEnsign(rc, 'rising_sun', -l * 0.48, 0, 13, 8.5);
+    drawNavalEnsign(rc, 'rising_sun', -l * 0.48, 0, Math.min(13, l * 0.1), Math.min(8.5, l * 0.065));
 
   } else if (name.includes('Bremen')) {
     // 2. 德國布萊梅級巡防艦 (FGS Bremen F207)
@@ -152,7 +152,7 @@ export function drawAlliedSAGShip(rc: RenderContext, ship: Ship, hullColor: stri
     ctx.fillRect(-l * 0.44, -w * 0.32, l * 0.22, w * 0.64);
 
     // 艦尾動態：德國聯邦海軍旗
-    drawNavalEnsign(rc, 'de_bundesmarine', -l * 0.47, 0, 13, 8.5);
+    drawNavalEnsign(rc, 'de_bundesmarine', -l * 0.47, 0, Math.min(13, l * 0.1), Math.min(8.5, l * 0.065));
 
   } else if (name.includes('Tourville') || name.includes('FS ')) {
     // 3. 法國杜爾維爾級導向飛彈驅逐艦 (FS Tourville D610)
@@ -189,7 +189,7 @@ export function drawAlliedSAGShip(rc: RenderContext, ship: Ship, hullColor: stri
     ctx.fillRect(-l * 0.34, -w * 0.16, l * 0.08, w * 0.32);
 
     // 艦尾動態：法國海軍三色旗
-    drawNavalEnsign(rc, 'fr_marine', -l * 0.48, 0, 13, 8.5);
+    drawNavalEnsign(rc, 'fr_marine', -l * 0.48, 0, Math.min(13, l * 0.1), Math.min(8.5, l * 0.065));
 
   } else {
     // 4. 英國皇家海軍 (Royal Navy SAG: KGV / Duke of York / Sheffield / Belfast / Type 42 / Jervis)
@@ -308,7 +308,7 @@ export function drawAlliedSAGShip(rc: RenderContext, ship: Ship, hullColor: stri
 
     // 艦尾動態：英國皇家海軍白船旗 (White Ensign)
     const ensign = alliedEnsign(ship);
-    if (ensign) drawNavalEnsign(rc, ensign, -l * 0.48, 0, 13, 8.5);
+    if (ensign) drawNavalEnsign(rc, ensign, -l * 0.48, 0, Math.min(13, l * 0.1), Math.min(8.5, l * 0.065));
   }
 
   drawShipTurrets(rc, ship, hullColor);
