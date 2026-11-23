@@ -7,6 +7,7 @@ import { drawSmallCraft } from './smallCraft';
 import { SHIP_HULL_DRAWERS } from './hulls';
 import { ALLIED_GUN_SHIP_CLASSES } from './ww2';
 import { alliedEnsign } from './alliedClasses';
+import { drawColdWarAlliedShip } from './coldWarAllied';
 import { planView } from './planform';
 
 function isSubmarineShip(ship: Ship): boolean {
@@ -596,7 +597,7 @@ export { drawShipTurrets } from './mounts';
 // 盟軍水面打擊群 (Allied SAG) 專屬考證艦艇外觀與動態軍艦旗
 // ══════════════════════════════════════════════════════════
 /** Naval ensigns drawn on allied ships. */
-export type NavalEnsign = 'white_ensign' | 'rising_sun' | 'de_bundesmarine' | 'fr_marine' | 'au_white_ensign' | 'ca_ensign' | 'nl_ensign' | 'rok_ensign';
+export type NavalEnsign = 'white_ensign' | 'rising_sun' | 'de_bundesmarine' | 'fr_marine' | 'au_white_ensign' | 'ca_ensign' | 'nl_ensign' | 'rok_ensign' | 'rvn_ensign';
 
 export function drawNavalEnsign(rc: RenderContext, ensignType: NavalEnsign, x: number, y: number, length: number = 13, height: number = 8.5) {
   const ctx = rc.ctx;
@@ -768,6 +769,12 @@ export function drawNavalEnsign(rc: RenderContext, ensignType: NavalEnsign, x: n
     ctx.fillRect(0, h3, length, h3);
     ctx.fillStyle = '#1565C0';
     ctx.fillRect(0, h3 * 2, length, h3);
+  } else if (ensignType === 'rvn_ensign') {
+    // Republic of Vietnam: yellow field with three red stripes (the navy flew the national flag)
+    ctx.fillStyle = '#FFD600';
+    ctx.fillRect(0, 0, length, height);
+    ctx.fillStyle = '#D32F2F';
+    for (const f of [0.36, 0.48, 0.6]) ctx.fillRect(0, height * f - height * 0.045, length, height * 0.09);
   } else if (ensignType === 'rok_ensign') {
     // 🇰🇷 Taegukgi: red-over-blue taeguk with the four trigrams
     ctx.fillStyle = '#FFFFFF';
@@ -805,6 +812,12 @@ function renderShipHullByType(rc: RenderContext, ship: Ship, hullColor: string, 
     if (adamsDerivative || ((ship.type === 'battleship' || ship.type === 'cruiser' || ship.type === 'destroyer') && ALLIED_GUN_SHIP_CLASSES.test(ship.name))) {
       // Classic gun ships (and the Adams-class exports) get the full class-specific plan view, flying their own ensign
       SHIP_HULL_DRAWERS[ship.type](rc, ship, hullColor, detailColor);
+      const ensign = alliedEnsign(ship);
+      if (ensign) drawNavalEnsign(rc, ensign, -ship.length * 0.48, 0, Math.min(13, ship.length * 0.1), Math.min(8.5, ship.length * 0.065));
+      return;
+    }
+    if (drawColdWarAlliedShip(rc, ship, hullColor, detailColor)) {
+      // Cold War allied escorts drawn from their class layouts (coldWarAllied.ts)
       const ensign = alliedEnsign(ship);
       if (ensign) drawNavalEnsign(rc, ensign, -ship.length * 0.48, 0, Math.min(13, ship.length * 0.1), Math.min(8.5, ship.length * 0.065));
       return;

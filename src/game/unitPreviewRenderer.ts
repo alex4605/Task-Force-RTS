@@ -5,6 +5,7 @@ import { drawSpecificAircraftModel } from './render/aircraft';
 import { AIRCRAFT_NATION } from './render/aircraft/nation';
 import { TANK_PLANS, drawTankPlan } from './render/groundPlan';
 import { SUPPORT_PLANS, drawRocketLauncherPlan, drawSupportPlan } from './render/groundPlanSupport';
+import { drawTowedAaGunPlan } from './render/aaGunPlans';
 import { drawAtgmTeam, drawEngineerTeam, drawInfantryTeam, drawMortarSection } from './render/groundInfantry';
 import { app6Function, app6Mobility, drawApp6 } from './render/app6';
 
@@ -15,6 +16,8 @@ export interface UnitPreviewOptions {
   compact?: boolean;
   /** Era of the card (ships: draws the exact class the card delivers in that era). */
   era?: Era;
+  /** Ground units: draw in the enemy's or the allies' colours (the encyclopedia). */
+  side?: 'player' | 'enemy' | 'allied';
 }
 
 /**
@@ -966,7 +969,9 @@ export function drawGroundSilhouette(
 
   const kind = groundSilhouetteClass(t);
 
-  if ((kind === 'tank' || kind === 'spg' || kind === 'air_defense' || kind === 'carrier') && SUPPORT_PLANS.some((p) => p.match.test(t))) {
+  if (drawTowedAaGunPlan(ctx, t, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor })) {
+    // Towed light / medium AA guns in their own plan views (render/aaGunPlans.ts)
+  } else if ((kind === 'tank' || kind === 'spg' || kind === 'air_defense' || kind === 'carrier') && SUPPORT_PLANS.some((p) => p.match.test(t))) {
     // Self-propelled guns, tank destroyers and air-defence vehicles from real dimensions
     drawSupportPlan(ctx, SUPPORT_PLANS.find((p) => p.match.test(t))!, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor });
   } else if (kind === 'rocket' && drawRocketLauncherPlan(ctx, t, { hullFill, hullHighlight, hullStroke, turretFill, trackColor, barrelColor })) {
@@ -2496,13 +2501,13 @@ function drawAircraftPreview(
   ctx.restore();
 }
 
-function drawGroundPreview(ctx: CanvasRenderingContext2D, w: number, h: number, rawKey: string) {
+function drawGroundPreview(ctx: CanvasRenderingContext2D, w: number, h: number, rawKey: string, side: 'player' | 'enemy' | 'allied' = 'player') {
   const t = normalizeKey(rawKey);
   const cx = w * 0.52;
   const cy = h * 0.54;
   const scale = Math.min(w / 46, h / 28);
 
-  drawGroundSilhouetteAt(ctx, t, cx, cy, scale);
+  drawGroundSilhouetteAt(ctx, t, cx, cy, scale, side === 'enemy' ? false : side === 'allied' ? 'allied' : true);
 
   // The unit's APP-6 symbol in the corner, exactly as it appears on the battlefield
   const fn = app6Function(t);
@@ -2518,11 +2523,12 @@ function drawGroundSilhouetteAt(
   unitType: string,
   cx: number,
   cy: number,
-  scale: number
+  scale: number,
+  isPlayer: boolean | 'allied' = true
 ) {
   ctx.save();
   ctx.translate(cx, cy);
-  drawGroundSilhouette(ctx, unitType, true, scale);
+  drawGroundSilhouette(ctx, unitType, isPlayer, scale);
   ctx.restore();
 }
 
@@ -2789,7 +2795,7 @@ export function drawUnitPreview(
   } else if (kind === 'aircraft') {
     drawAircraftPreview(ctx, width, height, unitKey, options.payloadType);
   } else if (kind === 'ground') {
-    drawGroundPreview(ctx, width, height, unitKey);
+    drawGroundPreview(ctx, width, height, unitKey, options.side);
   } else {
     drawInstallationPreview(ctx, width, height, unitKey);
   }

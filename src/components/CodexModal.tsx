@@ -80,7 +80,7 @@ ShipPreview.displayName = 'ShipPreview';
 const Preview: React.FC<{ e: CodexEntry; era: Era; w: number; h: number }> = ({ e, era, w, h }) => {
   if (e.ship) return <ShipPreview ship={e.ship} cacheKey={e.key} width={w} height={h} />;
   if (e.kind === 'site') return <SitePreview type={e.key} name={e.title} era={e.eras[0] ?? era} width={w} height={h} />;
-  return <UnitPreviewCanvas kind={e.kind} unitKey={e.key} width={w} height={h} era={e.eras[0] ?? era} />;
+  return <UnitPreviewCanvas kind={e.kind} unitKey={e.key} width={w} height={h} era={e.eras[0] ?? era} side={e.side === 'enemy' || e.side === 'allied' ? e.side : undefined} />;
 };
 
 export const CodexModal: React.FC<CodexModalProps> = ({ isOpen, onClose, era }) => {

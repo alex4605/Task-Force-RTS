@@ -242,6 +242,7 @@ export function alliedEnsign(ship: Ship): NavalEnsign | undefined {
   if (n.startsWith('HMCS ')) return early ? 'white_ensign' : 'ca_ensign';
   if (n.startsWith('HNLMS ')) return 'nl_ensign';
   if (n.startsWith('ROKS ')) return 'rok_ensign';
+  if (n.startsWith('RVNS ')) return 'rvn_ensign';
   if (n.startsWith('FGS ')) return 'de_bundesmarine';
   if (n.startsWith('FS ')) return 'fr_marine';
   if (n.startsWith('JDS ')) return 'rising_sun';

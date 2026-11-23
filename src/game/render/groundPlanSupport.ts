@@ -75,7 +75,7 @@ export interface SupportPlan {
 export const SUPPORT_PLANS: SupportPlan[] = [
   // ── Additional US and allied vehicles ──
   // M16 MGMC: half-track with the M45 quad .50 mount in the open rear body
-  { match: /quad50/, L: 6.5, W: 2.2, track: 0.3, halftrack: true, nose: 'flat', noseLen: 0.3, engine: { len: 1.2, at: 'front' }, cab: { len: 1.3 }, mount: { x: -1.3, len: 1.7, wid: 1.7, kind: 'open', shape: 'dome' }, guns: [{ y: -0.5, len: 2.2, bore: 13 }, { y: -0.25, len: 2.2, bore: 13 }, { y: 0.25, len: 2.2, bore: 13 }, { y: 0.5, len: 2.2, bore: 13 }] },
+  { match: /quad50/, L: 6.5, W: 2.2, track: 0.3, halftrack: true, nose: 'flat', noseLen: 0.3, engine: { len: 1.2, at: 'front' }, cab: { len: 1.3 }, mount: { x: -1.3, len: 1.7, wid: 1.7, kind: 'open', shape: 'dome' }, guns: [{ y: -0.5, len: 2.2, bore: 20 }, { y: -0.25, len: 2.2, bore: 20 }, { y: 0.25, len: 2.2, bore: 20 }, { y: 0.5, len: 2.2, bore: 20 }] },
   // M113 ACAV: commander's .50 behind a shield and two shielded M60s on the roof
   { match: /acav/, L: 4.86, W: 2.69, track: 0.38, nose: 'flat', noseLen: 0.4, engine: { len: 1.2, at: 'front_right' }, mount: { x: 0.3, y: -0.4, len: 1.0, wid: 1.0, kind: 'turret', shape: 'dome' }, guns: [{ y: 0, len: 1.9, bore: 13 }], pintles: [{ x: -1.2, y: -1.0, dir: -1.2 }, { x: -1.2, y: 1.0, dir: 1.2 }] },
   // M106 / M106A2: M113 hull with the 4.2-inch / 107mm mortar on a turntable under the big rear roof hatch, firing over the back
