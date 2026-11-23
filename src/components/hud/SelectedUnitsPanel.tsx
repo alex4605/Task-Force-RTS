@@ -182,7 +182,7 @@ export const SelectedUnitsPanel: React.FC<SelectedUnitsPanelProps> = ({
   const sonobuoyDisabled = isLegacyEra || !hasBuoyAmmo;
 
   return (
-    <div className="pointer-events-auto bg-[#071322]/90 backdrop-blur-md border border-[#00E676]/60 rounded-lg p-3 w-80 text-xs font-mono space-y-2.5 shadow-xl">
+    <div className="pointer-events-auto bg-[#071322]/90 backdrop-blur-md border border-[#00E676]/60 rounded-lg p-3 w-80 text-xs font-mono space-y-2.5 shadow-xl max-h-full overflow-y-auto">
       <div className="flex justify-between items-center text-[#00E676] font-bold border-b border-[#1E3A5F] pb-1">
         <span>單位選擇列表 ({selectedUnits.length})</span>
         <span className="text-[10px] text-slate-400">右鍵指派移動 / 攻擊</span>

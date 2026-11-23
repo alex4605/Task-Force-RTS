@@ -65,3 +65,11 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Short screens (a 1080p monitor in a browser window leaves ~900-950 px): the bottom deck drops its
+   secondary detail rows so the launch, ferry and build buttons stay on screen */
+@media (max-height: 1000px) {
+  .deck-detail {
+    display: none !important;
+  }
+}
