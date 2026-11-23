@@ -1163,4 +1163,4 @@ export function drawAkizukiDD(rc: RenderContext, ship: Ship, hullColor: string, 
 }
 
 /** Allied gun ships whose class the WW2 drawers above know (Commonwealth, Dutch, ROK and ex-USN). */
-export const ALLIED_GUN_SHIP_CLASSES = /Australia|Canberra|Shropshire|Exeter|De Ruyter|Achilles|Leander|HMAS Hobart 荷巴特號 \(D63\)|Argonaut|Belfast|Jamaica|Swiftsure|Gambia|Howe|Duke of York|King George|Warspite|Arunta|Warramunga|Bataan|Cayuga|Athabaskan|Cossack|Napier|Jervis|Electra|Kortenaer|Quilliam|Grenville|Evertsen|Armada|Defender|Vampire|Murchison|Rotoiti|Grandière|Baekdusan|Trần Hưng Đạo|Chungbuk/;
+export const ALLIED_GUN_SHIP_CLASSES = /Australia|Canberra|Shropshire|Exeter|De Ruyter|Achilles|Leander|HMAS Hobart 荷巴特號 \(D63\)|Argonaut|Belfast|Sheffield|Jamaica|Swiftsure|Gambia|Howe|Duke of York|King George|Warspite|Arunta|Warramunga|Bataan|Cayuga|Athabaskan|Cossack|Napier|Jervis|Electra|Kortenaer|Quilliam|Grenville|Evertsen|Armada|Defender|Vampire|Murchison|Rotoiti|Grandière|Baekdusan|Trần Hưng Đạo|Chungbuk/;

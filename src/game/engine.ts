@@ -18251,7 +18251,7 @@ export class GameEngine {
   // 時代一：英國皇家海軍 (King George V BB + Sheffield CL + Jervis DD)
   // 時代二：英國皇家海軍 (Duke of York BB + Belfast CL + Armada DD)
   // 時代三：聯合國軍海軍特遣隊 (Belfast CL + Cossack DD + Defender DD)
-  // 時代四：50% 北約特遣艦隊 (Sheffield Type 42 + Andromeda Leander) vs 50% 海上自衛隊 (Haruna DDH + Takatsuki DD)
+  // 時代四：越南共和國海軍外海巡邏艦隊、Market Time 沿岸監視部隊或澳洲砲擊線驅逐艦 (英、日未派艦參與越戰)
   // 時代五：50% 北約特遣部隊 (Gloucester Type 42 B2 + Bremen F122 + Tourville F67) vs 50% 海上自衛隊 (Shirane DDH + Asagiri DD + Hatsuyuki FF)
   // 嚴格防止 Blue on blue: side: 'allied' 判定敵對僅對 'enemy' 生效，與玩家同袍協同作戰！
   // ══════════════════════════════════════════════════════════

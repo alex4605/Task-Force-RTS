@@ -516,99 +516,23 @@ export function getAlliedSagFleet(era: Era): AlliedSagFleet {
       },
     ];
   } else if (era === 'era4') {
-    const isNato = Math.random() < 0.5;
-    if (isNato) {
-      title = '北約大西洋常設艦隊 (NATO STANAVFORLANT SAG)';
-      ships = [
-        {
-          name: 'HMS Sheffield 謝菲爾德號 (D80)',
-          codeName: 'HMS Sheffield (D80)',
-          type: 'ddg',
-          length: 88,
-          width: 16,
-          maxHealth: 6800,
-          speed: 24,
-          flakRange: 1400,
-          hasModernNavalGunAA: true,
-          hasSAM: true,
-          samRange: 3200,
-          samModel: 'Sea Dart (海鏢) 區域防空飛彈',
-          torpedoCooldown: 25,
-          turrets: [
-            { id: 'shef42-t1', pos: { x: 24, y: 0 }, angle: 0, range: 1800, damage: 480, cooldown: 0, maxCooldown: 2.5, caliber: '4.5吋 Mk 8 全自動艦砲' },
-            { id: 'shef42-sam', pos: { x: 8, y: 0 }, angle: 0, range: 3200, damage: 950, cooldown: 0, maxCooldown: 8.0, caliber: 'Sea Dart (海鏢) 雙臂防空飛彈' },
-          ],
-        },
-        {
-          name: 'HMS Andromeda 仙女座號 (F57)',
-          codeName: 'HMS Andromeda (F57)',
-          type: 'destroyer',
-          length: 80,
-          width: 15,
-          maxHealth: 5500,
-          speed: 24,
-          flakRange: 1200,
-          hasHarpoon: true,
-          ashmType: 'exocet_mm38',
-          hasSAM: true,
-          samRange: 2400,
-          samModel: 'Sea Wolf (海狼) 點防空飛彈',
-          torpedoCooldown: 25,
-          turrets: [
-            { id: 'andro-sam', pos: { x: 18, y: 0 }, angle: 0, range: 2400, damage: 750, cooldown: 0, maxCooldown: 6.0, caliber: 'Sea Wolf (海狼) 短程防空飛彈' },
-            { id: 'andro-ashm', pos: { x: -14, y: 0 }, angle: 0, range: 4000, damage: 1650, cooldown: 0, maxCooldown: 24.0, caliber: 'Exocet (飛魚 MM38) 掠海反艦飛彈' },
-          ],
-        },
-        sagShip({ name: 'HMCS Iroquois 易洛魁號 (280)', codeName: 'HMCS Iroquois (280)', type: 'ddg', length: 92, width: 15, maxHealth: 6400, speed: 26, flakRange: 1300, hasModernNavalGunAA: true, hasSAM: true, samRange: 2400, samModel: 'RIM-7 海麻雀防空飛彈', hasASROC: true }, 'ca-280e4', [
-          [28, 0, '127mm OTO Melara 超速砲', 1800, 480, 1.8],
-        ]),
-      ];
-    } else {
-      title = '日本海上自衛隊護衛艦群 (JMSDF Escort Flotilla SAG)';
-      ships = [
-        {
-          name: 'JDS Haruna 榛名號 (DDH-141)',
-          codeName: 'JDS Haruna (DDH-141)',
-          type: 'ddg',
-          length: 104,
-          width: 18,
-          maxHealth: 7400,
-          speed: 24,
-          flakRange: 1300,
-          hasModernNavalGunAA: true,
-          hasASROC: true,
-          hasSAM: true,
-          samRange: 2600,
-          samModel: 'RIM-7 海麻雀防空飛彈',
-          torpedoCooldown: 25,
-          turrets: [
-            { id: 'haruna-t1', pos: { x: 32, y: 0 }, angle: 0, range: 1800, damage: 500, cooldown: 0, maxCooldown: 2.5, caliber: '54倍徑 5吋砲 (Mk 42)' },
-            { id: 'haruna-t2', pos: { x: 18, y: 0 }, angle: 0, range: 1800, damage: 500, cooldown: 0, maxCooldown: 2.5, caliber: '54倍徑 5吋砲 (Mk 42)' },
-            { id: 'haruna-sam', pos: { x: -24, y: 0 }, angle: Math.PI, range: 2600, damage: 850, cooldown: 0, maxCooldown: 7.0, caliber: 'RIM-7 海麻雀防空飛彈' },
-          ],
-        },
-        {
-          name: 'JDS Takatsuki 高月號 (DD-164)',
-          codeName: 'JDS Takatsuki (DD-164)',
-          type: 'destroyer',
-          length: 86,
-          width: 16,
-          maxHealth: 5600,
-          speed: 25,
-          flakRange: 1200,
-          hasModernNavalGunAA: true,
-          hasASROC: true,
-          torpedoCooldown: 25,
-          turrets: [
-            { id: 'taka-t1', pos: { x: 26, y: 0 }, angle: 0, range: 1800, damage: 500, cooldown: 0, maxCooldown: 2.5, caliber: '54倍徑 5吋砲 (Mk 42)' },
-            { id: 'taka-t2', pos: { x: -22, y: 0 }, angle: Math.PI, range: 1800, damage: 500, cooldown: 0, maxCooldown: 2.5, caliber: '54倍徑 5吋砲 (Mk 42)' },
-          ],
-        },
-        sagShip({ name: 'JDS Amatsukaze 天津風號 (DDG-163)', codeName: 'JDS Amatsukaze (DDG-163)', type: 'ddg', length: 88, width: 14, maxHealth: 6000, speed: 26, flakRange: 1300, hasModernNavalGunAA: true, hasSAM: true, samRange: 2600, samModel: 'RIM-24 韃靼人 (Mk 13 單臂)', hasASROC: true }, 'jds-163', [
-          [28, 0, '3吋/50 Mk 33 雙聯裝', 1500, 260, 1.8], [-24, 0, 'Mk 13 韃靼人單臂發射架', 2600, 850, 8.0],
-        ]),
-      ];
-    }
+    // Neither Britain nor Japan sent warships to Vietnam: the free-world navies off the coast were
+    // the RAN gunline destroyers, the ROK Navy and the South Vietnamese Navy, which took over the
+    // ex-US Coast Guard Casco-class cutters in 1971 for offshore patrol and naval gunfire support.
+    title = '越南共和國海軍 外海巡邏艦隊 (VNN Sea Force · 1972)';
+    const CASCO: Mount[] = [
+      [26, 0, '5吋/38 Mk 30 單裝', 1850, 380, 2.4],
+      [-16, 0, '40mm Bofors 雙聯裝', 1100, 60, 0.8],
+    ];
+    ships = [
+      sagShip({ name: 'RVNS Trần Quang Khải 陳光凱號 (HQ-2)', codeName: 'RVNS Tran Quang Khai (HQ-2)', type: 'ffg', length: 80, width: 12, maxHealth: 4200, speed: 18, flakRange: 1100 }, 'rvn-hq2', CASCO),
+      sagShip({ name: 'RVNS Trần Bình Trọng 陳平重號 (HQ-5)', codeName: 'RVNS Tran Binh Trong (HQ-5)', type: 'ffg', length: 80, width: 12, maxHealth: 4200, speed: 18, flakRange: 1100 }, 'rvn-hq5', CASCO),
+      // Admirable-class ex-minesweeper used as a patrol ship; sunk at the Paracels in January 1974
+      sagShip({ name: 'RVNS Nhựt Tảo 日藻號 (HQ-10)', codeName: 'RVNS Nhut Tao (HQ-10)', type: 'patrol_boat', length: 56, width: 10, maxHealth: 2200, speed: 14, flakRange: 900, craft: { hull: 'displacement', house: [0.12, 0.26], stern: 'racks' } }, 'rvn-hq10', [
+        [18, 0, '3吋/50 Mk 26 單裝', 1400, 180, 2.4],
+        [-12, 0, '40mm Bofors 單裝', 1100, 50, 1.2],
+      ]),
+    ];
   } else {
     // Era 5
     const isNato = Math.random() < 0.5;
@@ -631,8 +555,8 @@ export function getAlliedSagFleet(era: Era): AlliedSagFleet {
           samModel: 'Sea Dart Mod 2 區域防空飛彈',
           torpedoCooldown: 25,
           turrets: [
-            { id: 'glou-t1', pos: { x: 26, y: 0 }, angle: 0, range: 1800, damage: 520, cooldown: 0, maxCooldown: 2.5, caliber: '4.5吋 Mk 8 全自動艦砲' },
-            { id: 'glou-sam', pos: { x: 10, y: 0 }, angle: 0, range: 3400, damage: 1050, cooldown: 0, maxCooldown: 7.0, caliber: 'Sea Dart Mod 2 雙臂防空飛彈' },
+            { id: 'glou-t1', pos: { x: 30, y: 0 }, angle: 0, range: 1800, damage: 520, cooldown: 0, maxCooldown: 2.5, caliber: '4.5吋 Mk 8 全自動艦砲' },
+            { id: 'glou-sam', pos: { x: 17, y: 0 }, angle: 0, range: 3400, damage: 1050, cooldown: 0, maxCooldown: 7.0, caliber: 'Sea Dart Mod 2 雙臂防空飛彈' },
           ],
         },
         {
@@ -654,7 +578,7 @@ export function getAlliedSagFleet(era: Era): AlliedSagFleet {
           torpedoCooldown: 25,
           turrets: [
             { id: 'brem-t1', pos: { x: 24, y: 0 }, angle: 0, range: 1800, damage: 420, cooldown: 0, maxCooldown: 1.8, caliber: '奧托梅萊拉 76mm 快砲' },
-            { id: 'brem-sam', pos: { x: -18, y: 0 }, angle: Math.PI, range: 2800, damage: 850, cooldown: 0, maxCooldown: 6.5, caliber: 'NSSMS 八聯裝北約海麻雀' },
+            { id: 'brem-sam', pos: { x: 14, y: 0 }, angle: 0, range: 2800, damage: 850, cooldown: 0, maxCooldown: 6.5, caliber: 'NSSMS 八聯裝北約海麻雀' },
           ],
         },
         {
@@ -726,7 +650,7 @@ export function getAlliedSagFleet(era: Era): AlliedSagFleet {
           torpedoCooldown: 25,
           turrets: [
             { id: 'asagiri-t1', pos: { x: 25, y: 0 }, angle: 0, range: 1800, damage: 420, cooldown: 0, maxCooldown: 1.8, caliber: '奧托 76mm 快砲 (DART)' },
-            { id: 'asagiri-sam', pos: { x: -22, y: 0 }, angle: Math.PI, range: 2800, damage: 850, cooldown: 0, maxCooldown: 6.5, caliber: '海麻雀防空飛彈' },
+            { id: 'asagiri-sam', pos: { x: -41, y: 0 }, angle: Math.PI, range: 2800, damage: 850, cooldown: 0, maxCooldown: 6.5, caliber: '海麻雀防空飛彈' },
           ],
         },
         {

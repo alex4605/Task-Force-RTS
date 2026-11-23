@@ -12,10 +12,12 @@ interface UnitPreviewCanvasProps {
   era?: Era;
   compact?: boolean;
   className?: string;
+  /** Ground units: draw in that side's colours. */
+  side?: 'player' | 'enemy' | 'allied';
 }
 
 export const UnitPreviewCanvas: React.FC<UnitPreviewCanvasProps> = React.memo(
-  ({ kind, unitKey, width = 144, height = 46, payloadType, era, compact = false, className = '' }) => {
+  ({ kind, unitKey, width = 144, height = 46, payloadType, era, compact = false, className = '', side }) => {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
     useEffect(() => {
@@ -29,9 +31,9 @@ export const UnitPreviewCanvas: React.FC<UnitPreviewCanvasProps> = React.memo(
 
       ctx.save();
       ctx.scale(dpr, dpr);
-      drawUnitPreview(ctx, width, height, kind, unitKey, { payloadType, compact, era });
+      drawUnitPreview(ctx, width, height, kind, unitKey, { payloadType, compact, era, side });
       ctx.restore();
-    }, [kind, unitKey, width, height, payloadType, compact, era]);
+    }, [kind, unitKey, width, height, payloadType, compact, era, side]);
 
     return (
       <canvas
