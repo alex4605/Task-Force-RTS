@@ -602,6 +602,24 @@ export const SelectedUnitsPanel: React.FC<SelectedUnitsPanelProps> = ({
           <Shield className="w-3.5 h-3.5 text-cyan-200" />
           <span>{isDesignatingCap ? ('⚡ 正在指定空巡空域 (拖曳/點地圖)') : '指派空優巡邏空域 (C)'}</span>
         </button>
+        {selectedUnits.some((u) => isShipUnit(u) && u.side === 'player' && !u.isSunk) && (
+          <button
+            type="button"
+            onClick={() => {
+              if (isDesignatingCap) onCancelCap?.();
+              else onStartCapDesignation?.();
+            }}
+            className={`mt-1 w-full py-1.5 px-2 rounded text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-all shadow-md whitespace-nowrap ${
+              isDesignatingCap
+                ? 'bg-gradient-to-r from-orange-500 to-red-600 text-white border border-orange-300 ring-2 ring-orange-400'
+                : 'bg-gradient-to-r from-[#BF360C] to-[#8D2A0A] hover:from-[#D84315] hover:to-[#BF360C] text-[#FBE9E7] border border-[#FF8A65]/70'
+            }`}
+            title="拖曳框選一片海域：選取的艦艇將在區內巡弋，自動前往救起落水飛行員與船員（敵方人員俘虜）。下達其他移動命令即解除。"
+          >
+            <span>🛟</span>
+            <span>{isDesignatingCap ? '⚡ 拖曳框選救生站海域…' : '指派救生站 (搜救海域)'}</span>
+          </button>
+        )}
         {selectedUnits.some((u) => isGroundUnit(u) && u.side === 'player' && !u.embarkedInShipId && isFootClass(u.type)) && (() => {
           const dug = selectedUnits.some((u) => isGroundUnit(u) && u.foxhole !== undefined);
           return (

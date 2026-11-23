@@ -1,6 +1,7 @@
 import { Ship } from '../../../types/game';
 import { RenderContext } from '../context';
 import { drawShipTurrets } from './mounts';
+import { drawSmallCraft } from './smallCraft';
 
 // CV-63 Kitty Hawk Supercarrier Line Art (Angled flight deck, 4 catapults, modern island)
 export function drawCV63(rc: RenderContext, ship: Ship, hullColor: string, detailColor: string) {
@@ -1198,6 +1199,10 @@ export function drawPetyaFFG(rc: RenderContext, ship: Ship, hullColor: string, d
 // twin 25mm 2M-3 mounts fore and aft, small wheelhouse with radar mast.
 export function drawP6TorpedoBoat(rc: RenderContext, ship: Ship, hullColor: string, detailColor: string) {
   const ctx = rc.ctx;
+  if (ship.craft) {
+    drawSmallCraft(rc, ship, hullColor, detailColor);
+    return;
+  }
   if (/P-4|T-33\d/.test(ship.name)) {
     drawP4TorpedoBoat(ctx, ship, hullColor, detailColor);
     return;

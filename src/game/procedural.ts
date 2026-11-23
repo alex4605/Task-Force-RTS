@@ -7752,6 +7752,11 @@ function addEnemyGarrisonUnits(era: Era, islands: Island[], groundUnits: GroundU
 
 /** The player's historical task force for each era. */
 function addPlayerTaskForce(era: Era, cvPos: Vector2D, initialHeading: number, playerShips: Ship[]): void {
+  addPlayerTaskForceMain(era, cvPos, initialHeading, playerShips);
+  playerShips.push(...classicCraftFor(era, 'player', cvPos));
+}
+
+function addPlayerTaskForceMain(era: Era, cvPos: Vector2D, initialHeading: number, playerShips: Ship[]): void {
   if (era === 'era1') {
     addPlayerFleetEra1(cvPos, initialHeading, playerShips);
   } else if (era === 'era2') {
@@ -8643,6 +8648,11 @@ function addPlayerFleetEra3(cvPos: Vector2D, initialHeading: number, playerShips
 // Heading 225° (South-West)
 /** The historical OPFOR task force for each era. */
 function addEnemyTaskForce(era: Era, enemyShips: Ship[], enemyCenter: Vector2D, enemyHeading: number): void {
+  addEnemyTaskForceMain(era, enemyShips, enemyCenter, enemyHeading);
+  enemyShips.push(...classicCraftFor(era, 'enemy', enemyCenter));
+}
+
+function addEnemyTaskForceMain(era: Era, enemyShips: Ship[], enemyCenter: Vector2D, enemyHeading: number): void {
   if (era === 'era1') {
     addEnemyFleetEra1(enemyShips, enemyCenter, enemyHeading);
   } else if (era === 'era2') {
@@ -9789,4 +9799,149 @@ export function codexFleetShips(era: Era): { player: Ship[]; enemy: Ship[] } {
     );
   }
   return { player, enemy };
+}
+
+// ── Classic small combatants ──────────────────────────────────────────────
+
+type CraftSpec = {
+  type: Ship['type'];
+  side: Ship['side'];
+  codeName: string;
+  length: number;
+  width: number;
+  health: number;
+  speed: number;
+  maxSpeed: number;
+  armor: number;
+  craft: Ship['craft'];
+  guns: [number, number, string, number, number, number, number][];
+  arms: { name: string; count: string; type: 'main' | 'secondary' | 'aa' | 'torpedo' | 'asw'; desc?: string }[];
+  torpedoes?: number;
+  harpoon?: boolean;
+  depthCharges?: boolean;
+  flakRange?: number;
+};
+
+/**
+ * The small ships that did much of the fighting and are easy to forget: PT boats in Iron Bottom
+ * Sound and Surigao Strait, the minesweepers that cleared Wonsan, the Asheville gunboats and Swift
+ * boats off Vietnam, the Pegasus hydrofoil, and on the other side the Shinyo suicide boats of the
+ * Keramas and North Vietnam's Shanghai-class gunboats.
+ */
+const CLASSIC_CRAFT: Record<string, CraftSpec> = {
+  elco_pt: {
+    type: 'patrol_boat', side: 'player', codeName: 'Elco 80-ft PT', length: 24, width: 6, health: 320, speed: 20, maxSpeed: 41, armor: 0.05,
+    craft: { hull: 'planing', house: [0.08, 0.18], tubes: 4, deck: '#1B2A20' },
+    guns: [[3, -1.6, '.50 cal Twin M2 (左機槍塔)', 900, 0.4, 2, 30], [3, 1.6, '.50 cal Twin M2 (右機槍塔)', 900, 0.4, 2, 30], [-9, 0, '20mm Oerlikon', 1000, 0.6, 1, 40]],
+    arms: [{ name: 'Mk 8 21 吋魚雷', count: '4 枚', type: 'torpedo', desc: '老式 Mk 8 魚雷，常因深度與引信問題失效' }, { name: '.50 雙聯裝機槍塔', count: '2 座', type: 'aa' }, { name: '20mm 厄利空機砲', count: '1 門', type: 'aa' }],
+    torpedoes: 14, flakRange: 600,
+  },
+  am_admirable: {
+    type: 'patrol_boat', side: 'player', codeName: 'Admirable-class AM', length: 56, width: 10, health: 900, speed: 10, maxSpeed: 15, armor: 0.12,
+    craft: { hull: 'displacement', house: [0.12, 0.26], stern: 'sweep' },
+    guns: [[18, 0, '3-inch/50 Mk 22', 1500, 3, 1, 110], [-6, 0, '40mm Bofors Twin', 1300, 1.4, 2, 50]],
+    arms: [{ name: '3 吋 50 倍徑艦砲', count: '1 門', type: 'main' }, { name: '40mm 波佛斯', count: '2 門', type: 'aa' }, { name: '掃雷具 / 深水炸彈', count: '一套', type: 'asw' }],
+    depthCharges: true, flakRange: 1100,
+  },
+  pg_asheville: {
+    type: 'patrol_boat', side: 'player', codeName: 'Asheville-class PG', length: 50, width: 7, health: 900, speed: 18, maxSpeed: 40, armor: 0.1,
+    craft: { hull: 'planing', house: [0.06, 0.24] },
+    guns: [[14, 0, '3-inch/50 Mk 34', 1500, 2.2, 1, 120], [-14, 0, '40mm Bofors', 1300, 1.2, 1, 50], [-4, -2, '.50 cal M2', 900, 0.4, 1, 20]],
+    arms: [{ name: '3 吋 50 倍徑速射砲', count: '1 門', type: 'main' }, { name: '40mm 波佛斯', count: '1 門', type: 'aa' }, { name: '.50 機槍', count: '4 挺', type: 'aa' }],
+    flakRange: 1000,
+  },
+  pcf_swift: {
+    type: 'patrol_boat', side: 'player', codeName: 'Swift Boat PCF', length: 16, width: 5, health: 260, speed: 14, maxSpeed: 28, armor: 0.06,
+    craft: { hull: 'planing', house: [0.08, 0.3] },
+    guns: [[4, 0, '.50 cal Twin M2 (艦橋頂)', 900, 0.4, 2, 30], [-6, 0, '81mm Mortar / .50 Combo', 1200, 2.5, 1, 90]],
+    arms: [{ name: '.50 雙聯裝機槍', count: '1 座', type: 'main' }, { name: '81mm 迫擊砲 / .50 機槍組合', count: '1 座', type: 'secondary' }],
+    flakRange: 600,
+  },
+  phm_pegasus: {
+    type: 'patrol_boat', side: 'player', codeName: 'Pegasus-class PHM', length: 40, width: 8.6, health: 700, speed: 24, maxSpeed: 48, armor: 0.08,
+    craft: { hull: 'hydrofoil', house: [0.08, 0.26], canisters: 8 },
+    guns: [[11, 0, '76mm OTO Melara Mk 75', 1700, 1.0, 1, 110]],
+    arms: [{ name: 'RGM-84 魚叉反艦飛彈', count: '8 枚', type: 'main' }, { name: '76mm 奧托快砲', count: '1 門', type: 'secondary' }],
+    harpoon: true, flakRange: 1200,
+  },
+  shinyo: {
+    type: 'patrol_boat', side: 'enemy', codeName: 'Shinyo', length: 6, width: 2, health: 90, speed: 16, maxSpeed: 23, armor: 0.02,
+    craft: { hull: 'wooden', house: [-0.25, 0.2] },
+    guns: [],
+    arms: [{ name: '艇艏 250kg 炸藥 (自殺衝撞)', count: '1', type: 'torpedo', desc: '夜間成群衝撞運輸船與登陸艦' }],
+    torpedoes: 999, flakRange: 0,
+  },
+  shanghai: {
+    type: 'patrol_boat', side: 'enemy', codeName: 'Shanghai-class', length: 39, width: 5.4, health: 600, speed: 18, maxSpeed: 30, armor: 0.08,
+    craft: { hull: 'displacement', house: [0.04, 0.24], stern: 'racks' },
+    guns: [[12, 0, '37mm Twin 61-K', 1200, 0.8, 2, 45], [-12, 0, '25mm Twin 2M-3', 1000, 0.5, 2, 30]],
+    arms: [{ name: '37mm 雙聯裝砲', count: '2 座', type: 'main' }, { name: '25mm 雙聯裝砲', count: '2 座', type: 'aa' }, { name: '深水炸彈', count: '8 枚', type: 'asw' }],
+    depthCharges: true, flakRange: 900,
+  },
+};
+
+export function createClassicCraft(key: keyof typeof CLASSIC_CRAFT, id: string, name: string, pos: Vector2D, era: Era): Ship {
+  const c = CLASSIC_CRAFT[key];
+  const heading = c.side === 'enemy' ? (Math.PI * 3) / 4 : -Math.PI / 4;
+  return createShip({
+    id,
+    name,
+    codeName: c.codeName,
+    type: c.type,
+    side: c.side,
+    era,
+    pos: { ...pos },
+    heading,
+    speed: c.speed,
+    maxSpeed: c.maxSpeed,
+    length: c.length,
+    width: c.width,
+    health: c.health,
+    maxHealth: c.health,
+    armor: c.armor,
+    detectionRange: 2000,
+    craft: c.craft,
+    hasTorpedoes: c.torpedoes !== undefined,
+    torpedoCooldown: 0,
+    torpedoReloadTime: c.torpedoes,
+    hasHarpoon: c.harpoon,
+    ashmType: c.harpoon ? 'harpoon' : undefined,
+    hasDepthCharges: c.depthCharges,
+    depthChargeCooldown: 0,
+    turrets: c.guns.map(([x, y, cal, range, reload, barrels, dmg]) => createTurret(x, y, cal, range, reload, barrels, heading, dmg)),
+    detailedArmaments: c.arms,
+    flakCooldown: 0,
+    flakRange: c.flakRange ?? 600,
+  });
+}
+
+/** The era's classic small combatants for one side, placed round a point. */
+function classicCraftFor(era: Era, side: 'player' | 'enemy', at: Vector2D): Ship[] {
+  const p = (dx: number, dy: number) => ({ x: at.x + dx, y: at.y + dy });
+  if (side === 'player') {
+    if (era === 'era1')
+      return [createClassicCraft('elco_pt', 'player-pt-109', 'PT-109', p(-520, 120), era), createClassicCraft('elco_pt', 'player-pt-59', 'PT-59', p(-560, 170), era)];
+    if (era === 'era2')
+      return [createClassicCraft('elco_pt', 'player-pt-137', 'PT-137', p(-520, 120), era), createClassicCraft('elco_pt', 'player-pt-493', 'PT-493', p(-560, 170), era)];
+    if (era === 'era3') return [createClassicCraft('am_admirable', 'player-am-275', 'USS Pirate (AM-275)', p(-480, 200), era)];
+    if (era === 'era4')
+      return [createClassicCraft('pg_asheville', 'player-pg-84', 'USS Asheville (PG-84)', p(-520, 160), era), createClassicCraft('pcf_swift', 'player-pcf-94', 'PCF-94 (Swift Boat)', p(-560, 220), era)];
+    return [createClassicCraft('phm_pegasus', 'player-phm-1', 'USS Pegasus (PHM-1)', p(-520, 160), era)];
+  }
+  if (era === 'era2')
+    return [0, 1, 2].map((k) => createClassicCraft('shinyo', `enemy-shinyo-${k}`, `震洋 第3海上挺進戰隊 #${k + 1}`, p(-380 - k * 40, 260 + k * 30), era));
+  if (era === 'era4')
+    return [createClassicCraft('shanghai', 'enemy-shanghai-1', '上海級砲艇 T-121', p(-300, 300), era), createClassicCraft('shanghai', 'enemy-shanghai-2', '上海級砲艇 T-122', p(-340, 340), era)];
+  if (era === 'era5') {
+    const g = createPetyaFFG('enemy-grisha-1', '格里沙級護衛艦 MPK-105', p(-300, 300));
+    g.codeName = 'Project 1124 Grisha';
+    g.detailedArmaments = [
+      { name: 'SA-N-4 黃蜂防空飛彈', count: '20 枚', type: 'aa' },
+      { name: '57mm AK-725 雙聯裝砲', count: '1 座', type: 'main' },
+      { name: 'RBU-6000 反潛火箭', count: '2 具', type: 'asw' },
+      { name: '533mm 魚雷管', count: '4 具', type: 'torpedo' },
+    ];
+    return [g];
+  }
+  return [];
 }

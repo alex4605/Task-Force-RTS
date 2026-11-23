@@ -3,6 +3,7 @@ import { Era, Ship } from '../types/game';
 /** One ship of an allied Surface Action Group, before it is instantiated by the engine. */
 export type AlliedSagShipDef = {
   name: string;
+  craft?: import('../types/game').SmallCraftPlan;
   codeName: string;
   type: Ship['type'];
   length: number;
@@ -355,6 +356,11 @@ const EXTRA_SAG_FLEETS: Record<Era, AlliedSagFleet[]> = {
         sagShip({ name: 'FGS Lütjens 呂特晏斯號 (D185)', codeName: 'FGS Lütjens (D185)', type: 'ddg', length: 92, width: 15, maxHealth: 6400, speed: 26, flakRange: 1300, hasModernNavalGunAA: true, hasSAM: true, samRange: 2800, samModel: 'SM-1MR 標準 (Mk 13 單臂)', hasHarpoon: true, ashmType: 'harpoon', hasASROC: true }, 'de-d185', [
           [28, 0, '5吋/54 Mk 42 (艦艏)', 1800, 500, 2.5], [-26, 0, '5吋/54 Mk 42 (艦艉)', 1800, 500, 2.5],
         ]),
+        // Type 143 Albatros Schnellboot: the Bundesmarine's fast attack craft for the Baltic approaches
+        sagShip({ name: 'FGS Albatros 信天翁號 (P6111)', codeName: 'FGS Albatros (P6111)', type: 'patrol_boat', length: 57, width: 8, maxHealth: 1600, speed: 38, flakRange: 1000, hasHarpoon: true, ashmType: 'exocet_mm38', torpedoCooldown: 30, craft: { hull: 'planing', house: [0.1, 0.24], tubes: 2, canisters: 4 } }, 'de-p6111', [
+          [18, 0, '76mm OTO Melara 快砲 (艦艏)', 1700, 110, 1.0],
+          [-18, 0, '76mm OTO Melara 快砲 (艦艉)', 1700, 110, 1.0],
+        ]),
       ],
     },
   ],
@@ -391,6 +397,11 @@ export function getAlliedSagFleet(era: Era): AlliedSagFleet {
       sagShip({ name: 'HMNZS Leander 林德號 (75)', codeName: 'HMNZS Leander (75)', type: 'cruiser', length: 98, width: 17, maxHealth: 7600, speed: 22, flakRange: 1200, torpedoCooldown: 28 }, 'rnzn-lea', LEANDER_6IN),
       sagShip({ name: 'HMNZS Achilles 阿基里斯號 (70)', codeName: 'HMNZS Achilles (70)', type: 'cruiser', length: 98, width: 17, maxHealth: 7600, speed: 22, flakRange: 1200, torpedoCooldown: 28 }, 'rnzn-ach', LEANDER_6IN),
       sagShip({ name: 'HMAS Warramunga 瓦拉蒙加號 (I44)', codeName: 'HMAS Warramunga (I44)', type: 'destroyer', length: 72, width: 13, maxHealth: 4600, speed: 26, flakRange: 1100, torpedoCooldown: 22 }, 'ran-war1', TRIBAL_DD),
+      // Bathurst-class corvette: HMAS Deloraine sank I-124 off Darwin in January 1942
+      sagShip({ name: 'HMAS Deloraine 德洛蘭號 (J232)', codeName: 'HMAS Deloraine (J232)', type: 'patrol_boat', length: 56, width: 10, maxHealth: 2400, speed: 15, flakRange: 900, craft: { hull: 'displacement', house: [0.12, 0.26], stern: 'racks' } }, 'ran-delo', [
+        [18, 0, '4吋 Mk XIX 單裝', 1400, 160, 3.0],
+        [-14, 0, '40mm Bofors', 1200, 50, 1.2],
+      ]),
     ];
   } else if (era === 'era2') {
     title = '英國皇家海軍第57特遣艦隊 (Royal Navy Task Force 57 SAG)';

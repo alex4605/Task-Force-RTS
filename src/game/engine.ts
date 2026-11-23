@@ -1606,6 +1606,9 @@ export class GameEngine {
         activeWaypointIndex: 0,
         riverine: Boolean(river),
       };
+      // A direct order takes the ship off its lifeguard station
+      ship.sarZone = undefined;
+      ship.sarTargetId = undefined;
 
       if (order.type === 'move' && targetPos) {
         const firstWp = waypoints && waypoints.length > 0 ? waypoints[0] : targetPos;
@@ -2482,6 +2485,92 @@ export class GameEngine {
   }
 
   // Issue Combat Air Patrol (CAP) Orbit Order to Fighters in a designated area
+  /**
+   * Lifeguard station (救生站): the selected ships patrol an area and pick up every airman or ship's
+   * survivor in the water there, our own and the enemy's (who become prisoners). This is what US
+   * submarines and destroyers did on the lifeguard stations along the B-29 and carrier strike
+   * routes to Japan, and what a carrier's plane-guard destroyer did astern of it. A plain click sets
+   * a 2.4 km square round the point. Returns whether any ship took the station.
+   */
+  public issueShipSarOrder(origin: Vector2D, specificUnitIds?: string[], box?: { x0: number; y0: number; x1: number; y1: number }): boolean {
+    const ids = specificUnitIds || this.selectedUnitIds;
+    const ships = this.playerShips.filter((s) => ids.includes(s.id) && !s.isSunk);
+    if (ships.length === 0) return false;
+    const zone = box ?? { x0: origin.x - 1200, y0: origin.y - 1200, x1: origin.x + 1200, y1: origin.y + 1200 };
+    for (const s of ships) {
+      s.sarZone = { ...zone };
+      s.sarTargetId = undefined;
+      s.order = { type: 'idle' };
+    }
+    this.addCombatLog({
+      category: 'naval',
+      sourceSide: 'player',
+      sourceName: ships.map((s) => s.name.split(' (')[0]).join('、'),
+      targetName: '救生站',
+      actionType: 'recon_spotted',
+      text: `🛟【救生站】${ships.map((s) => `「${s.name}」`).join('、')}進駐指定海域擔任救生站，自主搜索並救起區內所有落水飛行員與船員（敵方人員將被俘）。`,
+    });
+    return true;
+  }
+
+  /** Sends one ship to a point by the sea lanes (a river craft takes the channel). */
+  private steerShipTo(ship: Ship, pos: Vector2D, speedFactor = 1): void {
+    const river = this.planRiverineOrder(ship, pos);
+    let target = river ? river.targetPos : this.navGrid ? this.navGrid.projectToWalkableWater(pos, requiredDepth(ship)) : pos;
+    const waypoints = river ? river.waypoints : this.navGrid ? this.navGrid.findPath(ship.pos, target, requiredDepth(ship)) : [target];
+    if (!target) target = pos;
+    ship.order = { type: 'move', targetPos: target, waypoints, activeWaypointIndex: 0, riverine: Boolean(river) };
+    const first = waypoints && waypoints.length > 0 ? waypoints[0] : target;
+    ship.targetHeading = Math.atan2(first.y - ship.pos.y, first.x - ship.pos.x);
+    ship.targetSpeed = ship.maxSpeed * speedFactor;
+  }
+
+  /**
+   * Ships on a lifeguard station, twice a second: steam for the nearest raft in the area (a
+   * little beyond its edge too: a raft drifts), and with none, patrol the area at an economical
+   * speed so as to be near when the next aircraft comes down.
+   */
+  private sarTimer = 0;
+  private updateShipSar(dt: number): void {
+    this.sarTimer -= dt;
+    if (this.sarTimer > 0) return;
+    this.sarTimer = 0.5;
+    for (const ship of this.playerShips) {
+      const z = ship.sarZone;
+      if (!z || ship.isSunk) continue;
+      const m = 250;
+      const inZone = (p: Vector2D) => p.x >= z.x0 - m && p.x <= z.x1 + m && p.y >= z.y0 - m && p.y <= z.y1 + m;
+      const rafts = (this.lifeRafts ?? []).filter((r) => !r.rescued && !r.isCapturedPOW && !r.isOnLand && inZone(r.pos));
+      // Rafts another ship on station is already making for are left to it
+      const claimed = new Set(this.playerShips.filter((s) => s !== ship && s.sarTargetId).map((s) => s.sarTargetId));
+      const pick = rafts.filter((r) => !claimed.has(r.id)).sort((a, b) => dist(a.pos, ship.pos) - dist(b.pos, ship.pos))[0] ?? rafts[0];
+      if (pick) {
+        const tp = ship.order.targetPos;
+        if (ship.sarTargetId !== pick.id || !tp || dist(tp, pick.pos) > 60) {
+          if (ship.sarTargetId !== pick.id) {
+            this.addCombatLog({
+              category: 'naval',
+              sourceSide: 'player',
+              sourceName: ship.name,
+              targetName: pick.pilotName,
+              actionType: 'recon_spotted',
+              text: `🛟【救生站】「${ship.name}」發現落水人員「${pick.pilotName}」，全速前往救援。`,
+            });
+          }
+          ship.sarTargetId = pick.id;
+          this.steerShipTo(ship, pick.pos);
+        }
+        continue;
+      }
+      ship.sarTargetId = undefined;
+      const tp = ship.order.targetPos;
+      if (ship.order.type !== 'move' || !tp || dist(ship.pos, tp) < 90) {
+        const p = { x: z.x0 + Math.random() * (z.x1 - z.x0), y: z.y0 + Math.random() * (z.y1 - z.y0) };
+        this.steerShipTo(ship, p, 0.55);
+      }
+    }
+  }
+
   public issueCapPatrolOrder(origin: Vector2D, specificUnitIds?: string[], box?: { x0: number; y0: number; x1: number; y1: number }) {
     const ids = specificUnitIds || this.selectedUnitIds;
     let targetFighters = this.aircraft.filter(
@@ -2947,6 +3036,7 @@ export class GameEngine {
     this.updateSof(effectiveDt);
     this.updateAntiShipMissilePointDefense(effectiveDt);
     this.updateModernNavalGunAA(effectiveDt);
+    this.updateShipSar(effectiveDt);
     this.updateLifeRaftRescue(effectiveDt);
     this.updatePowCamps(effectiveDt);
     this.updatePendingMissileLaunches(effectiveDt);
@@ -3192,6 +3282,14 @@ export class GameEngine {
       // Cooldowns
       if (ship.hasTorpedoes && ship.torpedoCooldown !== undefined && ship.torpedoCooldown > 0) {
         ship.torpedoCooldown = Math.max(0, ship.torpedoCooldown - dt);
+      }
+      // Our PT boats loose their torpedoes by themselves at an enemy surface ship inside 650 m
+      if (ship.side === 'player' && ship.craft?.tubes && ship.hasTorpedoes && !ship.isSunk && (ship.torpedoCooldown ?? 0) <= 0) {
+        const mark = this.enemyShips.find((e) => !e.isSunk && !e.isSubmerged && dist(e.pos, ship.pos) < 650);
+        if (mark) {
+          this.fireTorpedoSalvo(ship, mark.pos, 2);
+          ship.torpedoCooldown = ship.torpedoReloadTime || 14;
+        }
       }
       if (ship.hasDepthCharges && ship.depthChargeCooldown !== undefined && ship.depthChargeCooldown > 0) {
         ship.depthChargeCooldown = Math.max(0, ship.depthChargeCooldown - dt);
@@ -3521,6 +3619,32 @@ export class GameEngine {
     } else {
       ship.targetHeading = primaryTarget.heading + Math.PI;
       ship.targetSpeed = 14;
+    }
+
+    // Shinyo: no torpedoes, the boat is the weapon. Run straight in at full speed and blow up alongside
+    if (ship.codeName === 'Shinyo') {
+      ship.targetHeading = Math.atan2(primaryTarget.pos.y - ship.pos.y, primaryTarget.pos.x - ship.pos.x);
+      ship.targetSpeed = ship.maxSpeed;
+      if (d < Math.max(30, primaryTarget.length * 0.45)) {
+        soundEngine.playExplosion(true);
+        const dmg = Math.round(900 * (1 - Math.min(0.85, primaryTarget.armor || 0) * 0.35));
+        primaryTarget.health = Math.max(0, primaryTarget.health - dmg);
+        if (primaryTarget.hullCrewHealth !== undefined) {
+          primaryTarget.hullCrewHealth = Math.max(0, primaryTarget.hullCrewHealth - dmg);
+          primaryTarget.health = primaryTarget.hullCrewHealth;
+        }
+        this.sinkShip(ship);
+        this.addCombatLog({
+          category: 'naval',
+          sourceSide: 'enemy',
+          sourceName: ship.name,
+          targetName: primaryTarget.name,
+          actionType: 'gun_hit',
+          damage: dmg,
+          text: `💥【震洋自殺艇衝撞】「${ship.name}」夜間高速衝撞「${primaryTarget.name}」，艇艏 250kg 炸藥爆炸，造成 ${dmg} 點傷害！`,
+        });
+      }
+      return;
     }
 
     if (ship.hasTorpedoes && (ship.torpedoCooldown || 0) <= 0 && d < 700) {
@@ -18076,6 +18200,7 @@ export class GameEngine {
       id,
       name: def.name,
       codeName: def.codeName,
+      craft: def.craft,
       type: def.type,
       side: 'allied',
       era: this.era,

@@ -1,4 +1,4 @@
-import { Aircraft, Installation, Island, Vector2D, SelectionBox, RequisitionItem, Era } from '../../types/game';
+import { Aircraft, Installation, Island, Vector2D, SelectionBox, RequisitionItem, Era, Ship } from '../../types/game';
 import { RenderContext, Camera, OrderMarker, isWorldCircleVisible } from './context';
 import type { RadarCoverage } from '../engine';
 import { costOf, formatBundle } from '../economy';
@@ -581,6 +581,51 @@ export function drawCapBoxes(rc: RenderContext, aircraft: Aircraft[], selectedId
     ctx.font = `bold ${10 / camera.zoom}px monospace`;
     ctx.textAlign = 'left';
     ctx.fillText('CAP 空域', b.x0 + 6 / camera.zoom, b.y0 + 14 / camera.zoom);
+  }
+  if (started) ctx.restore();
+}
+
+/** Lifeguard stations of the selected ships (all of them faintly), with a line to the raft being made for. */
+export function drawSarZones(rc: RenderContext, ships: Ship[], selectedIds: string[], camera: Camera) {
+  const ctx = rc.ctx;
+  let started = false;
+  const seen = new Set<string>();
+  for (const s of ships) {
+    const b = s.sarZone;
+    if (!b || s.isSunk) continue;
+    if (!started) {
+      started = true;
+      ctx.save();
+      ctx.translate(rc.width / 2, rc.height / 2);
+      ctx.scale(camera.zoom, camera.zoom);
+      ctx.translate(-camera.x, -camera.y);
+    }
+    const sel = selectedIds.includes(s.id);
+    const key = `${b.x0}|${b.y0}|${b.x1}|${b.y1}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      ctx.fillStyle = sel ? 'rgba(255, 112, 67, 0.06)' : 'rgba(255, 112, 67, 0.025)';
+      ctx.fillRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
+      ctx.strokeStyle = sel ? 'rgba(255, 138, 101, 0.8)' : 'rgba(255, 138, 101, 0.3)';
+      ctx.lineWidth = 1.5 / camera.zoom;
+      ctx.setLineDash([10 / camera.zoom, 6 / camera.zoom]);
+      ctx.strokeRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
+      ctx.setLineDash([]);
+      ctx.fillStyle = sel ? '#FFAB91' : 'rgba(255, 171, 145, 0.55)';
+      ctx.font = `bold ${10 / camera.zoom}px monospace`;
+      ctx.textAlign = 'left';
+      ctx.fillText(`🛟 救生站 · ${s.name.split(' (')[0]}`, b.x0 + 6 / camera.zoom, b.y0 + 14 / camera.zoom);
+    }
+    if (sel && s.sarTargetId && s.order.targetPos) {
+      ctx.strokeStyle = 'rgba(255, 171, 145, 0.85)';
+      ctx.lineWidth = 1.2 / camera.zoom;
+      ctx.setLineDash([4 / camera.zoom, 4 / camera.zoom]);
+      ctx.beginPath();
+      ctx.moveTo(s.pos.x, s.pos.y);
+      ctx.lineTo(s.order.targetPos.x, s.order.targetPos.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
   }
   if (started) ctx.restore();
 }

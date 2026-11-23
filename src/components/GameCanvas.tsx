@@ -343,6 +343,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       renderer.drawDippingSonar(engine.aircraft, engine.selectedUnitIds, cameraRef.current);
       // Selected aircraft's assigned CAP boxes and escort charges
       renderer.drawCapBoxes(engine.aircraft, engine.selectedUnitIds, cameraRef.current);
+      renderer.drawSarZones(engine.playerShips, engine.selectedUnitIds, cameraRef.current);
 
       // Draw Interactive Passive Sonobuoy Drop Preview
       if (isDesignatingSonobuoyRef.current) {

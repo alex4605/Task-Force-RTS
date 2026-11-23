@@ -402,9 +402,27 @@ export interface GunRoe {
   ground: boolean;
 }
 
+/** Plan-view layout of a small combatant: hull form, deckhouse, torpedo tubes, missile canisters. */
+export interface SmallCraftPlan {
+  hull: 'planing' | 'displacement' | 'hydrofoil' | 'wooden';
+  /** Deckhouse: centre x and length as fractions of the boat's length. */
+  house: [number, number];
+  tubes?: number;
+  canisters?: number;
+  /** Depth-charge racks or mine-sweeping gear at the stern. */
+  stern?: 'racks' | 'sweep';
+  deck?: string;
+}
+
 export interface Ship {
   id: string;
   name: string;
+  /** Lifeguard station: an area this ship patrols, picking up every airman or survivor in the water there. */
+  sarZone?: { x0: number; y0: number; x1: number; y1: number };
+  /** The raft the ship is steaming for on its lifeguard station. */
+  sarTargetId?: string;
+  /** Small-craft plan for boats drawn by the generic small-craft drawer (PT boats, gunboats, hydrofoils...). */
+  craft?: SmallCraftPlan;
   codeName?: string;
   type: ShipType;
   side: ShipSide;

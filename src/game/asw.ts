@@ -294,6 +294,7 @@ const ASW_FITS: Array<[RegExp, AswFit]> = [
   [/Gearing|Frank Knox/, { depthCharges: true, aheadThrower: 'hedgehog' }],
   [/Skory|Smotryashchy|Sposobny|Ozhestochonny|Vnimatelny|Vrazumitelny|Vidny/, { depthCharges: true }],
   [/Bataan|Cayuga|Cossack/, { depthCharges: true }],
+  [/Deloraine/, { depthCharges: true }], // Bathurst class: depth-charge throwers and racks
   [/Defender/, { aheadThrower: 'squid', depthCharges: true }], // RN Daring class: one triple Squid
   [/Vampire/, { aheadThrower: 'limbo' }], // the RAN Darings were completed with Limbo in place of Squid
   [/Rotoiti/, { aheadThrower: 'squid' }], // Loch class: two triple Squid
