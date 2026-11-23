@@ -1319,7 +1319,7 @@ export const HUD: React.FC<HUDProps> = ({
             </span>
           </div>
         ) : (
-          <footer className="pointer-events-auto bg-[#071322]/95 backdrop-blur-md border border-[#1E3A5F] rounded-lg p-2.5 flex flex-col gap-2.5 shadow-2xl max-w-full max-h-[42vh] overflow-y-auto">
+          <footer className="pointer-events-auto bg-[#071322]/95 backdrop-blur-md border border-[#1E3A5F] rounded-lg p-2.5 flex flex-col gap-2.5 shadow-2xl max-w-full max-h-[50vh] overflow-y-auto">
             {/* Deck Header Bar: Context-Specific Title & Emergency Actions */}
             <div className="flex items-center justify-between gap-3 border-b border-[#1E3A5F]/80 pb-2">
               <div className="flex items-center gap-1.5 overflow-x-auto">
@@ -1567,6 +1567,35 @@ export const HUD: React.FC<HUDProps> = ({
                             </span>
                           </div>
 
+                        {/* Sortie Button */}
+                        <div className="grid grid-cols-2 gap-1 mt-1">
+                          <button
+                            type="button"
+                            disabled={!hasReady}
+                            onClick={() => {
+                              onLaunchModel(model, effectiveCount, currentPayload, activeCarrier?.id);
+                              setBottomDeckTab('carrier');
+                              setIsBottomDeckExpanded(true);
+                            }}
+                            className={`py-1 px-1.5 rounded font-bold text-center text-[10px] flex items-center justify-center gap-1 transition-transform active:scale-95 ${
+                              hasReady
+                                ? 'bg-gradient-to-r from-[#1976D2] to-[#0D47A1] hover:from-[#2196F3] hover:to-[#1565C0] text-white border border-[#42A5F5]/60 shadow'
+                                : 'bg-[#050D18] border border-slate-800 text-slate-600 cursor-not-allowed'
+                            }`}
+                          >
+                            <Plane className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{hasReady ? (`出擊 ${effectiveCount}機`) : ('整備中')}</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!hasReady || !carrierFerryTo || !activeCarrier}
+                            onClick={() => activeCarrier && onTransferPlanes?.(model, effectiveCount, activeCarrier.id, carrierFerryTo)}
+                            className={`py-1 px-1.5 rounded font-bold text-center text-[10px] border ${hasReady && carrierFerryTo ? 'bg-[#0B1E34] hover:bg-[#153252] text-[#80DEEA] border-[#1E3A5F]' : 'bg-[#050D18] text-slate-600 border-slate-800 cursor-not-allowed'}`}
+                            title="以轉場航線飛往選定的機場或航艦"
+                          >
+                            🛫 轉場 {effectiveCount}機
+                          </button>
+                        </div>
                           {/* Unit Demonstration Blueprint Preview */}
                           <div className="relative mt-1">
                             <UnitPreviewCanvas
@@ -1617,7 +1646,7 @@ export const HUD: React.FC<HUDProps> = ({
 
                           {/* Interactive Armament Tray Trigger Card */}
                           <div className="mt-1.5 bg-[#040E1B] p-1.5 rounded border border-[#1E3A5F]/80 flex flex-col gap-0.5">
-                            <div className="flex items-center justify-between gap-1">
+                            <div className="deck-detail flex items-center justify-between gap-1">
                               <span className="text-[8px] font-bold text-emerald-400 bg-[#004D40]/60 px-1 py-0.2 rounded truncate">
                                 {payloadData.purposeBadge || ('作戰')}
                               </span>
@@ -1650,33 +1679,6 @@ export const HUD: React.FC<HUDProps> = ({
                           </div>
                         </div>
 
-                        {/* Sortie Button */}
-                        <button
-                          type="button"
-                          disabled={!hasReady}
-                          onClick={() => {
-                            onLaunchModel(model, effectiveCount, currentPayload, activeCarrier?.id);
-                            setBottomDeckTab('carrier');
-                            setIsBottomDeckExpanded(true);
-                          }}
-                          className={`mt-1.5 py-1 px-1.5 rounded font-bold text-center text-[10px] flex items-center justify-center gap-1 transition-transform active:scale-95 ${
-                            hasReady
-                              ? 'bg-gradient-to-r from-[#1976D2] to-[#0D47A1] hover:from-[#2196F3] hover:to-[#1565C0] text-white border border-[#42A5F5]/60 shadow'
-                              : 'bg-[#050D18] border border-slate-800 text-slate-600 cursor-not-allowed'
-                          }`}
-                        >
-                          <Plane className="w-3 h-3 shrink-0" />
-                          <span className="truncate">{hasReady ? (`出擊 ${effectiveCount}機`) : ('整備中')}</span>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={!hasReady || !carrierFerryTo || !activeCarrier}
-                          onClick={() => activeCarrier && onTransferPlanes?.(model, effectiveCount, activeCarrier.id, carrierFerryTo)}
-                          className={`mt-1 py-0.5 px-1.5 rounded font-bold text-center text-[9px] border ${hasReady && carrierFerryTo ? 'bg-[#0B1E34] hover:bg-[#153252] text-[#80DEEA] border-[#1E3A5F]' : 'bg-[#050D18] text-slate-600 border-slate-800 cursor-not-allowed'}`}
-                          title="以轉場航線飛往選定的機場或航艦"
-                        >
-                          🛫 轉場 {effectiveCount}機
-                        </button>
                       </div>
                     );
                   })}
@@ -1690,10 +1692,10 @@ export const HUD: React.FC<HUDProps> = ({
           {bottomDeckTab === 'airbase' && (
             <div className="flex flex-col gap-2">
               {/* Header Info & Category Filter Bar */}
-              <div className="flex items-center justify-between text-xs font-mono text-[#80CBC4] bg-[#051A18] px-3 py-1.5 rounded border border-[#00695C]">
+              <div className="flex items-center justify-between text-xs font-mono text-[#80CBC4] bg-[#051A18] px-3 py-1 rounded border border-[#00695C]">
                 <div className="flex items-center gap-2">
                   <span className="font-bold">{activeAirfield ? `${activeAirfield.isHQ ? '🏛️' : '🛬'} ${activeAirfield.name}` : '前進野戰陸基航空站 (FORWARD AIRBASE)'}</span>
-                  <span className="text-[10px] text-slate-300">
+                  <span className="deck-detail text-[10px] text-slate-300">
                     {era === 'era5'
                         ? '支援 B-52G / F-111 現代長程戰轟、A-10A / AH-64A / F-15A / F-16A 陸空主力與海軍陸基戰備分隊！'
                         : era === 'era4'
@@ -1890,6 +1892,57 @@ export const HUD: React.FC<HUDProps> = ({
                           </span>
                         </div>
 
+                        {/* Action Buttons: Sortie & Ferry */}
+                        <div className="grid grid-cols-2 gap-1.5 mt-1">
+                          {(() => {
+                            const dest = ferryBases.find((b) => b.id === afbFerryTo);
+                            const deckOnly = dest?.isCarrier && !isCarrierCapable;
+                            const canFerry = hasReady && !!dest && !deckOnly && !!activeAirfield;
+                            return (
+                              <button
+                                type="button"
+                                disabled={!canFerry}
+                                onClick={() => activeAirfield && onTransferPlanes?.(id as AircraftModel, effectiveCount, activeAirfield.id, afbFerryTo)}
+                                className={`py-1.5 px-1 rounded font-bold text-center text-[10px] flex items-center justify-center gap-1 transition-transform active:scale-95 ${
+                                  canFerry
+                                    ? 'bg-[#0B1E34] hover:bg-[#153252] text-[#80DEEA] border border-[#1E3A5F]'
+                                    : 'bg-[#031017] text-slate-600 border border-slate-800 cursor-not-allowed'
+                                }`}
+                                title={deckOnly ? '陸基機型無法降落航艦甲板' : '以轉場航線飛往選定的機場或航艦'}
+                              >
+                                <span>{deckOnly ? '陸航專用' : '🛫 轉場'}</span>
+                              </button>
+                            );
+                          })()}
+
+                          <button
+                            type="button"
+                            disabled={!hasReady}
+                            onClick={() => {
+                              onLaunchAirbaseSortie?.(id as AircraftModel, effectiveCount, currentPayload, activeAirfield?.id);
+                            }}
+                            className={`py-1.5 px-1 rounded font-bold text-center text-[10px] flex items-center justify-center gap-1 transition-transform active:scale-95 ${
+                              hasReady
+                                ? isNukeEquipped
+                                  ? canAffordNuke
+                                    ? 'bg-gradient-to-r from-amber-600 via-rose-600 to-red-700 hover:from-amber-500 hover:to-red-600 text-white border border-amber-300 shadow-xl'
+                                    : 'bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300'
+                                  : 'bg-gradient-to-r from-[#00897B] to-[#004D40] hover:from-[#26A69A] hover:to-[#00796B] text-white border border-[#80CBC4]/60 shadow'
+                                : 'bg-[#031017] border border-slate-800 text-slate-600 cursor-not-allowed'
+                            }`}
+                          >
+                            <Plane className="w-3 h-3" />
+                            <span className="truncate">
+                              {hasReady
+                                ? isNukeEquipped
+                                  ? canAffordNuke
+                                    ? ('☢️ 核打擊出擊')
+                                    : (`☢️ 缺 ${shortfallText(stock, nukeBill)}`)
+                                  : (`出擊 ${effectiveCount}機`)
+                                : ('無機')}
+                            </span>
+                          </button>
+                        </div>
                         {/* Unit Demonstration Blueprint Preview */}
                         <div className="relative mt-1">
                           <UnitPreviewCanvas
@@ -1950,7 +2003,7 @@ export const HUD: React.FC<HUDProps> = ({
                               : 'bg-[#031017] border-[#004D40]'
                           }`}
                         >
-                          <div className="flex items-center justify-between gap-1">
+                          <div className="deck-detail flex items-center justify-between gap-1">
                             <span
                               className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
                                 isNukeEquipped
@@ -1969,7 +2022,7 @@ export const HUD: React.FC<HUDProps> = ({
                             {payloadData.badge}
                           </div>
 
-                          <div className="flex items-center justify-between text-[9px] text-slate-300">
+                          <div className="deck-detail flex items-center justify-between text-[9px] text-slate-300">
                             <span>💥 半徑: {payloadData.blastRadius ? `${payloadData.blastRadius}m` : ('直擊')}</span>
                             <span className="text-amber-300 font-bold tabular-nums">
                               {payloadData.damage > 0 ? `${payloadData.damage.toLocaleString()} DMG` : ('空戰')}
@@ -2002,57 +2055,6 @@ export const HUD: React.FC<HUDProps> = ({
                           </button>
                         </div>
 
-                        {/* Action Buttons: Sortie & Ferry */}
-                        <div className="grid grid-cols-2 gap-1.5 mt-2">
-                          {(() => {
-                            const dest = ferryBases.find((b) => b.id === afbFerryTo);
-                            const deckOnly = dest?.isCarrier && !isCarrierCapable;
-                            const canFerry = hasReady && !!dest && !deckOnly && !!activeAirfield;
-                            return (
-                              <button
-                                type="button"
-                                disabled={!canFerry}
-                                onClick={() => activeAirfield && onTransferPlanes?.(id as AircraftModel, effectiveCount, activeAirfield.id, afbFerryTo)}
-                                className={`py-1.5 px-1 rounded font-bold text-center text-[10px] flex items-center justify-center gap-1 transition-transform active:scale-95 ${
-                                  canFerry
-                                    ? 'bg-[#0B1E34] hover:bg-[#153252] text-[#80DEEA] border border-[#1E3A5F]'
-                                    : 'bg-[#031017] text-slate-600 border border-slate-800 cursor-not-allowed'
-                                }`}
-                                title={deckOnly ? '陸基機型無法降落航艦甲板' : '以轉場航線飛往選定的機場或航艦'}
-                              >
-                                <span>{deckOnly ? '陸航專用' : '🛫 轉場'}</span>
-                              </button>
-                            );
-                          })()}
-
-                          <button
-                            type="button"
-                            disabled={!hasReady}
-                            onClick={() => {
-                              onLaunchAirbaseSortie?.(id as AircraftModel, effectiveCount, currentPayload, activeAirfield?.id);
-                            }}
-                            className={`py-1.5 px-1 rounded font-bold text-center text-[10px] flex items-center justify-center gap-1 transition-transform active:scale-95 ${
-                              hasReady
-                                ? isNukeEquipped
-                                  ? canAffordNuke
-                                    ? 'bg-gradient-to-r from-amber-600 via-rose-600 to-red-700 hover:from-amber-500 hover:to-red-600 text-white border border-amber-300 shadow-xl'
-                                    : 'bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-300'
-                                  : 'bg-gradient-to-r from-[#00897B] to-[#004D40] hover:from-[#26A69A] hover:to-[#00796B] text-white border border-[#80CBC4]/60 shadow'
-                                : 'bg-[#031017] border border-slate-800 text-slate-600 cursor-not-allowed'
-                            }`}
-                          >
-                            <Plane className="w-3 h-3" />
-                            <span className="truncate">
-                              {hasReady
-                                ? isNukeEquipped
-                                  ? canAffordNuke
-                                    ? ('☢️ 核打擊出擊')
-                                    : (`☢️ 缺 ${shortfallText(stock, nukeBill)}`)
-                                  : (`出擊 ${effectiveCount}機`)
-                                : ('無機')}
-                            </span>
-                          </button>
-                        </div>
                       </div>
                     );
                   })}
@@ -2247,7 +2249,7 @@ export const HUD: React.FC<HUDProps> = ({
                               {builderRequirement(item.typeTag) === 'engineer' ? '🛠 工兵' : '🪖 步兵'}
                             </span>
                           </div>
-                          <div className="text-[8.5px] text-[#80DEEA] mt-1 bg-[#040C16] px-1 py-0.5 rounded border border-[#1E3A5F]/50 truncate">
+                          <div className="deck-detail text-[8.5px] text-[#80DEEA] mt-1 bg-[#040C16] px-1 py-0.5 rounded border border-[#1E3A5F]/50 truncate">
                             {item.statsDesc}
                           </div>
                           {(buildTime(item.typeTag) > 0 || BUILD_PREREQ[item.typeTag]) && (
