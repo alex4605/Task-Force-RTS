@@ -108,7 +108,7 @@ const LOADOUTS: Partial<Record<AircraftModel, readonly Store[]>> = {
   p47: [s('mixed_bombs_rockets'), s('hvar_rockets', 10), s('bombs_dual_500'), s('bomb_1000'), s('clean_guns')], // P-47D-30: ten HVAR
   p38: [s('hvar_rockets', 10), s('clean_guns'), s('bombs_dual_500'), s('bomb_1000')], // P-38L: ten HVAR "Christmas tree"
   a26: [s('napalm_canister', 2, ['era3']), s('bombs_dual_500'), s('bomb_1000'), s('bombs_quad_500'), s('hvar_rockets', 8)],
-  b29: [s('bombs_carpet_250'), s('bombs_quad_500'), s('bombs_dual_1000'), s('bomb_2000'), s('bomb_1600'), s('bomb_1000'), s('tactical_nuke')],
+  b29: [s('bombs_carpet_250'), s('bombs_quad_500'), s('bombs_dual_1000'), s('bomb_2000'), s('bomb_1600'), s('bomb_1000'), s('tactical_nuke', undefined, ['era3'])],
   c47: [s('c1_paratroopers'), s('para_pack_howitzer', 1, ['era2', 'era3'])], // 28 jumpers, or a 75 mm pack howitzer in bundles
   pby: [s('scout_fuel'), s('depth_bombs', 4), s('aerial_torpedo', 2), s('bombs_dual_500')], // Black Cat: radar search, depth charges, two Mk 13 torpedoes
   // ── Korean War ──

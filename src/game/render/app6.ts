@@ -461,6 +461,7 @@ const EXPLICIT_FUNCTION: Record<string, App6Function> = {
   sof_seal_83: 'special_forces',
   sof_ranger_83: 'special_forces',
   opfor_ija_hmg_42: 'infantry',
+  opfor_ija_takasago_42: 'infantry',
   opfor_ija_47mm_at: 'anti_armour',
   opfor_ija_kami: 'armour',
   opfor_ija_banzai_45: 'infantry',

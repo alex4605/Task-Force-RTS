@@ -122,6 +122,24 @@ export function drawShell(rc: RenderContext, proj: Projectile): void {
 
 export function drawBullet(rc: RenderContext, proj: Projectile): void {
   const ctx = rc.ctx;
+  if (proj.isFlame) {
+    // Burning fuel: a rolling fireball that swells as it flies, smoke at its tail
+    const f = Math.min(1, (proj.distanceTraveled ?? 0) / Math.max(1, proj.maxDistance ?? 1));
+    const r = 4 + f * 9;
+    const g = ctx.createRadialGradient(proj.pos.x, proj.pos.y, 0, proj.pos.x, proj.pos.y, r);
+    g.addColorStop(0, 'rgba(255, 245, 157, 0.95)');
+    g.addColorStop(0.45, 'rgba(255, 145, 0, 0.85)');
+    g.addColorStop(1, 'rgba(183, 28, 28, 0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(proj.pos.x, proj.pos.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(40, 30, 25, 0.35)';
+    ctx.beginPath();
+    ctx.arc(proj.pos.x - proj.vel.x * 0.05, proj.pos.y - proj.vel.y * 0.05, r * 0.7, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
   const col = tracerColours(proj.side, rc.era);
   const beam = !!proj.isBeamTracer; // M61 / GSh-23 rotary cannon: an almost continuous stream
   const k = beam ? 0.2 : 0.06;

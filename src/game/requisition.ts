@@ -1469,7 +1469,7 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
           : '調派 2架 B-17 飛行堡壘四發重型轟炸機至前進航空基地，實施密集連環航彈覆蓋。',
       statsDesc:
         era === 'era3'
-          ? '+2架 萬米平流層重轟 | 可掛載戰術核彈 (4,500 CP)'
+          ? '+2架 萬米平流層重轟 | 可掛載戰術核彈'
           : '+2架 陸基四發重型轟炸機 | 密集地毯式連環航彈',
       typeTag: 'heavy_bomber_pool',
     },
@@ -1506,6 +1506,22 @@ function buildRequisitionCatalog(era: Era): RequisitionItem[] {
       typeTag: 'air_c47',
     },
   ];
+
+  // Era 2: the XXI Bomber Command's B-29s flew from the Marianas from November 1944
+  if (era === 'era2') {
+    aircraft.push({
+      id: 'req-air-b29-e2',
+      category: 'aircraft',
+      name: 'B-29 超級堡壘 第21轟炸機司令部 (+2架)',
+      cost: 380,
+      era: 'era2',
+      badge: '馬里亞納戰略轟炸',
+      desc: '自塞班、天寧與關島起飛的 B-29 超級堡壘。加壓艙與遙控砲塔，可在日軍攔截機難以觸及的高度投下大量航彈。',
+      statsDesc: '+2架 陸基戰略重轟 | 24枚連環地毯航彈',
+      typeTag: 'air_b29',
+      airCount: 2,
+    });
+  }
 
   // Era 3 Special Aircraft Additions
   if (era === 'era3') {

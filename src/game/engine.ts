@@ -1,3 +1,4 @@
+import { groundWeaponMode, GroundWeaponMode } from './groundWeapons';
 import { ImpactEffect, ImpactSurface, impactFor, MAX_IMPACTS } from './impacts';
 import { snapOntoLand } from './coastline';
 import { canCallFrom, isLightGroundUnit, rallyKind, resolveGroundRequisition } from './groundRequisition';
@@ -421,7 +422,7 @@ export class GameEngine {
       for (let k = 0; k < n; k++) {
         const a = (k / n) * Math.PI * 2;
         const q = { x: p.x + Math.cos(a) * r, y: p.y + Math.sin(a) * r };
-        if (dry(q) && dry({ x: q.x + Math.cos(a) * 20, y: q.y + Math.sin(a) * 20 })) return q;
+        if (dry(q) && dry({ x: q.x + Math.cos(a) * 20, y: q.y + Math.sin(a) * 20 }) && this.isGroundWalkable(q.x, q.y)) return q;
       }
     }
     return snapOntoLand(island, p);
@@ -1306,7 +1307,7 @@ export class GameEngine {
       this.era === 'era1'
         ? { b17: 6, b25: 6, p40: 8, p36a: 8, p39d: 6, a20: 6, f4f: 8, sbd: 8, tbd: 6, os2u: 2, c47: 4, pby: 3 }
         : this.era === 'era2'
-        ? { b24: 6, b17_late: 6, p51: 8, p47: 6, p38: 4, f6f: 10, f4u: 8, sb2c: 8, tbf: 8, sc1: 2, c47: 4, pby: 3 }
+        ? { b24: 6, b17_late: 6, b29: 4, p51: 8, p47: 6, p38: 4, f6f: 10, f4u: 8, sb2c: 8, tbf: 8, sc1: 2, c47: 4, pby: 3 }
         : this.era === 'era3'
         ? { b29: 6, f86: 8, f84: 8, f82: 6, a26: 6, f9f: 8, f2h: 6, ad1: 8, f4u4: 6, af_guardian: 4, ad3w: 2, ho3s1: 2, c47: 4 }
         : this.era === 'era4'
@@ -3049,6 +3050,7 @@ export class GameEngine {
     this.updateSettlements(effectiveDt);
     this.updateRearPatrols(effectiveDt);
     this.updateAlliedCapStations(effectiveDt);
+    this.updateRocketShips(effectiveDt);
     this.updateFieldWorks(effectiveDt);
     this.updateLocalForces(effectiveDt);
     this.updateCivilHospitals(effectiveDt);
@@ -10267,10 +10269,8 @@ export class GameEngine {
       } else if (unit.cooldown <= 0 && this.canEngageGroundAt(unit.pos, unit.range, targetGround.pos, indirectFire)) {
         soundEngine.playGunSalvo(false);
         const d = dist(unit.pos, targetGround.pos);
-        const isArty = unit.isArtillery || unit.isSPG || unit.type.includes('artillery') || unit.type === 'opfor_2s1';
-        const isTank = unit.type.includes('tank') || unit.type === 'opfor_t72b' || unit.type === 'opfor_t80b' || unit.type === 'opfor_bmp2';
-        const isMortar = unit.type.includes('mortar');
-        const isAtgm = unit.type === 'opfor_bmp2' || unit.type === 'opfor_t80b';
+        const mode = groundWeaponMode(unit.type);
+        const isAtgm = mode === 'atgm';
         const isNuclearScud = unit.type === 'opfor_scud_nuclear';
         const isScud = unit.type === 'opfor_scud_tel';
         const isOpforMlrs = unit.type === 'opfor_bm21_grad' || unit.type === 'opfor_bm27_uragan' || unit.type === 'opfor_bm13_katyusha';
@@ -10342,116 +10342,8 @@ export class GameEngine {
             }
           }
           unit.cooldown = unit.disorganized ? unit.reloadTime * 2 : unit.reloadTime;
-        } else if (isArty) {
-          this.registerArtillerySignature(unit.pos, unit.side, unit.name, unit.type);
-          if (d < 700) {
-            unit.artilleryMode = 'direct_fire';
-            const pSpeed = 560;
-            this.projectiles.push({
-              id: `opfor-arty-direct-${Date.now()}`,
-              type: 'shell',
-              side: 'enemy',
-              pos: { ...unit.pos },
-              vel: {
-                x: ((targetGround.pos.x - unit.pos.x) / d) * pSpeed,
-                y: ((targetGround.pos.y - unit.pos.y) / d) * pSpeed,
-              },
-              originPos: { ...unit.pos },
-              targetPos: { ...targetGround.pos },
-              flightProgress: 0,
-              maxDistance: d,
-              distanceTraveled: 0,
-              damage: Math.round(unit.damage * 1.15),
-              blastRadius: 20,
-              speed: pSpeed,
-              heading: unit.heading,
-              isDead: false,
-              trail: [],
-              attackerName: `${unit.name} 【直瞄平射】`,
-            });
-          } else {
-            unit.artilleryMode = 'bombardment';
-            const pSpeed = 400;
-            this.projectiles.push({
-              id: `opfor-arty-bombard-${Date.now()}`,
-              type: 'shell',
-              side: 'enemy',
-              pos: { ...unit.pos },
-              vel: {
-                x: ((targetGround.pos.x - unit.pos.x) / d) * pSpeed,
-                y: ((targetGround.pos.y - unit.pos.y) / d) * pSpeed,
-              },
-              originPos: { ...unit.pos },
-              targetPos: { ...targetGround.pos },
-              flightProgress: 0,
-              maxDistance: d,
-              distanceTraveled: 0,
-              damage: unit.damage,
-              blastRadius: 40,
-              arcAltitude: 1.25,
-              speed: pSpeed,
-              heading: unit.heading,
-              isDead: false,
-              trail: [],
-              attackerName: `${unit.name} 【長程曲射】`,
-            });
-          }
-        } else if (isTank || isMortar) {
-          if (isMortar) {
-            this.registerArtillerySignature(unit.pos, unit.side, unit.name, unit.type);
-          }
-          const pSpeed = isMortar ? 390 : 520;
-          this.projectiles.push({
-            id: `opfor-shell-${Date.now()}`,
-            type: 'shell',
-            side: 'enemy',
-            pos: { ...unit.pos },
-            vel: {
-              x: ((targetGround.pos.x - unit.pos.x) / d) * pSpeed,
-              y: ((targetGround.pos.y - unit.pos.y) / d) * pSpeed,
-            },
-            originPos: { ...unit.pos },
-            targetPos: { ...targetGround.pos },
-            flightProgress: 0,
-            maxDistance: d,
-            distanceTraveled: 0,
-            damage: unit.damage,
-            blastRadius: isMortar ? 18 : 22,
-            speed: pSpeed,
-            heading: unit.heading,
-            isDead: false,
-            trail: [],
-            attackerName: unit.name,
-          });
         } else {
-          // 密集群射機槍曳光彈 (3發緊湊點射)
-          for (let b = 0; b < 3; b++) {
-            const spread = (Math.random() - 0.5) * 0.08;
-            const bAngle = unit.heading + spread;
-            const bSpeed = 480;
-            this.projectiles.push({
-              id: `opfor-mg-${Date.now()}-${b}`,
-              type: 'bullet',
-              side: 'enemy',
-              pos: {
-                x: unit.pos.x + Math.cos(unit.heading) * (b * 8),
-                y: unit.pos.y + Math.sin(unit.heading) * (b * 8),
-              },
-              vel: { x: Math.cos(bAngle) * bSpeed, y: Math.sin(bAngle) * bSpeed },
-              originPos: { ...unit.pos },
-              targetPos: { ...targetGround.pos },
-              flightProgress: 0,
-              maxDistance: d,
-              distanceTraveled: 0,
-              damage: Math.round(unit.damage / 3),
-              blastRadius: 6,
-              speed: bSpeed,
-              heading: bAngle,
-              isDead: false,
-              trail: [],
-              attackerName: unit.name,
-            });
-          }
+          this.fireGroundWeaponAt(unit, mode, targetGround.pos, targetGround.id);
         }
 
         // 壓制我軍步兵組織度與壓制值
@@ -10526,11 +10418,8 @@ export class GameEngine {
       const isAtacms = unit.type === 'us_m270_atacms';
       const isCalliope = unit.type === 'us_m4_calliope';
       const isMlrs = unit.type === 'us_m270_mlrs';
-      const silClass = groundSilhouetteClass(unit.type);
-      const isAtgm = unit.type === 'us_dragon_atgm' || unit.type === 'us_m2_bradley' || unit.type === 'us_hmmwv_tow' || unit.type === 'frg_marder' || unit.type === 'uk_milan_team';
-      const isArty = unit.isArtillery || unit.isSPG || unit.type.includes('artillery') || unit.type.includes('howitzer') || unit.type === 'us_m198_155';
-      const isTank = silClass === 'tank' || unit.type.includes('armor');
-      const isShell = isTank || isArty || unit.type === 'usmc_lvt_45' || unit.type === 'usmc_lvtp5a1' || unit.type === 'usmc_aav7a1' || unit.type === 'usmc_lav25' || unit.type === 'uk_warrior' || unit.type === 'usmc_37mm_at';
+      const mode = groundWeaponMode(unit.type);
+      const isAtgm = mode === 'atgm';
 
       if (isNuclearAtacms) {
         this.fireNuclearSSMMissile(unit, targetPos, targetUnit ?? undefined);
@@ -10608,115 +10497,8 @@ export class GameEngine {
             });
           }
         }
-      } else if (isArty) {
-        this.registerArtillerySignature(unit.pos, unit.side, unit.name, unit.type);
-        if (d < 700) {
-          // Direct tank-like line-of-sight cannon fire mode! (直瞄平射)
-          unit.artilleryMode = 'direct_fire';
-          const pSpeed = 580;
-          this.projectiles.push({
-            id: `arty-direct-${Date.now()}`,
-            type: 'shell',
-            side: 'player',
-            pos: { ...unit.pos },
-            vel: {
-              x: ((targetPos.x - unit.pos.x) / d) * pSpeed,
-              y: ((targetPos.y - unit.pos.y) / d) * pSpeed,
-            },
-            originPos: { ...unit.pos },
-            targetPos: { ...targetPos },
-            flightProgress: 0,
-            maxDistance: d,
-            distanceTraveled: 0,
-            damage: Math.round(unit.damage * 1.15),
-            blastRadius: 20,
-            speed: pSpeed,
-            heading: unit.heading,
-            isDead: false,
-            trail: [],
-            attackerName: `${unit.name} 【直瞄平射】`,
-          });
-        } else {
-          // Long-range high-angle parabolic bombardment mode! (長程曲射)
-          unit.artilleryMode = 'bombardment';
-          const pSpeed = 410;
-          this.projectiles.push({
-            id: `arty-bombard-${Date.now()}`,
-            type: 'shell',
-            side: 'player',
-            pos: { ...unit.pos },
-            vel: {
-              x: ((targetPos.x - unit.pos.x) / d) * pSpeed,
-              y: ((targetPos.y - unit.pos.y) / d) * pSpeed,
-            },
-            originPos: { ...unit.pos },
-            targetPos: { ...targetPos },
-            flightProgress: 0,
-            maxDistance: d,
-            distanceTraveled: 0,
-            damage: unit.damage,
-            blastRadius: 42,
-            arcAltitude: 1.25,
-            speed: pSpeed,
-            heading: unit.heading,
-            isDead: false,
-            trail: [],
-            attackerName: `${unit.name} 【長程曲射】`,
-          });
-        }
-      } else if (isShell) {
-        const pSpeed = isTank ? 540 : 460;
-        this.projectiles.push({
-          id: `usmc-shell-${Date.now()}`,
-          type: 'shell',
-          side: 'player',
-          pos: { ...unit.pos },
-          vel: {
-            x: ((targetPos.x - unit.pos.x) / d) * pSpeed,
-            y: ((targetPos.y - unit.pos.y) / d) * pSpeed,
-          },
-          originPos: { ...unit.pos },
-          targetPos: { ...targetPos },
-          flightProgress: 0,
-          maxDistance: d,
-          distanceTraveled: 0,
-          damage: unit.damage,
-          blastRadius: 22,
-          speed: pSpeed,
-          heading: unit.heading,
-          isDead: false,
-          trail: [],
-          attackerName: unit.name,
-        });
       } else {
-        // 密集群射機槍曳光彈 (3發高速點射)
-        for (let b = 0; b < 3; b++) {
-          const spread = (Math.random() - 0.5) * 0.07;
-          const bAngle = unit.heading + spread;
-          const bSpeed = 490;
-          this.projectiles.push({
-            id: `usmc-mg-${Date.now()}-${b}`,
-            type: 'bullet',
-            side: 'player',
-            pos: {
-              x: unit.pos.x + Math.cos(unit.heading) * (b * 8),
-              y: unit.pos.y + Math.sin(unit.heading) * (b * 8),
-            },
-            vel: { x: Math.cos(bAngle) * bSpeed, y: Math.sin(bAngle) * bSpeed },
-            originPos: { ...unit.pos },
-            targetPos: { ...targetPos },
-            flightProgress: 0,
-            maxDistance: d,
-            distanceTraveled: 0,
-            damage: Math.round(unit.damage / 3),
-            blastRadius: 8,
-            speed: bSpeed,
-            heading: bAngle,
-            isDead: false,
-            trail: [],
-            attackerName: unit.name,
-          });
-        }
+        this.fireGroundWeaponAt(unit, mode, targetPos, targetUnit?.id);
       }
 
       // 戰鬥交火使雙方組織度與壓制值受到衝擊
@@ -11077,56 +10859,101 @@ export class GameEngine {
   // LSM(R) 火箭艦連續火箭齊射主動技能 (Rocket Barrage)
   // ══════════════════════════════════════════════════════════
 
+  /** LSM(R)s reload between ripples and fire on their own at beach defences in reach. */
+  private updateRocketShips(dt: number): void {
+    for (const ship of this.playerShips) {
+      if (ship.isSunk || ship.type !== 'lsm_r') continue;
+      if ((ship.rocketCooldown ?? 0) > 0) ship.rocketCooldown = Math.max(0, (ship.rocketCooldown ?? 0) - dt);
+      else if (this.findLsmrTarget(ship)) this.triggerLSMRocketBarrage(ship.id);
+    }
+  }
+
+  /** LSM(R) rocket reach (5in spin-stabilised rockets). */
+  private static readonly LSMR_REACH = 1700;
+
+  /** The nearest enemy beach target in rocket reach: troops ashore first, then works. */
+  private findLsmrTarget(lsmr: Ship): Vector2D | null {
+    const reach = GameEngine.LSMR_REACH;
+    let best: Vector2D | null = null;
+    let bd = reach;
+    for (const u of this.groundUnits) {
+      if (u.isDestroyed || u.side !== 'enemy' || u.embarkedInShipId) continue;
+      const d = dist(lsmr.pos, u.pos);
+      if (d < bd) {
+        bd = d;
+        best = u.pos;
+      }
+    }
+    if (best) return { ...best };
+    for (const isl of this.islands) {
+      for (const inst of isl.installations) {
+        if (inst.isDestroyed || inst.side !== 'enemy' || inst.isCivilian) continue;
+        const d = dist(lsmr.pos, inst.pos);
+        if (d < bd) {
+          bd = d;
+          best = inst.pos;
+        }
+      }
+    }
+    return best ? { ...best } : null;
+  }
+
+  /**
+   * LSM(R) rocket ripple: the 1945 LSM(R)-188s carried 75 Mk 36 / Mk 30 launchers firing 5in
+   * spin-stabilised rockets in rapid ripples to saturate a beach before the first wave landed.
+   */
   public triggerLSMRocketBarrage(lsmrId: string, targetPos?: Vector2D) {
     const lsmr = this.playerShips.find((s) => s.id === lsmrId && !s.isSunk);
     if (!lsmr || (lsmr.rocketCooldown && lsmr.rocketCooldown > 0)) return;
 
-    const target = targetPos || {
-      x: lsmr.pos.x + Math.cos(lsmr.heading) * 950,
-      y: lsmr.pos.y + Math.sin(lsmr.heading) * 950,
+    const aimed = targetPos ?? this.findLsmrTarget(lsmr);
+    const target = aimed ?? {
+      x: lsmr.pos.x + Math.cos(lsmr.heading) * 1200,
+      y: lsmr.pos.y + Math.sin(lsmr.heading) * 1200,
     };
     soundEngine.playRocketIgnition();
+    soundEngine.playRocketWhoosh();
 
-    // Fire 12 continuous rockets in rapid succession
-    for (let r = 0; r < 12; r++) {
-      this.scheduleAction(r * 0.08, () => {
+    const salvo = 48;
+    for (let r = 0; r < salvo; r++) {
+      this.scheduleAction(r * 0.06, () => {
         if (!lsmr || lsmr.isSunk) return;
-        const spreadX = (Math.random() - 0.5) * 120;
-        const spreadY = (Math.random() - 0.5) * 120;
-        const rTarget = { x: target.x + spreadX, y: target.y + spreadY };
+        const rTarget = { x: target.x + (Math.random() - 0.5) * 220, y: target.y + (Math.random() - 0.5) * 220 };
         const angle = Math.atan2(rTarget.y - lsmr.pos.y, rTarget.x - lsmr.pos.x);
         const d = dist(lsmr.pos, rTarget);
-
+        // Launchers sit along both sides of the deck
+        const off = (r % 2 ? 1 : -1) * lsmr.width * 0.3;
+        const from = { x: lsmr.pos.x - Math.sin(lsmr.heading) * off, y: lsmr.pos.y + Math.cos(lsmr.heading) * off };
         this.projectiles.push({
           id: `lsm-rocket-${Date.now()}-${r}-${Math.random().toString(36).slice(2, 6)}`,
           type: 'rocket',
           side: 'player',
-          pos: { ...lsmr.pos },
-          vel: { x: Math.cos(angle) * 360, y: Math.sin(angle) * 360 },
-          originPos: { ...lsmr.pos },
+          pos: from,
+          vel: { x: Math.cos(angle) * 380, y: Math.sin(angle) * 380 },
+          originPos: { ...from },
           targetPos: rTarget,
           flightProgress: 0,
           maxDistance: d,
           distanceTraveled: 0,
-          damage: 220,
-          blastRadius: 45,
-          speed: 360,
+          damage: 130,
+          blastRadius: 32,
+          speed: 380,
           heading: angle,
           isDead: false,
           trail: [],
-          attackerName: 'LSM(R)-196 火箭艦',
+          attackerName: `${lsmr.name} (5吋火箭)`,
         });
       });
     }
 
-    lsmr.rocketCooldown = 18; // 18 seconds cooldown
+    lsmr.rocketCooldown = 30; // the crew reloads the launchers by hand between ripples
     this.addCombatLog({
       category: 'naval',
       sourceSide: 'player',
       sourceName: lsmr.name,
-      targetName: '敵灘頭防禦陣地',
+      targetName: aimed ? '敵灘頭防禦陣地' : '前方海岸',
       actionType: 'rocket_hit',
-      text: `🚀【密集火箭彈幕覆蓋！】「${lsmr.name}」85聯裝連續火箭發射架齊射！密集 5吋火箭呼嘯傾瀉目標海灘！`,
+      text: `🚀【火箭彈幕】「${lsmr.name}」以 ${salvo} 枚 5 吋火箭連續齊射覆蓋${aimed ? '敵方灘頭陣地' : '前方海岸'}！`,
     });
   }
 
@@ -14315,6 +14142,113 @@ export class GameEngine {
     });
   }
 
+  /**
+   * One shot (or burst) of a ground unit's weapon by its weapon class (groundWeapons.ts), the same
+   * for our, allied and enemy units: shells for guns, bursts for cannon and machine guns, a fireball
+   * for flame, a rocket for RPG / recoilless teams, mortar bombs on a high arc.
+   */
+  private fireGroundWeaponAt(unit: GroundUnit, mode: GroundWeaponMode, targetPos: Vector2D, targetId?: string): void {
+    const d = Math.max(1, dist(unit.pos, targetPos));
+    const side = unit.side;
+    const ux = (targetPos.x - unit.pos.x) / d;
+    const uy = (targetPos.y - unit.pos.y) / d;
+    const base = { side, originPos: { ...unit.pos }, targetPos: { ...targetPos }, flightProgress: 0, distanceTraveled: 0, isDead: false, trail: [] as Vector2D[] };
+    const tag = (s: string) => `${unit.side === 'enemy' ? 'opfor' : 'gnd'}-${s}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const shell = (speed: number, damage: number, blast: number, label: string, arc?: number) =>
+      this.projectiles.push({
+        ...base,
+        id: tag('shell'),
+        type: 'shell',
+        pos: { ...unit.pos },
+        vel: { x: ux * speed, y: uy * speed },
+        maxDistance: d,
+        damage,
+        blastRadius: blast,
+        speed,
+        heading: unit.heading,
+        arcAltitude: arc,
+        attackerName: label,
+        targetEntityId: targetId,
+      });
+    const burst = (n: number, speed: number, damage: number, blast: number, spreadRad: number, label: string, flame = false) => {
+      for (let b = 0; b < n; b++) {
+        const a = unit.heading + (Math.random() - 0.5) * spreadRad;
+        this.projectiles.push({
+          ...base,
+          id: tag(flame ? 'flame' : 'mg'),
+          type: 'bullet',
+          pos: { x: unit.pos.x + Math.cos(unit.heading) * (b * 6), y: unit.pos.y + Math.sin(unit.heading) * (b * 6) },
+          vel: { x: Math.cos(a) * speed, y: Math.sin(a) * speed },
+          maxDistance: d,
+          damage,
+          blastRadius: blast,
+          speed,
+          heading: a,
+          attackerName: label,
+          isFlame: flame || undefined,
+        });
+      }
+    };
+    switch (mode) {
+      case 'indirect':
+        this.registerArtillerySignature(unit.pos, unit.side, unit.name, unit.type);
+        if (d < 700) {
+          unit.artilleryMode = 'direct_fire';
+          shell(570, Math.round(unit.damage * 1.15), 20, `${unit.name} 【直瞄平射】`);
+        } else {
+          unit.artilleryMode = 'bombardment';
+          shell(405, unit.damage, 42, `${unit.name} 【長程曲射】`, 1.25);
+        }
+        break;
+      case 'mortar':
+        // Mortars never fire direct: a high arc every time
+        this.registerArtillerySignature(unit.pos, unit.side, unit.name, unit.type);
+        unit.artilleryMode = 'bombardment';
+        shell(330, unit.damage, 32, `${unit.name} 【迫擊砲曲射】`, 1.7);
+        break;
+      case 'cannon':
+        shell(540, unit.damage, 22, unit.name);
+        break;
+      case 'autocannon':
+        burst(4, 520, Math.round(unit.damage / 4), 10, 0.06, `${unit.name} (機砲連射)`);
+        break;
+      case 'mg':
+        burst(4, 490, Math.round(unit.damage / 4), 6, 0.08, `${unit.name} (機槍掃射)`);
+        break;
+      case 'flame':
+        soundEngine.playRocketWhoosh();
+        burst(5, 240, Math.round(unit.damage / 5), 18, 0.22, `${unit.name} (火焰噴射)`, true);
+        break;
+      case 'rocket_at': {
+        soundEngine.playRocketWhoosh();
+        const n = /ontos/.test(unit.type) ? 2 : 1;
+        for (let r = 0; r < n; r++) {
+          this.projectiles.push({
+            ...base,
+            id: tag('rkt'),
+            type: 'rocket',
+            pos: { ...unit.pos },
+            vel: { x: ux * 300, y: uy * 300 },
+            maxDistance: d,
+            damage: Math.round(unit.damage / n),
+            blastRadius: 18,
+            speed: 300,
+            heading: unit.heading,
+            attackerName: `${unit.name} (${/ontos/.test(unit.type) ? 'M40 106mm 無後座力砲' : '火箭筒'})`,
+            targetEntityId: targetId,
+          });
+        }
+        break;
+      }
+      case 'satchel':
+        // A thrown charge or lunge mine: short, slow, heavy
+        shell(200, Math.round(unit.damage * 1.2), 30, `${unit.name} (近身爆破)`);
+        break;
+      default:
+        burst(3, 460, Math.round(unit.damage / 3), 6, 0.08, unit.name);
+    }
+  }
+
   // ══════════════════════════════════════════════════════════
   // M4A3 薛曼「管風琴」60聯裝飽和火箭齊射 (Sherman Calliope MLRS Salvo)
   // ══════════════════════════════════════════════════════════
@@ -14322,13 +14256,14 @@ export class GameEngine {
     soundEngine.playRocketIgnition();
     soundEngine.playRocketWhoosh();
     this.registerArtillerySignature(launcher.pos, launcher.side, launcher.name, 'us_m4_calliope');
-    const rocketCount = 18; // 18x 4.5" M8 rockets in 60-tube rack salvo
+    // The T34 rack's full ripple: all 60 4.5in M8 rockets in a few seconds
+    const rocketCount = 60;
     for (let r = 0; r < rocketCount; r++) {
-      this.scheduleAction(r * 0.095, () => {
+      this.scheduleAction(r * 0.05, () => {
         if (!launcher || launcher.isDestroyed) return;
         const impactSpread: Vector2D = {
-          x: targetPos.x + (Math.random() - 0.5) * 140,
-          y: targetPos.y + (Math.random() - 0.5) * 140,
+          x: targetPos.x + (Math.random() - 0.5) * 200,
+          y: targetPos.y + (Math.random() - 0.5) * 200,
         };
         const d = dist(launcher.pos, impactSpread);
         const angle = Math.atan2(impactSpread.y - launcher.pos.y, impactSpread.x - launcher.pos.x);
@@ -14344,8 +14279,8 @@ export class GameEngine {
           flightProgress: 0,
           maxDistance: d + 200,
           distanceTraveled: 0,
-          damage: 320,
-          blastRadius: 28,
+          damage: 110,
+          blastRadius: 26,
           speed,
           heading: angle,
           isDead: false,
@@ -17494,21 +17429,26 @@ export class GameEngine {
           const flagship = this.getFlagship();
           if (raft.fromShip) {
             // A ship's survivors: trained sailors back in the manpower pool
+            // ...and the time it would take to train their replacements saved
             const mp = men * 4;
-            this.economy.add({ mp, pp: 0, rp: 0, tp: 0 });
+            const tp = Math.min(60, men * 2);
+            this.economy.add({ mp, pp: 0, rp: 0, tp });
             this.score.totalScore += 20 * men;
-            this.addBannerAlert(`🛟【艦員獲救】「${rescuerName}」救起「${raft.pilotName}」，人力 MP +${mp}`, 'player', 'capture', 5.0);
+            this.addBannerAlert(`🛟【艦員獲救】「${rescuerName}」救起「${raft.pilotName}」，人力 MP +${mp} · 時間 TP +${tp}`, 'player', 'capture', 5.0);
             this.addCombatLog({
               category: 'naval',
               sourceSide: 'player',
               sourceName: rescuerName,
               targetName: raft.planeName,
               actionType: 'recon_spotted',
-              text: `🛟【艦員獲救】「${rescuerName}」救起「${raft.pilotName}」，${men} 名艦員歸建，人力 MP +${mp}。`,
+              text: `🛟【艦員獲救】「${rescuerName}」救起「${raft.pilotName}」，${men} 名艦員歸建，人力 MP +${mp}，免去補訓新兵的時間 TP +${tp}。`,
             });
           } else {
+            // A trained aircrew back in the cockpit: months of flight school not needed again
+            const tp = Math.min(80, 20 + men * 10);
+            this.economy.add({ mp: 0, pp: 0, rp: 0, tp });
             this.addBannerAlert(
-              `🛟【機組獲救】「${rescuerName}」救起「${raft.pilotName}」，補回 1 架「${raft.planeName.split(' ')[0]}」`,
+              `🛟【機組獲救】「${rescuerName}」救起「${raft.pilotName}」，補回 1 架「${raft.planeName.split(' ')[0]}」· 時間 TP +${tp}`,
               'player',
               'capture',
               6.0
@@ -17519,7 +17459,7 @@ export class GameEngine {
               sourceName: rescuerName,
               targetName: raft.planeName,
               actionType: 'recon_spotted',
-              text: `🛟【機組獲救】「${rescuerName}」救起「${raft.pilotName}」（${men} 人），機組歸建，補回 1 架 ${raft.planeName}。★+1，+150 分。`,
+              text: `🛟【機組獲救】「${rescuerName}」救起「${raft.pilotName}」（${men} 人），機組歸建，補回 1 架 ${raft.planeName}，免去重新訓練飛行員的時間 TP +${tp}。★+1，+150 分。`,
             });
             // The crew returns to the flagship's hangar or the airbase pool
             const m = raft.planeModel;
@@ -18672,35 +18612,59 @@ export class GameEngine {
   private rearPatrolTimer = 0;
   private rearPatrolLost: Record<string, number> = {};
   private rearPatrolManned = new Set<string>();
-  private static readonly REAR_PATROL: Record<Era, { type: GroundUnitType; name: string }> = {
-    era1: { type: 'si_scouts_42', name: '所羅門群島土著偵察兵 巡邏隊' },
-    era2: { type: 'usmc_rifle_45', name: '陸戰隊憲兵 巡邏隊' },
-    era3: { type: 'rok_police_50', name: '大韓民國警察 戰鬥警察 巡邏隊' },
-    era4: { type: 'arvn_rfpf_65', name: '南越地方軍 (RF/PF) 巡邏隊' },
-    era5: { type: 'frg_heimatschutz_83', name: '西德國土防衛 巡邏隊' },
+  private static readonly REAR_PATROL: Record<'allied' | 'enemy', Record<Era, { type: GroundUnitType; name: string }>> = {
+    allied: {
+      era1: { type: 'si_scouts_42', name: '所羅門群島土著偵察兵 巡邏隊' },
+      era2: { type: 'usmc_rifle_45', name: '陸戰隊憲兵 巡邏隊' },
+      era3: { type: 'rok_police_50', name: '大韓民國警察 戰鬥警察 巡邏隊' },
+      era4: { type: 'arvn_rfpf_65', name: '南越地方軍 (RF/PF) 巡邏隊' },
+      era5: { type: 'frg_heimatschutz_83', name: '西德國土防衛 巡邏隊' },
+    },
+    // The other side's rear security, who went out after downed American aircrew
+    enemy: {
+      era1: { type: 'opfor_infantry_42', name: '海軍特別陸戰隊 警備巡邏班' },
+      era2: { type: 'opfor_infantry_45', name: '日軍 憲兵隊 搜索班' },
+      era3: { type: 'opfor_kpa_infantry_50', name: '朝鮮人民軍 保安隊 巡邏班' },
+      era4: { type: 'opfor_vc_guerrilla_65', name: '地方民兵自衛隊 搜捕隊' },
+      era5: { type: 'opfor_mvd_vv_83', name: '內務部內衛部隊 後方警備巡邏隊' },
+    },
   };
+
   private updateRearPatrols(dt: number): void {
     this.rearPatrolTimer -= dt;
     if (this.rearPatrolTimer > 0) return;
     this.rearPatrolTimer = 2;
-    const patrols = this.groundUnits.filter((u) => u.rearPatrol && !u.isDestroyed);
-    const posts = this.islands.flatMap((isl) => (isl.strongholds ?? []).filter((sh) => sh.isCaptured).map((sh) => ({ isl, sh })));
+    this.runRearPatrols('allied');
+    this.runRearPatrols('enemy');
+  }
+
+  /**
+   * Rear-area patrols, both sides: each stronghold a side holds raises a small patrol (four at most
+   * on the map per side, re-manned a minute after one is lost) that hunts the other side's downed
+   * aircrew near its post and otherwise walks the beat. Ours come from strongholds we captured.
+   */
+  private runRearPatrols(side: 'allied' | 'enemy'): void {
+    const foe = (g: { side: string }) => (side === 'enemy' ? g.side !== 'enemy' : g.side === 'enemy');
+    const patrols = this.groundUnits.filter((u) => u.rearPatrol && !u.isDestroyed && (side === 'enemy') === (u.side === 'enemy'));
+    const posts = this.islands.flatMap((isl) => (isl.strongholds ?? []).filter((sh) => (side === 'enemy' ? !sh.isCaptured : sh.isCaptured)).map((sh) => ({ isl, sh })));
+    const key = (id: string) => `${side}|${id}`;
     // A post whose patrol is gone waits a minute before it is manned again
     for (const id of [...this.rearPatrolManned]) {
-      if (!patrols.some((u) => u.rearPatrol!.post === id)) {
+      if (!id.startsWith(`${side}|`)) continue;
+      if (!patrols.some((u) => key(u.rearPatrol!.post) === id)) {
         this.rearPatrolManned.delete(id);
         this.rearPatrolLost[id] = this.gameTime;
       }
     }
-    // Raise one patrol at a post that has none (a minute after its last one was lost), four at most
+    // Raise one patrol at a post that has none, four at most per side
     if (patrols.length < 4) {
       for (const { isl, sh } of posts) {
         if (patrols.some((u) => u.rearPatrol!.post === sh.id)) continue;
-        if (this.gameTime - (this.rearPatrolLost[sh.id] ?? -999) < 60) continue;
-        // Only a post that is actually secure: no live enemy works or troops close round it
+        if (this.gameTime - (this.rearPatrolLost[key(sh.id)] ?? -999) < 60) continue;
+        // Only a post that is actually secure: no live hostile works or troops close round it
         const near = (q: Vector2D) => dist(q, sh.cpPos) < 600;
-        if (this.groundUnits.some((g) => g.side === 'enemy' && !g.isDestroyed && near(g.pos))) continue;
-        if (isl.installations.some((i) => i.side === 'enemy' && !i.isDestroyed && i.type !== 'pow_camp' && near(i.pos))) continue;
+        if (this.groundUnits.some((g) => foe(g) && !g.isDestroyed && !g.embarkedInShipId && near(g.pos))) continue;
+        if (side === 'allied' && isl.installations.some((i) => i.side === 'enemy' && !i.isDestroyed && i.type !== 'pow_camp' && near(i.pos))) continue;
         let pos: Vector2D | null = null;
         for (let k = 0; k < 12 && !pos; k++) {
           const a = Math.random() * Math.PI * 2;
@@ -18708,31 +18672,44 @@ export class GameEngine {
           if (this.isGroundWalkable(p.x, p.y)) pos = p;
         }
         if (!pos) continue;
-        const spec = GameEngine.REAR_PATROL[this.era];
-        const u = createGroundUnit(`rear-patrol-${sh.id}-${Math.floor(this.gameTime)}`, spec.type, `${spec.name} (${sh.name.split(' (')[0].split(' [')[0]})`, 'allied', this.era, pos);
+        const spec = GameEngine.REAR_PATROL[side][this.era];
+        const u = createGroundUnit(`${side}-patrol-${sh.id}-${Math.floor(this.gameTime)}`, spec.type, `${spec.name} (${sh.name.split(' (')[0].split(' [')[0]})`, side, this.era, pos);
         u.rearPatrol = { home: { ...sh.cpPos }, post: sh.id };
-        this.rearPatrolManned.add(sh.id);
+        this.rearPatrolManned.add(key(sh.id));
         this.groundUnits.push(u);
         patrols.push(u);
-        this.addCombatLog({
-          category: 'naval',
-          sourceSide: 'allied',
-          sourceName: '後方警備',
-          targetName: isl.name,
-          actionType: 'recon_spotted',
-          text: `🚓【後方巡邏】「${u.name}」進駐已攻克的「${sh.name}」，負責搜捕附近跳傘的敵機組員並巡邏周邊。`,
-        });
+        if (side === 'allied') {
+          this.addCombatLog({
+            category: 'naval',
+            sourceSide: 'allied',
+            sourceName: '後方警備',
+            targetName: isl.name,
+            actionType: 'recon_spotted',
+            text: `🚓【後方巡邏】「${u.name}」進駐已攻克的「${sh.name}」，負責搜捕附近跳傘的敵機組員並巡邏周邊。`,
+          });
+        }
         break; // one a tick
       }
     }
+    const quarry = side === 'enemy' ? 'player' : 'enemy';
     for (const u of patrols) {
       const home = u.rearPatrol!.home;
       const airman = (this.lifeRafts ?? [])
-        .filter((r) => r.side === 'enemy' && r.isOnLand && !r.rescued && !r.isCapturedPOW && dist(r.pos, home) < 1400)
+        .filter((r) => r.side === quarry && r.isOnLand && !r.rescued && !r.isCapturedPOW && dist(r.pos, home) < 1400)
         .sort((a, b) => dist(a.pos, u.pos) - dist(b.pos, u.pos))[0];
       if (airman) {
         const tp = u.order.targetPos;
         if (u.order.type !== 'move' || !tp || dist(tp, airman.pos) > 40) u.order = { type: 'move', targetPos: { ...airman.pos } };
+        if (side === 'enemy' && this.logAllowed(`hunt|${airman.id}`, 90)) {
+          this.addCombatLog({
+            category: 'air',
+            sourceSide: 'enemy',
+            sourceName: u.name,
+            targetName: airman.pilotName,
+            actionType: 'recon_spotted',
+            text: `⚠️【敵軍搜捕】「${u.name}」正在搜索我方落地機組員「${airman.pilotName}」，盡快派兵或直升機救援！`,
+          });
+        }
         continue;
       }
       // Walking the beat: a point within 500 m of the post

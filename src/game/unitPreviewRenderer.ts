@@ -753,6 +753,7 @@ const EXPLICIT_SILHOUETTE_CLASS: Record<string, GroundSilhouetteClass> = {
   sof_seal_83: 'infantry',
   sof_ranger_83: 'infantry',
   opfor_ija_hmg_42: 'infantry',
+  opfor_ija_takasago_42: 'infantry',
   opfor_ija_47mm_at: 'towed',
   opfor_ija_kami: 'tank',
   opfor_ija_banzai_45: 'infantry',

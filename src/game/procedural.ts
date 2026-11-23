@@ -2161,6 +2161,141 @@ export function createNewportLST(id: string, name: string, pos: Vector2D, era: E
   });
 }
 
+/**
+ * Okinawa, April-May 1945: the Maeda Escarpment ("Hacksaw Ridge") on the Shuri Line, a sheer
+ * coral-limestone cliff held by the 32nd Army's 62nd Division from caves and reverse-slope
+ * positions. An extra stronghold on the era-2 Okinawa island, away from the others, on high
+ * ground well inland.
+ */
+function addMaedaEscarpment(islands: Island[]): void {
+  const isl = islands.find((i) => i.id === 'atoll-1' && i.name.startsWith('Okinawa'));
+  if (!isl) return;
+  const inland = (p: Vector2D) =>
+    isPointOnIslandLand(p, isl) &&
+    [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2].every((a) => isPointOnIslandLand({ x: p.x + Math.cos(a) * 170, y: p.y + Math.sin(a) * 170 }, isl));
+  const others = isl.installations.map((i) => i.pos);
+  let best: Vector2D | null = null;
+  let bestScore = -Infinity;
+  for (let k = 0; k < 48; k++) {
+    const a = (k / 48) * Math.PI * 2;
+    for (const f of [0.35, 0.5, 0.62]) {
+      const p = { x: isl.center.x + Math.cos(a) * isl.radius * f, y: isl.center.y + Math.sin(a) * isl.radius * f };
+      if (!inland(p)) continue;
+      const clear = Math.min(...others.map((o) => dist(o, p)));
+      if (clear < 300) continue;
+      if (clear > bestScore) {
+        bestScore = clear;
+        best = p;
+      }
+    }
+  }
+  if (!best) return;
+  const shId = `${isl.id}-sh-maeda`;
+  const cp = best;
+  const garrison: string[] = [];
+  const add = (spec: Parameters<typeof makeInstallation>[0]) => {
+    const inst = makeInstallation(spec);
+    isl.installations.push(inst);
+    garrison.push(inst.id);
+  };
+  add({
+    id: `${shId}-cp`,
+    type: 'command_post',
+    name: '沖繩 · 前田高地 第62師團 前進指揮所',
+    weaponDesc: '首里防線的石灰岩斷崖 · 反斜面坑道指揮所',
+    pos: cp,
+    health: 4800,
+    armor: 0.7,
+    range: 800,
+    cooldown: 0.7,
+    reloadTime: 1.5,
+    side: 'enemy',
+    strongholdId: shId,
+    isASuWOnly: true,
+  });
+  add({
+    id: `${shId}-cliff`,
+    type: 'bunker_nest',
+    name: '前田高地 斷崖頂機槍陣地 (九二式重機關銃)',
+    weaponDesc: '崖頂石灰岩洞口 · 俯射攀爬斷崖的部隊',
+    pos: { x: cp.x + 70, y: cp.y - 40 },
+    health: 3600,
+    armor: 0.78,
+    range: 950,
+    cooldown: 0.4,
+    reloadTime: 1.1,
+    side: 'enemy',
+    strongholdId: shId,
+    isASuWOnly: true,
+  });
+  add({
+    id: `${shId}-reverse`,
+    type: 'bunker_nest',
+    name: '前田高地 反斜面洞窟陣地 (擲彈筒 / 輕機關銃)',
+    weaponDesc: '藏於斷崖背面 · 攻方登頂後才遭到逆襲',
+    pos: { x: cp.x - 60, y: cp.y + 50 },
+    health: 3400,
+    armor: 0.75,
+    range: 850,
+    cooldown: 0.45,
+    reloadTime: 1.2,
+    side: 'enemy',
+    strongholdId: shId,
+    isASuWOnly: true,
+  });
+  add({
+    id: `${shId}-tunnel`,
+    type: 'hidden_tunnel',
+    name: '前田高地 地下坑道網 (逆襲出口)',
+    weaponDesc: '貫穿高地的坑道 · 夜間逆襲與滲透',
+    pos: { x: cp.x - 90, y: cp.y - 60 },
+    health: 2600,
+    armor: 0.8,
+    range: 600,
+    cooldown: 1,
+    reloadTime: 2,
+    side: 'enemy',
+    strongholdId: shId,
+  });
+  add({
+    id: `${shId}-inf`,
+    type: 'infantry_platoon',
+    name: '第62師團 獨立步兵第13大隊 守備陣地',
+    weaponDesc: '步兵壕與散兵坑 · 斷崖兩側交叉火網',
+    pos: { x: cp.x + 20, y: cp.y + 85 },
+    health: 2400,
+    armor: 0.45,
+    range: 800,
+    cooldown: 0.6,
+    reloadTime: 1.4,
+    side: 'enemy',
+    strongholdId: shId,
+  });
+  add({
+    id: `${shId}-mortar`,
+    type: 'towed_artillery',
+    name: '前田高地 反斜面迫擊砲陣地 (九七式曲射步兵砲)',
+    weaponDesc: '81mm 迫擊砲 · 由斷崖背面曲射攻方',
+    pos: { x: cp.x - 110, y: cp.y + 10 },
+    health: 2200,
+    armor: 0.45,
+    range: 1200,
+    cooldown: 1.2,
+    reloadTime: 3.2,
+    side: 'enemy',
+    strongholdId: shId,
+    isASuWOnly: true,
+  });
+  (isl.strongholds ??= []).push({
+    id: shId,
+    name: '沖繩 · 前田高地 (鋼鋸嶺)',
+    cpPos: cp,
+    isCaptured: false,
+    captureProgress: 0,
+    garrisonIds: garrison,
+  });
+}
+
 export function createLSMR(id: string, name: string, pos: Vector2D, era: Era): Ship {
   return createShip({
     id,
@@ -2185,7 +2320,7 @@ export function createLSMR(id: string, name: string, pos: Vector2D, era: Era): S
       createTurret(-18, 0, '40mm Bofors Twin (艦艉防空砲)', 850, 1.2, 2, -Math.PI / 4, 160),
     ],
     detailedArmaments: [
-      { name: '5吋連續自動裝填火箭發射架群', count: '85具火箭導軌', type: 'main', desc: '密集5吋火箭彈幕準備' },
+      { name: 'Mk 36 5吋旋轉穩定火箭發射架', count: '75具', type: 'main', desc: '每次齊射 48 枚，覆蓋灘頭防禦' },
       { name: '5吋38倍徑單裝高平砲', count: '1門', type: 'secondary', desc: '直接砲擊' },
       { name: '40mm 博福斯雙聯高射砲', count: '2門', type: 'aa', desc: '自衛防空' },
     ],
@@ -5115,6 +5250,7 @@ export function generateSector(sectorNumber: number, era: Era = 'era1'): Generat
 
   // Natural coastlines (atolls did theirs before their reef passes were cut) and island villages
   naturalizeIslands(islands, seedBase, (isl) => isl.id.startsWith('atoll-'), worldSize);
+  if (era === 'era2') addMaedaEscarpment(islands);
   addIslandSettlements(islands, era, seedBase * 31 + 7);
   addMainlandVillages(islands, era, seedBase * 53 + 11);
   addEnemyPowCamp(islands, era);
@@ -7525,6 +7661,7 @@ function addFriendlyGroundUnits(era: Era, groundUnits: GroundUnit[]): void {
 /** Supporting weapons and specialists that vary the island garrisons, by era. */
 const GARRISON_SUPPORT: Record<Era, { type: GroundUnitType; name: string }[]> = {
   era1: [
+    { type: 'opfor_ija_takasago_42', name: '高砂義勇隊 叢林斥候' },
     { type: 'opfor_ija_hmg_42', name: '九二式重機槍隊' },
     { type: 'opfor_ija_47mm_at', name: '一式機動四十七粍速射砲隊' },
     { type: 'opfor_ija_kami', name: '特二式內火艇「カミ」水陸戰車隊' },
@@ -7532,6 +7669,7 @@ const GARRISON_SUPPORT: Record<Era, { type: GroundUnitType; name: string }[]> = 
     { type: 'opfor_ija_type98_aa', name: '九八式高射機關砲隊' },
   ],
   era2: [
+    { type: 'opfor_ija_takasago_42', name: '高砂義勇隊 叢林斥候' },
     { type: 'opfor_ija_banzai_45', name: '挺身斬込隊' },
     { type: 'opfor_ija_hmg_42', name: '九二式重機槍隊' },
     { type: 'opfor_ija_47mm_at', name: '一式機動四十七粍速射砲隊' },

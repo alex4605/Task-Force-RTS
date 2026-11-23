@@ -167,6 +167,7 @@ export const GROUND_UNIT_STATS: Record<GroundUnitType, GroundUnitStats> = {
   sof_seal_83: { health: 1600, armor: 0.3, speed: 5.0, damage: 135, reloadTime: 0.8, isAmphibious: true },
   sof_ranger_83: { health: 1900, armor: 0.36, speed: 5.0, damage: 150, reloadTime: 0.85 },
   opfor_ija_hmg_42: { health: 1500, armor: 0.3, speed: 3.2, damage: 110, reloadTime: 0.7 },
+  opfor_ija_takasago_42: { health: 1500, armor: 0.28, speed: 5.4, damage: 105, reloadTime: 0.9 },
   opfor_ija_47mm_at: { health: 1400, armor: 0.3, speed: 2.4, damage: 280, reloadTime: 2.4 },
   opfor_ija_kami: { health: 1800, armor: 0.42, speed: 4.2, damage: 150, reloadTime: 2.0, isAmphibious: true },
   opfor_ija_banzai_45: { health: 1700, armor: 0.25, speed: 4.6, damage: 95, reloadTime: 1.0 },

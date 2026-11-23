@@ -419,7 +419,7 @@ export const SelectedUnitsPanel: React.FC<SelectedUnitsPanelProps> = ({
               {isLSMR && (
                 <div className="pt-1 border-t border-[#1E3A5F]/40 flex justify-between items-center gap-1">
                   <span className="text-[9.5px] text-[#FFE082]">
-                    85聯裝連續火箭彈幕
+                    5吋火箭彈幕 (48 發齊射，射程內自動開火)
                   </span>
                   <button
                     type="button"
