@@ -3,8 +3,11 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
 
-export default defineConfig(() => {
+export default defineConfig(({ command }) => {
   return {
+    // Relative asset paths in the build, so the game runs from any sub-path (GitHub Pages serves
+    // it at /<repo>/); the dev server keeps the root
+    base: command === 'build' ? './' : '/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

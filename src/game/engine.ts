@@ -3283,12 +3283,39 @@ export class GameEngine {
       if (ship.hasTorpedoes && ship.torpedoCooldown !== undefined && ship.torpedoCooldown > 0) {
         ship.torpedoCooldown = Math.max(0, ship.torpedoCooldown - dt);
       }
-      // Our PT boats loose their torpedoes by themselves at an enemy surface ship inside 650 m
-      if (ship.side === 'player' && ship.craft?.tubes && ship.hasTorpedoes && !ship.isSunk && (ship.torpedoCooldown ?? 0) <= 0) {
-        const mark = this.enemyShips.find((e) => !e.isSunk && !e.isSubmerged && dist(e.pos, ship.pos) < 650);
-        if (mark) {
-          this.fireTorpedoSalvo(ship, mark.pos, 2);
-          ship.torpedoCooldown = ship.torpedoReloadTime || 14;
+      // Our torpedo-armed ships loose their torpedoes on their own: PT boats inside 650 m (a pair),
+      // the gun-and-torpedo destroyers, the DE and the Atlanta-class cruiser inside 900 m (half a
+      // salvo at a time). The Cold War ships' Mk 32 tubes fire ASW torpedoes, not these.
+      if (ship.side === 'player' && ship.hasTorpedoes && !ship.isSunk && (ship.torpedoCooldown ?? 0) <= 0) {
+        const pt = Boolean(ship.craft?.tubes);
+        const surfaceTubes = pt || ship.type === 'destroyer' || ship.type === 'cruiser';
+        if (surfaceTubes) {
+          const reach = pt ? 650 : 900;
+          let mark: Ship | undefined;
+          let best = reach;
+          for (const e of this.enemyShips) {
+            if (e.isSunk || e.isSubmerged) continue;
+            const d = dist(e.pos, ship.pos);
+            if (d < best) {
+              best = d;
+              mark = e;
+            }
+          }
+          if (mark) {
+            // Lead the target: aim where it will be when the fish arrive
+            const run = best / 85; // torpedo speed in fireTorpedoSalvo
+            const aim = { x: mark.pos.x + mark.vel.x * run, y: mark.pos.y + mark.vel.y * run };
+            this.fireTorpedoSalvo(ship, aim, pt ? 2 : 3);
+            ship.torpedoCooldown = ship.torpedoReloadTime || 16;
+            this.addCombatLog({
+              category: 'naval',
+              sourceSide: 'player',
+              sourceName: ship.name,
+              targetName: mark.name,
+              actionType: 'recon_spotted',
+              text: `🌊【魚雷攻擊】「${ship.name}」向「${mark.name}」射出 ${pt ? 2 : 3} 枚魚雷！`,
+            });
+          }
         }
       }
       if (ship.hasDepthCharges && ship.depthChargeCooldown !== undefined && ship.depthChargeCooldown > 0) {
