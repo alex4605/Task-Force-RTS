@@ -58,6 +58,24 @@ export function crewOf(model: AircraftModel): number {
   return CREW[model] ?? 1;
 }
 
+/**
+ * The rescue crewman a helicopter carries to recover downed aircrew without landing (hoist and
+ * sling, or a man lowered to the survivor): none on the gunships.
+ */
+const RESCUE_CREW: Partial<Record<AircraftModel, string>> = {
+  ho3s1: '絞盤救生員',
+  uh2: '海軍搜救泳員',
+  sh2: '海軍搜救泳員',
+  sh3f: '海軍搜救泳員',
+  sh60b: '海軍搜救泳員',
+  uh1: '「Dust Off」醫護兵',
+  ch53: '空軍傘降救援員 (PJ)',
+  ch46: '陸戰隊搜救隊員',
+  lynx: '皇家海軍救生員',
+  ka27: '海軍救生員',
+};
+export const rescueCrewOf = (model: AircraftModel): string | undefined => RESCUE_CREW[model];
+
 /** Can use a FARP: helicopters and the V/STOL jets. */
 export const isRotaryOrVstol = (model: AircraftModel) => HELICOPTERS.has(model) || model === 'av8b' || model === 'yak38' || model === 'sea_harrier';
 

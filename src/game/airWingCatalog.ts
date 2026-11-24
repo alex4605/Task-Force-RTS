@@ -276,6 +276,7 @@ export function getAfbModelsForEra(era: Era): AfbModelDef[] {
     return [
       { id: 'pby', label: 'PBY-5A 卡特琳娜 (黑貓)', role: 'scout', desc: '黑貓中隊夜間反艦 · 雷達搜索 / 深水炸彈 / 魚雷 · 搜救', isNavy: true },
       { id: 'b24', label: 'B-24 解放者', role: 'level_bomber', desc: '超重型遠程水平轟炸機 · 16枚地毯連環航彈', isNavy: false },
+      { id: 'b29', label: 'B-29 超級堡壘', role: 'level_bomber', desc: '馬里亞納起飛的戰略重轟 · 24枚連環地毯航彈', isNavy: false },
       { id: 'b17_late', label: 'B-17G 飛行堡壘 (後期)', role: 'level_bomber', desc: '下顎雙聯.50機砲砲塔 · 密集防禦火網 · 16枚地毯轟炸', isNavy: false },
       { id: 'p51', label: 'P-51 野馬', role: 'fighter', desc: '長程高速空優戰鬥機 · 6x .50 機槍 / 火箭 / 航彈', isNavy: false },
       { id: 'p47', label: 'P-47 雷霆 (Jug)', role: 'attacker', desc: '裝甲戰鬥轟炸機 · 8x .50機槍 + 火箭/雙航彈', isNavy: false },

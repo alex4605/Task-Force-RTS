@@ -159,6 +159,7 @@ export type GroundUnitType =
   | 'sof_seal_83'             // 時代五 SOF 海豹第四分隊 (格瑞那達)
   | 'sof_ranger_83'           // 時代五 SOF 第75遊騎兵團排 (緊急狂怒行動)
   | 'opfor_ija_hmg_42'        // 時代一/二 日軍九二式重機槍隊
+  | 'opfor_ija_takasago_42'   // 時代一/二 高砂義勇隊 (臺灣原住民叢林斥候)
   | 'opfor_ija_47mm_at'       // 時代一/二 日軍一式機動四十七粍速射砲
   | 'opfor_ija_kami'          // 時代一/二 特二式內火艇「カミ」水陸戰車
   | 'opfor_ija_banzai_45'     // 時代二 日軍挺身斬込隊 (刺突爆雷)
@@ -1777,6 +1778,8 @@ export interface LifeRaft {
   isCapturedPOW?: boolean; // 是否已被作為戰俘收押
   /** A downed airman on land making for his own side's command post (its id / position). */
   walkingTo?: { id: string; name: string; pos: Vector2D };
+  /** Game time until which the other side's troops know where he is (an airman on land hides). */
+  spottedUntil?: number;
 }
 
 export type AircraftState =
@@ -2147,6 +2150,8 @@ export interface Projectile {
   /** Fraction of a gun round's or rocket's damage that gets through tank armour. */
   vsArmour?: number;
   isNapalm?: boolean;
+  /** A gout of burning fuel from a flame tank or flamethrower (drawn as a fireball). */
+  isFlame?: boolean;
   isTinyTim?: boolean;
   isAcousticHoming?: boolean;
   /** Squid / Limbo / Bofors / RBU rounds sink to a set depth instead of needing a contact hit. */
@@ -2276,6 +2281,9 @@ export interface CombatDiceRoll {
 export interface CombatLogEntry {
   id: string;
   timestamp: number;
+  /** Routine reports of one kind folded into this line, and its text before the count. */
+  repeat?: number;
+  baseText?: string;
   timeStr: string;
   category: 'air' | 'naval' | 'aa' | 'sunk';
   sourceSide: ShipSide;

@@ -1,3 +1,4 @@
+import { groundWeaponMode, WEAPON_MODE_LABEL } from './groundWeapons';
 import typesSource from '../types/game.ts?raw';
 import { AircraftModel, Era, GroundUnitType, InstallationType, ShipType } from '../types/game';
 import { GROUND_UNIT_STATS } from './groundUnitStats';
@@ -306,7 +307,7 @@ function buildGround(): CodexEntry[] {
     const cls = groundSilhouetteClass(type);
     const km = GROUND_UNIT_RANGE_KM[type];
     const intro = GROUND_INTRO[type];
-    const extras = localForceNotes(type);
+    const extras = [`⚔️ 攻擊方式：${WEAPON_MODE_LABEL[groundWeaponMode(type)]}`, ...localForceNotes(type)];
     return {
       kind: 'ground',
       key,

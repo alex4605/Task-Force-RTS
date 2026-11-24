@@ -187,6 +187,7 @@ export const GROUND_UNIT_RANGE_KM: Record<GroundUnitType, number> = {
   sof_seal_83: 0.55, // M16A2 / M60E3 / M203
   sof_ranger_83: 0.6, // M16A2 / M249 / M72
   opfor_ija_hmg_42: 0.9, // Type 92 HMG
+  opfor_ija_takasago_42: 0.35, // Arisaka rifles, bolo knives (蕃刀) at close quarters
   opfor_ija_47mm_at: 1.0, // Type 1 47mm AT
   opfor_ija_kami: 1.0, // 37mm Type 1
   opfor_ija_banzai_45: 0.3, // lunge mines, bayonets
