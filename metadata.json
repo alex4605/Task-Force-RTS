@@ -1,6 +1,8 @@
 {
-  "name": "Task Force 1944: Vector Fleet Command",
-  "description": "WWII top-down naval combat game with clean vector line art. Command a carrier battle group across procedurally generated island archipelagos.",
+  "name": "Task Force RTS · 特遣艦隊 1942–1991",
+  "description": "跨越五個時代 (瓜達爾卡納爾 1942、沖繩 1944-45、韓戰、越戰、1980 年代北約對華約) 的俯視角即時戰略：指揮特遣艦隊、航空隊與登陸部隊，海陸空聯合作戰。",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
