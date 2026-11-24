@@ -1,5 +1,14 @@
 import React, { useEffect } from 'react';
 import { ERA_ECONOMY_NOTE } from '../game/economy';
+
+/** The theatre command issuing the orders in each era. */
+const COMMAND: Record<string, string> = {
+  era1: 'CINCPAC',
+  era2: 'CINCPAC',
+  era3: 'CINCFE · UNC',
+  era4: 'CINCPAC · MACV',
+  era5: 'SACLANT · NATO',
+};
 import { SectorIntel } from '../types/game';
 import { FileText, Target, Crosshair, CheckCircle2, X, ShieldAlert, Compass } from 'lucide-react';
 
@@ -43,8 +52,8 @@ export const BriefingModal: React.FC<BriefingModalProps> = ({
             </div>
             <div>
               <div className="text-[10px] text-[#90CAF9] tracking-widest uppercase font-bold flex items-center gap-1.5">
-                <span className="text-[#00E5FF]">[CINCPAC]</span>
-                <span>{'CINCPAC OPERATIONAL BRIEFING & DISPATCH'}</span>
+                <span className="text-[#00E5FF]">[{COMMAND[intel.era]}]</span>
+                <span>{`${COMMAND[intel.era]} OPERATIONAL BRIEFING & DISPATCH`}</span>
               </div>
               <h2 className="text-base font-bold text-[#E0F7FA] tracking-wide mt-0.5">
                 {`第 ${intel.sectorNumber} 作戰海域`}: {intel.sectorName.toUpperCase()}
@@ -64,7 +73,7 @@ export const BriefingModal: React.FC<BriefingModalProps> = ({
         <div className="flex items-center justify-between px-3 py-1.5 bg-[#0B1E34] border border-[#1E3A5F]/80 rounded text-[10px] text-[#80DEEA]">
           <span className="flex items-center gap-1 font-bold text-amber-300">
             <ShieldAlert className="w-3.5 h-3.5" />
-            <span>TOP SECRET // CINCPAC DEPT OF THE NAVY</span>
+            <span>TOP SECRET // {COMMAND[intel.era]}</span>
           </span>
           <span className="text-slate-400">
             戰區戰役指令 · 即刻生效
@@ -127,7 +136,7 @@ export const BriefingModal: React.FC<BriefingModalProps> = ({
                   </>
                 ) : intel.era === 'era2' ? (
                   <>
-                    <li>【防空火網攔截】請保持戰鬥機空中巡邏 (CAP) 攔截神風特攻與櫻花火箭；旗艦可開啟密集防空彈幕阻截敵機。</li>
+                    <li>【防空火網攔截】請保持戰鬥機空中巡邏 (CAP) 攔截神風特攻與櫻花火箭；B-29 飛在高射砲射高之上，只有敵戰鬥機能威脅它們。</li>
                     <li>【兩棲登陸突擊】派遣 LCVP / LST 靠岸裝載陸戰隊與裝甲排，航抵敵島灘頭右鍵點擊執行搶灘登陸。</li>
                     <li>【城區掩體優勢】城鎮與要塞提供部隊 70% 航彈防禦與 50% 直射減傷；注意避開平民掩蔽部以免政治值 (PP) 流失。</li>
                     <li>【VT信管與雷達火控】裝備 VT 接近引信與火控雷達之巡洋艦與驅逐艦可建立綿密艦隊防空圈。</li>
@@ -140,6 +149,7 @@ export const BriefingModal: React.FC<BriefingModalProps> = ({
                     <li>【艦載偵察索敵】善用 OS2U 偵察機探明敵艦隊方位，先敵發現、先敵實施俯衝轟炸與魚雷夾擊。</li>
                   </>
                 )}
+                <li>【搜救與戰俘】跳傘落地的機組員會躲藏並避開敵軍巡邏隊，派地面部隊或搭載救援員的直升機接近即可救回（返還 TP）；可指定艦艇搜救海域。雙方據點都會派出巡邏隊搜捕落地的敵方飛行員。</li>
                 <li>
                   【戰爭經濟】{ERA_ECONOMY_NOTE[intel.era]}。增援與構工需消耗 MP 人力／RP 資源／PP 政治／TP 時間四種資源，
                   佔領據點推進戰役階段會提高動員程度與產出；我軍傷亡與誤擊平民會使政治值流失。
